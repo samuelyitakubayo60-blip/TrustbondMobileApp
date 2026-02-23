@@ -1,0 +1,45 @@
+from typing import Annotated, List, Optional
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session, joinedload
+
+from app.database import get_db
+from app.models.hotspot import Hotspot
+from app.api.v1.auth import get_current_admin_or_supervisor
+from app.models.police_user import PoliceUser
+from app.schemas.hotspot import HotspotResponse
+
+router = APIRouter(prefix="/hotspots", tags=["hotspots"])
+
+
+@router.get("/", response_model=List[HotspotResponse])
+def list_hotspots(
+    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)],
+    db: Session = Depends(get_db),
+    risk_level: Optional[str] = Query(None, description="Filter by risk_level (low, medium, high)."),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """List hotspots. Created automatically when many reports of the same place and same incident type are submitted."""
+    query = (
+        db.query(Hotspot)
+        .options(joinedload(Hotspot.incident_type))
+        .order_by(Hotspot.detected_at.desc())
+    )
+    if risk_level:
+        query = query.filter(Hotspot.risk_level == risk_level)
+    hotspots = query.limit(limit).all()
+    return [
+        HotspotResponse(
+            hotspot_id=h.hotspot_id,
+            center_lat=h.center_lat,
+            center_long=h.center_long,
+            radius_meters=h.radius_meters,
+            incident_count=h.incident_count,
+            risk_level=h.risk_level,
+            time_window_hours=h.time_window_hours,
+            detected_at=h.detected_at,
+            incident_type_id=h.incident_type_id,
+            incident_type_name=h.incident_type.type_name if h.incident_type else None,
+        )
+        for h in hotspots
+    ]
