@@ -26,7 +26,7 @@ Follow these steps in order: **database → backend → frontend → mobile**.
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
+Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -71,7 +71,7 @@ You can re-run this script safely; it skips existing data when appropriate.
 
 ```bash
 cd backend
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload
 ```
 
 API will be available at:
@@ -104,7 +104,6 @@ For local development:
 
 ```bash
 cd frontend
-set VITE_API_BASE_URL=http://localhost:8000/api/v1   # PowerShell: $env:VITE_API_BASE_URL="http://localhost:8000/api/v1"
 npm run dev
 ```
 
@@ -167,13 +166,13 @@ Select a simulator/emulator or a physical device.
    - `python -m venv .venv && source .venv/bin/activate`
    - `pip install -r requirements.txt`
    - `python scripts/init_db.py`
-   - `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
+   - `uvicorn app.main:app --reload`
 4. From `frontend/`:
    - `npm install`
-   - `VITE_API_BASE_URL=http://localhost:8000/api/v1 npm run dev`
+   - `npm run dev`
 5. From `mobile/`:
    - `flutter pub get`
-   - `flutter run --dart-define=API_BASE_URL=http://localhost:8000/api/v1`
+   - `flutter run`
 
 After that:
 
