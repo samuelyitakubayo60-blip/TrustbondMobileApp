@@ -1,5 +1,4 @@
 ## TrustBond – Local setup guide
-
 This is a **full project** with:
 
 - `backend/` – FastAPI + PostgreSQL/PostGIS API

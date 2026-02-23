@@ -39,6 +39,17 @@ class ReportResponse(BaseModel):
     village_location_id: Optional[int] = None
     village_name: Optional[str] = None  # from locations table (village containing the point)
     incident_type_name: Optional[str] = None  # set when listing/loading with join
+    evidence_count: int = 0
+    evidence_preview: list["EvidencePreview"] = []
+
+    class Config:
+        from_attributes = True
+
+
+class EvidencePreview(BaseModel):
+    evidence_id: UUID
+    file_url: str
+    file_type: str  # photo | video
 
     class Config:
         from_attributes = True

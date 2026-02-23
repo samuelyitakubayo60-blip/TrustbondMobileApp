@@ -44,6 +44,27 @@ export default function ReportDetail() {
     return new Date(s).toLocaleString();
   }
 
+  function formatLocationSource(source) {
+    if (!source) return null;
+    switch (source) {
+      case 'same_village_all':
+        return 'reporter and all evidence are in the same village';
+      case 'village_conflict':
+        return 'reporter village differs from some evidence villages';
+      case 'evidence_only':
+        return 'based only on evidence villages';
+      case 'evidence_conflict':
+        return 'evidence villages disagree';
+      case 'reporter_only_no_village':
+        return 'reporter point outside mapped villages';
+      case 'evidence_only_no_village':
+        return 'evidence point outside mapped villages';
+      default:
+        if (source === 'reporter_only') return null;
+        return source;
+    }
+  }
+
   const evidence = report?.evidence_files || [];
   const assignments = report?.assignments || [];
   const reviews = report?.reviews || [];
@@ -130,8 +151,8 @@ export default function ReportDetail() {
                   : report.latitude != null && report.longitude != null
                     ? `${Number(report.latitude).toFixed(5)}, ${Number(report.longitude).toFixed(5)}`
                     : '—'}
-                {report.incident_location_source && report.incident_location_source !== 'reporter_only' && (
-                  <span className="location-source"> ({report.incident_location_source})</span>
+                {formatLocationSource(report.incident_location_source) && (
+                  <span className="location-source"> ({formatLocationSource(report.incident_location_source)})</span>
                 )}
               </dd>
               {report.incident_village_name && (

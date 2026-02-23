@@ -1,6 +1,6 @@
-from typing import Annotated, Optional, List
+from typing import Annotated, Optional, List, Tuple, Dict, Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form, Query, status
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from uuid import uuid4, UUID
 from datetime import datetime, timedelta, timezone
 import io
@@ -23,6 +23,7 @@ from app.schemas.report import (
     ReportDetailResponse,
     ReportListResponse,
     EvidenceFileResponse,
+    EvidencePreview,
     AssignmentResponse,
     AssignCreate,
     ReviewResponse,
@@ -37,7 +38,6 @@ from app.core.report_rules import apply_rule_based_status, is_likely_screenshot_
 from app.core.audit import log_action
 from app.core.hotspot_auto import create_hotspots_from_reports
 from app.core.village_lookup import get_village_location_id, get_village_location_info
-from app.core.report_location import compute_incident_location
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -263,6 +263,13 @@ def _build_report_response(r: Report, db: Optional[Session] = None) -> ReportRes
                 village_name = info.get("village_name")
         except Exception:
             pass
+
+    evidence_files = list(getattr(r, "evidence_files", None) or [])
+    evidence_files.sort(key=lambda x: (x.uploaded_at is None, x.uploaded_at), reverse=False)
+    evidence_preview = [
+        EvidencePreview(evidence_id=ef.evidence_id, file_url=ef.file_url, file_type=ef.file_type)
+        for ef in evidence_files[:3]
+    ]
     return ReportResponse(
         report_id=r.report_id,
         device_id=r.device_id,
@@ -275,7 +282,108 @@ def _build_report_response(r: Report, db: Optional[Session] = None) -> ReportRes
         village_location_id=r.village_location_id,
         village_name=village_name,
         incident_type_name=r.incident_type.type_name if r.incident_type else None,
+        evidence_count=len(evidence_files),
+        evidence_preview=evidence_preview,
     )
+
+
+def _float_or_none(val) -> Optional[float]:
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def _compute_incident_location_with_villages(
+    report: Report,
+    db: Session,
+) -> Tuple[Optional[float], Optional[float], str, Optional[Dict[str, Any]]]:
+    """
+    Decide incident location by comparing reporter village vs evidence villages.
+
+    Preference order:
+    - If reporter + all evidence are in the same village -> use that village ("same_village_all").
+    - Else if reporter village exists -> use reporter village ("reporter_only" or "village_conflict").
+    - Else if evidence villages exist -> use dominant evidence village ("evidence_only" or "evidence_conflict").
+    - Else fall back to raw reporter/evidence coordinates.
+    """
+    rep_lat = _float_or_none(report.latitude)
+    rep_lon = _float_or_none(report.longitude)
+
+    report_info: Optional[Dict[str, Any]] = None
+    report_village: Optional[str] = None
+    if rep_lat is not None and rep_lon is not None:
+        try:
+            report_info = get_village_location_info(db, rep_lat, rep_lon)
+            if report_info:
+                report_village = report_info.get("village_name")
+        except Exception:
+            report_info = None
+
+    evidence_points: list[Dict[str, Any]] = []
+    evidence_villages: list[str] = []
+
+    for ef in report.evidence_files or []:
+        lat = _float_or_none(ef.media_latitude)
+        lon = _float_or_none(ef.media_longitude)
+        if lat is None or lon is None:
+            continue
+        info = None
+        village_name = None
+        try:
+            info = get_village_location_info(db, lat, lon)
+            if info:
+                village_name = info.get("village_name")
+        except Exception:
+            info = None
+        evidence_points.append({"lat": lat, "lon": lon, "info": info, "village": village_name})
+        if village_name:
+            evidence_villages.append(village_name)
+
+    unique_evidence_villages = set(ev for ev in evidence_villages if ev)
+
+    # Case 1: reporter + all evidence in same village
+    if report_village and unique_evidence_villages and len(unique_evidence_villages) == 1 and report_village in unique_evidence_villages:
+        chosen_info = report_info
+        chosen_lat, chosen_lon = rep_lat, rep_lon
+        if chosen_lat is None or chosen_lon is None:
+            same_village_points = [p for p in evidence_points if p.get("village") == report_village]
+            if same_village_points:
+                chosen_lat = same_village_points[0]["lat"]
+                chosen_lon = same_village_points[0]["lon"]
+                chosen_info = same_village_points[0]["info"] or chosen_info
+        return chosen_lat, chosen_lon, "same_village_all", chosen_info
+
+    # Case 2: reporter village exists (with or without evidence)
+    if report_village:
+        chosen_lat, chosen_lon, chosen_info = rep_lat, rep_lon, report_info
+        if unique_evidence_villages and (len(unique_evidence_villages) > 1 or report_village not in unique_evidence_villages):
+            source = "village_conflict"
+        else:
+            source = "reporter_only"
+        return chosen_lat, chosen_lon, source, chosen_info
+
+    # Case 3: no reporter village, but evidence villages exist
+    if unique_evidence_villages:
+        from collections import Counter
+
+        counts = Counter(ev for ev in evidence_villages if ev)
+        dominant_village, _ = counts.most_common(1)[0]
+        dominant_points = [p for p in evidence_points if p.get("village") == dominant_village]
+        chosen = dominant_points[0] if dominant_points else evidence_points[0]
+        source = "evidence_only" if len(unique_evidence_villages) == 1 else "evidence_conflict"
+        return chosen["lat"], chosen["lon"], source, chosen["info"]
+
+    # Case 4: no villages at all – fall back to raw coordinates
+    if rep_lat is not None and rep_lon is not None:
+        return rep_lat, rep_lon, "reporter_only_no_village", None
+    if evidence_points:
+        p = evidence_points[0]
+        return p["lat"], p["lon"], "evidence_only_no_village", p["info"]
+
+    return None, None, "unknown", None
 
 
 @router.get("/", response_model=ReportListResponse | List[ReportResponse])
@@ -293,7 +401,11 @@ def list_reports(
     if device_id is not None:
         reports = (
             db.query(Report)
-            .options(joinedload(Report.incident_type), joinedload(Report.village_location))
+            .options(
+                joinedload(Report.incident_type),
+                joinedload(Report.village_location),
+                selectinload(Report.evidence_files),
+            )
             .filter(Report.device_id == device_id)
             .order_by(Report.reported_at.desc())
             .all()
@@ -301,7 +413,11 @@ def list_reports(
         return [_build_report_response(r, db) for r in reports]
     if current_user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
-    query = db.query(Report).options(joinedload(Report.incident_type), joinedload(Report.village_location))
+    query = db.query(Report).options(
+        joinedload(Report.incident_type),
+        joinedload(Report.village_location),
+        selectinload(Report.evidence_files),
+    )
     # Officers see only reports assigned to them
     if getattr(current_user, "role", None) == "officer":
         query = query.join(Report.assignments).filter(
@@ -407,11 +523,7 @@ def get_report(
             )
         review_list.sort(key=lambda x: x.reviewed_at, reverse=True)
 
-    incident_lat, incident_lon, incident_source = compute_incident_location(report, report.evidence_files)
-
-    incident_location_info = None
-    if incident_lat is not None and incident_lon is not None:
-        incident_location_info = get_village_location_info(db, incident_lat, incident_lon)
+    incident_lat, incident_lon, incident_source, incident_location_info = _compute_incident_location_with_villages(report, db)
 
     return ReportDetailResponse(
         report_id=report.report_id,
