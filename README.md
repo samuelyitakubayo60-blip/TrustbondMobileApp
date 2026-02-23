@@ -67,6 +67,14 @@ This script will:
 
 You can re-run this script safely; it skips existing data when appropriate.
 
+**Optional – sample data (1 device, 1 report, 3 evidence rows):**
+
+```bash
+psql -U postgres -d trustbond -f backend/scripts/seed_one_device_report_evidence.sql
+```
+
+Evidence URLs are placeholders; you can update them later with `UPDATE evidence_files SET file_url = '...' WHERE evidence_id = '...';`
+
 #### 2.4 Run the backend
 
 ```bash
