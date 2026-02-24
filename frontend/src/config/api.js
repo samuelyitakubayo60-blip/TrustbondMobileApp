@@ -39,6 +39,7 @@ export const API_ENDPOINTS = {
   },
   hotspots: {
     list: `${API_BASE_URL}/api/v1/hotspots`,
+    evidence: (id) => `${API_BASE_URL}/api/v1/hotspots/${id}/evidence`,
   },
   locations: {
     list: `${API_BASE_URL}/api/v1/locations`,
