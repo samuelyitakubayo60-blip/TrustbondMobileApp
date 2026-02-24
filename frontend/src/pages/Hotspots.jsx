@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiService } from '../services/apiService.js';
+import EvidenceCarousel from '../components/EvidenceCarousel.jsx';
 import '../styles/colors.css';
 
 export default function Hotspots() {
@@ -12,6 +13,11 @@ export default function Hotspots() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filterRisk, setFilterRisk] = useState('');
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [evidenceItems, setEvidenceItems] = useState([]);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState(null);
+  const [activeHotspot, setActiveHotspot] = useState(null);
 
   useEffect(() => {
     if (!canSeeHotspots) navigate('/dashboard', { replace: true });
@@ -41,6 +47,26 @@ export default function Hotspots() {
   function mapUrl(lat, lng) {
     return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}&zoom=15`;
   }
+
+  const openEvidence = (hotspot) => {
+    setActiveHotspot(hotspot);
+    setEvidenceOpen(true);
+    setEvidenceLoading(true);
+    setEvidenceError(null);
+    setEvidenceItems([]);
+    apiService
+      .getHotspotEvidence(hotspot.hotspot_id)
+      .then((items) => setEvidenceItems(Array.isArray(items) ? items : []))
+      .catch((err) => setEvidenceError(err.message || 'Failed to load evidence for hotspot'))
+      .finally(() => setEvidenceLoading(false));
+  };
+
+  const closeEvidence = () => {
+    setEvidenceOpen(false);
+    setActiveHotspot(null);
+    setEvidenceItems([]);
+    setEvidenceError(null);
+  };
 
   if (!canSeeHotspots) return null;
   return (
@@ -72,6 +98,7 @@ export default function Hotspots() {
                   <th>Window (h)</th>
                   <th>Detected at</th>
                   <th>Map</th>
+                  <th>Evidence</th>
                 </tr>
               </thead>
               <tbody>
@@ -89,6 +116,15 @@ export default function Hotspots() {
                         View on map
                       </a>
                     </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="link-button"
+                        onClick={() => openEvidence(h)}
+                      >
+                        View evidence
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -96,6 +132,30 @@ export default function Hotspots() {
           </div>
         )}
       </div>
+
+      {evidenceOpen && (
+        <div className="modal-overlay" onClick={closeEvidence}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>
+              Hotspot evidence
+              {activeHotspot?.incident_type_name && ` – ${activeHotspot.incident_type_name}`}
+            </h3>
+            {evidenceLoading && <p className="loading">Loading evidence…</p>}
+            {evidenceError && <p className="error-message">{evidenceError}</p>}
+            {!evidenceLoading && !evidenceError && evidenceItems.length === 0 && (
+              <p className="empty">No evidence for this hotspot.</p>
+            )}
+            {!evidenceLoading && !evidenceError && evidenceItems.length > 0 && (
+              <EvidenceCarousel items={evidenceItems} />
+            )}
+            <div className="form-actions" style={{ marginTop: '1rem', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={closeEvidence}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

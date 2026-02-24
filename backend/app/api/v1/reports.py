@@ -15,6 +15,7 @@ from app.config import settings
 from app.database import get_db, SessionLocal
 from app.models.report import Report
 from app.models.evidence_file import EvidenceFile
+from app.models.hotspot import Hotspot
 from app.models.device import Device
 from app.models.incident_type import IncidentType
 from app.schemas.report import (
@@ -270,6 +271,27 @@ def _build_report_response(r: Report, db: Optional[Session] = None) -> ReportRes
         EvidencePreview(evidence_id=ef.evidence_id, file_url=ef.file_url, file_type=ef.file_type)
         for ef in evidence_files[:3]
     ]
+
+    hotspot_id = None
+    hotspot_risk_level = None
+    hotspot_incident_count = None
+    hotspot_label = None
+
+    hotspots = list(getattr(r, "hotspots", None) or [])
+    if hotspots:
+        risk_rank = {"low": 0, "medium": 1, "high": 2}
+        hotspots.sort(
+            key=lambda h: (risk_rank.get((h.risk_level or "").lower(), 0), h.incident_count, h.detected_at),
+            reverse=True,
+        )
+        h: Hotspot = hotspots[0]
+        hotspot_id = h.hotspot_id
+        hotspot_risk_level = h.risk_level
+        hotspot_incident_count = h.incident_count
+        type_name = h.incident_type.type_name if h.incident_type else (r.incident_type.type_name if r.incident_type else f"Type {r.incident_type_id}")
+        area_name = village_name or "this area"
+        hotspot_label = f"{type_name} hotspot in {area_name}"
+
     return ReportResponse(
         report_id=r.report_id,
         device_id=r.device_id,
@@ -284,6 +306,10 @@ def _build_report_response(r: Report, db: Optional[Session] = None) -> ReportRes
         incident_type_name=r.incident_type.type_name if r.incident_type else None,
         evidence_count=len(evidence_files),
         evidence_preview=evidence_preview,
+        hotspot_id=hotspot_id,
+        hotspot_risk_level=hotspot_risk_level,
+        hotspot_incident_count=hotspot_incident_count,
+        hotspot_label=hotspot_label,
     )
 
 
@@ -405,6 +431,7 @@ def list_reports(
                 joinedload(Report.incident_type),
                 joinedload(Report.village_location),
                 selectinload(Report.evidence_files),
+                selectinload(Report.hotspots),
             )
             .filter(Report.device_id == device_id)
             .order_by(Report.reported_at.desc())
@@ -417,6 +444,7 @@ def list_reports(
         joinedload(Report.incident_type),
         joinedload(Report.village_location),
         selectinload(Report.evidence_files),
+        selectinload(Report.hotspots),
     )
     # Officers see only reports assigned to them
     if getattr(current_user, "role", None) == "officer":

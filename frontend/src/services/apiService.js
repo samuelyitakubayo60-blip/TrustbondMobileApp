@@ -188,6 +188,10 @@ export const apiService = {
     return fetchWithAuth(url);
   },
 
+  async getHotspotEvidence(hotspotId) {
+    return fetchWithAuth(API_ENDPOINTS.hotspots.evidence(hotspotId));
+  },
+
   async getLocations(params = {}) {
     const sp = new URLSearchParams();
     if (params.location_type) sp.set('location_type', params.location_type);

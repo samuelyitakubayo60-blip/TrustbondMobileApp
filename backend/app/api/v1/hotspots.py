@@ -1,13 +1,15 @@
 from typing import Annotated, List, Optional
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session, joinedload
+from fastapi import APIRouter, Depends, Query, HTTPException, status
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db
 from app.models.hotspot import Hotspot
+from app.models.report import Report
 from app.api.v1.auth import get_current_admin_or_supervisor
 from app.models.police_user import PoliceUser
 from app.schemas.hotspot import HotspotResponse
+from app.schemas.report import EvidenceFileResponse
 
 router = APIRouter(prefix="/hotspots", tags=["hotspots"])
 
@@ -43,3 +45,38 @@ def list_hotspots(
         )
         for h in hotspots
     ]
+
+
+@router.get("/{hotspot_id}/evidence", response_model=List[EvidenceFileResponse])
+def get_hotspot_evidence(
+    hotspot_id: int,
+    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)],
+    db: Session = Depends(get_db),
+):
+    """Return all evidence files from all reports that contributed to this hotspot."""
+    hotspot = (
+        db.query(Hotspot)
+        .options(selectinload(Hotspot.reports).selectinload(Report.evidence_files))
+        .filter(Hotspot.hotspot_id == hotspot_id)
+        .first()
+    )
+    if not hotspot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hotspot not found")
+
+    evidence_items: List[EvidenceFileResponse] = []
+    for r in hotspot.reports or []:
+        for ef in r.evidence_files or []:
+            evidence_items.append(
+                EvidenceFileResponse(
+                    evidence_id=ef.evidence_id,
+                    report_id=ef.report_id,
+                    file_url=ef.file_url,
+                    file_type=ef.file_type,
+                    uploaded_at=ef.uploaded_at,
+                    media_latitude=ef.media_latitude,
+                    media_longitude=ef.media_longitude,
+                )
+            )
+
+    evidence_items.sort(key=lambda e: (e.uploaded_at is None, e.uploaded_at))
+    return evidence_items

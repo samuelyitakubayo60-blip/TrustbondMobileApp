@@ -41,6 +41,11 @@ class ReportResponse(BaseModel):
     incident_type_name: Optional[str] = None  # set when listing/loading with join
     evidence_count: int = 0
     evidence_preview: list["EvidencePreview"] = []
+     # Hotspot summary (if this report is part of an active hotspot)
+    hotspot_id: Optional[int] = None
+    hotspot_risk_level: Optional[str] = None  # low | medium | high
+    hotspot_incident_count: Optional[int] = None
+    hotspot_label: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -243,6 +243,8 @@ export default function Reports() {
                 const preview = Array.isArray(r.evidence_preview) ? r.evidence_preview : [];
                 const showPreview = preview.slice(0, 3);
                 const extraCount = Math.max(0, (Number(r.evidence_count || preview.length) || 0) - showPreview.length);
+                const inHotspot = r.hotspot_id != null;
+                const hotspotRisk = String(r.hotspot_risk_level || '').toLowerCase();
 
                 return (
                   <div
@@ -259,9 +261,16 @@ export default function Reports() {
                         <span className="report-type">{r.incident_type_name || `Type ${r.incident_type_id}`}</span>
                         <span className="report-time">· {formatDate(r.reported_at)}</span>
                       </div>
-                      <span className="report-status" style={{ background: sm.bg, color: sm.fg }}>
-                        {sm.label}
-                      </span>
+                      <div className="report-card-chips">
+                        {inHotspot && (
+                          <span className={`report-hotspot-chip risk-${hotspotRisk || 'low'}`}>
+                            Hotspot{r.hotspot_incident_count ? ` · ${r.hotspot_incident_count} reports` : ''}
+                          </span>
+                        )}
+                        <span className="report-status" style={{ background: sm.bg, color: sm.fg }}>
+                          {sm.label}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="report-card-meta">
