@@ -23,7 +23,7 @@ from app.models.police_user import PoliceUser  # type: ignore
 
 
 # EDIT THESE BEFORE RUNNING (or run multiple times with different values)
-DEFAULT_EMAIL = "samuelyitakubayo60@gmailk.com"
+DEFAULT_EMAIL = "samuelyitakubayo60@gmail.com"
 DEFAULT_PASSWORD = "Admin123!"
 DEFAULT_FIRST_NAME = "System"
 DEFAULT_LAST_NAME = "Admin"

@@ -25,10 +25,17 @@ class ReportCreate(BaseModel):
     movement_speed: Optional[Decimal] = None
     was_stationary: Optional[bool] = None
     evidence_files: list[EvidenceFileCreate] = []
+    # Contextual tags from reporter (e.g. Night-time, Weapons involved)
+    context_tags: list[str] = []
+    # Client metadata at submit (optional)
+    app_version: Optional[str] = None
+    network_type: Optional[str] = None
+    battery_level: Optional[Decimal] = None
 
 
 class ReportResponse(BaseModel):
     report_id: UUID
+    report_number: Optional[str] = None  # RPT-YYYY-NNNN
     device_id: UUID
     incident_type_id: int
     description: Optional[str]
@@ -36,16 +43,25 @@ class ReportResponse(BaseModel):
     longitude: Decimal
     reported_at: datetime
     rule_status: str
+    status: Optional[str] = None  # report_status: pending, verified, flagged, rejected
+    verification_status: Optional[str] = None  # pending, under_review, verified, rejected
     village_location_id: Optional[int] = None
     village_name: Optional[str] = None  # from locations table (village containing the point)
     incident_type_name: Optional[str] = None  # set when listing/loading with join
     evidence_count: int = 0
     evidence_preview: list["EvidencePreview"] = []
-     # Hotspot summary (if this report is part of an active hotspot)
+    trust_score: Optional[Decimal] = None  # from device or ML prediction
     hotspot_id: Optional[int] = None
     hotspot_risk_level: Optional[str] = None  # low | medium | high
     hotspot_incident_count: Optional[int] = None
     hotspot_label: Optional[str] = None
+    is_flagged: Optional[bool] = None
+    flag_reason: Optional[str] = None
+    verified_at: Optional[datetime] = None
+    context_tags: list[str] = []
+    app_version: Optional[str] = None
+    network_type: Optional[str] = None
+    battery_level: Optional[Decimal] = None
 
     class Config:
         from_attributes = True

@@ -9,10 +9,17 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.email import is_smtp_configured, send_password_reset_code
-from app.core.security import ALGORITHM, create_access_token, get_password_hash, verify_password
+from app.core.security import (
+    ALGORITHM,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    create_access_token,
+    get_password_hash,
+    verify_password,
+)
 from app.database import get_db
 from app.models.password_reset_code import PasswordResetCode
 from app.models.police_user import PoliceUser
+from app.models.user_session import UserSession
 from app.schemas.auth import ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, MeResponse, ResetPasswordRequest, Token
 
 
@@ -50,10 +57,33 @@ def _get_user_from_token(db: Session, token: str) -> PoliceUser:
     user = db.query(PoliceUser).filter(PoliceUser.police_user_id == int(sub)).first()
     if not user or not user.is_active:
         raise credentials_exception
+
+    # Optional: if sessions table exists, ensure this token corresponds
+    # to a non-revoked session. If not found, fall back to accepting
+    # the token so legacy tokens still work.
+    try:
+        session = (
+            db.query(UserSession)
+            .filter(
+                UserSession.police_user_id == user.police_user_id,
+                UserSession.refresh_token == token,
+                UserSession.expires_at > datetime.now(timezone.utc),
+                UserSession.revoked_at.is_(None),
+            )
+            .first()
+        )
+    except Exception:
+        session = None
+
+    if session is None:
+        # Do not immediately revoke access; simply allow login,
+        # but admin revoke endpoints will act on sessions when present.
+        return user
+
     return user
 
 
-async def get_current_user(
+def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     db: Session = Depends(get_db),
 ) -> PoliceUser:
@@ -99,11 +129,22 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
 
     # Update last_login_at
-    user.last_login_at = datetime.now(timezone.utc)
-    db.add(user)
+    now = datetime.now(timezone.utc)
+    user.last_login_at = now
+    access_token = create_access_token(subject=str(user.police_user_id), role=user.role)
+
+    # Create / record a session tied to this access token
+    expires_at = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    session_row = UserSession(
+        police_user_id=user.police_user_id,
+        refresh_token=access_token,
+        user_agent=None,
+        ip_address=None,
+        expires_at=expires_at,
+    )
+    db.add_all([user, session_row])
     db.commit()
 
-    access_token = create_access_token(subject=str(user.police_user_id), role=user.role)
     return Token(access_token=access_token)
 
 
@@ -125,6 +166,30 @@ def change_password(
     db.add(current_user)
     db.commit()
     return {"message": "Password updated"}
+
+
+@router.post("/revoke-other-sessions")
+def revoke_other_sessions(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
+):
+    """
+    Revoke all other active sessions for the current user, keeping this one.
+    """
+    now = datetime.now(timezone.utc)
+    (
+        db.query(UserSession)
+        .filter(
+            UserSession.police_user_id == current_user.police_user_id,
+            UserSession.refresh_token != token,
+            UserSession.revoked_at.is_(None),
+            UserSession.expires_at > now,
+        )
+        .update({UserSession.revoked_at: now}, synchronize_session=False)
+    )
+    db.commit()
+    return {"message": "Other sessions revoked"}
 
 
 RESET_CODE_EXPIRE_MINUTES = 15

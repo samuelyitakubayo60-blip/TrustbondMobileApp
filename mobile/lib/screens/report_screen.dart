@@ -412,7 +412,7 @@ class _ReportScreenState extends State<ReportScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               DropdownButtonFormField<int>(
-                value: _selectedIncidentTypeId,
+                initialValue: _selectedIncidentTypeId,
                 decoration: const InputDecoration(
                   labelText: 'Incident Type',
                   border: OutlineInputBorder(),

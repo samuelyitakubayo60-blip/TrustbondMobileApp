@@ -1,96 +1,324 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext.jsx';
-import ProtectedRoute from './components/ProtectedRoute.jsx';
-import Login from './pages/Login.jsx';
-import ForgotPassword from './pages/ForgotPassword.jsx';
-import ResetPassword from './pages/ResetPassword.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import Reports from './pages/Reports.jsx';
-import ReportDetail from './pages/ReportDetail.jsx';
-import Users from './pages/Users.jsx';
-import Hotspots from './pages/Hotspots.jsx';
-import ChangePassword from './pages/ChangePassword.jsx';
-import AuditLog from './pages/AuditLog.jsx';
-import IncidentTypes from './pages/IncidentTypes.jsx';
-import './App.css';
-import './pages/Pages.css';
+import React, { useState, useEffect } from 'react';
+import Layout from './components/Layout/Layout';
+import Dashboard from './components/screens/Dashboard';
+import Reports from './components/screens/Reports';
+import ReportDetail from './components/screens/ReportDetail';
+import CaseManagement from './components/screens/CaseManagement';
+import Hotspots from './components/screens/Hotspots';
+import SafetyMap from './components/screens/SafetyMap';
+import DeviceTrust from './components/screens/DeviceTrust';
+import Users from './components/screens/Users';
+import IncidentTypes from './components/screens/IncidentTypes';
+import Stations from './components/screens/Stations';
+import AuditLog from './components/screens/AuditLog';
+import SystemConfig from './components/screens/SystemConfig';
+import ChangePassword from './components/screens/ChangePassword';
+import Notifications from './components/screens/Notifications';
+import Login from './components/screens/Login';
+import { useAuth } from './context/AuthContext';
+import AddUserModal from './components/Modals/AddUserModal';
+import EditUserModal from './components/Modals/EditUserModal';
+import AssignModal from './components/Modals/AssignModal';
+import AddIncidentModal from './components/Modals/AddIncidentModal';
+import NewCaseModal from './components/Modals/NewCaseModal';
+import StationModal from './components/Modals/StationModal';
+import api from './api/client';
 
 function App() {
+  const { user, loading, logout } = useAuth();
+  const [currentScreen, setCurrentScreen] = useState('dashboard');
+  const [isLightMode, setIsLightMode] = useState(false);
+  const [selectedReportId, setSelectedReportId] = useState(null);
+  const [selectedIncidentType, setSelectedIncidentType] = useState(null);
+  const [selectedStation, setSelectedStation] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [incidentTypesRefreshKey, setIncidentTypesRefreshKey] = useState(0);
+  const [usersRefreshKey, setUsersRefreshKey] = useState(0);
+  const [sidebarCounts, setSidebarCounts] = useState({
+    reports: 0,
+    cases: 0,
+    notifications: 0,
+  });
+  const [modals, setModals] = useState({
+    addUser: false,
+    editUser: false,
+    assign: false,
+    addIncident: false,
+    editIncident: false,
+    addStation: false,
+    editStation: false,
+    newCase: false
+  });
+
+  // Screens configuration
+  const screens = [
+    'dashboard',
+    'reports',
+    'report-detail',
+    'case-management',
+    'hotspots',
+    'safety-map',
+    'device-trust',
+    'users',
+    'incident-types',
+    'audit-log',
+    'system-config',
+    'change-password',
+    'notifications'
+  ];
+
+  const titles = {
+    dashboard: 'Dashboard',
+    reports: 'Reports',
+    'report-detail': 'Report Detail — RPT-0041',
+    'case-management': 'Case Management',
+    hotspots: 'Crime Hotspots',
+    'safety-map': 'Safety Map',
+    'device-trust': 'Device Trust Management',
+    users: 'User Management',
+    'incident-types': 'Incident Types',
+    'audit-log': 'Audit Log',
+    'system-config': 'System Configuration',
+    'change-password': 'Change Password',
+    notifications: 'Notifications'
+  };
+
+  // Load theme from localStorage
+  useEffect(() => {
+    const savedMode = localStorage.getItem('tb-mode');
+    if (savedMode === 'light') {
+      setIsLightMode(true);
+      document.body.classList.add('light-mode');
+    }
+  }, []);
+
+  const toggleMode = () => {
+    const newMode = !isLightMode;
+    setIsLightMode(newMode);
+    document.body.classList.toggle('light-mode');
+    localStorage.setItem('tb-mode', newMode ? 'light' : 'dark');
+  };
+
+  // Load sidebar badge counts (reports, cases, notifications)
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+
+    const loadCounts = async () => {
+      try {
+        const [dash, caseStats, notif] = await Promise.all([
+          api.get('/api/v1/stats/dashboard'),
+          api.get('/api/v1/cases/stats'),
+          api.get('/api/v1/notifications/unread-count'),
+        ]);
+        if (cancelled) return;
+        setSidebarCounts({
+          reports: dash?.pending ?? 0,
+          cases: (caseStats?.open ?? 0) + (caseStats?.in_progress ?? 0),
+          notifications: notif?.unread_count ?? 0,
+        });
+      } catch {
+        if (cancelled) return;
+        setSidebarCounts((prev) => ({ ...prev }));
+      }
+    };
+
+    loadCounts();
+    const id = setInterval(loadCounts, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [user]);
+
+  const goToScreen = (id, idx) => {
+    setCurrentScreen(id);
+  };
+
+  const handleOpenReport = (reportId) => {
+    setSelectedReportId(reportId);
+    setCurrentScreen('report-detail');
+  };
+
+  const openModal = (modalName) => {
+    if (modalName === 'addIncident') setSelectedIncidentType(null);
+    if (modalName === 'addStation') setSelectedStation(null);
+    setModals(prev => ({ ...prev, [modalName]: true }));
+  };
+
+  const closeModal = (modalName) => {
+    setModals(prev => ({ ...prev, [modalName]: false }));
+  };
+
+  // Render current screen
+  const renderScreen = () => {
+    switch (currentScreen) {
+      case 'dashboard':
+        return <Dashboard goToScreen={goToScreen} openModal={openModal} />;
+      case 'reports':
+        return (
+          <Reports
+            goToScreen={goToScreen}
+            openModal={openModal}
+            onOpenReport={handleOpenReport}
+          />
+        );
+      case 'report-detail':
+        return (
+          <ReportDetail
+            goToScreen={goToScreen}
+            openModal={openModal}
+            reportId={selectedReportId}
+          />
+        );
+      case 'case-management':
+        return <CaseManagement goToScreen={goToScreen} openModal={openModal} />;
+      case 'hotspots':
+        return <Hotspots goToScreen={goToScreen} openModal={openModal} />;
+      case 'safety-map':
+        return <SafetyMap goToScreen={goToScreen} openModal={openModal} />;
+      case 'device-trust':
+        return <DeviceTrust goToScreen={goToScreen} openModal={openModal} />;
+      case 'users':
+        return (
+          <Users
+            goToScreen={goToScreen}
+            openModal={openModal}
+            refreshKey={usersRefreshKey}
+            onEditUser={(u) => {
+              setSelectedUser(u);
+              openModal('editUser');
+            }}
+          />
+        );
+      case 'incident-types':
+        return (
+          <IncidentTypes
+            goToScreen={goToScreen}
+            openModal={openModal}
+            refreshKey={incidentTypesRefreshKey}
+            onEditIncidentType={(t) => {
+              setSelectedIncidentType(t);
+              openModal('editIncident');
+            }}
+          />
+        );
+      case 'stations':
+        return <Stations goToScreen={goToScreen} openModal={(name, payload) => {
+          if (name === 'editStation') {
+            setSelectedStation(payload || null);
+          }
+          openModal(name);
+        }} />;
+      case 'audit-log':
+        return <AuditLog goToScreen={goToScreen} openModal={openModal} />;
+      case 'system-config':
+        return <SystemConfig goToScreen={goToScreen} openModal={openModal} />;
+      case 'change-password':
+        return <ChangePassword goToScreen={goToScreen} openModal={openModal} />;
+      case 'notifications':
+        return <Notifications goToScreen={goToScreen} openModal={openModal} />;
+      default:
+        return <Dashboard goToScreen={goToScreen} openModal={openModal} />;
+    }
+  };
+
+  if (loading) {
+    return null;
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/reports"
-            element={
-              <ProtectedRoute>
-                <Reports />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/reports/:id"
-            element={
-              <ProtectedRoute>
-                <ReportDetail />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/users"
-            element={
-              <ProtectedRoute>
-                <Users />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/incident-types"
-            element={
-              <ProtectedRoute>
-                <IncidentTypes />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/hotspots"
-            element={
-              <ProtectedRoute>
-                <Hotspots />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/change-password"
-            element={
-              <ProtectedRoute>
-                <ChangePassword />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/audit"
-            element={
-              <ProtectedRoute>
-                <AuditLog />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+    <>
+      <Layout
+        currentScreen={currentScreen}
+        titles={titles}
+        isLightMode={isLightMode}
+        toggleMode={toggleMode}
+        goToScreen={goToScreen}
+        user={user}
+        onLogout={logout}
+        sidebarCounts={sidebarCounts}
+      >
+        {renderScreen()}
+      </Layout>
+
+      {/* Modals */}
+      <AddUserModal 
+        isOpen={modals.addUser}
+        onClose={() => closeModal('addUser')}
+        onSaved={() => setUsersRefreshKey((k) => k + 1)}
+      />
+      <EditUserModal 
+        isOpen={modals.editUser}
+        onClose={() => closeModal('editUser')}
+        user={selectedUser}
+        onSaved={() => setUsersRefreshKey((k) => k + 1)}
+      />
+      <AssignModal 
+        isOpen={modals.assign} 
+        onClose={() => closeModal('assign')} 
+        reportId={selectedReportId}
+        onAssigned={() => {
+          // after assignment, re-open report detail to refresh view
+          if (selectedReportId) {
+            setCurrentScreen('report-detail');
+          }
+        }}
+      />
+      <AddIncidentModal 
+        isOpen={modals.addIncident} 
+        onClose={() => closeModal('addIncident')}
+        mode="add"
+        incidentType={null}
+        onSaved={() => setIncidentTypesRefreshKey((k) => k + 1)}
+      />
+      <AddIncidentModal 
+        isOpen={modals.editIncident} 
+        onClose={() => closeModal('editIncident')}
+        mode="edit"
+        incidentType={selectedIncidentType}
+        onSaved={() => setIncidentTypesRefreshKey((k) => k + 1)}
+      />
+      <NewCaseModal 
+        isOpen={modals.newCase} 
+        onClose={() => closeModal('newCase')} 
+        onCreated={() => {
+          // simple approach: reload case list by returning to screen
+          setCurrentScreen('dashboard');
+          setTimeout(() => setCurrentScreen('case-management'), 0);
+        }}
+      />
+      <StationModal
+        isOpen={modals.addStation}
+        onClose={() => closeModal('addStation')}
+        mode="add"
+        station={null}
+        onSaved={() => {
+          // force reload when coming back to Stations; simplest is full reload
+          if (currentScreen === 'stations') {
+            setCurrentScreen('dashboard');
+            setTimeout(() => setCurrentScreen('stations'), 0);
+          }
+        }}
+      />
+      <StationModal
+        isOpen={modals.editStation}
+        onClose={() => closeModal('editStation')}
+        mode="edit"
+        station={selectedStation}
+        onSaved={() => {
+          if (currentScreen === 'stations') {
+            setCurrentScreen('dashboard');
+            setTimeout(() => setCurrentScreen('stations'), 0);
+          }
+        }}
+      />
+    </>
   );
 }
 

@@ -21,12 +21,22 @@ def list_hotspots(
     risk_level: Optional[str] = Query(None, description="Filter by risk_level (low, medium, high)."),
     limit: int = Query(50, ge=1, le=200),
 ):
-    """List hotspots. Created automatically when many reports of the same place and same incident type are submitted."""
-    query = (
-        db.query(Hotspot)
-        .options(joinedload(Hotspot.incident_type))
-        .order_by(Hotspot.detected_at.desc())
-    )
+    """List hotspots. Created automatically when many reports of the same place and same incident type are submitted.
+
+    - Admin: sees all hotspots.
+    - Supervisor: sees hotspots that include at least one report in their assigned_location_id (if set).
+    """
+    query = db.query(Hotspot).options(joinedload(Hotspot.incident_type))
+
+    # Scope for supervisors by assigned_location_id, if configured
+    if current_user.role == "supervisor" and getattr(current_user, "assigned_location_id", None):
+        query = (
+            query.join(Hotspot.reports)
+            .filter(Report.village_location_id == current_user.assigned_location_id)
+            .distinct()
+        )
+
+    query = query.order_by(Hotspot.detected_at.desc())
     if risk_level:
         query = query.filter(Hotspot.risk_level == risk_level)
     hotspots = query.limit(limit).all()

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Numeric, DateTime
+from sqlalchemy import Column, String, Integer, Numeric, Boolean, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from app.database import Base
@@ -14,3 +14,4 @@ class Device(Base):
     trusted_reports = Column(Integer, default=0)
     flagged_reports = Column(Integer, default=0)
     device_trust_score = Column(Numeric(5, 2), default=50.00)
+    is_banned = Column(Boolean, default=False)

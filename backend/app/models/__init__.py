@@ -13,6 +13,9 @@ from app.models.report_assignment import ReportAssignment
 from app.models.notification import Notification
 from app.models.audit_log import AuditLog
 from app.models.password_reset_code import PasswordResetCode
+from app.models.case import Case, CaseReport
+from app.models.user_session import UserSession
+from app.models.system_config import SystemConfig
 
 __all__ = [
     "Base",
@@ -30,4 +33,8 @@ __all__ = [
     "Notification",
     "AuditLog",
     "PasswordResetCode",
+    "Case",
+    "CaseReport",
+    "UserSession",
+    "SystemConfig",
 ]

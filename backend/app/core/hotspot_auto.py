@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.hotspot import Hotspot, hotspot_reports_table
 from app.models.report import Report
+from app.models.ml_prediction import MLPrediction
 
 
 # Same place + same type: 2+ reports in last 24h in one area (village or lat/long bucket), same incident_type_id
@@ -25,11 +26,16 @@ def _weight_for_report(report: Report) -> Tuple[float, bool]:
     """
     Compute a numeric weight and whether this report has a confirmed police review.
 
+    Base rule-based weight:
     - rule_status passed     -> 1.0
     - rule_status pending    -> 0.6
     - rule_status flagged    -> 0.3
     - rule_status rejected   -> 0.0
     - bonus for confirmed review: +0.7
+
+    If an ML prediction exists, its trust_score (0–100) is converted to a
+    trust_weight in [0, 1] and blended with the rule-based score to give
+    more influence to high-credibility reports.
     """
     status = (report.rule_status or "").lower()
     if status == "passed":
@@ -46,6 +52,31 @@ def _weight_for_report(report: Report) -> Tuple[float, bool]:
     has_confirmed = any((rv.decision or "").lower() == "confirmed" for rv in (report.police_reviews or []))
     if has_confirmed:
         base += 0.7
+
+    # Blend in ML trust_score if available
+    ml_preds = getattr(report, "ml_predictions", None) or []
+    if ml_preds:
+        # Prefer final predictions, then latest by evaluated_at
+        final_preds = [p for p in ml_preds if p.is_final]
+        if final_preds:
+            ml_source = final_preds
+        else:
+            ml_source = ml_preds
+        ml_source.sort(
+            key=lambda p: (p.evaluated_at or datetime.min.replace(tzinfo=timezone.utc)),
+            reverse=True,
+        )
+        latest: MLPrediction = ml_source[0]
+        trust_score = latest.trust_score
+        try:
+            trust_score_f = float(trust_score) if trust_score is not None else None
+        except Exception:
+            trust_score_f = None
+        if trust_score_f is not None:
+            trust_weight = max(0.0, min(1.0, trust_score_f / 100.0))
+            # Blend: 60% ML trust, 40% rule-based
+            base = trust_weight * 1.5 + base * 0.4
+
     return base, has_confirmed
 
 
@@ -81,7 +112,10 @@ def create_hotspots_from_reports(
 
     reports = (
         db.query(Report)
-        .options(selectinload(Report.police_reviews))
+        .options(
+            selectinload(Report.police_reviews),
+            selectinload(Report.ml_predictions),
+        )
         .filter(Report.reported_at >= since)
         .all()
     )

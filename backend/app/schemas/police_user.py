@@ -14,6 +14,7 @@ class PoliceUserBase(BaseModel):
     badge_number: Optional[str] = None
     role: str = Field(..., pattern="^(admin|supervisor|officer)$")
     assigned_location_id: Optional[int] = None
+    station_id: Optional[int] = None
     is_active: bool = True
 
 
@@ -26,6 +27,7 @@ class PoliceUserCreate(BaseModel):
     phone_number: Optional[str] = None
     role: str = Field(..., pattern="^(admin|supervisor|officer)$")
     assigned_location_id: Optional[int] = None
+    station_id: Optional[int] = None
     is_active: bool = True
 
 
@@ -37,6 +39,7 @@ class PoliceUserUpdate(BaseModel):
     badge_number: Optional[str] = None
     role: Optional[str] = Field(default=None, pattern="^(admin|supervisor|officer)$")
     assigned_location_id: Optional[int] = None
+    station_id: Optional[int] = None
     is_active: Optional[bool] = None
     password: Optional[str] = Field(default=None, min_length=6)
 
@@ -51,6 +54,7 @@ class PoliceUserResponse(BaseModel):
     badge_number: Optional[str]
     role: str
     assigned_location_id: Optional[int]
+    station_id: Optional[int]
     is_active: bool
     created_at: datetime
     last_login_at: Optional[datetime]

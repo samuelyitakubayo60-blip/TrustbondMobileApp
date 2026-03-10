@@ -1,83 +1,80 @@
 import 'package:flutter/material.dart';
-import 'home_screen.dart';
+import '../config/theme.dart';
+import '../widgets/shared_widgets.dart';
+import 'onboarding_screen.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends State<SplashScreen> {
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(const Duration(milliseconds: 2500), () {
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    final onPrimary = Theme.of(context).colorScheme.onPrimary;
     return Scaffold(
       body: Container(
         width: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              primary,
-              primary.withOpacity(0.85),
-            ],
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(-0.4, -0.6),
+            radius: 1.4,
+            colors: [Color(0xFF0D1A2E), Color(0xFF060B14)],
           ),
         ),
         child: SafeArea(
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Spacer(flex: 2),
-              // Logo: use asset if present, otherwise shield icon
-              _buildLogo(context, onPrimary),
-              const SizedBox(height: 24),
-              Text(
-                'TrustBond',
-                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      color: onPrimary,
-                      fontWeight: FontWeight.bold,
-                    ) ??
-                    const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: Image.asset(
+                  'assets/images/logo.jpeg',
+                  width: 110,
+                  height: 110,
+                  fit: BoxFit.cover,
+                ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Report incidents in Musanze',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: onPrimary.withOpacity(0.9),
-                    ) ??
-                    TextStyle(
-                      fontSize: 14,
-                      color: Colors.white.withOpacity(0.9),
-                    ),
+              const SizedBox(height: 16),
+              RichText(
+                text: const TextSpan(
+                  style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, letterSpacing: 3),
+                  children: [
+                    TextSpan(text: 'TRUST', style: TextStyle(color: AppColors.text)),
+                    TextSpan(text: 'BOND', style: TextStyle(color: AppColors.accent)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'COMMUNITY SAFETY · RWANDA',
+                style: TextStyle(fontSize: 10, color: AppColors.muted, letterSpacing: 2.5),
+              ),
+              const AccentLine(),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 60),
+                child: Text(
+                  'Anonymous reporting. Intelligent verification. Safer Musanze.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: AppColors.muted, height: 1.8),
+                ),
               ),
               const Spacer(flex: 2),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 32),
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
-                  ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 36),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+                        ),
+                        child: const Text('Get Started →'),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Your identity is always protected',
+                      style: TextStyle(fontSize: 10, color: AppColors.muted),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -85,23 +82,5 @@ class _SplashScreenState extends State<SplashScreen> {
         ),
       ),
     );
-  }
-
-  Widget _buildLogo(BuildContext context, Color color) {
-    try {
-      return Image.asset(
-        'assets/images/logo.jpeg',
-        height: 96,
-        width: 96,
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => Icon(
-          Icons.shield_outlined,
-          size: 96,
-          color: color,
-        ),
-      );
-    } catch (_) {
-      return Icon(Icons.shield_outlined, size: 96, color: color);
-    }
   }
 }

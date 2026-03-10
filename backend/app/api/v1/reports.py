@@ -36,11 +36,30 @@ from app.models.police_review import PoliceReview
 from app.api.v1.auth import get_optional_user, get_current_user, get_current_admin_or_supervisor
 from app.api.v1.notifications import create_notification
 from app.core.report_rules import apply_rule_based_status, is_likely_screenshot_or_screen_recording
+from app.core.credibility_model import score_report_credibility
 from app.core.audit import log_action
 from app.core.hotspot_auto import create_hotspots_from_reports
 from app.core.village_lookup import get_village_location_id, get_village_location_info
+from sqlalchemy import text
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+def _generate_report_number(db: Session) -> str:
+    """Generate next report number RPT-YYYY-NNNN."""
+    year = datetime.now(timezone.utc).strftime("%Y")
+    prefix = f"RPT-{year}-"
+    row = db.execute(
+        text("""
+            SELECT COALESCE(MAX(
+                NULLIF(SUBSTRING(report_number FROM 'RPT-[0-9]{4}-([0-9]+)'), '')::INT
+            ), 0) + 1 AS next_num
+            FROM reports WHERE report_number LIKE :prefix
+        """),
+        {"prefix": f"{prefix}%"},
+    ).fetchone()
+    next_num = row[0] if row else 1
+    return f"{prefix}{next_num:04d}"
 
 UPLOAD_DIR = "uploads/evidence"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -191,9 +210,10 @@ def create_report(
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid coordinates")
     
-    # Create report
+    report_num = _generate_report_number(db) if hasattr(Report, "report_number") else None
     report = Report(
         report_id=uuid4(),
+        report_number=report_num,
         device_id=report_data.device_id,
         incident_type_id=report_data.incident_type_id,
         description=report_data.description,
@@ -204,6 +224,12 @@ def create_report(
         movement_speed=report_data.movement_speed,
         was_stationary=report_data.was_stationary,
         rule_status="pending",  # Will be processed by verification engine
+        status="pending",
+        verification_status="pending",
+        context_tags=report_data.context_tags or [],
+        app_version=report_data.app_version,
+        network_type=report_data.network_type,
+        battery_level=report_data.battery_level,
     )
     
     report.village_location_id = village_id  # already looked up above (required for in-scope)
@@ -226,15 +252,23 @@ def create_report(
 
     # Rule-based verification (no ML; ML will be added later)
     evidence_count = len(report_data.evidence_files)
-    rule_status, is_flagged = apply_rule_based_status(report, evidence_count, db)
+    rule_status, is_flagged, flag_reason = apply_rule_based_status(report, evidence_count, db)
     report.rule_status = rule_status
     report.is_flagged = is_flagged
-    
+    if is_flagged and flag_reason:
+        report.flag_reason = flag_reason
+    if rule_status == "rejected":
+        report.status = "rejected"
+        report.verification_status = "rejected"
+
+    # ML-based credibility scoring (best-effort; failures are ignored)
+    score_report_credibility(db, report, device, evidence_count)
+
     # Update device stats
     device.total_reports += 1
 
     log_action(db, "report_created", entity_type="report", entity_id=str(report.report_id), actor_type="system", success=True)
-    
+
     db.commit()
     db.refresh(report)
 
@@ -292,8 +326,22 @@ def _build_report_response(r: Report, db: Optional[Session] = None) -> ReportRes
         area_name = village_name or "this area"
         hotspot_label = f"{type_name} hotspot in {area_name}"
 
+    trust_score = None
+    if getattr(r, "device", None) and r.device:
+        trust_score = r.device.device_trust_score
+    if trust_score is None and getattr(r, "ml_predictions", None):
+        preds = [p for p in r.ml_predictions if p.is_final or p.trust_score is not None]
+        if preds:
+            preds.sort(key=lambda p: (p.evaluated_at or datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
+            trust_score = preds[0].trust_score
+
+    context_tags = getattr(r, "context_tags", None) or []
+    if context_tags is None:
+        context_tags = []
+
     return ReportResponse(
         report_id=r.report_id,
+        report_number=getattr(r, "report_number", None),
         device_id=r.device_id,
         incident_type_id=r.incident_type_id,
         description=r.description,
@@ -301,15 +349,25 @@ def _build_report_response(r: Report, db: Optional[Session] = None) -> ReportRes
         longitude=r.longitude,
         reported_at=r.reported_at,
         rule_status=r.rule_status,
+        status=getattr(r, "status", None),
+        verification_status=getattr(r, "verification_status", None),
         village_location_id=r.village_location_id,
         village_name=village_name,
         incident_type_name=r.incident_type.type_name if r.incident_type else None,
         evidence_count=len(evidence_files),
         evidence_preview=evidence_preview,
+        trust_score=float(trust_score) if trust_score is not None else None,
         hotspot_id=hotspot_id,
         hotspot_risk_level=hotspot_risk_level,
         hotspot_incident_count=hotspot_incident_count,
         hotspot_label=hotspot_label,
+        is_flagged=getattr(r, "is_flagged", None),
+        flag_reason=getattr(r, "flag_reason", None),
+        verified_at=getattr(r, "verified_at", None),
+        context_tags=context_tags,
+        app_version=getattr(r, "app_version", None),
+        network_type=getattr(r, "network_type", None),
+        battery_level=float(r.battery_level) if getattr(r, "battery_level", None) is not None else None,
     )
 
 
@@ -417,17 +475,27 @@ def list_reports(
     device_id: Optional[UUID] = Query(None, description="Device ID for 'my reports' (mobile). If omitted, auth required for all reports."),
     current_user: Annotated[Optional[PoliceUser], Depends(get_optional_user)] = None,
     db: Session = Depends(get_db),
-    rule_status: Optional[str] = Query(None, description="Filter by rule_status: pending, passed, flagged (suspicious/needs review), rejected."),
+    rule_status: Optional[str] = Query(None, description="Filter by rule_status: pending, passed, flagged, rejected."),
+    incident_type_id: Optional[int] = Query(None, description="Filter by incident type."),
+    village_location_id: Optional[int] = Query(None, description="Filter by village/location."),
     from_date: Optional[datetime] = Query(None, description="Reports reported on or after this date (ISO)."),
     to_date: Optional[datetime] = Query(None, description="Reports reported on or before this date (ISO)."),
     limit: int = Query(20, ge=1, le=100, description="Page size (police list only)."),
     offset: int = Query(0, ge=0, description="Skip N items (police list only)."),
 ):
-    """List reports. With device_id: list for that device (mobile). Without: auth required. Officers see only reports assigned to them; supervisors/admins see all."""
+    """List reports.
+
+    - With device_id: list for that device (mobile).
+    - Without device_id: auth required.
+      * Officers: only reports assigned to them.
+      * Supervisors: reports in their assigned location (if set).
+      * Admins: all reports.
+    """
     if device_id is not None:
         reports = (
             db.query(Report)
             .options(
+                joinedload(Report.device),
                 joinedload(Report.incident_type),
                 joinedload(Report.village_location),
                 selectinload(Report.evidence_files),
@@ -441,18 +509,28 @@ def list_reports(
     if current_user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     query = db.query(Report).options(
+        joinedload(Report.device),
         joinedload(Report.incident_type),
         joinedload(Report.village_location),
         selectinload(Report.evidence_files),
         selectinload(Report.hotspots),
     )
+    role = getattr(current_user, "role", None)
+
     # Officers see only reports assigned to them
-    if getattr(current_user, "role", None) == "officer":
+    if role == "officer":
         query = query.join(Report.assignments).filter(
             ReportAssignment.police_user_id == current_user.police_user_id
         ).distinct()
+    # Supervisors see reports in their assigned location (if configured)
+    elif role == "supervisor" and getattr(current_user, "assigned_location_id", None):
+        query = query.filter(Report.village_location_id == current_user.assigned_location_id)
     if rule_status:
         query = query.filter(Report.rule_status == rule_status)
+    if incident_type_id is not None:
+        query = query.filter(Report.incident_type_id == incident_type_id)
+    if village_location_id is not None:
+        query = query.filter(Report.village_location_id == village_location_id)
     if from_date is not None:
         query = query.filter(Report.reported_at >= from_date)
     if to_date is not None:
@@ -591,15 +669,60 @@ def get_report(
 def add_review(
     report_id: UUID,
     body: ReviewCreate,
-    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)] = None,
+    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
     db: Session = Depends(get_db),
 ):
-    """Add a police review (decision + note). Admin or supervisor only."""
+    """
+    Add a police review (decision + note).
+
+    - Admin / Supervisor: any report they can see.
+    - Officer: only for reports assigned to them.
+    """
     if body.decision not in ("confirmed", "rejected", "investigation"):
         raise HTTPException(status_code=400, detail="decision must be confirmed, rejected, or investigation")
+
     report = db.query(Report).filter(Report.report_id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+
+    role = getattr(current_user, "role", None)
+    if role == "officer":
+        assigned = (
+            db.query(ReportAssignment)
+            .filter(
+                ReportAssignment.report_id == report_id,
+                ReportAssignment.police_user_id == current_user.police_user_id,
+            )
+            .first()
+        )
+        if not assigned:
+            raise HTTPException(
+                status_code=403,
+                detail="You can only review reports assigned to you",
+            )
+
+    # Update report verification and status when police confirms or rejects
+    now_utc = datetime.now(timezone.utc)
+    if body.decision == "confirmed":
+        report.verification_status = "verified"
+        report.verified_by = current_user.police_user_id
+        report.verified_at = now_utc
+        report.status = "verified"
+        report.is_flagged = False
+        report.flag_reason = None
+    elif body.decision == "rejected":
+        report.verification_status = "rejected"
+        report.verified_by = current_user.police_user_id
+        report.verified_at = now_utc
+        report.status = "rejected"
+        report.is_flagged = True
+        report.flag_reason = body.review_note or "rejected_by_reviewer"
+    else:
+        # investigation
+        report.verification_status = "under_review"
+        if body.review_note:
+            report.flag_reason = body.review_note
+
     review = PoliceReview(
         review_id=uuid4(),
         report_id=report_id,
@@ -639,18 +762,39 @@ def assign_report(
     current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)] = None,
     db: Session = Depends(get_db),
 ):
-    """Assign this report to an officer. Admin or supervisor only."""
+    """Assign this report to an officer. Admin or supervisor only.
+
+    - Admin: can assign to any active officer.
+    - Supervisor: can assign only to officers in their own station (if they have one).
+    """
     report = db.query(Report).filter(Report.report_id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
-    officer = db.query(PoliceUser).filter(
-        PoliceUser.police_user_id == body.police_user_id,
-        PoliceUser.is_active == True,
-    ).first()
+    officer = (
+        db.query(PoliceUser)
+        .filter(
+            PoliceUser.police_user_id == body.police_user_id,
+            PoliceUser.is_active == True,
+        )
+        .first()
+    )
     if not officer:
         raise HTTPException(status_code=400, detail="Officer not found or inactive")
+
+    # Supervisors can only assign to officers in their station.
+    if current_user.role == "supervisor" and current_user.station_id is not None:
+        if officer.station_id != current_user.station_id:
+            raise HTTPException(
+                status_code=403,
+                detail="You can only assign reports to officers in your station",
+            )
     if body.priority not in ("low", "medium", "high", "urgent"):
         raise HTTPException(status_code=400, detail="priority must be low, medium, high, or urgent")
+
+    # Set handling_station_id when assigning to an officer with a station
+    if officer.station_id is not None:
+        report.handling_station_id = officer.station_id
+
     assignment = ReportAssignment(
         assignment_id=uuid4(),
         report_id=report_id,
@@ -849,9 +993,11 @@ async def upload_evidence(
     report_after = db.query(Report).filter(Report.report_id == report.report_id).first()
     if report_after:
         evidence_count = db.query(EvidenceFile).filter(EvidenceFile.report_id == report_after.report_id).count()
-        rule_status, is_flagged = apply_rule_based_status(report_after, evidence_count, db)
+        rule_status, is_flagged, flag_reason = apply_rule_based_status(report_after, evidence_count, db)
         report_after.rule_status = rule_status
         report_after.is_flagged = is_flagged
+        if is_flagged and flag_reason:
+            report_after.flag_reason = flag_reason
         db.commit()
     
     return {"evidence_id": str(evidence.evidence_id), "file_url": file_url}

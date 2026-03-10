@@ -116,10 +116,10 @@ def apply_rule_based_status(
     report: Report,
     evidence_count: int,
     db: Session,
-) -> tuple[str, bool]:
+) -> tuple[str, bool, str | None]:
     """
     Apply rule-based logic to set rule_status and is_flagged.
-    Returns (rule_status, is_flagged).
+    Returns (rule_status, is_flagged, flag_reason or None).
     """
     description = (report.description or "").strip()
     has_description = len(description) >= MIN_DESCRIPTION_LENGTH
@@ -136,25 +136,25 @@ def apply_rule_based_status(
 
     # Rule 1: Reject — no description and no evidence (too sparse to be useful)
     if not has_short_description and not has_evidence:
-        return "rejected", True
+        return "rejected", True, "no_description_or_evidence"
 
     # Rule 2: Flag — has evidence but no/minimal description
     if has_evidence and not has_description:
-        return "flagged", True
+        return "flagged", True, "no_description_with_evidence"
 
     # Rule 3: Flag — very short description (even with evidence)
     if has_short_description and not has_description and has_evidence:
-        return "flagged", True
+        return "flagged", True, "minimal_description"
 
     # Rule 4: Flag — high severity incident type (needs review)
     if severity >= HIGH_SEVERITY_WEIGHT:
-        return "flagged", True
+        return "flagged", True, "high_severity_incident"
 
     # Rule 5: Pass — has reasonable description; optional evidence
     if has_description:
-        return "passed", False
+        return "passed", False, None
 
     # Default: pending (e.g. short description but has evidence)
     if has_evidence:
-        return "passed", False
-    return "pending", False
+        return "passed", False, None
+    return "pending", False, None

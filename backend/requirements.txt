@@ -13,3 +13,7 @@ shapely
 pillow
 cloudinary
 email-validator
+scikit-learn
+xgboost 
+joblib
+pandas

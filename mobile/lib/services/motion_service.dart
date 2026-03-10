@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show sqrt;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:sensors_plus/sensors_plus.dart';
 
@@ -31,7 +32,7 @@ Future<MotionSample> collectMotionSample({double durationSeconds = 1.2}) async {
   });
 
   await Future.delayed(Duration(milliseconds: (durationSeconds * 1000).toInt()));
-  await sub?.cancel();
+  await sub.cancel();
 
   return _computeMotion(magnitudes);
 }
@@ -43,7 +44,7 @@ MotionSample _computeMotion(List<double> magnitudes) {
 
   final mean = magnitudes.reduce((a, b) => a + b) / magnitudes.length;
   final variance = magnitudes.map((m) => (m - mean) * (m - mean)).reduce((a, b) => a + b) / magnitudes.length;
-  final std = variance > 0 ? variance : 0.0;
+  final std = variance > 0 ? sqrt(variance) : 0.0;
 
   const lowThreshold = 0.5;
   const highThreshold = 3.0;

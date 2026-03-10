@@ -21,7 +21,22 @@ from app.models import (
     Notification,
     AuditLog,
 )
-from app.api.v1 import auth, devices, incident_types, police_users, reports, stats, hotspots, notifications, audit, locations, incident_groups
+from app.api.v1 import (
+    auth,
+    devices,
+    incident_types,
+    police_users,
+    reports,
+    stats,
+    hotspots,
+    notifications,
+    audit,
+    locations,
+    incident_groups,
+    cases,
+    stations,
+    system_config,
+)
 
 
 @asynccontextmanager
@@ -61,6 +76,9 @@ app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(audit.router, prefix="/api/v1")
 app.include_router(locations.router, prefix="/api/v1")
 app.include_router(incident_groups.router, prefix="/api/v1")
+app.include_router(cases.router, prefix="/api/v1")
+app.include_router(stations.router, prefix="/api/v1")
+app.include_router(system_config.router, prefix="/api/v1")
 
 
 @app.get("/health")

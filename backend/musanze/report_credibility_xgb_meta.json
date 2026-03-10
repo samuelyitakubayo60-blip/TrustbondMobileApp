@@ -1,0 +1,290 @@
+{
+  "best_params": {
+    "clf__subsample": 0.9,
+    "clf__n_estimators": 300,
+    "clf__min_child_weight": 5,
+    "clf__max_depth": 6,
+    "clf__learning_rate": 0.05,
+    "clf__gamma": 0.2,
+    "clf__colsample_bytree": 0.8
+  },
+  "best_threshold": 0.9929507970809937,
+  "feature_columns": [
+    "latitude",
+    "longitude",
+    "sector",
+    "cell",
+    "village",
+    "sector_id",
+    "cell_id",
+    "village_id",
+    "incident_type_id",
+    "incident_type_name",
+    "gps_accuracy",
+    "motion_level",
+    "movement_speed",
+    "was_stationary",
+    "evidence_count",
+    "has_live_capture",
+    "time_of_day",
+    "reported_at",
+    "description_length",
+    "network_type",
+    "device_total_reports",
+    "device_trusted_reports",
+    "device_flagged_reports",
+    "device_trust_score",
+    "confirmation_rate",
+    "spam_flag_count",
+    "rule_status",
+    "is_flagged",
+    "gps_speed_check",
+    "gps_anomaly_flag",
+    "future_timestamp_flag"
+  ],
+  "numeric_columns": [
+    "latitude",
+    "longitude",
+    "sector_id",
+    "cell_id",
+    "village_id",
+    "incident_type_id",
+    "gps_accuracy",
+    "movement_speed",
+    "was_stationary",
+    "evidence_count",
+    "has_live_capture",
+    "description_length",
+    "device_total_reports",
+    "device_trusted_reports",
+    "device_flagged_reports",
+    "device_trust_score",
+    "confirmation_rate",
+    "spam_flag_count",
+    "is_flagged",
+    "gps_speed_check",
+    "gps_anomaly_flag",
+    "future_timestamp_flag"
+  ],
+  "categorical_columns": [
+    "sector",
+    "cell",
+    "village",
+    "incident_type_name",
+    "motion_level",
+    "time_of_day",
+    "reported_at",
+    "network_type",
+    "rule_status"
+  ],
+  "n_rows": 6388,
+  "validation": {
+    "roc_auc": 1.0,
+    "pr_auc": 1.0
+  },
+  "test": {
+    "roc_auc": 1.0
+  },
+  "feature_importances_top50": [
+    {
+      "feature": "num__is_flagged",
+      "importance": 0.2851763069629669
+    },
+    {
+      "feature": "cat__rule_status_passed",
+      "importance": 0.23882298171520233
+    },
+    {
+      "feature": "cat__rule_status_pending",
+      "importance": 0.1379578560590744
+    },
+    {
+      "feature": "num__evidence_count",
+      "importance": 0.13419578969478607
+    },
+    {
+      "feature": "num__device_trust_score",
+      "importance": 0.10225100070238113
+    },
+    {
+      "feature": "cat__rule_status_rejected",
+      "importance": 0.07034355401992798
+    },
+    {
+      "feature": "cat__rule_status_flagged",
+      "importance": 0.029939034953713417
+    },
+    {
+      "feature": "num__confirmation_rate",
+      "importance": 0.0010596057400107384
+    },
+    {
+      "feature": "num__device_trusted_reports",
+      "importance": 0.0002538636908866465
+    },
+    {
+      "feature": "num__latitude",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__longitude",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__sector_id",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__cell_id",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__village_id",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__incident_type_id",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__gps_accuracy",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__movement_speed",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__was_stationary",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__has_live_capture",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__description_length",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__device_total_reports",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__device_flagged_reports",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__spam_flag_count",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__gps_speed_check",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__gps_anomaly_flag",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__future_timestamp_flag",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Busogo",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Cyuve",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Gacaca",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Gashaki",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Gataraga",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Kimonyi",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Kinigi",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Muhoza",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Muko",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Musanze",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Nkotsi",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Nyange",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Remera",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Rwaza",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Shingiro",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Bikara",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Birira",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Bisoke",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Bukinanyana",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Bumara",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Buramira",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Buruba",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Cyabagarura",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Cyabararika",
+      "importance": 0.0
+    }
+  ]
+}

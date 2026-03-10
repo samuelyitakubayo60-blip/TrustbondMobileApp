@@ -1,12 +1,10 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform, kIsWeb;
-import 'package:image_picker/image_picker.dart';
-import 'package:geolocator/geolocator.dart';
+import '../config/theme.dart';
+import '../widgets/shared_widgets.dart';
 import '../services/api_service.dart';
 import '../services/device_service.dart';
 import '../models/report_model.dart';
-import '../config/api_config.dart';
+import 'report_detail_screen.dart';
 
 class MyReportsScreen extends StatefulWidget {
   const MyReportsScreen({super.key});
@@ -15,22 +13,41 @@ class MyReportsScreen extends StatefulWidget {
   State<MyReportsScreen> createState() => _MyReportsScreenState();
 }
 
-class _MyReportsScreenState extends State<MyReportsScreen> {
+class _MyReportsScreenState extends State<MyReportsScreen>
+    with SingleTickerProviderStateMixin {
   final _apiService = ApiService();
   final _deviceService = DeviceService();
 
   String? _deviceId;
   List<ReportListItem> _reports = [];
   bool _loading = true;
+  int _filterIndex = 0;
+
   String? _error;
+
+  static const _filters = ['All', 'Pending', 'Verified', 'Rejected'];
+
+  late TabController _tabCtrl;
 
   @override
   void initState() {
     super.initState();
-    _loadDeviceAndReports();
+    _tabCtrl = TabController(length: _filters.length, vsync: this);
+    _tabCtrl.addListener(() {
+      if (!_tabCtrl.indexIsChanging) {
+        setState(() => _filterIndex = _tabCtrl.index);
+      }
+    });
+    _load();
   }
 
-  Future<void> _loadDeviceAndReports() async {
+  @override
+  void dispose() {
+    _tabCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
@@ -38,16 +55,12 @@ class _MyReportsScreenState extends State<MyReportsScreen> {
     final deviceId = await _deviceService.getDeviceId();
     if (deviceId == null || deviceId.isEmpty) {
       setState(() {
-        _deviceId = null;
-        _reports = [];
         _loading = false;
-        _error = 'No device registered. Submit a report first to register.';
+        _deviceId = null;
       });
       return;
     }
-    setState(() {
-      _deviceId = deviceId;
-    });
+    _deviceId = deviceId;
     try {
       final list = await _apiService.getMyReports(deviceId);
       setState(() {
@@ -55,567 +68,167 @@ class _MyReportsScreenState extends State<MyReportsScreen> {
             .map((e) => ReportListItem.fromJson(e as Map<String, dynamic>))
             .toList();
         _loading = false;
-        _error = null;
       });
     } catch (e) {
+      debugPrint('Failed to load my reports: $e');
       setState(() {
-        _reports = [];
-        _loading = false;
         _error = e.toString().replaceFirst('Exception: ', '');
+        _loading = false;
       });
     }
+  }
+
+  List<ReportListItem> get _filtered {
+    if (_filterIndex == 0) return _reports;
+    final key = _filters[_filterIndex].toLowerCase();
+    return _reports.where((r) {
+      final s = r.ruleStatus.toLowerCase();
+      if (key == 'pending') return s == 'pending' || s == 'processing';
+      if (key == 'verified') {
+        return s == 'confirmed' || s == 'verified' || s == 'trusted' || s == 'passed';
+      }
+      if (key == 'rejected') return s == 'rejected' || s == 'flagged';
+      return true;
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
+            _buildTabs(),
+            Expanded(child: _buildBody()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      child: Row(
         children: [
-          if (!_loading)
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0, top: 8.0),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: IconButton(
-                  icon: const Icon(Icons.refresh),
-                  onPressed: _loadDeviceAndReports,
-                ),
-              ),
-            ),
-          Expanded(child: _buildBody()),
+          const Text('My Reports',
+              style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
+          const Spacer(),
+          Text('${_reports.length} total',
+              style: const TextStyle(fontSize: 11, color: AppColors.muted)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTabs() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      height: 36,
+      decoration: BoxDecoration(
+        color: AppColors.surface2,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: TabBar(
+        controller: _tabCtrl,
+        indicator: BoxDecoration(
+          color: AppColors.accent.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
+        ),
+        indicatorSize: TabBarIndicatorSize.tab,
+        labelColor: AppColors.accent,
+        unselectedLabelColor: AppColors.muted,
+        labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        unselectedLabelStyle: const TextStyle(fontSize: 12),
+        dividerHeight: 0,
+        tabs: _filters.map((f) => Tab(text: f)).toList(),
       ),
     );
   }
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+          child: CircularProgressIndicator(color: AppColors.accent));
     }
     if (_error != null) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(32),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.info_outline, size: 48, color: Colors.grey[600]),
+              const Icon(Icons.cloud_off, color: AppColors.muted, size: 48),
+              const SizedBox(height: 12),
+              const Text('Could not load reports',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Text(_error!,
+                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                  textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[700], fontSize: 16),
+              ElevatedButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
               ),
             ],
           ),
         ),
       );
     }
-    if (_reports.isEmpty) {
+    final items = _filtered;
+    if (items.isEmpty) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.assignment_outlined, size: 64, color: Colors.grey[400]),
-              const SizedBox(height: 16),
-              Text(
-                'No reports yet',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Submit a report from the Report tab to see it here.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-            ],
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.assignment_outlined,
+                size: 48, color: AppColors.muted.withValues(alpha: 0.5)),
+            const SizedBox(height: 12),
+            const Text('No reports found',
+                style: TextStyle(color: AppColors.muted)),
+          ],
         ),
       );
     }
     return RefreshIndicator(
-      onRefresh: _loadDeviceAndReports,
+      onRefresh: _load,
+      color: AppColors.accent,
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        itemCount: _reports.length,
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        itemCount: items.length,
         itemBuilder: (context, index) {
-          final report = _reports[index];
-          return _ReportCard(
-            report: report,
-            onTap: () => _openDetail(report),
+          final r = items[index];
+          return ReportItemCard(
+            icon: iconForIncidentType(r.incidentTypeName ?? ''),
+            iconBg: colorForIncidentType(r.incidentTypeName ?? '')
+                .withValues(alpha: 0.1),
+            typeName: r.incidentTypeName ?? 'Incident',
+            description: r.description ?? 'No description',
+            timeLabel: timeAgo(r.reportedAt),
+            statusLabel: formatStatus(r.ruleStatus),
+            statusType: badgeTypeFromStatus(r.ruleStatus),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ReportDetailScreen(
+                  reportId: r.reportId,
+                  deviceId: _deviceId ?? '',
+                ),
+              ),
+            ),
           );
         },
       ),
     );
   }
 
-  void _openDetail(ReportListItem report) {
-    if (_deviceId == null) return;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => _ReportDetailScreen(
-          reportId: report.reportId,
-          deviceId: _deviceId!,
-          apiService: _apiService,
-        ),
-      ),
-    );
-  }
-}
-
-class _ReportCard extends StatelessWidget {
-  final ReportListItem report;
-  final VoidCallback onTap;
-
-  const _ReportCard({required this.report, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final statusColor = _statusColor(report.ruleStatus);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      report.incidentTypeName ?? 'Incident #${report.incidentTypeId}',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      report.ruleStatus,
-                      style: TextStyle(
-                        color: statusColor,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _formatDate(report.reportedAt),
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 13,
-                ),
-              ),
-              if (report.description != null && report.description!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  report.description!.length > 120
-                      ? '${report.description!.substring(0, 120)}...'
-                      : report.description!,
-                  style: TextStyle(color: Colors.grey[700], fontSize: 14),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  static Color _statusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'passed':
-        return Colors.green;
-      case 'flagged':
-        return Colors.orange;
-      case 'rejected':
-        return Colors.red;
-      default:
-        return Colors.blue;
-    }
-  }
-
-  static String _formatDate(DateTime d) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final reportDay = DateTime(d.year, d.month, d.day);
-    if (reportDay == today) {
-      return 'Today ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-    }
-    final yesterday = today.subtract(const Duration(days: 1));
-    if (reportDay == yesterday) {
-      return 'Yesterday ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-    }
-    return '${d.day}/${d.month}/${d.year} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-  }
-}
-
-class _ReportDetailScreen extends StatefulWidget {
-  final String reportId;
-  final String deviceId;
-  final ApiService apiService;
-
-  const _ReportDetailScreen({
-    required this.reportId,
-    required this.deviceId,
-    required this.apiService,
-  });
-
-  @override
-  State<_ReportDetailScreen> createState() => _ReportDetailScreenState();
-}
-
-bool get _isMobileWithCamera =>
-    !kIsWeb &&
-    (defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS);
-
-class _ReportDetailScreenState extends State<_ReportDetailScreen> {
-  ReportDetailItem? _report;
-  bool _loading = true;
-  String? _error;
-  bool _uploadingEvidence = false;
-  final ImagePicker _picker = ImagePicker();
-
-  @override
-  void initState() {
-    super.initState();
-    _loadReport();
-  }
-
-  Future<void> _loadReport() async {
-    if (!mounted) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final data = await widget.apiService.getReport(widget.reportId, widget.deviceId);
-      if (!mounted) return;
-      setState(() {
-        _report = ReportDetailItem.fromJson(data);
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString().replaceFirst('Exception: ', '');
-        _loading = false;
-      });
-    }
-  }
-
-  void _showAddEvidenceOptions() {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Add evidence',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 16),
-              if (_isMobileWithCamera)
-                ListTile(
-                  leading: const Icon(Icons.camera_alt),
-                  title: const Text('Take photo'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _pickAndUploadEvidence(isVideo: false, fromCamera: true);
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Choose photo'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickAndUploadEvidence(isVideo: false, fromCamera: false);
-                },
-              ),
-              if (_isMobileWithCamera)
-                ListTile(
-                  leading: const Icon(Icons.videocam),
-                  title: const Text('Record video'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _pickAndUploadEvidence(isVideo: true, fromCamera: true);
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.video_library),
-                title: const Text('Choose video'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickAndUploadEvidence(isVideo: true, fromCamera: false);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickAndUploadEvidence({
-    required bool isVideo,
-    required bool fromCamera,
-  }) async {
-    try {
-      String? path;
-      if (isVideo) {
-        final XFile? file = await _picker.pickVideo(
-          source: fromCamera ? ImageSource.camera : ImageSource.gallery,
-          maxDuration: const Duration(minutes: 2),
-        );
-        path = file?.path;
-      } else {
-        final XFile? file = await _picker.pickImage(
-          source: fromCamera ? ImageSource.camera : ImageSource.gallery,
-          imageQuality: 85,
-        );
-        path = file?.path;
-      }
-      if (path == null || !mounted) return;
-
-      setState(() => _uploadingEvidence = true);
-      Position? position;
-      try {
-        position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
-        );
-      } catch (_) {}
-
-      await widget.apiService.uploadEvidence(
-        widget.reportId,
-        widget.deviceId,
-        path,
-        mediaLatitude: position?.latitude,
-        mediaLongitude: position?.longitude,
-        capturedAt: DateTime.now(),
-        isLiveCapture: fromCamera,
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Evidence added')),
-      );
-      await _loadReport();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add evidence: ${e.toString().replaceFirst('Exception: ', '')}')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _uploadingEvidence = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Report details'),
-        actions: [
-          if (_report != null && !_loading)
-            IconButton(
-              icon: _uploadingEvidence
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.add_photo_alternate),
-              onPressed: _uploadingEvidence ? null : _showAddEvidenceOptions,
-              tooltip: 'Add evidence',
-            ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Text(_error!, textAlign: TextAlign.center),
-                  ),
-                )
-              : _report == null
-                  ? const SizedBox.shrink()
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _DetailRow(
-                            label: 'Type',
-                            value: _report!.incidentTypeName ?? '${_report!.incidentTypeId}',
-                          ),
-                          _DetailRow(
-                            label: 'Status',
-                            value: _report!.ruleStatus,
-                          ),
-                          _DetailRow(
-                            label: 'Submitted',
-                            value: _ReportCard._formatDate(_report!.reportedAt),
-                          ),
-                          _DetailRow(
-                            label: 'Location',
-                            value: '${_report!.latitude.toStringAsFixed(5)}, ${_report!.longitude.toStringAsFixed(5)}',
-                          ),
-                          if (_report!.description != null &&
-                              _report!.description!.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              'Description',
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    color: Colors.grey[600],
-                                  ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(_report!.description!),
-                          ],
-                          const SizedBox(height: 20),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Evidence',
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                      color: Colors.grey[600],
-                                    ),
-                              ),
-                              TextButton.icon(
-                                onPressed: _uploadingEvidence ? null : _showAddEvidenceOptions,
-                                icon: const Icon(Icons.add, size: 20),
-                                label: const Text('Add evidence'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          if (_report!.evidenceFiles.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 16),
-                              child: Text(
-                                'No evidence yet. You can add photos or videos within 72 hours of submitting.',
-                                style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                              ),
-                          )
-                          else
-                            _EvidenceGrid(evidence: _report!.evidenceFiles),
-                        ],
-                      ),
-                    ),
-    );
-  }
-}
-
-class _EvidenceGrid extends StatelessWidget {
-  final List<ReportEvidenceItem> evidence;
-
-  const _EvidenceGrid({required this.evidence});
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        childAspectRatio: 1,
-      ),
-      itemCount: evidence.length,
-      itemBuilder: (context, index) {
-        final ef = evidence[index];
-        final url = ApiConfig.evidenceFileUrl(ef.fileUrl);
-        final isPhoto = ef.fileType.toLowerCase() == 'photo';
-        return GestureDetector(
-          onTap: () {
-            // Could open fullscreen viewer
-            if (isPhoto) {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (context) => Scaffold(
-                    appBar: AppBar(title: const Text('Evidence')),
-                    body: InteractiveViewer(
-                      child: Center(
-                        child: Image.network(url, fit: BoxFit.contain),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }
-          },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: isPhoto
-                ? Image.network(
-                    url,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const ColoredBox(
-                      color: Colors.grey,
-                      child: Icon(Icons.broken_image, size: 32),
-                    ),
-                  )
-                : ColoredBox(
-                    color: Colors.grey.shade800,
-                    child: Icon(Icons.videocam, color: Colors.grey.shade400, size: 32),
-                  ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _DetailRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: Colors.grey[600],
-                ),
-          ),
-          const SizedBox(height: 2),
-          Text(value, style: const TextStyle(fontSize: 16)),
-        ],
-      ),
-    );
-  }
 }
