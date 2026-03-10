@@ -231,8 +231,11 @@ def create_report(
         network_type=report_data.network_type,
         battery_level=report_data.battery_level,
     )
-    
+
+    # Wire location hierarchy: use the village row as both specific village_location_id
+    # and generic location_id so downstream queries can work with a single FK.
     report.village_location_id = village_id  # already looked up above (required for in-scope)
+    report.location_id = village_id
     db.add(report)
     db.flush()  # Get report_id
 

@@ -6,6 +6,7 @@ import '../widgets/shared_widgets.dart';
 import '../services/api_service.dart';
 import '../services/device_service.dart';
 import '../services/motion_service.dart';
+import '../services/device_status_service.dart';
 import 'report_success_screen.dart';
 
 class ReportStep3Screen extends StatefulWidget {
@@ -36,6 +37,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   final _apiService = ApiService();
   final _deviceService = DeviceService();
   final _picker = ImagePicker();
+  final _statusService = DeviceStatusService();
 
   final List<_EvidenceFile> _files = [];
   bool _submitting = false;
@@ -119,6 +121,10 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
             motionLevel: 'low', movementSpeed: 0.0, wasStationary: true);
       }
 
+      // Collect network and battery status (best-effort; failures are not fatal)
+      final networkType = await _statusService.getNetworkType();
+      final batteryLevel = await _statusService.getBatteryLevel();
+
       final reportData = <String, dynamic>{
         'device_id': deviceId,
         'incident_type_id': widget.incidentTypeId,
@@ -140,8 +146,14 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
       if (widget.tags.isNotEmpty) {
         reportData['context_tags'] = widget.tags;
       }
-      // Client metadata (optional). Add connectivity_plus/battery_plus later for network_type/battery_level.
-      reportData['app_version'] = '1.0.0';
+      // Client metadata
+      reportData['app_version'] = '1.0.0'; // later can be from package_info_plus
+      if (networkType != null) {
+        reportData['network_type'] = networkType;
+      }
+      if (batteryLevel != null) {
+        reportData['battery_level'] = batteryLevel;
+      }
 
       final result = await _apiService.submitReport(reportData);
       final reportId = result['report_id']?.toString() ?? '';
