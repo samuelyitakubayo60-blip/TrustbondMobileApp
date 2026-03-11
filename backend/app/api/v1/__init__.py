@@ -1,4 +1,4 @@
-from . import devices, reports, incident_types, auth, police_users
+from . import devices, reports, incident_types, auth, police_users, public_locations, public_hotspots
 
 __all__ = [
     "devices",
@@ -6,5 +6,7 @@ __all__ = [
     "incident_types",
     "auth",
     "police_users",
+    "public_locations",
+    "public_hotspots",
 ]
 

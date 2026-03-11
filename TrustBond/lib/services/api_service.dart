@@ -90,6 +90,47 @@ class ApiService {
     throw Exception(message);
   }
 
+  /// Public locations browser for mobile Safety Map.
+  /// locationType: sector | cell | village
+  Future<List<dynamic>> getPublicLocations({
+    String? locationType,
+    int? parentId,
+    int limit = 2000,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.publicLocationsUrl}/').replace(
+      queryParameters: {
+        if (locationType != null) 'location_type': locationType,
+        if (parentId != null) 'parent_id': parentId.toString(),
+        'limit': limit.toString(),
+      },
+    );
+    final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as List<dynamic>;
+    }
+    throw Exception('Failed to load locations: ${response.statusCode}');
+  }
+
+  /// Fetch polygon boundaries from backend as GeoJSON FeatureCollection.
+  Future<Map<String, dynamic>> getPublicLocationsGeoJson({
+    String locationType = 'village',
+    int? parentId,
+    int limit = 10000,
+  }) async {
+    final uri = Uri.parse(ApiConfig.publicLocationsGeoJsonUrl).replace(
+      queryParameters: {
+        'location_type': locationType,
+        if (parentId != null) 'parent_id': parentId.toString(),
+        'limit': limit.toString(),
+      },
+    );
+    final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to load map polygons: ${response.statusCode}');
+  }
+
   /// Upload evidence to an existing report (e.g. add evidence later). deviceId is required.
   Future<Map<String, dynamic>> uploadEvidence(
     String reportId,

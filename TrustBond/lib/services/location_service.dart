@@ -188,3 +188,4 @@ class LocationResult {
     return error ?? 'Unknown location';
   }
 }
+

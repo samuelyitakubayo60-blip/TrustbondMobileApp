@@ -22,9 +22,9 @@ export function AuthProvider({ children }) {
     });
   }, []);
 
-  const login = async (email, password) => {
+  const login = async (email, password, remember = true) => {
     const { access_token } = await api.post('/api/v1/auth/login', { email, password }, { token: null });
-    setToken(access_token);
+    setToken(access_token, { remember });
     const u = await api.get('/api/v1/auth/me');
     setUser(u);
     return u;

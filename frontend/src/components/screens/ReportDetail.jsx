@@ -162,8 +162,14 @@ const ReportDetail = ({ goToScreen, openModal, reportId }) => {
                 Assign Officer
               </button>
               <button
+                className="btn btn-primary btn-sm"
+                onClick={() => openModal('newCase')}
+              >
+                Create Case
+              </button>
+              <button
                 className="btn btn-warn btn-sm"
-                onClick={() => goToScreen('case-management', 3)}
+                onClick={() => openModal('linkCase')}
               >
                 Link to Case
               </button>

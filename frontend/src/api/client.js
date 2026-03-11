@@ -4,12 +4,28 @@
 const BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || 'http://localhost:8000';
 
 export function getToken() {
-  return localStorage.getItem('tb_token');
+  if (typeof window === 'undefined') return null;
+  return (
+    sessionStorage.getItem('tb_token') ||
+    localStorage.getItem('tb_token')
+  );
 }
 
-export function setToken(token) {
-  if (token) localStorage.setItem('tb_token', token);
-  else localStorage.removeItem('tb_token');
+export function setToken(token, { remember = true } = {}) {
+  if (typeof window === 'undefined') return;
+  if (!token) {
+    sessionStorage.removeItem('tb_token');
+    localStorage.removeItem('tb_token');
+    return;
+  }
+  // Clear both and set according to remember flag
+  sessionStorage.removeItem('tb_token');
+  localStorage.removeItem('tb_token');
+  if (remember) {
+    localStorage.setItem('tb_token', token);
+  } else {
+    sessionStorage.setItem('tb_token', token);
+  }
 }
 
 async function request(method, path, body = null, { token = getToken() } = {}) {

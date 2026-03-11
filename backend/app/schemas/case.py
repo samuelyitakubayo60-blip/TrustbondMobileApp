@@ -58,3 +58,7 @@ class CaseListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class CaseAddReports(BaseModel):
+    report_ids: list[UUID] = []

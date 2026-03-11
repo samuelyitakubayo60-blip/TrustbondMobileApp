@@ -15,12 +15,15 @@ import SystemConfig from './components/screens/SystemConfig';
 import ChangePassword from './components/screens/ChangePassword';
 import Notifications from './components/screens/Notifications';
 import Login from './components/screens/Login';
+import ForgotPassword from './components/screens/ForgotPassword';
+import ResetPassword from './components/screens/ResetPassword';
 import { useAuth } from './context/AuthContext';
 import AddUserModal from './components/Modals/AddUserModal';
 import EditUserModal from './components/Modals/EditUserModal';
 import AssignModal from './components/Modals/AssignModal';
 import AddIncidentModal from './components/Modals/AddIncidentModal';
 import NewCaseModal from './components/Modals/NewCaseModal';
+import LinkCaseModal from './components/Modals/LinkCaseModal';
 import StationModal from './components/Modals/StationModal';
 import api from './api/client';
 
@@ -47,8 +50,11 @@ function App() {
     editIncident: false,
     addStation: false,
     editStation: false,
-    newCase: false
+    newCase: false,
+    linkCase: false,
   });
+  const [authScreen, setAuthScreen] = useState('login'); // login | forgot | reset
+  const [resetEmail, setResetEmail] = useState('');
 
   // Screens configuration
   const screens = [
@@ -229,7 +235,30 @@ function App() {
   }
 
   if (!user) {
-    return <Login />;
+    if (authScreen === 'forgot') {
+      return (
+        <ForgotPassword
+          onBack={() => setAuthScreen('login')}
+          onCodeSent={(email) => {
+            setResetEmail(email);
+            setAuthScreen('reset');
+          }}
+        />
+      );
+    }
+    if (authScreen === 'reset') {
+      return (
+        <ResetPassword
+          email={resetEmail}
+          onBackToLogin={() => setAuthScreen('login')}
+        />
+      );
+    }
+    return (
+      <Login
+        onForgotPassword={() => setAuthScreen('forgot')}
+      />
+    );
   }
 
   return (
@@ -287,10 +316,19 @@ function App() {
       <NewCaseModal 
         isOpen={modals.newCase} 
         onClose={() => closeModal('newCase')} 
+        initialReportId={selectedReportId}
         onCreated={() => {
           // simple approach: reload case list by returning to screen
           setCurrentScreen('dashboard');
           setTimeout(() => setCurrentScreen('case-management'), 0);
+        }}
+      />
+      <LinkCaseModal
+        isOpen={modals.linkCase}
+        onClose={() => closeModal('linkCase')}
+        reportId={selectedReportId}
+        onLinked={() => {
+          // stay on report detail; could add toast later
         }}
       />
       <StationModal

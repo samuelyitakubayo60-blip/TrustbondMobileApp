@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
-
 import 'package:flutter/services.dart' show rootBundle;
 
-/// Simple DTO for village/cell/sector info used in the app.
+/// Result of a reverse-geocode lookup against the Musanze GeoJSON.
 class VillageLocation {
   final String village;
   final String cell;
@@ -16,37 +15,34 @@ class VillageLocation {
     required this.sector,
   });
 
+  /// Human-readable display string.
   String get displayName => '$village, $cell, $sector';
+
+  @override
+  String toString() => displayName;
 }
 
-/// Geographic bounds for the whole Musanze dataset.
-class MusanzeBounds {
-  final double minLat;
-  final double maxLat;
+/// Bounding box for the entire dataset.
+class MapBounds {
   final double minLng;
   final double maxLng;
+  final double minLat;
+  final double maxLat;
 
-  MusanzeBounds({
-    required this.minLat,
-    required this.maxLat,
-    required this.minLng,
-    required this.maxLng,
-  });
+  MapBounds(this.minLng, this.maxLng, this.minLat, this.maxLat);
 
-  double get latSpan => maxLat - minLat;
   double get lngSpan => maxLng - minLng;
+  double get latSpan => maxLat - minLat;
 }
 
-/// One polygon feature (usually a village) from the GeoJSON.
-class MusanzeFeature {
+/// Parsed Musanze boundary feature (one village polygon).
+class MapFeature {
   final String sector;
   final String cell;
   final String village;
+  final List<List<ui.Offset>> rings; // lng,lat as Offset(lng, lat)
 
-  /// Rings as lists of [ui.Offset] where dx = longitude, dy = latitude.
-  final List<List<ui.Offset>> rings;
-
-  MusanzeFeature({
+  MapFeature({
     required this.sector,
     required this.cell,
     required this.village,
@@ -54,195 +50,195 @@ class MusanzeFeature {
   });
 }
 
-/// Parsed Musanze boundaries + helper methods for lookups.
+/// Holds all parsed data for the Musanze map.
 class MusanzeMapData {
-  final List<MusanzeFeature> features;
+  final List<MapFeature> features;
+  final MapBounds bounds;
+  final List<String> sectors;
 
-  MusanzeMapData({required this.features});
+  MusanzeMapData({
+    required this.features,
+    required this.bounds,
+    required this.sectors,
+  });
 
-  /// Load GeoJSON from assets.
-  ///
-  /// Make sure you have copied:
-  /// - backend/musanze/musanze_boundaries.geojson
-  ///   to: mobile/assets/musanze_boundaries.geojson
-  /// and that "assets/" is listed in pubspec.yaml.
-  static Future<MusanzeMapData> load() async {
-    final text =
-        await rootBundle.loadString('assets/musanze_boundaries.geojson');
-    final data = jsonDecode(text) as Map<String, dynamic>;
-
-    final feats = <MusanzeFeature>[];
-    final featuresJson = data['features'] as List<dynamic>? ?? const [];
-
-    for (final f in featuresJson) {
-      final mf = _parseFeature(f as Map<String, dynamic>);
-      if (mf != null) {
-        feats.add(mf);
-      }
-    }
-    return MusanzeMapData(features: feats);
-  }
-
-  static MusanzeFeature? _parseFeature(Map<String, dynamic> json) {
-    final props = json['properties'] as Map<String, dynamic>? ?? const {};
-    final geom = json['geometry'] as Map<String, dynamic>? ?? const {};
-    final type = geom['type'] as String? ?? '';
-    final coords = geom['coordinates'];
-
-    final sector = (props['sector'] ??
-            props['SECTOR'] ??
-            props['sector_name'] ??
-            '') as String;
-    final cell =
-        (props['cell'] ?? props['CELL'] ?? props['cell_name'] ?? '') as String;
-    final village = (props['village'] ??
-            props['VILLAGE'] ??
-            props['village_name'] ??
-            '') as String;
-
-    if (coords == null) return null;
-
-    final rings = <List<ui.Offset>>[];
-
-    List<List<dynamic>> outer;
-    if (type == 'Polygon') {
-      outer = (coords as List).cast<List<dynamic>>();
-    } else if (type == 'MultiPolygon') {
-      // Flatten all polygon rings
-      outer = <List<dynamic>>[];
-      for (final poly in (coords as List)) {
-        for (final ring in (poly as List)) {
-          outer.add(ring as List<dynamic>);
-        }
-      }
-    } else {
-      return null;
-    }
-
-    for (final ring in outer) {
-      final pts = <ui.Offset>[];
-      for (final coord in ring) {
-        if (coord is List && coord.length >= 2) {
-          final lng = (coord[0] as num).toDouble();
-          final lat = (coord[1] as num).toDouble();
-          pts.add(ui.Offset(lng, lat));
-        }
-      }
-      if (pts.length >= 3) {
-        rings.add(pts);
-      }
-    }
-
-    if (rings.isEmpty) return null;
-
-    return MusanzeFeature(
-      sector: sector,
-      cell: cell,
-      village: village,
-      rings: rings,
-    );
-  }
-
-  /// Unique list of sector names.
-  List<String> get sectors =>
-      {for (final f in features) f.sector}.where((s) => s.isNotEmpty).toList();
-
-  /// All features in a given sector.
-  List<MusanzeFeature> bySector(String sector) =>
+  /// Features filtered by sector name.
+  List<MapFeature> bySector(String sector) =>
       features.where((f) => f.sector == sector).toList();
 
-  /// All villages in a given sector.
-  List<String> villagesIn(String sector) =>
-      {for (final f in features.where((f) => f.sector == sector)) f.village}
-          .where((v) => v.isNotEmpty)
-          .toList();
-
-  /// All cells in a given sector.
+  /// All unique cell names within a sector.
   List<String> cellsIn(String sector) =>
-      {for (final f in features.where((f) => f.sector == sector)) f.cell}
-          .where((c) => c.isNotEmpty)
-          .toList();
+      features.where((f) => f.sector == sector).map((f) => f.cell).toSet().toList()..sort();
 
-  /// Overall geographic bounds.
-  MusanzeBounds get bounds {
-    double? minLat, maxLat, minLng, maxLng;
-    for (final f in features) {
-      for (final ring in f.rings) {
-        for (final p in ring) {
-          final lng = p.dx;
-          final lat = p.dy;
-          minLat = minLat == null ? lat : math.min(minLat, lat);
-          maxLat = maxLat == null ? lat : math.max(maxLat, lat);
-          minLng = minLng == null ? lng : math.min(minLng, lng);
-          maxLng = maxLng == null ? lng : math.max(maxLng, lng);
-        }
-      }
-    }
-    return MusanzeBounds(
-      minLat: minLat ?? 0,
-      maxLat: maxLat ?? 0,
-      minLng: minLng ?? 0,
-      maxLng: maxLng ?? 0,
-    );
-  }
+  /// All unique village names within a cell.
+  List<String> villagesIn(String sector, String cell) =>
+      features.where((f) => f.sector == sector && f.cell == cell).map((f) => f.village).toSet().toList()..sort();
 
-  /// Centroid of a sector (used for labeling and camera movement).
+  /// Sector centroid (average of all polygon points in sector).
   ui.Offset sectorCentroid(String sector) {
     final feats = bySector(sector);
-    if (feats.isEmpty) return const ui.Offset(29.6347, -1.4975); // Musanze
-    double sumLat = 0, sumLng = 0;
+    if (feats.isEmpty) return ui.Offset.zero;
+    double sumLng = 0, sumLat = 0;
     int count = 0;
     for (final f in feats) {
       for (final ring in f.rings) {
-        for (final p in ring) {
-          sumLat += p.dy;
-          sumLng += p.dx;
+        for (final pt in ring) {
+          sumLng += pt.dx;
+          sumLat += pt.dy;
           count++;
         }
       }
     }
-    if (count == 0) return const ui.Offset(29.6347, -1.4975);
     return ui.Offset(sumLng / count, sumLat / count);
   }
 
-  /// All villages in a sector (used for list at bottom of map).
-  List<VillageLocation> bySectorLocations(String sector) {
-    return [
-      for (final f in features.where((f) => f.sector == sector))
-        VillageLocation(village: f.village, cell: f.cell, sector: f.sector),
-    ];
-  }
-
-  /// Find the nearest village to a given coordinate.
-  Future<VillageLocation?> findNearestVillage(
-      double lat, double lng) async {
-    // Simple nearest-centroid search over villages
-    VillageLocation? best;
-    double bestDist = double.infinity;
-    for (final f in features) {
-      // Approximate centroid of first ring
-      if (f.rings.isEmpty || f.rings.first.isEmpty) continue;
-      final ring = f.rings.first;
-      double sumLat = 0, sumLng = 0;
-      for (final p in ring) {
-        sumLat += p.dy;
-        sumLng += p.dx;
-      }
-      final cLat = sumLat / ring.length;
-      final cLng = sumLng / ring.length;
-      final dLat = lat - cLat;
-      final dLng = lng - cLng;
-      final dist = dLat * dLat + dLng * dLng;
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = VillageLocation(
-          village: f.village,
-          cell: f.cell,
-          sector: f.sector,
-        );
+  /// Find which village a GPS point (latitude, longitude) falls in.
+  /// Returns null if the point is outside all village polygons.
+  VillageLocation? findVillage(double latitude, double longitude) {
+    final point = ui.Offset(longitude, latitude); // GeoJSON is lng,lat
+    for (final feature in features) {
+      for (final ring in feature.rings) {
+        if (_pointInPolygon(point, ring)) {
+          return VillageLocation(
+            village: feature.village,
+            cell: feature.cell,
+            sector: feature.sector,
+          );
+        }
       }
     }
-    return best;
+    return null;
+  }
+
+  /// Find the nearest village to a GPS point (fallback when point-in-polygon misses).
+  VillageLocation? findNearestVillage(double latitude, double longitude) {
+    // First try exact match
+    final exact = findVillage(latitude, longitude);
+    if (exact != null) return exact;
+
+    // Fallback: find the closest village centroid
+    final point = ui.Offset(longitude, latitude);
+    double minDist = double.infinity;
+    MapFeature? closest;
+
+    for (final feature in features) {
+      for (final ring in feature.rings) {
+        if (ring.isEmpty) continue;
+        // Compute centroid of this ring
+        double sumX = 0, sumY = 0;
+        for (final pt in ring) {
+          sumX += pt.dx;
+          sumY += pt.dy;
+        }
+        final centroid = ui.Offset(sumX / ring.length, sumY / ring.length);
+        final dist = _distance(point, centroid);
+        if (dist < minDist) {
+          minDist = dist;
+          closest = feature;
+        }
+      }
+    }
+
+    if (closest != null) {
+      return VillageLocation(
+        village: closest.village,
+        cell: closest.cell,
+        sector: closest.sector,
+      );
+    }
+    return null;
+  }
+
+  /// Ray-casting point-in-polygon algorithm.
+  static bool _pointInPolygon(ui.Offset point, List<ui.Offset> polygon) {
+    bool inside = false;
+    final n = polygon.length;
+    for (int i = 0, j = n - 1; i < n; j = i++) {
+      final xi = polygon[i].dx, yi = polygon[i].dy;
+      final xj = polygon[j].dx, yj = polygon[j].dy;
+
+      if (((yi > point.dy) != (yj > point.dy)) &&
+          (point.dx < (xj - xi) * (point.dy - yi) / (yj - yi) + xi)) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  /// Euclidean distance between two points (good enough for small areas).
+  static double _distance(ui.Offset a, ui.Offset b) {
+    final dx = a.dx - b.dx;
+    final dy = a.dy - b.dy;
+    return math.sqrt(dx * dx + dy * dy);
+  }
+
+  /// Load and parse from bundled asset.
+  static Future<MusanzeMapData> load() async {
+    final raw = await rootBundle.loadString('assets/musanze_boundaries.geojson');
+    return parse(raw);
+  }
+
+  /// Parse a GeoJSON string.
+  static MusanzeMapData parse(String geojsonString) {
+    final json = jsonDecode(geojsonString) as Map<String, dynamic>;
+    final rawFeatures = json['features'] as List<dynamic>;
+
+    double minLng = double.infinity, maxLng = -double.infinity;
+    double minLat = double.infinity, maxLat = -double.infinity;
+    final sectorSet = <String>{};
+    final features = <MapFeature>[];
+
+    for (final raw in rawFeatures) {
+      final props = raw['properties'] as Map<String, dynamic>;
+      final geom = raw['geometry'] as Map<String, dynamic>;
+      // Support both asset keys (Sector/Cell/Village) and backend keys (sector/cell/village)
+      final sector = (props['Sector'] ?? props['sector'] ?? props['sector_name']) as String? ?? '';
+      final cell = (props['Cell'] ?? props['cell'] ?? props['cell_name']) as String? ?? '';
+      final village = (props['Village'] ?? props['village'] ?? props['village_name']) as String? ?? '';
+      sectorSet.add(sector);
+
+      final geoType = geom['type'] as String? ?? 'Polygon';
+      final coordsRaw = geom['coordinates'] as List<dynamic>;
+
+      // Normalise: MultiPolygon → list of polygon coords; Polygon → wrap in list.
+      final List<List<dynamic>> polygons;
+      if (geoType == 'MultiPolygon') {
+        polygons = coordsRaw.map((p) => p as List<dynamic>).toList();
+      } else {
+        polygons = [coordsRaw];
+      }
+
+      for (final polyCoords in polygons) {
+        final rings = <List<ui.Offset>>[];
+        for (final ringRaw in polyCoords) {
+          final ring = <ui.Offset>[];
+          for (final pt in ringRaw as List<dynamic>) {
+            final lng = (pt[0] as num).toDouble();
+            final lat = (pt[1] as num).toDouble();
+            if (lng < minLng) minLng = lng;
+            if (lng > maxLng) maxLng = lng;
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+            ring.add(ui.Offset(lng, lat));
+          }
+          rings.add(ring);
+        }
+
+        features.add(MapFeature(
+          sector: sector,
+          cell: cell,
+          village: village,
+          rings: rings,
+        ));
+      }
+    }
+
+    final sectors = sectorSet.toList()..sort();
+    return MusanzeMapData(
+      features: features,
+      bounds: MapBounds(minLng, maxLng, minLat, maxLat),
+      sectors: sectors,
+    );
   }
 }
 

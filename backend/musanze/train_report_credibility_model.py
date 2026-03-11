@@ -20,8 +20,8 @@ from xgboost import XGBClassifier
 
 ROOT = Path(__file__).resolve().parent
 DATA_PATH = ROOT / "report_credibility_training.csv"
-MODEL_PATH = ROOT / "report_credibility_xgb.joblib"
-METADATA_PATH = ROOT / "report_credibility_xgb_meta.json"
+MODEL_PATH = ROOT / "TrustBond.joblib"
+METADATA_PATH = ROOT / "TrustBond.json"
 
 
 def load_data(path: Path) -> pd.DataFrame:

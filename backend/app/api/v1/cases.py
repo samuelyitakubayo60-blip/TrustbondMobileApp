@@ -9,7 +9,7 @@ from app.models.case import Case, CaseReport
 from app.models.report import Report
 from app.models.police_user import PoliceUser
 from app.api.v1.auth import get_current_admin_or_supervisor, get_current_user
-from app.schemas.case import CaseCreate, CaseUpdate, CaseResponse, CaseListResponse
+from app.schemas.case import CaseCreate, CaseUpdate, CaseResponse, CaseListResponse, CaseAddReports
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -276,6 +276,69 @@ def update_case(
             case.description = payload.description
         if payload.outcome is not None:
             case.outcome = payload.outcome
+    db.add(case)
+    db.commit()
+    db.refresh(case)
+    case = db.query(Case).options(
+        joinedload(Case.location),
+        joinedload(Case.incident_type),
+        joinedload(Case.assigned_to),
+    ).filter(Case.case_id == cid).first()
+    return _case_to_response(case)
+
+
+@router.post("/{case_id}/reports", response_model=CaseResponse)
+def add_reports_to_case(
+    case_id: str,
+    payload: CaseAddReports,
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    """
+    Link one or more existing reports to an existing case.
+
+    - Admin: any case.
+    - Supervisor: only cases in their location.
+    - Officer: only cases assigned to them.
+    """
+    from uuid import UUID
+
+    try:
+        cid = UUID(case_id)
+    except ValueError:
+        raise HTTPException(404, "Case not found")
+
+    # Reuse same access rules as get_case/update_case
+    query = db.query(Case).filter(Case.case_id == cid)
+    if current_user.role == "supervisor" and getattr(current_user, "assigned_location_id", None):
+        query = query.filter(Case.location_id == current_user.assigned_location_id)
+    elif current_user.role == "officer":
+        query = query.filter(Case.assigned_to_id == current_user.police_user_id)
+
+    case = query.first()
+    if not case:
+        raise HTTPException(404, "Case not found")
+
+    # Add new links, avoiding duplicates
+    if payload.report_ids:
+        existing_links = {
+            cr.report_id for cr in db.query(CaseReport).filter(CaseReport.case_id == cid).all()
+        }
+        added = 0
+        for rid in payload.report_ids:
+            if rid in existing_links:
+                continue
+            report = db.query(Report).filter(Report.report_id == rid).first()
+            if not report:
+                continue
+            cr = CaseReport(case_id=cid, report_id=rid)
+            db.add(cr)
+            added += 1
+        if added:
+            # Recompute report_count to stay accurate
+            case.report_count = (
+                db.query(CaseReport).filter(CaseReport.case_id == cid).count()
+            )
     db.add(case)
     db.commit()
     db.refresh(case)

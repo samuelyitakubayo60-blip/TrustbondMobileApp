@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client';
 
-const NewCaseModal = ({ isOpen, onClose, onCreated }) => {
+const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
   const [title, setTitle] = useState('');
   const [incidentTypes, setIncidentTypes] = useState([]);
   const [incidentTypeId, setIncidentTypeId] = useState('');
@@ -20,7 +20,8 @@ const NewCaseModal = ({ isOpen, onClose, onCreated }) => {
     setIncidentTypeId('');
     setPriority('high');
     setAssignedToId('');
-    setReportIds('');
+    // Pre-fill the reports field when opened from a specific report
+    setReportIds(initialReportId ? String(initialReportId) : '');
     setNotes('');
     setError('');
     setSaving(false);

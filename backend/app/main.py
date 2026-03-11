@@ -36,6 +36,8 @@ from app.api.v1 import (
     cases,
     stations,
     system_config,
+    public_locations,
+    public_hotspots,
 )
 
 
@@ -79,8 +81,13 @@ app.include_router(incident_groups.router, prefix="/api/v1")
 app.include_router(cases.router, prefix="/api/v1")
 app.include_router(stations.router, prefix="/api/v1")
 app.include_router(system_config.router, prefix="/api/v1")
+app.include_router(public_locations.router, prefix="/api/v1")
+app.include_router(public_hotspots.router, prefix="/api/v1")
 
 
 @app.get("/health")
 def health():
     return {"status": "ok", "app": settings.app_name}
+@app.get("")
+def home():
+    return {""}

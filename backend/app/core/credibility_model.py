@@ -16,8 +16,8 @@ from app.models.device import Device
 
 
 ROOT = Path(__file__).resolve().parents[2] / "musanze"
-MODEL_PATH = ROOT / "report_credibility_xgb.joblib"
-META_PATH = ROOT / "report_credibility_xgb_meta.json"
+MODEL_PATH = ROOT / "TrustBond.joblib"
+META_PATH = ROOT / "TrustBond.json"
 
 _MODEL = None
 _META: Optional[Dict[str, Any]] = None
