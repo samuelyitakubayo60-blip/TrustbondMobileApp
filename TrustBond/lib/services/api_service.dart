@@ -30,6 +30,23 @@ class ApiService {
     throw Exception('Failed to register device: ${response.statusCode}');
   }
 
+  /// Fetch per-device profile stats for the mobile Profile screen.
+  /// Uses the anonymous device_hash (legacy-compatible).
+  Future<Map<String, dynamic>> getDeviceProfile(String deviceHash) async {
+    final response = await _client
+        .get(
+          Uri.parse('${ApiConfig.devicesUrl}/profile/$deviceHash'),
+          headers: _getHeaders,
+        )
+        .timeout(_timeout);
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+
+    throw Exception('Failed to get device profile: ${response.statusCode}');
+  }
+
   Future<List<dynamic>> getIncidentTypes() async {
     final response = await _client.get(
       Uri.parse('${ApiConfig.incidentTypesUrl}/'),

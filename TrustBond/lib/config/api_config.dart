@@ -6,7 +6,7 @@ class ApiConfig {
   /// Backend URL — deployed on Render.com (auto-deploys on git push).
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://trustbondmobileapp.onrender.com/api/v1',
+    defaultValue: 'http://127.0.0.1:8000/api/v1',
   );
 
   static String get devicesUrl => _url('$baseUrl/devices');

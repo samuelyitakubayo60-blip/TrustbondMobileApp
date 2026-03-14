@@ -5,6 +5,9 @@ import '../services/device_service.dart';
 import '../services/api_service.dart';
 import '../models/report_model.dart';
 import 'settings_screen.dart';
+import 'privacy_security_screen.dart';
+import 'help_faq_screen.dart';
+import 'about_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -14,7 +17,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String _deviceHash = '...';
+  String _deviceHashShort = '...';
   int _totalReports = 0;
   int _verifiedReports = 0;
   double _trustScore = 0;
@@ -26,32 +29,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadData() async {
-    final id = await DeviceService().getDeviceId();
-    if (id != null && id.isNotEmpty) {
-      setState(() => _deviceHash = id.substring(0, id.length.clamp(0, 12)));
-      try {
-        final list = await ApiService().getMyReports(id);
-        final reports = list
-            .map((e) => ReportListItem.fromJson(e as Map<String, dynamic>))
-            .toList();
-        final verified = reports
-            .where((r) =>
-                r.ruleStatus == 'confirmed' ||
-                r.ruleStatus == 'verified' ||
-                r.ruleStatus == 'trusted')
-            .length;
-        setState(() {
-          _totalReports = reports.length;
-          _verifiedReports = verified;
-          _trustScore = reports.isEmpty
-              ? 50
-              : ((verified / reports.length) * 100).clamp(0, 100);
-        });
-      } catch (_) {
-        // Report loading failed
-      }
-    } else {
-      // No device ID
+    // Use anonymous device hash (legacy-compatible with backend).
+    final hash = await DeviceService().getDeviceHash();
+    if (hash.isEmpty) return;
+
+    setState(() {
+      _deviceHashShort = hash.length >= 12
+          ? '${hash.substring(0, 8)}...${hash.substring(hash.length - 4)}'
+          : hash;
+    });
+
+    try {
+      final profile = await ApiService().getDeviceProfile(hash);
+      setState(() {
+        _totalReports = (profile['total_reports'] as num?)?.toInt() ?? 0;
+        _verifiedReports =
+            (profile['trusted_reports'] as num?)?.toInt() ?? 0;
+        _trustScore =
+            (profile['device_trust_score'] as num?)?.toDouble() ?? 50.0;
+      });
+    } catch (e) {
+      debugPrint('Failed to load profile: $e');
     }
   }
 
@@ -154,7 +152,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         style:
                             TextStyle(fontSize: 11, color: AppColors.muted)),
                     Text(
-                      _deviceHash,
+                      _deviceHashShort,
                       style: const TextStyle(
                           fontSize: 11,
                           fontFamily: 'monospace',
@@ -185,8 +183,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildTrustBreakdown() {
-    final quality = _totalReports > 0 ? (_verifiedReports / _totalReports).clamp(0.0, 1.0) : 0.0;
-    final score = _trustScore / 100;
+    final quality = _totalReports > 0
+        ? (_verifiedReports / _totalReports).clamp(0.0, 1.0)
+        : 0.0;
+    final score = (_trustScore / 100).clamp(0.0, 1.0);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -308,9 +308,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildMenuItems() {
     return Column(
       children: [
-        _menuItem(Icons.security, 'Privacy & Security', () {}),
-        _menuItem(Icons.help_outline, 'Help & FAQ', () {}),
-        _menuItem(Icons.info_outline, 'About TrustBond', () {}),
+        _menuItem(Icons.security, 'Privacy & Security', () {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacySecurityScreen()));
+        }),
+        _menuItem(Icons.help_outline, 'Help & FAQ', () {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpFaqScreen()));
+        }),
+        _menuItem(Icons.info_outline, 'About TrustBond', () {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutScreen()));
+        }),
       ],
     );
   }
@@ -335,7 +341,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: const TextStyle(
                       fontSize: 13, fontWeight: FontWeight.w500)),
             ),
-            const Icon(Icons.chevron_right, size: 18, color: AppColors.muted),
+            const Icon(Icons.chevron_right_rounded,
+                size: 18, color: AppColors.muted),
           ],
         ),
       ),

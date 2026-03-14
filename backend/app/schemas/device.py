@@ -12,6 +12,8 @@ class DeviceResponse(BaseModel):
     device_hash: str
     first_seen_at: datetime
     total_reports: int
+    trusted_reports: int
+    flagged_reports: int
     device_trust_score: float
 
     class Config:
