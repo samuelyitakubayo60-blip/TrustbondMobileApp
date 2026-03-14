@@ -21,6 +21,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _totalReports = 0;
   int _verifiedReports = 0;
   double _trustScore = 0;
+  Map<String, bool>? _achievements;
 
   @override
   void initState() {
@@ -47,6 +48,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             (profile['trusted_reports'] as num?)?.toInt() ?? 0;
         _trustScore =
             (profile['device_trust_score'] as num?)?.toDouble() ?? 50.0;
+        final a = profile['achievements'] as Map<String, dynamic>?;
+        _achievements = a != null
+            ? Map<String, bool>.from(a.map((k, v) => MapEntry(k, v == true)))
+            : null;
       });
     } catch (e) {
       debugPrint('Failed to load profile: $e');
@@ -243,12 +248,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildAchievements() {
+    // Prefer backend/ML achievements when available; fallback to local logic
+    final a = _achievements;
     final badges = [
-      _Badge('🛡️', 'First Report', _totalReports >= 1),
-      _Badge('⭐', '5 Verified', _verifiedReports >= 5),
-      _Badge('🏆', '10 Reports', _totalReports >= 10),
-      _Badge('🔥', 'Streak x7', _totalReports >= 7),
-      _Badge('💎', 'Top Reporter', _totalReports >= 20),
+      _Badge('🛡️', 'First Report', a?['first_report'] ?? _totalReports >= 1),
+      _Badge('⭐', '5 Verified', a?['five_verified'] ?? _verifiedReports >= 5),
+      _Badge('🏆', '10 Reports', a?['ten_reports'] ?? _totalReports >= 10),
+      _Badge('🔥', 'Streak x7', a?['streak_x7'] ?? _totalReports >= 7),
+      _Badge('💎', 'Top Reporter', a?['top_reporter'] ?? _totalReports >= 20),
     ];
     return Container(
       padding: const EdgeInsets.all(16),

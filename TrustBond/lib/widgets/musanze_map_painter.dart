@@ -219,12 +219,14 @@ class MusanzeMapPreviewPainter extends CustomPainter {
   final double padding;
   final double? userLatitude;
   final double? userLongitude;
+  final List<Map<String, dynamic>> sectorHotspots;
 
   MusanzeMapPreviewPainter({
     required this.mapData,
     this.padding = 8,
     this.userLatitude,
     this.userLongitude,
+    this.sectorHotspots = const [],
   });
 
   @override
@@ -300,6 +302,67 @@ class MusanzeMapPreviewPainter extends CustomPainter {
       );
     }
 
+    // Draw sector hotspots
+    for (final hotspot in sectorHotspots) {
+      final latitude = hotspot['latitude'] as double?;
+      final longitude = hotspot['longitude'] as double?;
+      final riskLevel = hotspot['risk_level'] as String?;
+      final incidentCount = hotspot['incident_count'] as int?;
+      
+      if (latitude == null || longitude == null) continue;
+      
+      final hotspotPos = toScreen(ui.Offset(longitude, latitude));
+      if (hotspotPos.dx >= 0 && hotspotPos.dx <= size.width &&
+          hotspotPos.dy >= 0 && hotspotPos.dy <= size.height) {
+        
+        // Determine color based on risk level
+        Color hotspotColor;
+        switch (riskLevel?.toLowerCase()) {
+          case 'high':
+            hotspotColor = AppColors.danger;
+            break;
+          case 'medium':
+            hotspotColor = AppColors.warn;
+            break;
+          case 'low':
+            hotspotColor = AppColors.ok;
+            break;
+          default:
+            hotspotColor = AppColors.muted;
+        }
+        
+        // Draw hotspot circle (size based on incident count)
+        final radius = incidentCount != null ? (4.0 + (incidentCount / 5).clamp(0, 4)).toDouble() : 6.0;
+        
+        // Outer glow
+        canvas.drawCircle(
+          hotspotPos,
+          radius + 2,
+          Paint()
+            ..color = hotspotColor.withValues(alpha: 0.2)
+            ..style = PaintingStyle.fill,
+        );
+        
+        // Main hotspot circle
+        canvas.drawCircle(
+          hotspotPos,
+          radius,
+          Paint()
+            ..color = hotspotColor.withValues(alpha: 0.8)
+            ..style = PaintingStyle.fill,
+        );
+        
+        // Inner highlight
+        canvas.drawCircle(
+          hotspotPos,
+          radius - 1,
+          Paint()
+            ..color = hotspotColor.withValues(alpha: 0.4)
+            ..style = PaintingStyle.fill,
+        );
+      }
+    }
+
     // Draw user location marker on preview
     if (userLatitude != null && userLongitude != null) {
       final userPos = toScreen(ui.Offset(userLongitude!, userLatitude!));
@@ -334,5 +397,6 @@ class MusanzeMapPreviewPainter extends CustomPainter {
   @override
   bool shouldRepaint(MusanzeMapPreviewPainter oldDelegate) =>
       oldDelegate.userLatitude != userLatitude ||
-      oldDelegate.userLongitude != userLongitude;
+      oldDelegate.userLongitude != userLongitude ||
+      oldDelegate.sectorHotspots.length != sectorHotspots.length;
 }

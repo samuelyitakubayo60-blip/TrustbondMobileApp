@@ -6,8 +6,14 @@ class PrivacySecurityScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.chevron_left),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: const Text('Privacy & Security', style: TextStyle(fontSize: 16)),
         backgroundColor: AppColors.surface,
         elevation: 0,
@@ -39,6 +45,7 @@ class PrivacySecurityScreen extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 

@@ -18,7 +18,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       body: SafeArea(
         child: Column(
           children: [
@@ -54,6 +56,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -64,7 +67,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           IconButton(
             onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+            icon: const Icon(Icons.chevron_left, size: 28),
           ),
           const Expanded(
             child: Text('Settings',

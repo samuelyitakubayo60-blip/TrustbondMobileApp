@@ -14,6 +14,7 @@ class ApiConfig {
   static String get incidentTypesUrl => _url('$baseUrl/incident-types');
   static String get publicLocationsUrl => _url('$baseUrl/public/locations');
   static String get publicLocationsGeoJsonUrl => _url('$baseUrl/public/locations/geojson');
+  static String get publicHotspotsUrl => _url('$baseUrl/public/hotspots');
 
   static String _url(String url) {
     if (url.startsWith('http://') || url.startsWith('https://')) return url;

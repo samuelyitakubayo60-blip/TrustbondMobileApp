@@ -7,17 +7,11 @@ import '../config/theme.dart';
 import '../models/musanze_map_data.dart';
 import '../services/location_service.dart';
 import '../services/api_service.dart';
+import '../services/hotspot_service.dart';
 import '../widgets/musanze_map_painter.dart' show sectorColor;
 
 class SafetyMapScreen extends StatefulWidget {
-  final bool showDetailedView;
-  final String? initialSectorId;
-  
-  const SafetyMapScreen({
-    super.key, 
-    this.showDetailedView = false,
-    this.initialSectorId,
-  });
+  const SafetyMapScreen({super.key});
 
   @override
   State<SafetyMapScreen> createState() => _SafetyMapScreenState();
@@ -32,13 +26,10 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   bool _loading = true;
   String? _error;
 
-  // Detail level management
-  bool _showDetailedView = false;
-  String _currentDetailLevel = 'sector'; // 'sector', 'cell', 'village'
-
   // GPS location state
   final _locationService = LocationService();
   final _api = ApiService();
+  final _hotspotService = HotspotService();
   double? _userLat;
   double? _userLng;
   VillageLocation? _userVillage;
@@ -56,24 +47,18 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   List<Map<String, dynamic>> _villages = [];
   bool _loadingHierarchy = false;
 
+  // Hotspot data
+  List<Hotspot> _villageHotspots = [];
+  List<Hotspot> _cellHotspots = [];
+  bool _loadingHotspots = false;
+  String _currentHotspotLevel = 'village'; // village or cell
+
   @override
   void initState() {
     super.initState();
-    _showDetailedView = widget.showDetailedView;
     _loadMap();
     _loadSectorsFromBackend();
     _getUserLocation();
-    
-    // If coming from home screen with detailed view, show all sectors initially
-    if (_showDetailedView) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Start with a slightly zoomed in view for better detail
-        _mapController.move(_musanzeCenter, 14.0);
-        setState(() {
-          _currentDetailLevel = 'sector'; // Start at sector level for detailed view
-        });
-      });
-    }
   }
 
   Future<void> _loadSectorsFromBackend() async {
@@ -81,16 +66,70 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     try {
       final res = await _api.getPublicLocations(locationType: 'sector', limit: 1000);
       if (!mounted) return;
-      debugPrint('Loaded ${res.length} sectors from backend');
       setState(() {
         _sectors = res.cast<Map<String, dynamic>>();
         _loadingHierarchy = false;
       });
-    } catch (e) {
-      debugPrint('Failed to load sectors: $e');
+    } catch (_) {
       if (!mounted) return;
       setState(() => _loadingHierarchy = false);
     }
+  }
+
+  Future<void> _loadVillageHotspots(int sectorId) async {
+    setState(() {
+      _loadingHotspots = true;
+      _villageHotspots = [];
+      _cellHotspots = [];
+      _currentHotspotLevel = 'village';
+    });
+    
+    try {
+      final hotspots = await _hotspotService.getVillageHotspots(sectorId);
+      if (!mounted) return;
+      setState(() {
+        _villageHotspots = hotspots;
+        _loadingHotspots = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingHotspots = false);
+    }
+  }
+
+  Future<void> _loadCellHotspots(int sectorId) async {
+    setState(() {
+      _loadingHotspots = true;
+      _villageHotspots = [];
+      _cellHotspots = [];
+      _currentHotspotLevel = 'cell';
+    });
+    
+    try {
+      final hotspots = await _hotspotService.getCellHotspots(sectorId: sectorId);
+      if (!mounted) return;
+      setState(() {
+        _cellHotspots = hotspots;
+        _loadingHotspots = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingHotspots = false);
+    }
+  }
+
+  void _toggleHotspotLevel() {
+    if (_selectedSectorId == null) return;
+    
+    if (_currentHotspotLevel == 'village') {
+      _loadCellHotspots(_selectedSectorId!);
+    } else {
+      _loadVillageHotspots(_selectedSectorId!);
+    }
+  }
+
+  List<Hotspot> get _currentHotspots {
+    return _currentHotspotLevel == 'village' ? _villageHotspots : _cellHotspots;
   }
 
   Future<void> _loadCells(int sectorId) async {
@@ -288,6 +327,113 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     ];
   }
 
+  /// Build hotspot markers based on current level (village/cell).
+  List<Marker> _buildHotspotMarkers() {
+    if (_currentHotspots.isEmpty) return [];
+    
+    return _currentHotspots.map((hotspot) {
+      return Marker(
+        point: LatLng(hotspot.centerLat, hotspot.centerLong),
+        width: 40,
+        height: 40,
+        child: GestureDetector(
+          onTap: () => _showHotspotDetails(hotspot),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Pulsing effect for high-risk hotspots
+              if (hotspot.riskLevel == 'high')
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: _getHotspotColor(hotspot.riskLevel).withValues(alpha: 0.3),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              // Main hotspot circle
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: _getHotspotColor(hotspot.riskLevel),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.bg, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _getHotspotColor(hotspot.riskLevel).withValues(alpha: 0.3),
+                      blurRadius: 4,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+              ),
+              // Risk level indicator
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: _getHotspotColor(hotspot.riskLevel),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.bg, width: 1),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  void _showHotspotDetails(Hotspot hotspot) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Text(hotspot.riskEmoji),
+            const SizedBox(width: 8),
+            Text(hotspot.riskText),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Incidents: ${hotspot.incidentCount}'),
+            if (hotspot.incidentTypeName != null)
+              Text('Type: ${hotspot.incidentTypeName}'),
+            Text('Time window: ${hotspot.timeWindowHours} hours'),
+            Text('Radius: ${hotspot.radiusMeters.toStringAsFixed(0)}m'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getHotspotColor(String riskLevel) {
+    switch (riskLevel) {
+      case 'high':
+        return AppColors.danger;
+      case 'medium':
+        return AppColors.warn;
+      case 'low':
+        return AppColors.ok;
+      default:
+        return AppColors.muted;
+    }
+  }
+
   void _centerOnUser() {
     if (_userLat != null && _userLng != null) {
       _mapController.move(LatLng(_userLat!, _userLng!), 15.0);
@@ -355,18 +501,13 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
 
   Widget _buildSectorFilters() {
     if (_mapData == null) return const SizedBox.shrink();
-    
-    // Use backend sectors if available, otherwise use map data sectors
     final sectorNames = _sectors.isNotEmpty
         ? _sectors
             .map((s) => (s['location_name'] ?? '').toString())
             .where((n) => n.isNotEmpty)
             .toList()
         : _mapData!.sectors;
-    
     final sectors = ['All', ...sectorNames];
-    debugPrint('Building sector filters with ${sectors.length} sectors');
-    
     return Container(
       height: 34,
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -406,8 +547,15 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                     LatLng(centroid.dy, centroid.dx), 14.5);
                 if (sectorId != null) {
                   _loadCells(sectorId);
+                  _loadVillageHotspots(sectorId); // Load village hotspots
                 }
               } else {
+                // Reset to district view - clear hotspots
+                setState(() {
+                  _villageHotspots = [];
+                  _cellHotspots = [];
+                });
+              }
                 _mapController.move(_musanzeCenter, _initialZoom);
               }
             },
@@ -519,6 +667,8 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
               PolygonLayer(polygons: _buildPolygons()),
               // Sector labels
               MarkerLayer(markers: _buildSectorLabels()),
+              // Hotspot markers
+              MarkerLayer(markers: _buildHotspotMarkers()),
               // User GPS marker
               MarkerLayer(markers: _buildUserMarker()),
             ],
@@ -543,6 +693,15 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                 const SizedBox(height: 6),
                 if (_userLat != null)
                   _mapButton(Icons.my_location, _centerOnUser),
+                const SizedBox(height: 6),
+                if (_selectedSectorId != null)
+                  _mapButton(
+                    _currentHotspotLevel == 'village' ? Icons.location_city : Icons.home,
+                    _toggleHotspotLevel,
+                    tooltip: _currentHotspotLevel == 'village' 
+                        ? 'Switch to Cell Level' 
+                        : 'Switch to Village Level',
+                  ),
               ],
             ),
           ),
@@ -634,21 +793,30 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     );
   }
 
-  Widget _mapButton(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: AppColors.bg.withValues(alpha: 0.85),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Icon(icon, size: 18, color: AppColors.text),
+  Widget _mapButton(IconData icon, VoidCallback onTap, {String? tooltip}) {
+  Widget button = GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: AppColors.bg.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
       ),
+      child: Icon(icon, size: 18, color: AppColors.text),
+    ),
+  );
+  
+  if (tooltip != null) {
+    return Tooltip(
+      message: tooltip,
+      child: button,
     );
   }
+  
+  return button;
+}
 
   Widget _buildSectorInfo() {
     if (_mapData == null) return const SizedBox.shrink();
@@ -864,33 +1032,6 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
         ],
       ),
     );
-  }
-
-  Future<void> _loadDetailedView(String sectorId) async {
-    try {
-      // Parse sector ID to int if needed
-      final sectorIdInt = int.tryParse(sectorId);
-      if (sectorIdInt != null) {
-        await _loadCells(sectorIdInt);
-        setState(() {
-          _currentDetailLevel = 'cell';
-          _selectedSectorId = sectorIdInt;
-        });
-        
-        // Zoom to sector level
-        final sector = _sectors.firstWhere((s) => s['location_id'] == sectorIdInt, 
-            orElse: () => {});
-        if (sector.isNotEmpty) {
-          final lat = sector['latitude'] as double?;
-          final lng = sector['longitude'] as double?;
-          if (lat != null && lng != null) {
-            _mapController.move(LatLng(lat, lng), 14.0);
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Error loading detailed view: $e');
-    }
   }
 }
 

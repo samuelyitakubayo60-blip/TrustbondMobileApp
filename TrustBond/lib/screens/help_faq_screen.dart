@@ -6,8 +6,14 @@ class HelpFaqScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.chevron_left),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: const Text('Help & FAQ', style: TextStyle(fontSize: 16)),
         backgroundColor: AppColors.surface,
         elevation: 0,
@@ -38,6 +44,7 @@ class HelpFaqScreen extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 

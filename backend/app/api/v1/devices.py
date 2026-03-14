@@ -1,4 +1,4 @@
-from typing import Annotated, Optional
+from typing import Annotated, Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -13,6 +13,12 @@ from app.models.ml_prediction import MLPrediction
 from app.schemas.device import DeviceCreate, DeviceResponse
 from app.api.v1.auth import get_current_admin_or_supervisor
 from app.models.police_user import PoliceUser
+from app.schemas.ml import MLPredictionResponse, MLInsightResponse, DeviceMLStatsResponse
+from app.core.credibility_model import (
+    get_report_prediction,
+    get_home_insights,
+    get_device_ml_stats
+)
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -88,6 +94,15 @@ def get_device_profile(device_hash: str, db: Session = Depends(get_db)):
         .scalar()
     )
 
+    # Achievements derived from real report stats + ML trust data
+    achievements = {
+        "first_report": total >= 1,
+        "five_verified": trusted >= 5,
+        "ten_reports": total >= 10,
+        "streak_x7": total >= 7,
+        "top_reporter": total >= 20,
+    }
+
     return {
         "device_id": str(device.device_id),
         "device_hash": device.device_hash,
@@ -96,6 +111,7 @@ def get_device_profile(device_hash: str, db: Session = Depends(get_db)):
         "trusted_reports": trusted,
         "flagged_reports": flagged,
         "last_ml_update": last_ml.isoformat() if last_ml else None,
+        "achievements": achievements,
     }
 
 
@@ -205,3 +221,71 @@ def list_devices(
             "banned": banned,
         },
     }
+
+
+# ML Endpoints
+@router.get("/reports/{report_id}/prediction", response_model=MLPredictionResponse)
+async def get_report_prediction_endpoint(
+    report_id: str,
+    device_id: str = Query(..., description="Device ID for authorization"),
+    db: Session = Depends(get_db)
+):
+    """Get ML prediction for a specific report"""
+    prediction = get_report_prediction(db, report_id, device_id)
+    
+    if not prediction:
+        raise HTTPException(status_code=404, detail="Report not found or no prediction available")
+    
+    return MLPredictionResponse(
+        prediction_id=prediction.prediction_id,
+        report_id=prediction.report_id,
+        trust_score=float(prediction.trust_score),
+        prediction_label=prediction.prediction_label,
+        model_version=prediction.model_version,
+        confidence=float(prediction.confidence),
+        evaluated_at=prediction.evaluated_at,
+        explanation=prediction.explanation,
+        model_type=prediction.model_type,
+        is_final=prediction.is_final
+    )
+
+@router.get("/ml-insights", response_model=List[MLInsightResponse])
+async def get_home_insights_endpoint(
+    device_id: str = Query(..., description="Device ID"),
+    db: Session = Depends(get_db)
+):
+    """Get ML-powered insights for the home dashboard"""
+    insights_data = get_home_insights(db, device_id)
+    
+    return [
+        MLInsightResponse(
+            title=insight['title'],
+            description=insight['description'],
+            type=insight['type'],
+            score=insight.get('score'),
+            timestamp=datetime.fromisoformat(insight['timestamp'])
+        )
+        for insight in insights_data
+    ]
+
+@router.get("/{device_id}/ml-stats", response_model=DeviceMLStatsResponse)
+async def get_device_ml_stats_endpoint(
+    device_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get ML statistics for a specific device"""
+    stats_data = get_device_ml_stats(db, device_id)
+    
+    if not stats_data:
+        raise HTTPException(status_code=404, detail="Device not found")
+    
+    return DeviceMLStatsResponse(
+        device_id=stats_data['device_id'],
+        total_predictions=stats_data['total_predictions'],
+        average_trust_score=stats_data['average_trust_score'],
+        credible_reports=stats_data['credible_reports'],
+        suspicious_reports=stats_data['suspicious_reports'],
+        fake_reports=stats_data['fake_reports'],
+        model_versions=stats_data['model_versions'],
+        last_prediction=datetime.fromisoformat(stats_data['last_prediction']) if stats_data['last_prediction'] else None
+    )

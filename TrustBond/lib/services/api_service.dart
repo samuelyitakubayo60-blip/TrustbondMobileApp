@@ -195,6 +195,24 @@ class ApiService {
     } catch (_) {}
     throw EvidenceUploadException(message, response.statusCode);
   }
+
+  /// Fetch public hotspots for safety map
+  Future<List<dynamic>> getPublicHotspots({
+    String? riskLevel,
+    int? limit,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.publicHotspotsUrl}/').replace(
+      queryParameters: {
+        if (riskLevel != null) 'risk_level': riskLevel,
+        if (limit != null) 'limit': limit.toString(),
+      },
+    );
+    final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as List<dynamic>;
+    }
+    throw Exception('Failed to load hotspots: ${response.statusCode}');
+  }
 }
 
 /// Custom exception for evidence upload failures with status code info.

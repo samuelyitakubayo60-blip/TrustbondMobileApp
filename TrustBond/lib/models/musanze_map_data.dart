@@ -116,7 +116,7 @@ class MusanzeMapData {
     final exact = findVillage(latitude, longitude);
     if (exact != null) return exact;
 
-    // Fallback: find the closest village centroid
+    // Fallback: find the closest village centroid, but only if reasonably close
     final point = ui.Offset(longitude, latitude);
     double minDist = double.infinity;
     MapFeature? closest;
@@ -139,13 +139,18 @@ class MusanzeMapData {
       }
     }
 
-    if (closest != null) {
+    // Only return a location if the user is within a reasonable distance of Musanze
+    // Maximum distance: ~0.1 degrees (~11km) - this should cover the entire Musanze district
+    const double maxDistance = 0.1;
+    if (closest != null && minDist <= maxDistance) {
       return VillageLocation(
         village: closest.village,
         cell: closest.cell,
         sector: closest.sector,
       );
     }
+    
+    // User is outside Musanze district
     return null;
   }
 
