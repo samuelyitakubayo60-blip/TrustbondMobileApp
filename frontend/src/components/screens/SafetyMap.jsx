@@ -162,7 +162,7 @@ const SafetyMap = () => {
               All Types
             </button>
             {incidentTypes.map((t) => {
-              const name = t.name || t.incident_type_name || '';
+              const name = t.type_name || t.incident_type_name || '';
               if (!name) return null;
               const active = typeFilter === name;
               return (
@@ -215,7 +215,7 @@ const SafetyMap = () => {
                 if (!h.center_lat || !h.center_long) return null;
                 const pos = [Number(h.center_lat), Number(h.center_long)];
                 const count = h.incident_count || 0;
-                const radius = 12 + Math.min(count, 20); // px radius
+                const radius = 14 + Math.min(count, 24); // visual radius
                 const color = getCircleColor(h.risk_level);
                 return (
                   <CircleMarker
@@ -225,10 +225,19 @@ const SafetyMap = () => {
                     pathOptions={{
                       color,
                       fillColor: color,
-                      fillOpacity: 0.7,
+                      fillOpacity: 0.8,
                       weight: 2,
                     }}
                   >
+                    {/* Number label in the bubble, like your design */}
+                    <Tooltip
+                      permanent
+                      direction="center"
+                      className="cluster-count-label"
+                    >
+                      <span>{count}</span>
+                    </Tooltip>
+                    {/* Hover tooltip with extra detail */}
                     <Tooltip direction="top" offset={[0, -4]} opacity={0.9}>
                       <div style={{ fontSize: '11px' }}>
                         <strong>{h.incident_type_name || 'Cluster'}</strong>

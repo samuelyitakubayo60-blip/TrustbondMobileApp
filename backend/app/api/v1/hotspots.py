@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db
 from app.models.hotspot import Hotspot
 from app.models.report import Report
-from app.api.v1.auth import get_current_admin_or_supervisor
+from app.api.v1.auth import get_current_user, get_current_admin_or_supervisor
 from app.models.police_user import PoliceUser
 from app.schemas.hotspot import HotspotResponse
 from app.schemas.report import EvidenceFileResponse
@@ -16,23 +16,29 @@ router = APIRouter(prefix="/hotspots", tags=["hotspots"])
 
 @router.get("/", response_model=List[HotspotResponse])
 def list_hotspots(
-    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)],
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
-    risk_level: Optional[str] = Query(None, description="Filter by risk_level (low, medium, high)."),
+    risk_level: Optional[str] = Query(
+        None, description="Filter by risk_level (low, medium, high)."
+    ),
     limit: int = Query(50, ge=1, le=200),
 ):
-    """List hotspots. Created automatically when many reports of the same place and same incident type are submitted.
+    """List hotspots.
 
     - Admin: sees all hotspots.
-    - Supervisor: sees hotspots that include at least one report in their assigned_location_id (if set).
+    - Supervisor: hotspots that include at least one report in their assigned_location_id (if set).
+    - Officer: same sector scoping as supervisor when assigned_location_id is set, otherwise all.
     """
     query = db.query(Hotspot).options(joinedload(Hotspot.incident_type))
 
-    # Scope for supervisors by assigned_location_id, if configured
-    if current_user.role == "supervisor" and getattr(current_user, "assigned_location_id", None):
+    role = getattr(current_user, "role", None)
+    assigned_loc = getattr(current_user, "assigned_location_id", None)
+
+    # Scope for supervisors/officers by assigned_location_id, if configured
+    if role in ("supervisor", "officer") and assigned_loc:
         query = (
             query.join(Hotspot.reports)
-            .filter(Report.village_location_id == current_user.assigned_location_id)
+            .filter(Report.village_location_id == assigned_loc)
             .distinct()
         )
 
