@@ -136,22 +136,28 @@ class _ReportStep1ScreenState extends State<ReportStep1Screen> {
           const Text('Select the category that best describes what happened',
               style: TextStyle(fontSize: 12, color: AppColors.muted)),
           const SizedBox(height: 16),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 1.65,
-            ),
-            itemCount: _types.length,
-            itemBuilder: (context, index) {
-              final t = _types[index];
-              final id = t['incident_type_id'] as int? ?? 0;
-              final name = t['type_name'] as String? ?? '';
-              final sel = _selectedTypeId == id;
-              return _buildTypeCard(id, name, sel);
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final crossSpacing = 10.0;
+              final mainSpacing = 10.0;
+              final count = 2;
+              final itemWidth = (constraints.maxWidth - crossSpacing) / count;
+              final itemHeight = itemWidth * 0.95;
+              return Wrap(
+                spacing: crossSpacing,
+                runSpacing: mainSpacing,
+                children: List.generate(_types.length, (index) {
+                  final t = _types[index];
+                  final id = t['incident_type_id'] as int? ?? 0;
+                  final name = t['type_name'] as String? ?? '';
+                  final sel = _selectedTypeId == id;
+                  return SizedBox(
+                    width: itemWidth,
+                    height: itemHeight,
+                    child: _buildTypeCard(id, name, sel),
+                  );
+                }),
+              );
             },
           ),
         ],
@@ -169,7 +175,7 @@ class _ReportStep1ScreenState extends State<ReportStep1Screen> {
       }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
           color: selected
               ? color.withValues(alpha: 0.12)
@@ -181,20 +187,33 @@ class _ReportStep1ScreenState extends State<ReportStep1Screen> {
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(icon, style: const TextStyle(fontSize: 24)),
+            // Fixed-size icon so all incident types look the same (no oversized emoji)
+            SizedBox(
+              height: 26,
+              width: 26,
+              child: Center(
+                child: Text(
+                  icon,
+                  style: const TextStyle(fontSize: 20),
+                  textScaler: TextScaler.linear(1.0),
+                  overflow: TextOverflow.clip,
+                ),
+              ),
+            ),
             const SizedBox(height: 6),
             Text(
               name,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: selected ? color : AppColors.text,
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
             ),
           ],
         ),

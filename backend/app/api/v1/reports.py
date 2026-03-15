@@ -179,11 +179,27 @@ def create_report(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    """Submit a new incident report"""
-    # Verify device exists
-    device = db.query(Device).filter(Device.device_id == report_data.device_id).first()
+    """Submit a new incident report. Device can be identified by device_id or device_hash (find-or-create)."""
+    device = None
+    if report_data.device_id:
+        device = db.query(Device).filter(Device.device_id == report_data.device_id).first()
+        if not device:
+            raise HTTPException(status_code=404, detail="Device not found")
+    if device is None and report_data.device_hash and str(report_data.device_hash).strip():
+        device = (
+            db.query(Device)
+            .filter(Device.device_hash == report_data.device_hash.strip())
+            .first()
+        )
+        if not device:
+            device = Device(
+                device_id=uuid4(),
+                device_hash=report_data.device_hash.strip(),
+            )
+            db.add(device)
+            db.flush()
     if not device:
-        raise HTTPException(status_code=404, detail="Device not found")
+        raise HTTPException(status_code=400, detail="Either device_id or device_hash is required")
 
     # Verify incident type exists and is active
     incident_type = (
@@ -214,7 +230,7 @@ def create_report(
     report = Report(
         report_id=uuid4(),
         report_number=report_num,
-        device_id=report_data.device_id,
+        device_id=device.device_id,
         incident_type_id=report_data.incident_type_id,
         description=report_data.description,
         latitude=report_data.latitude,

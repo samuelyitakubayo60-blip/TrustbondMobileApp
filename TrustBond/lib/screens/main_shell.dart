@@ -129,38 +129,37 @@ class _MainShellState extends State<MainShell> {
   }
 
   Widget _fabItem() {
+    // Same icon size (22) and label style as other nav items for a consistent, professional look
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () => _onTabTapped(2),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Transform.translate(
-            offset: const Offset(0, -10),
-            child: Container(
-              width: 44,
-              height: 44,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: AppColors.accent,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.accent.withValues(alpha: 0.45),
-                    blurRadius: 20,
-                    offset: const Offset(0, 4),
+                    color: AppColors.accent.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
-              child: const Icon(Icons.add, color: Colors.black, size: 22),
+              child: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
             ),
-          ),
-          Transform.translate(
-            offset: const Offset(0, -4),
-            child: const Text(
+            const SizedBox(height: 3),
+            const Text(
               'Report',
               style: TextStyle(fontSize: 9, color: AppColors.muted, letterSpacing: 0.4),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

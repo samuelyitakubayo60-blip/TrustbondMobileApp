@@ -85,31 +85,19 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
     });
     try {
       String? deviceId = await _deviceService.getDeviceId();
+      final deviceHash = await _deviceService.getDeviceHash();
 
-      // Auto-register device if not yet registered
+      // Auto-register to get device_id when possible; backend can also resolve by device_hash
       if (deviceId == null || deviceId.isEmpty) {
         try {
-          final hash = await _deviceService.getDeviceHash();
-          final regResult = await _apiService.registerDevice(hash);
+          final regResult = await _apiService.registerDevice(deviceHash);
           deviceId = regResult['device_id']?.toString();
           if (deviceId != null && deviceId.isNotEmpty) {
             await _deviceService.saveDeviceId(deviceId);
           }
-        } catch (regErr) {
-          setState(() {
-            _error = 'Could not register device. Check your internet connection.';
-            _submitting = false;
-          });
-          return;
+        } catch (_) {
+          // Continue: submit with device_hash only; backend will find-or-create device
         }
-      }
-
-      if (deviceId == null || deviceId.isEmpty) {
-        setState(() {
-          _error = 'Device not registered. Please restart the app and try again.';
-          _submitting = false;
-        });
-        return;
       }
 
       // Collect motion/sensor data before submit (non-blocking)
@@ -125,13 +113,17 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
       final networkType = await _statusService.getNetworkType();
       final batteryLevel = await _statusService.getBatteryLevel();
 
+      // Always send device_hash so backend can find-or-create device (fixes "Device not found")
       final reportData = <String, dynamic>{
-        'device_id': deviceId,
+        'device_hash': deviceHash,
         'incident_type_id': widget.incidentTypeId,
         'description': widget.description,
         'latitude': widget.latitude,
         'longitude': widget.longitude,
       };
+      if (deviceId != null && deviceId.isNotEmpty) {
+        reportData['device_id'] = deviceId;
+      }
       // Only send optional fields if they have values
       if (widget.gpsAccuracy != null) {
         reportData['gps_accuracy'] = widget.gpsAccuracy;
@@ -142,10 +134,8 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
         reportData['movement_speed'] = motion.movementSpeed;
       }
       reportData['was_stationary'] = motion.wasStationary;
-      // Contextual tags (e.g. Night-time, Weapons involved) — one or more
-      if (widget.tags.isNotEmpty) {
-        reportData['context_tags'] = widget.tags;
-      }
+      // Contextual tags from Step 2 (e.g. Night-time, Weapons involved)
+      reportData['context_tags'] = widget.tags;
       // Client metadata
       reportData['app_version'] = '1.0.0'; // later can be from package_info_plus
       if (networkType != null) {
@@ -155,8 +145,30 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
         reportData['battery_level'] = batteryLevel;
       }
 
-      final result = await _apiService.submitReport(reportData);
+      Map<String, dynamic> result;
+      try {
+        result = await _apiService.submitReport(reportData);
+      } catch (e) {
+        final msg = e.toString();
+        if (msg.contains('Device not found') && deviceId != null && deviceId.isNotEmpty) {
+          await _deviceService.saveDeviceId(''); // clear stale id
+          reportData.remove('device_id');
+          result = await _apiService.submitReport(reportData);
+          deviceId = result['device_id']?.toString();
+          if (deviceId != null && deviceId.isNotEmpty) {
+            await _deviceService.saveDeviceId(deviceId);
+          }
+        } else {
+          rethrow;
+        }
+      }
       final reportId = result['report_id']?.toString() ?? '';
+      if (deviceId == null || deviceId.isEmpty) {
+        deviceId = result['device_id']?.toString();
+        if (deviceId != null && deviceId.isNotEmpty) {
+          await _deviceService.saveDeviceId(deviceId);
+        }
+      }
 
       // Upload evidence files with verification feedback
       final List<String> uploadErrors = [];
@@ -165,7 +177,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
         try {
           final evidenceResult = await _apiService.uploadEvidence(
             reportId,
-            deviceId,
+            deviceId ?? '',
             f.path,
             mediaLatitude: widget.latitude,
             mediaLongitude: widget.longitude,

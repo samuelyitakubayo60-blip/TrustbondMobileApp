@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
@@ -15,10 +15,12 @@ class EvidenceFileCreate(BaseModel):
 
 
 class ReportCreate(BaseModel):
-    device_id: UUID
+    device_id: Optional[UUID] = None
+    device_hash: Optional[str] = None
     incident_type_id: int
     description: Optional[str] = None
     latitude: Decimal
+
     longitude: Decimal
     gps_accuracy: Optional[Decimal] = None
     motion_level: Optional[str] = None  # low, medium, high
@@ -31,6 +33,12 @@ class ReportCreate(BaseModel):
     app_version: Optional[str] = None
     network_type: Optional[str] = None
     battery_level: Optional[Decimal] = None
+
+    @model_validator(mode="after")
+    def require_device_identifier(self):
+        if not self.device_id and not (self.device_hash and str(self.device_hash).strip()):
+            raise ValueError("Either device_id or device_hash is required")
+        return self
 
 
 class ReportResponse(BaseModel):
