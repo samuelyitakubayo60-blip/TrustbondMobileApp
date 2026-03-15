@@ -144,25 +144,50 @@ def list_devices(
         .limit(limit)
         .all()
     )
-    items = [
-        {
-            "device_id": str(d.device_id),
-            "device_hash_short": d.device_hash[:8] + "..." + d.device_hash[-4:]
-            if len(d.device_hash) >= 12
-            else d.device_hash,
-            "device_hash": d.device_hash,
-            "device_trust_score": float(d.device_trust_score)
-            if d.device_trust_score
-            else 0,
-            "total_reports": d.total_reports or 0,
-            "trusted_reports": d.trusted_reports or 0,
-            "flagged_reports": d.flagged_reports or 0,
-            "first_seen_at": d.first_seen_at.isoformat()
-            if d.first_seen_at
-            else None,
-        }
-        for d in devices
-    ]
+
+    # Build per-device last activity and sector information from most recent report.
+    items = []
+    for d in devices:
+        last_report = (
+            db.query(Report)
+            .options(joinedload(Report.village_location))
+            .filter(Report.device_id == d.device_id)
+            .order_by(Report.reported_at.desc())
+            .first()
+        )
+        last_active = last_report.reported_at if last_report else None
+        sector_location_id = (
+            last_report.village_location.location_id
+            if last_report and last_report.village_location
+            else None
+        )
+        sector_name = (
+            last_report.village_location.location_name
+            if last_report and last_report.village_location
+            else None
+        )
+        items.append(
+            {
+                "device_id": str(d.device_id),
+                "device_hash_short": d.device_hash[:8] + "..." + d.device_hash[-4:]
+                if len(d.device_hash) >= 12
+                else d.device_hash,
+                "device_hash": d.device_hash,
+                "device_trust_score": float(d.device_trust_score)
+                if d.device_trust_score
+                else 0,
+                "total_reports": d.total_reports or 0,
+                "trusted_reports": d.trusted_reports or 0,
+                "flagged_reports": d.flagged_reports or 0,
+                "spam_flags": getattr(d, "spam_flags", 0) or 0,
+                "first_seen_at": d.first_seen_at.isoformat()
+                if d.first_seen_at
+                else None,
+                "last_active_at": last_active.isoformat() if last_active else None,
+                "sector_location_id": sector_location_id,
+                "sector_name": sector_name,
+            }
+        )
     since_30d = datetime.now(timezone.utc) - timedelta(days=30)
     high = (
         db.query(func.count(Device.device_id))

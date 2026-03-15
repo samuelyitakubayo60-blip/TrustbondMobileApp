@@ -161,23 +161,33 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
 
   Future<void> _loadMap() async {
     try {
+      debugPrint('Starting to load map data...');
       MusanzeMapData data;
       try {
         final geo = await _api.getPublicLocationsGeoJson(locationType: 'village', limit: 10000);
+        debugPrint('Loaded GeoJSON with ${geo.length} features');
         data = MusanzeMapData.parse(jsonEncode(geo));
-      } catch (_) {
+        debugPrint('Parsed map data with ${data.sectors.length} sectors');
+      } catch (e) {
+        debugPrint('Failed to load GeoJSON, falling back to bundled data: $e');
         data = await MusanzeMapData.load();
+        debugPrint('Loaded bundled map data with ${data.sectors.length} sectors');
       }
-      setState(() {
-        _mapData = data;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _mapData = data;
+          _loading = false;
+        });
+        debugPrint('Map data loaded and state updated');
+      }
     } catch (e) {
       debugPrint('Failed to load map: $e');
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -302,8 +312,14 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
           children: [
             _buildHeader(),
             _buildSectorFilters(),
-            Expanded(child: _buildMap()),
-            _buildSectorInfo(),
+            Expanded(
+              flex: 3,
+              child: _buildMap(),
+            ),
+            Container(
+              height: 150,
+              child: _buildSectorInfo(),
+            ),
           ],
         ),
       ),
@@ -651,7 +667,31 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   }
 
   Widget _buildSectorInfo() {
-    if (_mapData == null) return const SizedBox.shrink();
+    // Always return a visible container that fills the space
+    return Container(
+      height: 150,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface2,
+        border: Border(top: BorderSide(color: AppColors.border.withValues(alpha: 0.3))),
+      ),
+      child: _buildSectorContent(),
+    );
+  }
+
+  Widget _buildSectorContent() {
+    if (_mapData == null) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: AppColors.accent, strokeWidth: 2),
+            SizedBox(height: 8),
+            Text('Loading map data...', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+          ],
+        ),
+      );
+    }
 
     // Drill-down (old UI style):
     // - No sector selected: show sector cards.
@@ -660,127 +700,109 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
 
     if (_selectedSector == null) {
       final sectors = _mapData!.sectors;
-      return Container(
-        constraints: const BoxConstraints(maxHeight: 170),
-        child: ListView.builder(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-          itemCount: sectors.length,
-          itemBuilder: (context, i) {
-            final name = sectors[i];
-            final villages = _mapData!.bySector(name);
-            final cells = _mapData!.cellsIn(name);
-            final color = sectorColor(name);
-            return GestureDetector(
-              onTap: () {
-                int? sectorId;
-                if (_sectors.isNotEmpty) {
-                  final match = _sectors.firstWhere(
-                    (s) => (s['location_name'] ?? '').toString() == name,
-                    orElse: () => const {},
-                  );
-                  final id = match['location_id'];
-                  if (id is int) sectorId = id;
-                }
-                setState(() {
-                  _selectedSector = name;
-                  _selectedSectorId = sectorId;
-                  _selectedCellId = null;
-                  _selectedCellName = null;
-                  _cells = [];
-                  _villages = [];
-                });
-                final centroid = _mapData!.sectorCentroid(name);
-                _mapController.move(LatLng(centroid.dy, centroid.dx), 14.5);
-                if (sectorId != null) {
-                  _loadCells(sectorId);
-                }
-              },
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  border: Border.all(color: AppColors.border),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: color.withValues(alpha: 0.12),
-                      ),
-                      child: Icon(Icons.location_on_rounded, size: 18, color: color),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                          Text(
-                            '${cells.length} cells · ${villages.length} villages',
-                            style: const TextStyle(fontSize: 10, color: AppColors.muted),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '${villages.length}',
-                        style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
+      debugPrint('Showing ${sectors.length} sectors in info panel');
+      return ListView.builder(
+        itemCount: sectors.length,
+        itemBuilder: (context, i) {
+          final name = sectors[i];
+          final villages = _mapData!.bySector(name);
+          final cells = _mapData!.cellsIn(name);
+          final color = sectorColor(name);
+          return GestureDetector(
+            onTap: () {
+              int? sectorId;
+              if (_sectors.isNotEmpty) {
+                final match = _sectors.firstWhere(
+                  (s) => (s['location_name'] ?? '').toString() == name,
+                  orElse: () => {},
+                );
+                final id = match['location_id'];
+                if (id is int) sectorId = id;
+              }
+              setState(() {
+                _selectedSector = name;
+                _selectedSectorId = sectorId;
+                _selectedCellId = null;
+                _selectedCellName = null;
+                _cells = [];
+                _villages = [];
+              });
+              final centroid = _mapData!.sectorCentroid(name);
+              _mapController.move(LatLng(centroid.dy, centroid.dx), 14.5);
+              if (sectorId != null) {
+                _loadCells(sectorId);
+              }
+            },
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(12),
               ),
-            );
-          },
-        ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: color.withValues(alpha: 0.12),
+                    ),
+                    child: Icon(Icons.location_on_rounded, size: 18, color: color),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        Text(
+                          '${cells.length} cells · ${villages.length} villages',
+                          style: const TextStyle(fontSize: 10, color: AppColors.muted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '${villages.length}',
+                      style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       );
     }
 
+    // When a sector is selected, show cells or villages
     final sectorColorC = sectorColor(_selectedSector!);
     final showingVillages = _selectedCellId != null;
     final items = showingVillages ? _villages : _cells;
 
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 210),
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
             children: [
-              Expanded(
-                child: Text(
-                  showingVillages
-                      ? (_selectedCellName ?? 'Villages')
-                      : 'Cells in ${_selectedSector!}',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                  overflow: TextOverflow.ellipsis,
-                ),
+              Text(
+                showingVillages ? 'Villages in $_selectedCellName' : 'Cells in $_selectedSector',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.text),
               ),
-              if (showingVillages)
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _selectedCellId = null;
-                      _selectedCellName = null;
-                      _villages = [];
-                    });
-                  },
-                  child: const Text('Back', style: TextStyle(fontSize: 12)),
-                ),
-              IconButton(
-                onPressed: () {
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
                   setState(() {
                     _selectedSector = null;
                     _selectedSectorId = null;
@@ -789,80 +811,82 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                     _cells = [];
                     _villages = [];
                   });
-                  _mapController.move(_musanzeCenter, _initialZoom);
                 },
-                icon: const Icon(Icons.close, size: 18),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.muted.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text('Back', style: TextStyle(fontSize: 10, color: AppColors.muted)),
+                ),
               ),
             ],
           ),
-          if (_loadingHierarchy)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: LinearProgressIndicator(color: AppColors.accent),
-            ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: items.length,
-              itemBuilder: (context, i) {
-                final it = items[i];
-                final name = (it['location_name'] ?? '—').toString();
-                return GestureDetector(
-                  onTap: () {
-                    if (!showingVillages) {
-                      final id = it['location_id'];
-                      if (id is int) {
-                        setState(() {
-                          _selectedCellId = id;
-                          _selectedCellName = name;
-                        });
-                        _moveToCentroid(it, 15.0);
-                        _loadVillages(id);
-                      }
-                    } else {
-                      _moveToCentroid(it, 16.0);
-                    }
+        ),
+        Expanded(
+          child: items.isEmpty
+              ? const Center(
+                  child: Text('No data available', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                )
+              : ListView.builder(
+                  itemCount: items.length,
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    final name = item['location_name']?.toString() ?? 'Unknown';
+                    return GestureDetector(
+                      onTap: () {
+                        if (showingVillages) {
+                          // Move to village location
+                          final lat = item['latitude'] as double?;
+                          final lng = item['longitude'] as double?;
+                          if (lat != null && lng != null) {
+                            _mapController.move(LatLng(lat, lng), 16.0);
+                          }
+                        } else {
+                          // Load villages for this cell
+                          final cellId = item['location_id'] as int?;
+                          if (cellId != null) {
+                            _loadVillages(cellId);
+                            setState(() {
+                              _selectedCellId = cellId;
+                              _selectedCellName = name;
+                            });
+                          }
+                        }
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.card,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: sectorColorC.withValues(alpha: 0.12),
+                              ),
+                              child: showingVillages 
+                                  ? Icon(Icons.home_outlined, size: 12, color: sectorColorC)
+                                  : Icon(Icons.grid_view_outlined, size: 12, color: sectorColorC),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
                   },
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      border: Border.all(color: AppColors.border),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: sectorColorC.withValues(alpha: 0.12),
-                          ),
-                          child: Icon(
-                            showingVillages ? Icons.home_work_outlined : Icons.map_outlined,
-                            size: 18,
-                            color: sectorColorC,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            name,
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const Icon(Icons.chevron_right, color: AppColors.muted),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
+                ),
+        ),
+      ],
     );
   }
 

@@ -97,3 +97,25 @@ def update_incident_type(
     db.commit()
     db.refresh(obj)
     return obj
+
+
+@router.delete("/{incident_type_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_incident_type(
+    incident_type_id: int,
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_admin)] = None,
+):
+    """Hard-delete an incident type (admin only)."""
+    obj = (
+        db.query(IncidentType)
+        .filter(IncidentType.incident_type_id == incident_type_id)
+        .first()
+    )
+    if not obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident type not found",
+        )
+    db.delete(obj)
+    db.commit()
+    return {}

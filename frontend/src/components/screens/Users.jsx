@@ -10,6 +10,10 @@ const Users = ({ openModal, onEditUser, refreshKey = 0 }) => {
   const [loading, setLoading] = useState(true);
   const [locationsById, setLocationsById] = useState({});
   const [reviewCounts, setReviewCounts] = useState({});
+  const [stationsById, setStationsById] = useState({});
+  const [searchText, setSearchText] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [stationFilter, setStationFilter] = useState('all');
 
   useEffect(() => {
     let mounted = true;
@@ -60,6 +64,28 @@ const Users = ({ openModal, onEditUser, refreshKey = 0 }) => {
     };
   }, [refreshKey]);
 
+  // Load stations so we can group/filter users by station.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get('/api/v1/stations?only_active=true')
+      .then((res) => {
+        if (cancelled) return;
+        const map = {};
+        (res?.items || []).forEach((st) => {
+          map[st.station_id] = st;
+        });
+        setStationsById(map);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setStationsById({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const resolveSectorName = (locationId) => {
     if (!locationId || !locationsById[locationId]) return null;
     let current = locationsById[locationId];
@@ -104,9 +130,35 @@ const Users = ({ openModal, onEditUser, refreshKey = 0 }) => {
   };
 
   const total = users.length;
-  const active = users.filter(u => u.is_active).length;
   const admins = users.filter(u => u.role === 'admin').length;
-  const sectors = new Set(users.map(u => u.assigned_location_id).filter(Boolean)).size;
+  const supervisors = users.filter(u => u.role === 'supervisor').length;
+  const officers = users.filter(u => u.role === 'officer').length;
+
+  const stationOptions = Object.values(stationsById).sort((a, b) =>
+    (a.station_name || '').localeCompare(b.station_name || '')
+  );
+
+  const filteredUsers = users.filter((u) => {
+    if (searchText.trim()) {
+      const q = searchText.trim().toLowerCase();
+      const name = `${u.first_name || ''} ${u.last_name || ''}`.toLowerCase();
+      const email = (u.email || '').toLowerCase();
+      const badge = (u.badge_number || '').toLowerCase();
+      if (!name.includes(q) && !email.includes(q) && !badge.includes(q)) {
+        return false;
+      }
+    }
+    if (roleFilter !== 'all' && u.role !== roleFilter) {
+      return false;
+    }
+    if (stationFilter !== 'all') {
+      const sid = Number(stationFilter);
+      if (!u.station_id || u.station_id !== sid) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   return (
     <>
@@ -117,20 +169,20 @@ const Users = ({ openModal, onEditUser, refreshKey = 0 }) => {
 
       <div className="stats-row">
         <div className="stat-card c-blue">
-          <div className="stat-label">Total Officers</div>
+          <div className="stat-label">Total Accounts</div>
           <div className="stat-value sv-blue">{total}</div>
-        </div>
-        <div className="stat-card c-green">
-          <div className="stat-label">Active</div>
-          <div className="stat-value sv-green">{active}</div>
         </div>
         <div className="stat-card c-orange">
           <div className="stat-label">Admins</div>
           <div className="stat-value sv-orange">{admins}</div>
         </div>
+        <div className="stat-card c-green">
+          <div className="stat-label">Supervisors</div>
+          <div className="stat-value sv-green">{supervisors}</div>
+        </div>
         <div className="stat-card c-cyan">
-          <div className="stat-label">Sectors Covered</div>
-          <div className="stat-value sv-cyan">{sectors}</div>
+          <div className="stat-label">Officers</div>
+          <div className="stat-value sv-cyan">{officers}</div>
         </div>
       </div>
 
@@ -143,15 +195,34 @@ const Users = ({ openModal, onEditUser, refreshKey = 0 }) => {
         </div>
 
         <div className="filter-row">
-          <input className="input" placeholder="Search officers..." style={{ flex: 2 }} />
-          <select className="select">
-            <option>All Roles</option>
-            <option>Admin</option>
-            <option>Officer</option>
-            <option>Supervisor</option>
+          <input
+            className="input"
+            placeholder="Search by name, email, or badge..."
+            style={{ flex: 2 }}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+          <select
+            className="select"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+          >
+            <option value="all">All Roles</option>
+            <option value="admin">Admin</option>
+            <option value="supervisor">Supervisor</option>
+            <option value="officer">Officer</option>
           </select>
-          <select className="select">
-            <option>All Sectors</option>
+          <select
+            className="select"
+            value={stationFilter}
+            onChange={(e) => setStationFilter(e.target.value)}
+          >
+            <option value="all">All Stations</option>
+            {stationOptions.map((st) => (
+              <option key={st.station_id} value={st.station_id}>
+                {st.station_name}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -163,7 +234,7 @@ const Users = ({ openModal, onEditUser, refreshKey = 0 }) => {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
-                <th>Sector</th>
+                <th>Station</th>
                 <th>Reviews</th>
                 <th>Status</th>
                 <th>Last Login</th>
@@ -171,7 +242,7 @@ const Users = ({ openModal, onEditUser, refreshKey = 0 }) => {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {filteredUsers.map((u) => (
                 <tr key={u.police_user_id}>
                   {(() => {
                     // compute sector name once per row
@@ -182,8 +253,8 @@ const Users = ({ openModal, onEditUser, refreshKey = 0 }) => {
                   <td style={{ fontSize: '10px' }}>{u.email}</td>
                   <td><span className={`badge ${u.role === 'admin' ? 'b-red' : 'b-blue'}`}>{u.role}</span></td>
                   <td style={{ color: 'var(--muted)' }}>
-                    {u.assigned_location_id
-                      ? (resolveSectorName(u.assigned_location_id) || '—')
+                    {u.station_id && stationsById[u.station_id]
+                      ? stationsById[u.station_id].station_name
                       : '—'}
                   </td>
                   <td>{reviewCounts[u.police_user_id] ?? '—'}</td>

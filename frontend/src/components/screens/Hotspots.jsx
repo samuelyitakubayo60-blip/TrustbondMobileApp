@@ -4,18 +4,37 @@ import api from '../../api/client';
 const Hotspots = () => {
   const [hotspots, setHotspots] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [riskFilter, setRiskFilter] = useState('all');
+
+  const loadHotspots = () => {
+    setLoading(true);
+    const path =
+      riskFilter === 'all'
+        ? '/api/v1/hotspots'
+        : `/api/v1/hotspots?risk_level=${encodeURIComponent(
+            riskFilter === 'critical'
+              ? 'high'
+              : riskFilter === 'warning'
+              ? 'medium'
+              : 'low'
+          )}`;
+    api
+      .get(path)
+      .then((res) => {
+        setHotspots(res || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  };
 
   useEffect(() => {
-    let mounted = true;
-    api.get('/api/v1/hotspots')
-      .then((res) => { if (mounted) { setHotspots(res || []); setLoading(false); } })
-      .catch(() => { if (mounted) setLoading(false); });
-    return () => { mounted = false; };
-  }, []);
+    loadHotspots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [riskFilter]);
 
-  const crit = hotspots.filter(h => h.risk_level === 'high').length;
-  const warn = hotspots.filter(h => h.risk_level === 'medium').length;
-  const normal = hotspots.filter(h => h.risk_level === 'low').length;
+  const crit = hotspots.filter((h) => h.risk_level === 'high').length;
+  const warn = hotspots.filter((h) => h.risk_level === 'medium').length;
+  const normal = hotspots.filter((h) => h.risk_level === 'low').length;
 
   return (
     <>
@@ -51,11 +70,16 @@ const Hotspots = () => {
         <div className="card">
           <div className="card-header">
             <div className="card-title">Detected Hotspot Clusters</div>
-            <select className="select" style={{ width: 'auto', fontSize: '11px', padding: '4px 8px' }}>
-              <option>All Risk Levels</option>
-              <option>Critical</option>
-              <option>Warning</option>
-              <option>Normal</option>
+            <select
+              className="select"
+              style={{ width: 'auto', fontSize: '11px', padding: '4px 8px' }}
+              value={riskFilter}
+              onChange={(e) => setRiskFilter(e.target.value)}
+            >
+              <option value="all">All Risk Levels</option>
+              <option value="critical">Critical</option>
+              <option value="warning">Warning</option>
+              <option value="normal">Normal</option>
             </select>
           </div>
           <div className="tbl-wrap">

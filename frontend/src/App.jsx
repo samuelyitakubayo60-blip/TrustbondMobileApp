@@ -56,6 +56,101 @@ function App() {
   const [authScreen, setAuthScreen] = useState('login'); // login | forgot | reset
   const [resetEmail, setResetEmail] = useState('');
 
+  // Map screen/auth IDs to URL paths so the browser bar updates.
+  const screenToPath = (id) => {
+    switch (id) {
+      case 'dashboard':
+        return '/';
+      case 'reports':
+        return '/reports';
+      case 'report-detail':
+        return '/reports/detail';
+      case 'case-management':
+        return '/cases';
+      case 'hotspots':
+        return '/hotspots';
+      case 'safety-map':
+        return '/safety-map';
+      case 'device-trust':
+        return '/device-trust';
+      case 'users':
+        return '/users';
+      case 'incident-types':
+        return '/incident-types';
+      case 'stations':
+        return '/stations';
+      case 'audit-log':
+        return '/audit-log';
+      case 'system-config':
+        return '/system-config';
+      case 'change-password':
+        return '/change-password';
+      case 'notifications':
+        return '/notifications';
+      default:
+        return '/';
+    }
+  };
+
+  const pathToScreen = (path) => {
+    switch (path) {
+      case '/':
+        return 'dashboard';
+      case '/reports':
+        return 'reports';
+      case '/reports/detail':
+        return 'report-detail';
+      case '/cases':
+        return 'case-management';
+      case '/hotspots':
+        return 'hotspots';
+      case '/safety-map':
+        return 'safety-map';
+      case '/device-trust':
+        return 'device-trust';
+      case '/users':
+        return 'users';
+      case '/incident-types':
+        return 'incident-types';
+      case '/stations':
+        return 'stations';
+      case '/audit-log':
+        return 'audit-log';
+      case '/system-config':
+        return 'system-config';
+      case '/change-password':
+        return 'change-password';
+      case '/notifications':
+        return 'notifications';
+      default:
+        return 'dashboard';
+    }
+  };
+
+  const authToPath = (screen) => {
+    switch (screen) {
+      case 'forgot':
+        return '/forgot-password';
+      case 'reset':
+        return '/reset-password';
+      case 'login':
+      default:
+        return '/login';
+    }
+  };
+
+  const pathToAuth = (path) => {
+    switch (path) {
+      case '/forgot-password':
+        return 'forgot';
+      case '/reset-password':
+        return 'reset';
+      case '/login':
+      default:
+        return 'login';
+    }
+  };
+
   // Screens configuration
   const screens = [
     'dashboard',
@@ -97,6 +192,29 @@ function App() {
       document.body.classList.add('light-mode');
     }
   }, []);
+
+  // Initialise screen/auth state from the current URL.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const path = window.location.pathname || '/';
+    if (user) {
+      setCurrentScreen(pathToScreen(path));
+    } else {
+      setAuthScreen(pathToAuth(path));
+    }
+
+    const handlePopState = () => {
+      const newPath = window.location.pathname || '/';
+      if (user) {
+        setCurrentScreen(pathToScreen(newPath));
+      } else {
+        setAuthScreen(pathToAuth(newPath));
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [user]);
 
   const toggleMode = () => {
     const newMode = !isLightMode;
@@ -140,6 +258,10 @@ function App() {
 
   const goToScreen = (id, idx) => {
     setCurrentScreen(id);
+    if (typeof window !== 'undefined') {
+      const path = screenToPath(id);
+      window.history.pushState(null, '', path);
+    }
   };
 
   const handleOpenReport = (reportId) => {
@@ -238,10 +360,18 @@ function App() {
     if (authScreen === 'forgot') {
       return (
         <ForgotPassword
-          onBack={() => setAuthScreen('login')}
+          onBack={() => {
+            setAuthScreen('login');
+            if (typeof window !== 'undefined') {
+              window.history.pushState(null, '', authToPath('login'));
+            }
+          }}
           onCodeSent={(email) => {
             setResetEmail(email);
             setAuthScreen('reset');
+            if (typeof window !== 'undefined') {
+              window.history.pushState(null, '', authToPath('reset'));
+            }
           }}
         />
       );
@@ -250,13 +380,23 @@ function App() {
       return (
         <ResetPassword
           email={resetEmail}
-          onBackToLogin={() => setAuthScreen('login')}
+          onBackToLogin={() => {
+            setAuthScreen('login');
+            if (typeof window !== 'undefined') {
+              window.history.pushState(null, '', authToPath('login'));
+            }
+          }}
         />
       );
     }
     return (
       <Login
-        onForgotPassword={() => setAuthScreen('forgot')}
+        onForgotPassword={() => {
+          setAuthScreen('forgot');
+          if (typeof window !== 'undefined') {
+            window.history.pushState(null, '', authToPath('forgot'));
+          }
+        }}
       />
     );
   }

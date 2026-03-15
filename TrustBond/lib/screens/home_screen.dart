@@ -10,7 +10,7 @@ import '../services/ml_service.dart';
 import '../models/report_model.dart';
 import 'notifications_screen.dart';
 import 'report_detail_screen.dart';
-import 'safety_map_screen.dart';
+import 'main_shell.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -392,11 +392,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildMapPreview() {
     return GestureDetector(
       onTap: () {
+        // Open the Map tab inside the main shell so the bottom nav stays visible.
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => const SafetyMapScreen(
-              showDetailedView: true,
-            ),
+            builder: (_) => const MainShell(initialIndex: 1),
           ),
         );
       },

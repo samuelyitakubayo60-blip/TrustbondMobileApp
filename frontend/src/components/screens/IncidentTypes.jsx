@@ -5,14 +5,50 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey }) => {
   const [types, setTypes] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let mounted = true;
+  const loadTypes = () => {
     setLoading(true);
     api.get('/api/v1/incident-types?include_inactive=true')
-      .then((res) => { if (mounted) { setTypes(res || []); setLoading(false); } })
-      .catch(() => { if (mounted) setLoading(false); });
+      .then((res) => {
+        setTypes(res || []);
+        setLoading(false);
+      })
+      .catch(() => { setLoading(false); });
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    loadTypes();
     return () => { mounted = false; };
   }, [refreshKey]);
+
+  const handleToggleActive = async (type) => {
+    try {
+      const updated = await api.put(`/api/v1/incident-types/${type.incident_type_id}`, {
+        is_active: !type.is_active,
+      });
+      setTypes((prev) =>
+        prev.map((t) =>
+          t.incident_type_id === updated.incident_type_id ? updated : t
+        )
+      );
+    } catch (e) {
+      window.alert(e.message || 'Failed to update incident type status');
+    }
+  };
+
+  const handleDelete = async (type) => {
+    if (!window.confirm(`Delete incident type "${type.type_name}"? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await api.delete(`/api/v1/incident-types/${type.incident_type_id}`);
+      setTypes((prev) =>
+        prev.filter((t) => t.incident_type_id !== type.incident_type_id)
+      );
+    } catch (e) {
+      window.alert(e.message || 'Failed to delete incident type');
+    }
+  };
 
   return (
     <>
@@ -76,6 +112,18 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey }) => {
                           onClick={() => onEditIncidentType?.(t)}
                         >
                           Edit
+                        </button>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={() => handleToggleActive(t)}
+                        >
+                          {t.is_active ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleDelete(t)}
+                        >
+                          Delete
                         </button>
                       </div>
                     </td>

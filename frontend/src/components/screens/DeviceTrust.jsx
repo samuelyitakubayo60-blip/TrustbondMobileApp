@@ -11,6 +11,8 @@ const DeviceTrust = () => {
   const [sortDir, setSortDir] = useState('desc'); // asc | desc
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [sectorFilter, setSectorFilter] = useState('all');
+  const [sectors, setSectors] = useState([]);
 
   // Load devices from backend, filtered by trust level
   useEffect(() => {
@@ -35,6 +37,19 @@ const DeviceTrust = () => {
     };
   }, [trustLevel]);
 
+  // Load sectors for dropdown (locations with type=sector)
+  useEffect(() => {
+    api
+      .get('/api/v1/locations')
+      .then((res) => {
+        const sectorList = (res || []).filter(
+          (loc) => loc.location_type === 'sector',
+        );
+        setSectors(sectorList);
+      })
+      .catch(() => setSectors([]));
+  }, []);
+
   const active = stats?.active_30d ?? 0;
   const high = stats?.high_trust ?? 0;
   const medium = stats?.medium_trust ?? 0;
@@ -42,13 +57,19 @@ const DeviceTrust = () => {
   const banned = stats?.banned ?? 0;
 
   const openProfile = async (deviceId) => {
+    const dev = devices.find((d) => d.device_id === deviceId);
+    if (!dev) return;
     try {
       setProfileLoading(true);
       setSelectedProfile(null);
-      const profile = await api.get(
-        `/api/v1/devices/profile?device_id=${deviceId}`,
+      const mlStats = await api.get(
+        `/api/v1/devices/${deviceId}/ml-stats`,
       );
-      setSelectedProfile(profile);
+      setSelectedProfile({
+        ...mlStats,
+        device_hash: dev.device_hash,
+        device_trust_score: dev.device_trust_score,
+      });
     } catch {
       setSelectedProfile(null);
     } finally {
@@ -172,8 +193,17 @@ const DeviceTrust = () => {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <select className="select">
-              <option>All Sectors</option>
+            <select
+              className="select"
+              value={sectorFilter}
+              onChange={(e) => setSectorFilter(e.target.value)}
+            >
+              <option value="all">All Sectors</option>
+              {sectors.map((s) => (
+                <option key={s.location_id} value={s.location_id}>
+                  {s.location_name}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -246,6 +276,12 @@ const DeviceTrust = () => {
               <tbody>
                 {[...devices]
                   .filter((d) => {
+                    if (sectorFilter !== 'all') {
+                      const sid = Number(sectorFilter);
+                      if (!d.sector_location_id || d.sector_location_id !== sid) {
+                        return false;
+                      }
+                    }
                     if (!search.trim()) return true;
                     const needle = search.trim().toLowerCase();
                     return (
@@ -337,10 +373,8 @@ const DeviceTrust = () => {
                             color: 'var(--muted)',
                           }}
                         >
-                          {d.first_seen_at
-                            ? new Date(
-                                d.first_seen_at,
-                              ).toLocaleDateString()
+                          {d.last_active_at
+                            ? new Date(d.last_active_at).toLocaleDateString()
                             : '—'}
                         </td>
                         <td>

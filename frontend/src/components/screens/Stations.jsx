@@ -19,6 +19,35 @@ const Stations = ({ openModal }) => {
     load();
   }, []);
 
+  const handleToggleActive = async (station) => {
+    try {
+      const updated = await api.put(`/api/v1/stations/${station.station_id}`, {
+        is_active: !station.is_active,
+      });
+      setStations((prev) =>
+        prev.map((s) =>
+          s.station_id === updated.station_id ? updated : s
+        )
+      );
+    } catch (e) {
+      window.alert(e.message || 'Failed to update station status');
+    }
+  };
+
+  const handleDelete = async (station) => {
+    if (!window.confirm(`Delete station "${station.station_name}"? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await api.delete(`/api/v1/stations/${station.station_id}`);
+      setStations((prev) =>
+        prev.filter((s) => s.station_id !== station.station_id)
+      );
+    } catch (e) {
+      window.alert(e.message || 'Failed to delete station');
+    }
+  };
+
   return (
     <>
       <div className="page-header">
@@ -68,6 +97,18 @@ const Stations = ({ openModal }) => {
                         onClick={() => openModal('editStation', s)}
                       >
                         Edit
+                      </button>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={() => handleToggleActive(s)}
+                      >
+                        {s.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => handleDelete(s)}
+                      >
+                        Delete
                       </button>
                     </div>
                   </td>

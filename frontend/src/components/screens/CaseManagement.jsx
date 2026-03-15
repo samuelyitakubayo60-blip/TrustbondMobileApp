@@ -12,6 +12,11 @@ const CaseManagement = ({ openModal }) => {
   const [loading, setLoading] = useState(true);
   const [editingCase, setEditingCase] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [stationsById, setStationsById] = useState({});
+  const [stationFilter, setStationFilter] = useState('all');
 
   useEffect(() => {
     reload();
@@ -22,7 +27,7 @@ const CaseManagement = ({ openModal }) => {
     setLoading(true);
     try {
       const [list, s] = await Promise.all([
-        api.get('/api/v1/cases?limit=50&offset=0'),
+        api.get(statusFilter === 'all' ? '/api/v1/cases?limit=50&offset=0' : `/api/v1/cases?limit=50&offset=0&status=${encodeURIComponent(statusFilter)}`),
         api.get('/api/v1/cases/stats'),
       ]);
       if (!mounted) return;
@@ -38,12 +43,60 @@ const CaseManagement = ({ openModal }) => {
     };
   };
 
+  // Load stations so we can filter/group by station.
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/api/v1/stations?only_active=true')
+      .then((res) => {
+        if (cancelled) return;
+        const map = {};
+        (res?.items || []).forEach((st) => {
+          map[st.station_id] = st;
+        });
+        setStationsById(map);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setStationsById({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const openCount = stats?.open ?? 0;
   const inProgress = stats?.in_progress ?? 0;
   const closed30 = stats?.closed ?? 0;  // simple
   const merged = stats?.reports_merged ?? 0;
 
-  const closedCases = cases.filter(c => c.status === 'closed').slice(0, 3);
+  const filteredCases = cases.filter((c) => {
+    if (searchText.trim()) {
+      const q = searchText.trim().toLowerCase();
+      const id = (c.case_number || String(c.case_id)).toLowerCase();
+      const title = (c.title || '').toLowerCase();
+      const loc = (c.location_name || '').toLowerCase();
+      if (!id.includes(q) && !title.includes(q) && !loc.includes(q)) {
+        return false;
+      }
+    }
+    if (priorityFilter !== 'all' && c.priority !== priorityFilter) {
+      return false;
+    }
+    if (stationFilter !== 'all') {
+      const sid = Number(stationFilter);
+      // Case has location_id; station mapping is indirect, so we use assigned officer's station when available.
+      if (!c.assigned_to_station_id || c.assigned_to_station_id !== sid) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const closedCases = filteredCases.filter(c => c.status === 'closed').slice(0, 3);
+
+  const stationOptions = Object.values(stationsById).sort((a, b) =>
+    (a.station_name || '').localeCompare(b.station_name || '')
+  );
 
   return (
     <>
@@ -77,21 +130,48 @@ const CaseManagement = ({ openModal }) => {
 
       <div className="card" style={{ marginBottom: '14px' }}>
         <div className="filter-row">
-          <input className="input" placeholder="Search cases..." style={{ flex: 2 }} />
-          <select className="select">
-            <option>All Statuses</option>
-            <option>open</option>
-            <option>investigating</option>
-            <option>closed</option>
+          <input
+            className="input"
+            placeholder="Search by case ID, title, or location..."
+            style={{ flex: 2 }}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+          <select
+            className="select"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              // Reload from backend whenever status changes
+              setTimeout(() => reload(), 0);
+            }}
+          >
+            <option value="all">All Statuses</option>
+            <option value="open">open</option>
+            <option value="investigating">investigating</option>
+            <option value="closed">closed</option>
           </select>
-          <select className="select">
-            <option>All Priorities</option>
-            <option>high</option>
-            <option>medium</option>
-            <option>low</option>
+          <select
+            className="select"
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value)}
+          >
+            <option value="all">All Priorities</option>
+            <option value="high">high</option>
+            <option value="medium">medium</option>
+            <option value="low">low</option>
           </select>
-          <select className="select">
-            <option>All Sectors</option>
+          <select
+            className="select"
+            value={stationFilter}
+            onChange={(e) => setStationFilter(e.target.value)}
+          >
+            <option value="all">All Stations</option>
+            {stationOptions.map((st) => (
+              <option key={st.station_id} value={st.station_id}>
+                {st.station_name}
+              </option>
+            ))}
           </select>
           {isAdminOrSupervisor && (
             <button className="btn btn-primary" onClick={() => openModal('newCase')}>+ New Case</button>
