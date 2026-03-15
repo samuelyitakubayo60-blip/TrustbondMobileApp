@@ -187,130 +187,227 @@ const Dashboard = ({ goToScreen }) => {
           </div>
         </div>
 
-        {/* Credibility split summary using ML/rule status */}
+        {/* Credibility Split: donut chart + legend + Avg Trust Score */}
         <div className="card">
           <div className="card-header">
             <div className="card-title">Credibility Split</div>
             <div className="card-action">All time</div>
           </div>
           <div style={{ padding: '10px 14px', fontSize: '12px' }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginBottom: 6,
-              }}
-            >
-              <span>Verified</span>
-              <span>
-                {verified}{' '}
-                {credibilityTotal
-                  ? `(${Math.round((verified / credibilityTotal) * 100)}%)`
-                  : ''}
-              </span>
-            </div>
-            <div className="prog-bar" style={{ marginBottom: 6 }}>
-              <div
-                className="prog-fill"
-                style={{
-                  width: `${
-                    credibilityTotal
-                      ? Math.round((verified / credibilityTotal) * 100)
-                      : 0
-                  }%`,
-                  background: 'var(--success)',
-                }}
-              ></div>
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginBottom: 6,
-              }}
-            >
-              <span>Pending</span>
-              <span>
-                {pending}{' '}
-                {credibilityTotal
-                  ? `(${Math.round((pending / credibilityTotal) * 100)}%)`
-                  : ''}
-              </span>
-            </div>
-            <div className="prog-bar" style={{ marginBottom: 6 }}>
-              <div
-                className="prog-fill"
-                style={{
-                  width: `${
-                    credibilityTotal
-                      ? Math.round((pending / credibilityTotal) * 100)
-                      : 0
-                  }%`,
-                  background: 'var(--warning)',
-                }}
-              ></div>
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginBottom: 6,
-              }}
-            >
-              <span>Flagged</span>
-              <span>
-                {flagged}{' '}
-                {credibilityTotal
-                  ? `(${Math.round((flagged / credibilityTotal) * 100)}%)`
-                  : ''}
-              </span>
-            </div>
-            <div className="prog-bar" style={{ marginBottom: 10 }}>
-              <div
-                className="prog-fill"
-                style={{
-                  width: `${
-                    credibilityTotal
-                      ? Math.round((flagged / credibilityTotal) * 100)
-                      : 0
-                  }%`,
-                  background: 'var(--danger)',
-                }}
-              ></div>
-            </div>
-
-            {/* Avg Trust Score bar */}
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginBottom: 4,
-                fontSize: '11px',
-              }}
-            >
-              <span>Avg Trust Score</span>
-              <span>
-                {avgTrustScore !== null
-                  ? `${Math.round(avgTrustScore)} / 100`
-                  : '—'}
-              </span>
-            </div>
-            <div className="prog-bar">
-              <div
-                className="prog-fill"
-                style={{
-                  width: `${
-                    avgTrustScore !== null
-                      ? Math.max(
-                          0,
-                          Math.min(100, Math.round(avgTrustScore)),
-                        )
-                      : 0
-                  }%`,
-                  background: 'var(--accent)',
-                }}
-              ></div>
-            </div>
+            {(() => {
+              const vPct = credibilityTotal
+                ? Math.round((verified / credibilityTotal) * 100)
+                : 0;
+              const pPct = credibilityTotal
+                ? Math.round((pending / credibilityTotal) * 100)
+                : 0;
+              const fPct = credibilityTotal
+                ? Math.round((flagged / credibilityTotal) * 100)
+                : 0;
+              const r = 45;
+              const c = 2 * Math.PI * r;
+              const vLen = (vPct / 100) * c;
+              const pLen = (pPct / 100) * c;
+              const fLen = (fPct / 100) * c;
+              const centerLabel =
+                vPct >= pPct && vPct >= fPct
+                  ? 'verified'
+                  : pPct >= fPct
+                  ? 'pending'
+                  : 'flagged';
+              const centerPct =
+                centerLabel === 'verified'
+                  ? vPct
+                  : centerLabel === 'pending'
+                  ? pPct
+                  : fPct;
+              return (
+                <>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      marginBottom: '12px',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                      <svg
+                        width="120"
+                        height="120"
+                        viewBox="0 0 120 120"
+                        style={{ transform: 'rotate(-90deg)' }}
+                      >
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r={r}
+                          fill="none"
+                          stroke="var(--success)"
+                          strokeWidth="14"
+                          strokeDasharray={
+                            credibilityTotal
+                              ? `${vLen} ${c - vLen}`
+                              : '0 999'
+                          }
+                          strokeDashoffset="0"
+                        />
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r={r}
+                          fill="none"
+                          stroke="var(--warning)"
+                          strokeWidth="14"
+                          strokeDasharray={
+                            credibilityTotal
+                              ? `${pLen} ${c - pLen}`
+                              : '0 999'
+                          }
+                          strokeDashoffset={-vLen}
+                        />
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r={r}
+                          fill="none"
+                          stroke="var(--danger)"
+                          strokeWidth="14"
+                          strokeDasharray={
+                            credibilityTotal
+                              ? `${fLen} ${c - fLen}`
+                              : '0 999'
+                          }
+                          strokeDashoffset={-(vLen + pLen)}
+                        />
+                      </svg>
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: '50%',
+                          top: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          textAlign: 'center',
+                          fontWeight: 700,
+                          fontSize: '18px',
+                          color:
+                            centerLabel === 'verified'
+                              ? 'var(--success)'
+                              : centerLabel === 'pending'
+                              ? 'var(--warning)'
+                              : 'var(--danger)',
+                        }}
+                      >
+                        <div>{credibilityTotal ? `${centerPct}%` : '—'}</div>
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            color: 'var(--muted)',
+                            textTransform: 'capitalize',
+                            fontWeight: 500,
+                          }}
+                        >
+                          {centerLabel}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 100 }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          marginBottom: 4,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            background: 'var(--success)',
+                          }}
+                        />
+                        <span>Verified – {verified}</span>
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          marginBottom: 4,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            background: 'var(--warning)',
+                          }}
+                        />
+                        <span>Pending – {pending}</span>
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            background: 'var(--danger)',
+                          }}
+                        />
+                        <span>Flagged – {flagged}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: 4,
+                      fontSize: '11px',
+                      color: 'var(--muted)',
+                    }}
+                  >
+                    <span>Avg Trust Score</span>
+                    <span
+                      style={{
+                        color: 'var(--text)',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {avgTrustScore !== null
+                        ? `${Math.round(avgTrustScore)} / 100`
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className="prog-bar">
+                    <div
+                      className="prog-fill"
+                      style={{
+                        width: `${
+                          avgTrustScore !== null
+                            ? Math.max(
+                                0,
+                                Math.min(100, Math.round(avgTrustScore)),
+                              )
+                            : 0
+                        }%`,
+                        background: 'var(--accent)',
+                      }}
+                    ></div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -425,8 +522,146 @@ const Dashboard = ({ goToScreen }) => {
         </div>
       </div>
 
-      {/* Audit details and system status are available elsewhere (Audit Log, System Config),
-          so we keep the dashboard focused on key KPIs, recent reports, and hotspots. */}
+      {/* Second row: Recent Activity (left) | Quick Actions + System Status (right) */}
+      <div className="g31" style={{ marginTop: '16px' }}>
+        {/* Recent Activity */}
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">Recent Activity</div>
+          </div>
+          <div style={{ padding: '10px 14px' }}>
+            {(stats?.recent_activity || []).map((a, i) => {
+              const severity = a.severity || 'neutral';
+              const dotColor =
+                severity === 'success'
+                  ? 'var(--success)'
+                  : severity === 'danger'
+                  ? 'var(--danger)'
+                  : severity === 'critical'
+                  ? 'var(--accent)'
+                  : severity === 'warn'
+                  ? 'var(--warning)'
+                  : 'var(--muted)';
+              const text =
+                a.text ||
+                `${a.action_type || 'Activity'}${
+                  a.entity_type ? ` on ${a.entity_type}` : ''
+                }`;
+              return (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 8,
+                  marginBottom: 10,
+                  fontSize: '12px',
+                }}
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: dotColor,
+                    flexShrink: 0,
+                    marginTop: 5,
+                  }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: 'var(--text)' }}>{text}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: 2 }}>
+                    {a.created_at}
+                  </div>
+                </div>
+              </div>
+            )})}
+          </div>
+        </div>
+
+        {/* Quick Actions + System Status */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">Quick Actions</div>
+            </div>
+            <div
+              style={{
+                padding: '10px 14px',
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 8,
+              }}
+            >
+              {[
+                { label: 'Pending', border: 'var(--warning)', go: () => goToScreen('reports', 1) },
+                { label: 'Flagged', border: 'var(--danger)', go: () => goToScreen('reports', 1) },
+                { label: 'Cases', border: 'var(--accent)', go: () => goToScreen('case-management', 3) },
+                { label: 'Add Officer', border: 'var(--success)', go: () => goToScreen('users', 7) },
+                { label: 'Map', border: 'var(--accent)', go: () => goToScreen('safety-map', 5) },
+                { label: 'Devices', border: 'var(--success)', go: () => goToScreen('device-trust', 6) },
+              ].map((btn, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className="btn btn-outline"
+                  style={{
+                    borderColor: btn.border,
+                    color: btn.border,
+                    borderRadius: 8,
+                    padding: '10px 12px',
+                    fontSize: '12px',
+                  }}
+                  onClick={btn.go}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">System Status</div>
+            </div>
+            <div style={{ padding: '10px 14px', fontSize: '12px' }}>
+              {(stats?.system_status || []).map((s, i) => {
+                const level = s.level || 'neutral';
+                const dotColor =
+                  level === 'ok'
+                    ? 'var(--success)'
+                    : level === 'warn'
+                    ? 'var(--warning)'
+                    : level === 'error'
+                    ? 'var(--danger)'
+                    : 'var(--muted)';
+                return (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 8,
+                  }}
+                >
+                  <span style={{ color: 'var(--text)' }}>{s.name}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: dotColor,
+                      }}
+                    />
+                    <span style={{ color: 'var(--muted)', fontSize: '11px' }}>{s.status}</span>
+                  </span>
+                </div>
+              )})}
+            </div>
+          </div>
+        </div>
+      </div>
     </>
   );
 };

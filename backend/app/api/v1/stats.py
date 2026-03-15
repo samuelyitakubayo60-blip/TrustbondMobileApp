@@ -13,6 +13,7 @@ from app.models.audit_log import AuditLog
 from app.api.v1.auth import get_current_user
 from app.models.police_user import PoliceUser
 from app.models.hotspot import Hotspot
+from app.models.ml_prediction import MLPrediction
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -115,17 +116,46 @@ def get_dashboard_stats(
             "risk_level": h.risk_level,
         })
 
-    recent_activity = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(5).all()
-    activity_list = [
-        {
+    recent_activity = (
+        db.query(AuditLog)
+        .order_by(AuditLog.created_at.desc())
+        .limit(5)
+        .all()
+    )
+
+    def _activity_row(a: AuditLog):
+        """Normalize recent activity into human‑readable text + severity."""
+        base = a.action_type or "activity"
+        # Very lightweight mapping – can be expanded as we add more actions.
+        action_lower = (a.action_type or "").lower()
+        if "verify" in action_lower:
+            severity = "success"
+        elif "flag" in action_lower or "blacklist" in action_lower:
+            severity = "danger"
+        elif "hotspot" in action_lower or "cluster" in action_lower:
+            severity = "critical"
+        elif "create" in action_lower or "add" in action_lower:
+            severity = "info"
+        else:
+            severity = "neutral"
+
+        parts = [base.replace("_", " ").capitalize()]
+        if a.entity_type:
+            parts.append(f"for {a.entity_type}")
+        if a.entity_id:
+            parts.append(str(a.entity_id))
+        text = " ".join(parts)
+
+        return {
             "action_type": a.action_type,
             "entity_type": a.entity_type,
             "entity_id": a.entity_id,
-            "action_details": a.action_details,
+            "text": text,
+            "severity": severity,
             "created_at": a.created_at.isoformat() if a.created_at else None,
         }
-        for a in recent_activity
-    ]
+
+    activity_list = [_activity_row(a) for a in recent_activity]
 
     # Weekly volume over the last 4 weeks (oldest W1 to newest W4)
     weekly_volume = []
@@ -154,6 +184,71 @@ def get_dashboard_stats(
     ]
     avg_trust_score = sum(trust_values) / len(trust_values) if trust_values else None
 
+    # System / ML status – keep it database‑driven so the UI reflects reality,
+    # without hard‑coding specific algorithms like Random Forest.
+    now = datetime.now(timezone.utc)
+
+    latest_pred = (
+        db.query(MLPrediction)
+        .order_by(MLPrediction.evaluated_at.desc())
+        .first()
+    )
+    if latest_pred and latest_pred.evaluated_at:
+        age = now - latest_pred.evaluated_at
+        if age <= timedelta(hours=24):
+            ml_status = "Online"
+            ml_level = "ok"
+        elif age <= timedelta(days=3):
+            ml_status = "Stale"
+            ml_level = "warn"
+        else:
+            ml_status = "Offline"
+            ml_level = "error"
+    else:
+        ml_status = "Offline"
+        ml_level = "error"
+
+    last_hotspot_detected = (
+        db.query(func.max(Hotspot.detected_at)).scalar()
+        if hasattr(Hotspot, "detected_at")
+        else None
+    )
+    if last_hotspot_detected:
+        age_hs = now - last_hotspot_detected
+        if age_hs <= timedelta(hours=24):
+            hs_status = "Running"
+            hs_level = "ok"
+        elif age_hs <= timedelta(days=3):
+            hs_status = "Idle"
+            hs_level = "warn"
+        else:
+            hs_status = "Stale"
+            hs_level = "warn"
+    else:
+        hs_status = "No data"
+        hs_level = "neutral"
+
+    system_status = [
+        {
+            "name": "ML Engine",
+            "status": ml_status,
+            "level": ml_level,
+            "model_type": latest_pred.model_type if latest_pred else None,
+            "model_version": latest_pred.model_version if latest_pred else None,
+            "last_updated": latest_pred.evaluated_at.isoformat()
+            if latest_pred and latest_pred.evaluated_at
+            else None,
+        },
+        {
+            "name": "Hotspot Detection (DBSCAN)",
+            "status": hs_status,
+            "level": hs_level,
+            "last_detected": last_hotspot_detected.isoformat()
+            if last_hotspot_detected
+            else None,
+        },
+    ]
+
     return {
         "total_reports": total,
         "reports_last_7_days": recent_7d_count,
@@ -169,4 +264,5 @@ def get_dashboard_stats(
         "recent_activity": activity_list,
         "weekly_volume": weekly_volume,
         "avg_trust_score": avg_trust_score,
+        "system_status": system_status,
     }
