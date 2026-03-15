@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 
 const Dashboard = ({ goToScreen }) => {
+  const { user } = useAuth();
+  const role = user?.role || 'officer';
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -22,52 +25,101 @@ const Dashboard = ({ goToScreen }) => {
   const recentReports = stats?.recent_reports ?? [];
   const topHotspots = stats?.top_hotspots ?? [];
   const recentActivity = stats?.recent_activity ?? [];
+  const myScope = stats?.scope === 'assigned_to_me';
 
   return (
     <>
       <div className="page-header">
-        <h2>Welcome back, System Admin</h2>
-        <p>Here's what's happening in Musanze District right now.</p>
+        <h2>
+          Welcome back,{' '}
+          {user ? `${user.first_name} ${user.last_name}` : 'Officer'}
+        </h2>
+        <p>
+          {role === 'officer'
+            ? 'Here is your assigned work — cases and reports that need your attention.'
+            : "Here's what's happening in Musanze District right now."}
+        </p>
       </div>
 
-      <div className="alert alert-warn">
-        <span className="alert-icon">!</span>
-        <div>
-          <strong>{pending} reports pending review</strong> — view and verify.
-          <span className="card-action" onClick={() => goToScreen('reports', 1)}>Review now</span>
+      {role === 'officer' ? (
+        <div className="alert alert-info">
+          <span className="alert-icon">i</span>
+          <div>
+            <strong>{pending} of your assigned reports</strong> still need a
+            decision.{' '}
+            <span
+              className="card-action"
+              onClick={() => goToScreen('reports', 1)}
+            >
+              Open My Reports
+            </span>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="alert alert-warn">
+          <span className="alert-icon">!</span>
+          <div>
+            <strong>{pending} reports pending review</strong> — view and verify.
+            <span
+              className="card-action"
+              onClick={() => goToScreen('reports', 1)}
+            >
+              Review now
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="stats-row">
         <div className="stat-card c-blue">
-          <div className="stat-label">Total Reports</div>
+          <div className="stat-label">
+            {role === 'officer' ? 'My Assigned Reports' : 'Total Reports'}
+          </div>
           <div className="stat-value sv-blue">{total}</div>
-          <div className="stat-change"><span className="up">live</span></div>
+          <div className="stat-change">
+            <span className="up">{myScope ? 'assigned' : 'live'}</span>
+          </div>
         </div>
         <div className="stat-card c-cyan">
           <div className="stat-label">Last 7 Days</div>
           <div className="stat-value sv-cyan">{recent7}</div>
-          <div className="stat-change"><span className="up">recent</span></div>
+          <div className="stat-change">
+            <span className="up">recent</span>
+          </div>
         </div>
         <div className="stat-card c-orange">
           <div className="stat-label">Pending</div>
           <div className="stat-value sv-orange">{pending}</div>
-          <div className="stat-change"><span className="dn">needs review</span></div>
+          <div className="stat-change">
+            <span className="dn">
+              {role === 'officer' ? 'your queue' : 'needs review'}
+            </span>
+          </div>
         </div>
         <div className="stat-card c-green">
           <div className="stat-label">Verified</div>
           <div className="stat-value sv-green">{verified}</div>
-          <div className="stat-change"><span className="up">rule \"passed\"</span></div>
+          <div className="stat-change">
+            <span className="up">rule "passed"</span>
+          </div>
         </div>
         <div className="stat-card c-red">
           <div className="stat-label">Flagged</div>
           <div className="stat-value sv-red">{flagged}</div>
-          <div className="stat-change"><span className="dn">check anomalies</span></div>
+          <div className="stat-change">
+            <span className="dn">
+              {role === 'officer' ? 'check anomalies' : 'check anomalies'}
+            </span>
+          </div>
         </div>
         <div className="stat-card c-purple">
-          <div className="stat-label">Open Cases</div>
+          <div className="stat-label">
+            {role === 'officer' ? 'My Open Cases' : 'Open Cases'}
+          </div>
           <div className="stat-value sv-purple">{openCases}</div>
-          <div className="stat-change"><span className="dn">case files</span></div>
+          <div className="stat-change">
+            <span className="dn">case files</span>
+          </div>
         </div>
       </div>
 

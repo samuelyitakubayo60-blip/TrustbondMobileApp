@@ -11,6 +11,8 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
   const [priority, setPriority] = useState(caseItem?.priority || 'medium');
   const [description, setDescription] = useState(caseItem?.description || '');
   const [outcome, setOutcome] = useState(caseItem?.outcome || '');
+  const [assignedToId, setAssignedToId] = useState(caseItem?.assigned_to_id || '');
+  const [officers, setOfficers] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,9 +22,29 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
     setPriority(caseItem.priority || 'medium');
     setDescription(caseItem.description || '');
     setOutcome(caseItem.outcome || '');
+    setAssignedToId(caseItem.assigned_to_id || '');
     setError('');
     setSaving(false);
   }, [isOpen, caseItem]);
+
+  // Load officer options for assignment when admin/supervisor.
+  useEffect(() => {
+    if (!isOpen || !isAdminOrSupervisor) return;
+    let cancelled = false;
+    api
+      .get('/api/v1/police-users/options')
+      .then((res) => {
+        if (cancelled) return;
+        setOfficers(res || []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOfficers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, isAdminOrSupervisor]);
 
   if (!isOpen || !caseItem) return null;
 
@@ -33,7 +55,7 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
       status,
       description,
       outcome,
-      ...(isAdminOrSupervisor ? { priority } : {}),
+      ...(isAdminOrSupervisor ? { priority, assigned_to_id: assignedToId || null } : {}),
     };
     try {
       await api.patch(`/api/v1/cases/${caseItem.case_id}`, payload);
@@ -89,6 +111,23 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
               <option value="low">low</option>
             </select>
           </div>
+          {isAdminOrSupervisor && (
+            <div className="input-group">
+              <div className="input-label">Assign Officer</div>
+              <select
+                className="select"
+                value={assignedToId}
+                onChange={(e) => setAssignedToId(e.target.value)}
+              >
+                <option value="">Unassigned</option>
+                {officers.map((o) => (
+                  <option key={o.police_user_id} value={o.police_user_id}>
+                    {o.first_name} {o.last_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="input-group">

@@ -2,7 +2,7 @@ from typing import Annotated, Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 

@@ -8,7 +8,10 @@ const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
   const [priority, setPriority] = useState('high');
   const [assignedToId, setAssignedToId] = useState('');
   const [officers, setOfficers] = useState([]);
-  const [reportIds, setReportIds] = useState('');
+  const [availableReports, setAvailableReports] = useState([]);
+  const [selectedReportIds, setSelectedReportIds] = useState(new Set());
+  const [sectorId, setSectorId] = useState('');
+  const [sectors, setSectors] = useState([]);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -20,25 +23,32 @@ const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
     setIncidentTypeId('');
     setPriority('high');
     setAssignedToId('');
-    // Pre-fill the reports field when opened from a specific report
-    setReportIds(initialReportId ? String(initialReportId) : '');
+    setAvailableReports([]);
+    setSelectedReportIds(
+      initialReportId ? new Set([String(initialReportId)]) : new Set(),
+    );
     setNotes('');
+    setSectorId('');
     setError('');
     setSaving(false);
 
     const load = async () => {
       try {
-        const [types, offs] = await Promise.all([
+        const [types, offs, locs] = await Promise.all([
           api.get('/api/v1/incident-types'),
           api.get('/api/v1/police-users/options'),
+          api.get('/api/v1/locations'),
         ]);
         if (cancelled) return;
         setIncidentTypes(types || []);
         setOfficers(offs || []);
+        const sectorList = (locs || []).filter((l) => l.location_type === 'sector');
+        setSectors(sectorList);
       } catch {
         if (cancelled) return;
         setIncidentTypes([]);
         setOfficers([]);
+        setSectors([]);
       }
     };
     load();
@@ -56,11 +66,7 @@ const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
     }
     setSaving(true);
     setError('');
-    // Expect comma-separated UUIDs for now
-    const ids = (reportIds || '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const ids = Array.from(selectedReportIds);
 
     const payload = {
       title: title.trim(),
@@ -68,6 +74,8 @@ const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
       incident_type_id: incidentTypeId ? Number(incidentTypeId) : null,
       priority: priority || 'medium',
       report_ids: ids,
+      assigned_to_id: assignedToId ? Number(assignedToId) : null,
+      location_id: sectorId ? Number(sectorId) : null,
     };
 
     try {
@@ -78,6 +86,44 @@ const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
       setError(e?.message || 'Failed to create case.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleReportSelected = (id) => {
+    setSelectedReportIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // When sector is chosen, load available reports for that sector (not yet linked to any case).
+  const loadReportsForSector = async (newSectorId) => {
+    setAvailableReports([]);
+    setSelectedReportIds(
+      initialReportId ? new Set([String(initialReportId)]) : new Set(),
+    );
+    if (!newSectorId) return;
+    try {
+      const res = await api.get(
+        `/api/v1/cases/available-reports?sector_location_id=${newSectorId}`,
+      );
+      setAvailableReports(res || []);
+      // If modal was opened from a specific report, keep it pre-selected if present.
+      if (initialReportId) {
+        const found = (res || []).some(
+          (r) => String(r.report_id) === String(initialReportId),
+        );
+        if (found) {
+          setSelectedReportIds(new Set([String(initialReportId)]));
+        }
+      }
+    } catch {
+      setAvailableReports([]);
     }
   };
 
@@ -134,6 +180,25 @@ const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
               <option value="low">Low</option>
             </select>
           </div>
+          <div className="input-group">
+            <div className="input-label">Sector (Case Location)</div>
+            <select
+              className="select"
+              value={sectorId}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSectorId(val);
+                loadReportsForSector(val);
+              }}
+            >
+              <option value="">— Detect from linked reports or choose sector —</option>
+              {sectors.map((s) => (
+                <option key={s.location_id} value={s.location_id}>
+                  {s.location_name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         
         <div className="input-group">
@@ -142,7 +207,6 @@ const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
             className="select"
             value={assignedToId}
             onChange={(e) => setAssignedToId(e.target.value)}
-            disabled
           >
             <option value="">Unassigned (assignment handled separately)</option>
             {officers.map((o) => (
@@ -154,13 +218,55 @@ const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
         </div>
         
         <div className="input-group">
-          <div className="input-label">Link Reports (comma-separated UUIDs)</div>
-          <input
-            className="input"
-            placeholder="e.g. 5c9a... , 7bd2..."
-            value={reportIds}
-            onChange={(e) => setReportIds(e.target.value)}
-          />
+          <div className="input-label">Link Reports in Sector</div>
+          {!sectorId && (
+            <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+              Select a <strong>Sector</strong> first to see unassigned reports in that area.
+            </div>
+          )}
+          {sectorId && (
+            <div
+              style={{
+                maxHeight: '180px',
+                overflowY: 'auto',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '8px',
+                padding: '6px 8px',
+                marginTop: '4px',
+              }}
+            >
+              {availableReports.length === 0 && (
+                <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                  No unassigned reports found for this sector.
+                </div>
+              )}
+              {availableReports.map((r) => (
+                <label
+                  key={r.report_id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '11px',
+                    marginBottom: '4px',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedReportIds.has(String(r.report_id))}
+                    onChange={() => toggleReportSelected(String(r.report_id))}
+                  />
+                  <span style={{ fontFamily: 'monospace' }}>
+                    {r.report_number || String(r.report_id).slice(0, 8)}
+                  </span>
+                  <span style={{ color: 'var(--muted)' }}>
+                    · {r.incident_type_name || 'Incident'} ·{' '}
+                    {r.village_name || 'Unknown'}
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
         
         <div className="input-group">

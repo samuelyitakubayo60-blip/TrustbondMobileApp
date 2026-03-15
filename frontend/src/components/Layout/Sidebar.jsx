@@ -21,8 +21,10 @@ const Sidebar = ({ isOpen, currentScreen, onNavigate, sidebarCounts = {}, user }
       { id: 'safety-map', idx: 5, label: 'Safety Map', icon: 'ni-mp' }
     ]},
     { section: 'Intelligence', items: [
-      // Device trust analytics – mostly for admin / analysts; keep visible for all for now
-      { id: 'device-trust', idx: 6, label: 'Device Trust', icon: 'ni-dt' }
+      // Device trust analytics – restricted to admin / supervisor
+      ...(role === 'admin' || role === 'supervisor'
+        ? [{ id: 'device-trust', idx: 6, label: 'Device Trust', icon: 'ni-dt' }]
+        : []),
     ]},
     { section: 'Management', items: [
       ...(role === 'admin'

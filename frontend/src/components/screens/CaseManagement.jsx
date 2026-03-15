@@ -235,6 +235,24 @@ const CaseManagement = ({ openModal }) => {
                   Update
                 </button>
               )}
+              {isAdminOrSupervisor && (
+                <button
+                  className="btn btn-outline btn-sm"
+                  style={{ color: 'var(--danger)', borderColor: 'transparent' }}
+                  onClick={async () => {
+                    const confirmed = window.confirm('Delete this case? This will unlink all associated reports.');
+                    if (!confirmed) return;
+                    try {
+                      await api.delete(`/api/v1/cases/${c.case_id}`);
+                      reload();
+                    } catch (e) {
+                      window.alert(e?.message || 'Failed to delete case.');
+                    }
+                  }}
+                >
+                  Delete
+                </button>
+              )}
             </div>
           </div>
         ))}
