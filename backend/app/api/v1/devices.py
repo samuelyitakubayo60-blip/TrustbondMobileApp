@@ -139,7 +139,9 @@ def list_devices(
         query = query.filter(Device.device_trust_score < 40)
     total = query.count()
     devices = (
-        query.order_by(Device.first_seen_at.desc())
+        query.order_by(
+            Device.last_seen_at.desc() if hasattr(Device, "last_seen_at") else Device.first_seen_at.desc()
+        )
         .offset(offset)
         .limit(limit)
         .all()
@@ -148,24 +150,24 @@ def list_devices(
     # Build per-device last activity and sector information from most recent report.
     items = []
     for d in devices:
-        last_report = (
-            db.query(Report)
-            .options(joinedload(Report.village_location))
-            .filter(Report.device_id == d.device_id)
-            .order_by(Report.reported_at.desc())
-            .first()
-        )
-        last_active = last_report.reported_at if last_report else None
-        sector_location_id = (
-            last_report.village_location.location_id
-            if last_report and last_report.village_location
-            else None
-        )
-        sector_name = (
-            last_report.village_location.location_name
-            if last_report and last_report.village_location
-            else None
-        )
+        last_report = None
+        last_active = getattr(d, "last_seen_at", None)
+        sector_location_id = None
+        sector_name = None
+        # Fallback to most recent report if last_seen_at is not yet populated
+        if last_active is None:
+            last_report = (
+                db.query(Report)
+                .options(joinedload(Report.village_location))
+                .filter(Report.device_id == d.device_id)
+                .order_by(Report.reported_at.desc())
+                .first()
+            )
+            if last_report:
+                last_active = last_report.reported_at
+                if last_report.village_location:
+                    sector_location_id = last_report.village_location.location_id
+                    sector_name = last_report.village_location.location_name
         items.append(
             {
                 "device_id": str(d.device_id),
@@ -180,9 +182,7 @@ def list_devices(
                 "trusted_reports": d.trusted_reports or 0,
                 "flagged_reports": d.flagged_reports or 0,
                 "spam_flags": getattr(d, "spam_flags", 0) or 0,
-                "first_seen_at": d.first_seen_at.isoformat()
-                if d.first_seen_at
-                else None,
+                "first_seen_at": d.first_seen_at.isoformat() if d.first_seen_at else None,
                 "last_active_at": last_active.isoformat() if last_active else None,
                 "sector_location_id": sector_location_id,
                 "sector_name": sector_name,
@@ -218,21 +218,30 @@ def list_devices(
         )
     else:
         banned = 0
-    active_30d = (
-        db.query(func.count(Device.device_id))
-        .filter(Device.first_seen_at >= since_30d)
-        .scalar()
-        or 0
-    )
-    if hasattr(Device, "is_banned"):
+    # Active devices in last 30 days based on last_seen_at when available
+    if hasattr(Device, "last_seen_at"):
+        active_base = db.query(func.count(Device.device_id)).filter(
+            Device.last_seen_at >= since_30d
+        )
+        if hasattr(Device, "is_banned"):
+            active_base = active_base.filter(Device.is_banned == False)
+        active_30d = active_base.scalar() or 0
+    else:
         active_30d = (
             db.query(func.count(Device.device_id))
-            .filter(
-                Device.first_seen_at >= since_30d, Device.is_banned == False
-            )
+            .filter(Device.first_seen_at >= since_30d)
             .scalar()
             or 0
         )
+        if hasattr(Device, "is_banned"):
+            active_30d = (
+                db.query(func.count(Device.device_id))
+                .filter(
+                    Device.first_seen_at >= since_30d, Device.is_banned == False
+                )
+                .scalar()
+                or 0
+            )
     return {
         "items": items,
         "total": total,

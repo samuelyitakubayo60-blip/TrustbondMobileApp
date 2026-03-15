@@ -48,6 +48,7 @@ class CaseResponse(BaseModel):
     closed_at: Optional[datetime] = None
     outcome: Optional[str] = None
     created_at: Optional[datetime] = None
+    average_trust_score: Optional[Decimal] = None
 
     class Config:
         from_attributes = True

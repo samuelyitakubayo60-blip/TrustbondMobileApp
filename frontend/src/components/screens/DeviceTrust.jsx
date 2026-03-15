@@ -86,7 +86,7 @@ const DeviceTrust = () => {
       'confirmed',
       'rejected',
       'spam_flags',
-      'last_active',
+      'last_active_at',
       'status',
     ];
     const rows = devices.map((d) => {
@@ -100,7 +100,7 @@ const DeviceTrust = () => {
         d.trusted_reports ?? 0,
         d.flagged_reports ?? 0,
         d.spam_flags ?? 0,
-        d.first_seen_at || '',
+        d.last_active_at || '',
         status,
       ];
     });
@@ -254,16 +254,16 @@ const DeviceTrust = () => {
                   <th
                     style={{ cursor: 'pointer' }}
                     onClick={() => {
-                      setSortField('first_seen_at');
+                      setSortField('last_active_at');
                       setSortDir((d) =>
-                        sortField === 'first_seen_at' && d === 'desc'
+                        sortField === 'last_active_at' && d === 'desc'
                           ? 'asc'
                           : 'desc',
                       );
                     }}
                   >
                     Last Active{' '}
-                    {sortField === 'first_seen_at'
+                    {sortField === 'last_active_at'
                       ? sortDir === 'asc'
                         ? '↑'
                         : '↓'
@@ -298,7 +298,7 @@ const DeviceTrust = () => {
                     if (va == null && vb == null) return 0;
                     if (va == null) return 1;
                     if (vb == null) return -1;
-                    if (sortField === 'first_seen_at') {
+                    if (sortField === 'last_active_at') {
                       const da = new Date(va).getTime();
                       const db = new Date(vb).getTime();
                       return (da - db) * dir;
@@ -479,6 +479,7 @@ const DeviceTrust = () => {
           )}
           {selectedProfile && !profileLoading && (
             <div style={{ padding: '10px 14px', fontSize: '12px' }}>
+              {/* Identity + headline trust score */}
               <div
                 style={{
                   marginBottom: '6px',
@@ -511,7 +512,7 @@ const DeviceTrust = () => {
               </div>
               {selectedProfile.last_ml_update && (
                 <div
-                  style={{ marginBottom: '6px', color: 'var(--muted)' }}
+                  style={{ marginBottom: '10px', color: 'var(--muted)' }}
                 >
                   Last ML update:{' '}
                   {new Date(
@@ -519,6 +520,191 @@ const DeviceTrust = () => {
                   ).toLocaleString()}
                 </div>
               )}
+
+              {/* Trust Score Formula (static explanation based on DB + ML) */}
+              <div
+                style={{
+                  marginTop: '8px',
+                  paddingTop: '8px',
+                  borderTop: '1px solid var(--border2)',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    marginBottom: '4px',
+                  }}
+                >
+                  Trust Score Formula
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                  Combines{' '}
+                  <strong>confirmed vs flagged reports</strong>,{' '}
+                  <strong>spam flags</strong>, and{' '}
+                  <strong>recent activity</strong>, with ML credibility as a
+                  cap on very low quality devices.
+                </div>
+
+                <div
+                  style={{
+                    marginTop: '6px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                  }}
+                >
+                  {/* Confirmation rate */}
+                  <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: '10px',
+                        marginBottom: 2,
+                      }}
+                    >
+                      <span>Confirmation Rate (40%)</span>
+                    </div>
+                    <div className="prog-bar">
+                      <div
+                        className="prog-fill"
+                        style={{
+                          width: `${Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              (selectedProfile.verified_reports || 0) /
+                                Math.max(
+                                  1,
+                                  selectedProfile.total_reports || 1,
+                                ) *
+                                100,
+                            ),
+                          )}%`,
+                          background: 'var(--success)',
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* History weight (more reports => more stable score) */}
+                  <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: '10px',
+                        marginBottom: 2,
+                      }}
+                    >
+                      <span>History Weight (30%)</span>
+                    </div>
+                    <div className="prog-bar">
+                      <div
+                        className="prog-fill"
+                        style={{
+                          width: `${Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              (selectedProfile.total_reports || 0) * 5,
+                            ),
+                          )}%`,
+                          background: 'var(--accent)',
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Spam penalty based on suspicious/fake flags */}
+                  <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: '10px',
+                        marginBottom: 2,
+                      }}
+                    >
+                      <span>Spam Penalty (20%)</span>
+                    </div>
+                    <div className="prog-bar">
+                      <div
+                        className="prog-fill"
+                        style={{
+                          width: `${Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              (selectedProfile.suspicious_reports || 0) *
+                                20,
+                            ),
+                          )}%`,
+                          background: 'var(--danger)',
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: '6px',
+                    fontSize: '10px',
+                    color: 'var(--muted)',
+                  }}
+                >
+                  Example formula:{' '}
+                  <code style={{ fontSize: '10px' }}>
+                    score = 0.4·confirm_rate + 0.3·history − 0.2·spam
+                  </code>
+                </div>
+              </div>
+
+              {/* ML trust distribution for this device */}
+              <div
+                style={{
+                  marginTop: '8px',
+                  paddingTop: '8px',
+                  borderTop: '1px solid var(--border2)',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    marginBottom: '4px',
+                  }}
+                >
+                  ML Distribution (this device)
+                </div>
+                <div style={{ fontSize: '11px', marginBottom: 4 }}>
+                  <span style={{ color: 'var(--success)' }}>
+                    {selectedProfile.credible_reports ?? 0} credible
+                  </span>
+                  ,{' '}
+                  <span style={{ color: 'var(--warning)' }}>
+                    {selectedProfile.suspicious_reports ?? 0} suspicious
+                  </span>
+                  ,{' '}
+                  <span style={{ color: 'var(--danger)' }}>
+                    {selectedProfile.fake_reports ?? 0} fake
+                  </span>
+                </div>
+                {Array.isArray(selectedProfile.model_versions) &&
+                  selectedProfile.model_versions.length > 0 && (
+                    <div
+                      style={{
+                        fontSize: '10px',
+                        color: 'var(--muted)',
+                      }}
+                    >
+                      Models used:{' '}
+                      {selectedProfile.model_versions.join(', ')}
+                    </div>
+                  )}
+              </div>
             </div>
           )}
         </div>

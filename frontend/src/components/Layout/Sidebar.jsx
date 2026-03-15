@@ -34,6 +34,7 @@ const Sidebar = ({ isOpen, currentScreen, onNavigate, sidebarCounts = {}, user }
             { id: 'stations', idx: 9, label: 'Stations', icon: 'ni-it' },
             { id: 'system-config', idx: 10, label: 'System Config', icon: 'ni-dt' },
             { id: 'audit-log', idx: 11, label: 'Audit Log', icon: 'ni-al' },
+            { id: 'active-sessions', idx: 13, label: 'Active Sessions', icon: 'ni-al' },
           ]
         : role === 'supervisor'
           ? [

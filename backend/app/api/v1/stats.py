@@ -57,14 +57,23 @@ def get_dashboard_stats(
     except Exception:
         pass
 
-    active_devices = db.query(func.count(Device.device_id)).filter(
-        Device.first_seen_at >= since_30d
-    ).scalar() or 0
-    if hasattr(Device, "is_banned"):
+    # Active devices in last 30 days, prefer last_seen_at when available
+    if hasattr(Device, "last_seen_at"):
+        active_q = db.query(func.count(Device.device_id)).filter(
+            Device.last_seen_at >= since_30d
+        )
+        if hasattr(Device, "is_banned"):
+            active_q = active_q.filter(Device.is_banned == False)
+        active_devices = active_q.scalar() or 0
+    else:
         active_devices = db.query(func.count(Device.device_id)).filter(
-            Device.first_seen_at >= since_30d,
-            Device.is_banned == False,
+            Device.first_seen_at >= since_30d
         ).scalar() or 0
+        if hasattr(Device, "is_banned"):
+            active_devices = db.query(func.count(Device.device_id)).filter(
+                Device.first_seen_at >= since_30d,
+                Device.is_banned == False,
+            ).scalar() or 0
 
     recent_reports_q = db.query(Report).options(
         joinedload(Report.device),
@@ -118,6 +127,33 @@ def get_dashboard_stats(
         for a in recent_activity
     ]
 
+    # Weekly volume over the last 4 weeks (oldest W1 to newest W4)
+    weekly_volume = []
+    now = datetime.now(timezone.utc)
+    for i in range(4, 0, -1):
+        start = now - timedelta(days=7 * i)
+        end = now - timedelta(days=7 * (i - 1))
+        count = (
+            db.query(func.count(Report.report_id))
+            .filter(report_filter, Report.reported_at >= start, Report.reported_at < end)
+            .scalar()
+            or 0
+        )
+        weekly_volume.append(
+            {
+                "label": f"W{5 - i}",  # W1, W2, W3, W4
+                "count": int(count),
+            }
+        )
+
+    # Average trust score from recent reports (device/ML trust)
+    trust_values = [
+        float(r["trust_score"])
+        for r in recent_reports_data
+        if r.get("trust_score") is not None
+    ]
+    avg_trust_score = sum(trust_values) / len(trust_values) if trust_values else None
+
     return {
         "total_reports": total,
         "reports_last_7_days": recent_7d_count,
@@ -131,4 +167,6 @@ def get_dashboard_stats(
         "recent_reports": recent_reports_data,
         "top_hotspots": hotspot_list,
         "recent_activity": activity_list,
+        "weekly_volume": weekly_volume,
+        "avg_trust_score": avg_trust_score,
     }

@@ -9,6 +9,7 @@ const Reports = ({ onOpenReport }) => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [sectorFilter, setSectorFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [incidentTypes, setIncidentTypes] = useState([]);
@@ -45,6 +46,9 @@ const Reports = ({ onOpenReport }) => {
     }
     if (sectorFilter !== 'all') {
       params.set('village_location_id', String(sectorFilter));
+    }
+    if (priorityFilter !== 'all') {
+      params.set('priority', String(priorityFilter));
     }
     if (fromDate) {
       params.set('from_date', new Date(fromDate).toISOString());
@@ -160,6 +164,16 @@ const Reports = ({ onOpenReport }) => {
               </option>
             ))}
           </select>
+          <select
+            className="select"
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value)}
+          >
+            <option value="all">All Priorities</option>
+            <option value="high">High priority</option>
+            <option value="medium">Medium priority</option>
+            <option value="low">Low priority</option>
+          </select>
           <input
             className="input"
             type="date"
@@ -183,12 +197,13 @@ const Reports = ({ onOpenReport }) => {
                 window.alert('No reports to export.');
                 return;
               }
-              const header = ['report_number', 'incident_type', 'village', 'trust_score', 'rule_status', 'reported_at'];
+              const header = ['report_number', 'incident_type', 'village', 'trust_score', 'assignment_priority', 'rule_status', 'reported_at'];
               const rows = items.map((r) => [
                 r.report_number || String(r.report_id),
                 r.incident_type_name || '',
                 r.village_name || '',
                 r.trust_score ?? '',
+                r.assignment_priority || '',
                 r.rule_status ?? '',
                 r.reported_at || '',
               ]);
@@ -229,6 +244,7 @@ const Reports = ({ onOpenReport }) => {
                 const score = r.trust_score ?? 0;
                 const width = Math.max(0, Math.min(100, Number(score)));
                 const status = r.rule_status;
+                const assignmentPriority = (r.assignment_priority || '').toLowerCase();
                 return (
                   <tr key={r.report_id}>
                     <td><input type="checkbox" /></td>
@@ -245,8 +261,45 @@ const Reports = ({ onOpenReport }) => {
                         <div className="trust-val">{Math.round(score)}</div>
                       </div>
                     </td>
-                    <td><span className="badge b-green">Rule</span></td>
-                    <td><span className="badge b-gray">—</span></td>
+                    <td>
+                      {score === null || score === undefined ? (
+                        <span className="badge b-gray">No ML</span>
+                      ) : (
+                        <span
+                          className={`badge ${
+                            score >= 70
+                              ? 'b-green'
+                              : score >= 40
+                              ? 'b-orange'
+                              : 'b-red'
+                          }`}
+                        >
+                          {score >= 70
+                            ? 'Likely real'
+                            : score >= 40
+                            ? 'Uncertain'
+                            : 'Suspicious'}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {assignmentPriority ? (
+                        <span
+                          className={`badge ${
+                            assignmentPriority === 'urgent' ||
+                            assignmentPriority === 'high'
+                              ? 'b-red'
+                              : assignmentPriority === 'medium'
+                              ? 'b-orange'
+                              : 'b-gray'
+                          }`}
+                        >
+                          {assignmentPriority}
+                        </span>
+                      ) : (
+                        <span className="badge b-gray">—</span>
+                      )}
+                    </td>
                     <td>
                       <span className={`badge ${
                         status === 'pending' ? 'b-orange'

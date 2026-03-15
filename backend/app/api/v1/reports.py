@@ -335,8 +335,25 @@ def _build_report_response(r: Report, db: Optional[Session] = None) -> ReportRes
     if trust_score is None and getattr(r, "ml_predictions", None):
         preds = [p for p in r.ml_predictions if p.is_final or p.trust_score is not None]
         if preds:
-            preds.sort(key=lambda p: (p.evaluated_at or datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
+            preds.sort(
+                key=lambda p: (p.evaluated_at or datetime.min.replace(tzinfo=timezone.utc)),
+                reverse=True,
+            )
             trust_score = preds[0].trust_score
+
+    # Aggregate assignment priority/status for list views
+    assignment_priority = None
+    assignment_status = None
+    assignments = list(getattr(r, "assignments", None) or [])
+    if assignments:
+        pr_rank = {"urgent": 3, "high": 2, "medium": 1, "low": 0}
+        assignments.sort(
+            key=lambda a: pr_rank.get((a.priority or "").lower(), 0),
+            reverse=True,
+        )
+        top = assignments[0]
+        assignment_priority = top.priority
+        assignment_status = top.status
 
     context_tags = getattr(r, "context_tags", None) or []
     if context_tags is None:
@@ -371,7 +388,69 @@ def _build_report_response(r: Report, db: Optional[Session] = None) -> ReportRes
         app_version=getattr(r, "app_version", None),
         network_type=getattr(r, "network_type", None),
         battery_level=float(r.battery_level) if getattr(r, "battery_level", None) is not None else None,
+        assignment_priority=assignment_priority,
+        assignment_status=assignment_status,
     )
+
+
+@router.get("/{report_id}/related", response_model=List[ReportResponse])
+def list_related_reports(
+    report_id: UUID,
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    limit: int = Query(5, ge=1, le=20),
+):
+    """
+    Return reports related to this one:
+    - Same incident_type_id
+    - Same village (when known)
+    - Reported within a 3 day window around this report
+    """
+    base: Report | None = (
+        db.query(Report)
+        .options(
+            joinedload(Report.incident_type),
+            joinedload(Report.village_location),
+            joinedload(Report.device),
+            joinedload(Report.ml_predictions),
+            joinedload(Report.hotspots).joinedload(Hotspot.incident_type),
+        )
+        .filter(Report.report_id == report_id)
+        .first()
+    )
+    if not base:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+
+    # Time window +/- 3 days
+    window = timedelta(days=3)
+    from_time = (base.reported_at or datetime.now(timezone.utc)) - window
+    to_time = (base.reported_at or datetime.now(timezone.utc)) + window
+
+    q = db.query(Report).options(
+        joinedload(Report.incident_type),
+        joinedload(Report.village_location),
+        joinedload(Report.device),
+        joinedload(Report.ml_predictions),
+        joinedload(Report.hotspots).joinedload(Hotspot.incident_type),
+    )
+
+    q = q.filter(
+        Report.report_id != base.report_id,
+        Report.incident_type_id == base.incident_type_id,
+        Report.reported_at >= from_time,
+        Report.reported_at <= to_time,
+    )
+
+    if base.village_location_id is not None:
+        q = q.filter(Report.village_location_id == base.village_location_id)
+
+    related = (
+        q.order_by(Report.reported_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return [_build_report_response(r, db) for r in related]
 
 
 def _float_or_none(val) -> Optional[float]:
@@ -503,6 +582,8 @@ def list_reports(
                 joinedload(Report.village_location),
                 selectinload(Report.evidence_files),
                 selectinload(Report.hotspots),
+                selectinload(Report.assignments),
+                selectinload(Report.ml_predictions),
             )
             .filter(Report.device_id == device_id)
             .order_by(Report.reported_at.desc())
@@ -517,6 +598,8 @@ def list_reports(
         joinedload(Report.village_location),
         selectinload(Report.evidence_files),
         selectinload(Report.hotspots),
+        selectinload(Report.assignments),
+        selectinload(Report.ml_predictions),
     )
     role = getattr(current_user, "role", None)
 

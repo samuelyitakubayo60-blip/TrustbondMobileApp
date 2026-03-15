@@ -24,8 +24,10 @@ const Dashboard = ({ goToScreen }) => {
   const openCases = stats?.open_cases ?? 0;
   const recentReports = stats?.recent_reports ?? [];
   const topHotspots = stats?.top_hotspots ?? [];
-  const recentActivity = stats?.recent_activity ?? [];
   const myScope = stats?.scope === 'assigned_to_me';
+  const credibilityTotal = pending + verified + flagged;
+  const weeklyVolume = stats?.weekly_volume || [];
+  const avgTrustScore = stats?.avg_trust_score ?? null;
 
   return (
     <>
@@ -123,8 +125,195 @@ const Dashboard = ({ goToScreen }) => {
         </div>
       </div>
 
-      {/* Keep charts visually static for now */}
-      {/* ... keep your existing Weekly Volume + Credibility Split JSX unchanged ... */}
+      {/* Weekly Volume + Credibility Split row */}
+      <div className="g31">
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">Weekly Volume</div>
+            <div className="card-action">Last 4 weeks</div>
+          </div>
+          <div
+            style={{
+              padding: '10px 14px',
+              display: 'flex',
+              gap: '8px',
+              alignItems: 'flex-end',
+              fontSize: '11px',
+            }}
+          >
+            {(weeklyVolume || []).map((w) => {
+              const max = Math.max(
+                1,
+                ...weeklyVolume.map((x) => x.count || 0),
+              );
+              const height = Math.max(
+                8,
+                Math.round(((w.count || 0) / max) * 40),
+              );
+              return (
+                <div
+                  key={w.label}
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '100%',
+                      height,
+                      borderRadius: '4px 4px 0 0',
+                      background: 'var(--accent)',
+                      opacity: 0.85,
+                    }}
+                  ></div>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)' }}>
+                    {w.label}
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)' }}>
+                    {w.count}
+                  </div>
+                </div>
+              );
+            })}
+            {!weeklyVolume.length && (
+              <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                No reports yet.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Credibility split summary using ML/rule status */}
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">Credibility Split</div>
+            <div className="card-action">All time</div>
+          </div>
+          <div style={{ padding: '10px 14px', fontSize: '12px' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginBottom: 6,
+              }}
+            >
+              <span>Verified</span>
+              <span>
+                {verified}{' '}
+                {credibilityTotal
+                  ? `(${Math.round((verified / credibilityTotal) * 100)}%)`
+                  : ''}
+              </span>
+            </div>
+            <div className="prog-bar" style={{ marginBottom: 6 }}>
+              <div
+                className="prog-fill"
+                style={{
+                  width: `${
+                    credibilityTotal
+                      ? Math.round((verified / credibilityTotal) * 100)
+                      : 0
+                  }%`,
+                  background: 'var(--success)',
+                }}
+              ></div>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginBottom: 6,
+              }}
+            >
+              <span>Pending</span>
+              <span>
+                {pending}{' '}
+                {credibilityTotal
+                  ? `(${Math.round((pending / credibilityTotal) * 100)}%)`
+                  : ''}
+              </span>
+            </div>
+            <div className="prog-bar" style={{ marginBottom: 6 }}>
+              <div
+                className="prog-fill"
+                style={{
+                  width: `${
+                    credibilityTotal
+                      ? Math.round((pending / credibilityTotal) * 100)
+                      : 0
+                  }%`,
+                  background: 'var(--warning)',
+                }}
+              ></div>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginBottom: 6,
+              }}
+            >
+              <span>Flagged</span>
+              <span>
+                {flagged}{' '}
+                {credibilityTotal
+                  ? `(${Math.round((flagged / credibilityTotal) * 100)}%)`
+                  : ''}
+              </span>
+            </div>
+            <div className="prog-bar" style={{ marginBottom: 10 }}>
+              <div
+                className="prog-fill"
+                style={{
+                  width: `${
+                    credibilityTotal
+                      ? Math.round((flagged / credibilityTotal) * 100)
+                      : 0
+                  }%`,
+                  background: 'var(--danger)',
+                }}
+              ></div>
+            </div>
+
+            {/* Avg Trust Score bar */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginBottom: 4,
+                fontSize: '11px',
+              }}
+            >
+              <span>Avg Trust Score</span>
+              <span>
+                {avgTrustScore !== null
+                  ? `${Math.round(avgTrustScore)} / 100`
+                  : '—'}
+              </span>
+            </div>
+            <div className="prog-bar">
+              <div
+                className="prog-fill"
+                style={{
+                  width: `${
+                    avgTrustScore !== null
+                      ? Math.max(
+                          0,
+                          Math.min(100, Math.round(avgTrustScore)),
+                        )
+                      : 0
+                  }%`,
+                  background: 'var(--accent)',
+                }}
+              ></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="g31">
         <div className="card">
@@ -149,6 +338,7 @@ const Dashboard = ({ goToScreen }) => {
                 {(recentReports || []).map((r) => {
                   const score = r.trust_score ?? 0;
                   const width = Math.max(0, Math.min(100, Number(score)));
+                  const status = r.rule_status;
                   return (
                     <tr key={r.report_id}>
                       <td style={{ fontSize: '10px', color: 'var(--muted)' }}>
@@ -159,12 +349,35 @@ const Dashboard = ({ goToScreen }) => {
                       <td>
                         <div className="trust-wrap">
                           <div className="trust-track">
-                            <div className="trust-fill" style={{ width: `${width}%`, background: 'var(--success)' }}></div>
+                            <div
+                              className="trust-fill"
+                              style={{
+                                width: `${width}%`,
+                                background:
+                                  score >= 70
+                                    ? 'var(--success)'
+                                    : score >= 40
+                                    ? 'var(--warning)'
+                                    : 'var(--danger)',
+                              }}
+                            ></div>
                           </div>
                           <div className="trust-val">{Math.round(score)}</div>
                         </div>
                       </td>
-                      <td><span className="badge b-green">{r.rule_status}</span></td>
+                      <td>
+                        <span
+                          className={`badge ${
+                            status === 'pending'
+                              ? 'b-orange'
+                              : status === 'passed'
+                              ? 'b-green'
+                              : 'b-red'
+                          }`}
+                        >
+                          {status}
+                        </span>
+                      </td>
                       <td style={{ fontSize: '10px', color: 'var(--muted)' }}>
                         {r.reported_at ? new Date(r.reported_at).toLocaleString() : '—'}
                       </td>

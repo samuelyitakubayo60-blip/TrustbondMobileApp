@@ -12,6 +12,7 @@ import IncidentTypes from './components/screens/IncidentTypes';
 import Stations from './components/screens/Stations';
 import AuditLog from './components/screens/AuditLog';
 import SystemConfig from './components/screens/SystemConfig';
+import ActiveSessions from './components/screens/ActiveSessions';
 import ChangePassword from './components/screens/ChangePassword';
 import Notifications from './components/screens/Notifications';
 import Login from './components/screens/Login';
@@ -87,6 +88,8 @@ function App() {
         return '/change-password';
       case 'notifications':
         return '/notifications';
+      case 'active-sessions':
+        return '/active-sessions';
       default:
         return '/';
     }
@@ -122,6 +125,8 @@ function App() {
         return 'change-password';
       case '/notifications':
         return 'notifications';
+      case '/active-sessions':
+        return 'active-sessions';
       default:
         return 'dashboard';
     }
@@ -165,7 +170,8 @@ function App() {
     'audit-log',
     'system-config',
     'change-password',
-    'notifications'
+    'notifications',
+    'active-sessions'
   ];
 
   const titles = {
@@ -181,7 +187,8 @@ function App() {
     'audit-log': 'Audit Log',
     'system-config': 'System Configuration',
     'change-password': 'Change Password',
-    notifications: 'Notifications'
+    notifications: 'Notifications',
+    'active-sessions': 'Active Sessions'
   };
 
   // Load theme from localStorage
@@ -347,6 +354,8 @@ function App() {
         return <ChangePassword goToScreen={goToScreen} openModal={openModal} />;
       case 'notifications':
         return <Notifications goToScreen={goToScreen} openModal={openModal} />;
+      case 'active-sessions':
+        return <ActiveSessions goToScreen={goToScreen} openModal={openModal} />;
       default:
         return <Dashboard goToScreen={goToScreen} openModal={openModal} />;
     }

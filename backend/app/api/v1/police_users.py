@@ -1,5 +1,6 @@
 import secrets
 from typing import Annotated, List, Optional
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -30,6 +31,61 @@ class OfficerOption(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SessionResponse(BaseModel):
+    session_id: str
+    police_user_id: int
+    user_name: str | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
+    created_at: datetime
+    expires_at: datetime
+    revoked_at: datetime | None = None
+
+
+@router.get("/sessions", response_model=List[SessionResponse])
+def list_sessions(
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)] = None,
+    limit: int = Query(100, le=500),
+):
+    """
+    List recent user sessions for security review.
+
+    - Admin: all users' sessions.
+    - Supervisor: only sessions for users in their own station (plus themselves).
+    """
+    q = db.query(UserSession, PoliceUser).join(
+        PoliceUser, PoliceUser.police_user_id == UserSession.police_user_id
+    )
+
+    if current_user.role == "supervisor" and current_user.station_id is not None:
+        q = q.filter(
+            (PoliceUser.station_id == current_user.station_id)
+            | (PoliceUser.police_user_id == current_user.police_user_id)
+        )
+
+    rows = (
+        q.order_by(UserSession.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    results: List[SessionResponse] = []
+    for sess, user in rows:
+        results.append(
+            SessionResponse(
+                session_id=str(sess.session_id),
+                police_user_id=sess.police_user_id,
+                user_name=f"{user.first_name} {user.last_name}" if user else None,
+                ip_address=sess.ip_address,
+                user_agent=sess.user_agent,
+                created_at=sess.created_at,
+                expires_at=sess.expires_at,
+                revoked_at=sess.revoked_at,
+            )
+        )
+    return results
 
 
 @router.get("/options", response_model=List[OfficerOption])

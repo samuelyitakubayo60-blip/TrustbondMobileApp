@@ -11,6 +11,10 @@ const ReportDetail = ({ goToScreen, openModal, reportId }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [savingDecision, setSavingDecision] = useState('');
+  const [mlPrediction, setMlPrediction] = useState(null);
+  const [mlLoading, setMlLoading] = useState(false);
+  const [relatedReports, setRelatedReports] = useState([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
 
   useEffect(() => {
     if (!reportId) {
@@ -36,6 +40,54 @@ const ReportDetail = ({ goToScreen, openModal, reportId }) => {
       mounted = false;
     };
   }, [reportId]);
+
+  // Load ML prediction for this report
+  useEffect(() => {
+    if (!report || !report.report_id || !report.device_id) return;
+    let cancelled = false;
+    setMlLoading(true);
+    api
+      .get(
+        `/api/v1/devices/reports/${report.report_id}/prediction?device_id=${report.device_id}`,
+      )
+      .then((res) => {
+        if (cancelled) return;
+        setMlPrediction(res);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMlPrediction(null);
+      })
+      .finally(() => {
+        if (!cancelled) setMlLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [report]);
+
+  // Load related reports
+  useEffect(() => {
+    if (!report || !report.report_id) return;
+    let cancelled = false;
+    setRelatedLoading(true);
+    api
+      .get(`/api/v1/reports/${report.report_id}/related`)
+      .then((res) => {
+        if (cancelled) return;
+        setRelatedReports(res || []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRelatedReports([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRelatedLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [report]);
 
   const reload = async () => {
     if (!reportId) return;
@@ -98,6 +150,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId }) => {
   const createdAt = report.reported_at
     ? new Date(report.reported_at).toLocaleString()
     : '—';
+  const assignments = report.assignments || [];
 
   return (
     <>
@@ -301,6 +354,31 @@ const ReportDetail = ({ goToScreen, openModal, reportId }) => {
                       ? new Date(ef.uploaded_at).toLocaleString()
                       : ''}
                   </div>
+                  {(ef.ai_quality_label || ef.blur_score || ef.tamper_score) && (
+                    <div
+                      style={{
+                        marginTop: '6px',
+                        fontSize: '10px',
+                        color: 'var(--muted)',
+                      }}
+                    >
+                      {ef.ai_quality_label && (
+                        <div>
+                          <strong>Quality:</strong> {ef.ai_quality_label}
+                        </div>
+                      )}
+                      {typeof ef.blur_score !== 'undefined' && ef.blur_score !== null && (
+                        <div>
+                          <strong>Blur:</strong> {Number(ef.blur_score).toFixed(2)}
+                        </div>
+                      )}
+                      {typeof ef.tamper_score !== 'undefined' && ef.tamper_score !== null && (
+                        <div>
+                          <strong>Tamper:</strong> {Number(ef.tamper_score).toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
               {(!report.evidence_files ||
@@ -313,6 +391,121 @@ const ReportDetail = ({ goToScreen, openModal, reportId }) => {
               )}
             </div>
           </div>
+
+          {assignments.length > 0 && (
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title">Assignments</div>
+                <span className="badge b-blue">
+                  {assignments.length} active
+                </span>
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gap: '8px',
+                }}
+              >
+                {assignments.map((a) => {
+                  const isMine =
+                    me?.police_user_id &&
+                    a.police_user_id === me.police_user_id;
+                  const statusBadge =
+                    a.status === 'closed'
+                      ? 'b-green'
+                      : a.status === 'resolved'
+                      ? 'b-green'
+                      : a.status === 'investigating'
+                      ? 'b-blue'
+                      : 'b-orange';
+                  const priorityBadge =
+                    a.priority === 'high'
+                      ? 'b-red'
+                      : a.priority === 'medium'
+                      ? 'b-orange'
+                      : 'b-gray';
+                  return (
+                    <div
+                      key={a.assignment_id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 10px',
+                        borderRadius: 'var(--rs)',
+                        border: '1px solid var(--border2)',
+                        background: isMine
+                          ? 'rgba(79, 142, 247, 0.06)'
+                          : 'var(--surface2)',
+                        fontSize: '11px',
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            marginBottom: 2,
+                          }}
+                        >
+                          {a.officer_name || 'Officer'}
+                          {isMine && (
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: '10px',
+                                color: 'var(--primary)',
+                              }}
+                            >
+                              (you)
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            color: 'var(--muted)',
+                          }}
+                        >
+                          Assigned{' '}
+                          {a.assigned_at
+                            ? new Date(a.assigned_at).toLocaleString()
+                            : '—'}
+                          {a.completed_at && (
+                            <>
+                              {' · '}Completed{' '}
+                              {new Date(
+                                a.completed_at,
+                              ).toLocaleString()}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'flex-end',
+                          gap: 4,
+                        }}
+                      >
+                        <span
+                          className={`badge ${priorityBadge}`}
+                          style={{ fontSize: '10px' }}
+                        >
+                          {a.priority}
+                        </span>
+                        <span
+                          className={`badge ${statusBadge}`}
+                          style={{ fontSize: '10px' }}
+                        >
+                          {a.status}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="detail-col">
@@ -321,6 +514,53 @@ const ReportDetail = ({ goToScreen, openModal, reportId }) => {
               <div className="card-title">Trust Scores</div>
             </div>
             <div style={{ marginBottom: '12px' }}>
+              {/* Report-level ML trust */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginBottom: '4px',
+                }}
+              >
+                <span
+                  style={{ fontSize: '11px', color: 'var(--muted)' }}
+                >
+                  Report Trust Score
+                </span>
+                <span
+                  style={{
+                    fontFamily: '"Syne", sans-serif',
+                    fontWeight: 800,
+                    fontSize: '17px',
+                    color: 'var(--success)',
+                  }}
+                >
+                  {mlPrediction
+                    ? Math.round(mlPrediction.trust_score ?? 0)
+                    : '—'}
+                </span>
+              </div>
+              <div className="prog-bar" style={{ marginBottom: '8px' }}>
+                <div
+                  className="prog-fill"
+                  style={{
+                    width: `${
+                      mlPrediction
+                        ? Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              mlPrediction.trust_score ?? 0,
+                            ),
+                          )
+                        : 0
+                    }%`,
+                    background: 'var(--success)',
+                  }}
+                ></div>
+              </div>
+
+              {/* Device trust (from DB) */}
               <div
                 style={{
                   display: 'flex',
@@ -356,10 +596,122 @@ const ReportDetail = ({ goToScreen, openModal, reportId }) => {
                   }}
                 ></div>
               </div>
+              {mlLoading && (
+                <div
+                  style={{
+                    fontSize: '10px',
+                    color: 'var(--muted)',
+                    marginTop: 6,
+                  }}
+                >
+                  Loading ML prediction…
+                </div>
+              )}
+              {mlPrediction && !mlLoading && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: '10px',
+                    color: 'var(--muted)',
+                  }}
+                >
+                  <div>
+                    Label:{' '}
+                    <strong>{mlPrediction.prediction_label}</strong>{' '}
+                    · Confidence{' '}
+                    {Math.round((mlPrediction.confidence ?? 0) * 100)}%
+                  </div>
+                  <div>
+                    Model: {mlPrediction.model_version}{' '}
+                    {mlPrediction.evaluated_at &&
+                      `· ${new Date(
+                        mlPrediction.evaluated_at,
+                      ).toLocaleString()}`}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Right-hand cards can be wired later; keep static or remove as needed */}
+          {/* Related reports card */}
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">Related Reports</div>
+            </div>
+            <div style={{ padding: '10px 14px', fontSize: '12px' }}>
+              {relatedLoading && (
+                <div
+                  style={{ fontSize: '12px', color: 'var(--muted)' }}
+                >
+                  Loading related reports…
+                </div>
+              )}
+              {!relatedLoading && relatedReports.length === 0 && (
+                <div
+                  style={{ fontSize: '12px', color: 'var(--muted)' }}
+                >
+                  No similar reports found in the last few days.
+                </div>
+              )}
+              {relatedReports.map((r) => (
+                <div
+                  key={r.report_id}
+                  style={{
+                    padding: '8px 0',
+                    borderBottom: '1px solid var(--border2)',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: 2,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontFamily: 'monospace',
+                        color: 'var(--muted)',
+                      }}
+                    >
+                      {r.report_number ||
+                        String(r.report_id).slice(0, 8)}
+                    </span>
+                    <span
+                      className={`badge ${
+                        r.rule_status === 'passed'
+                          ? 'b-green'
+                          : r.rule_status === 'pending'
+                          ? 'b-orange'
+                          : 'b-red'
+                      }`}
+                      style={{ fontSize: '10px' }}
+                    >
+                      {r.rule_status}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '11px' }}>
+                    {r.incident_type_name || '—'} ·{' '}
+                    {r.village_name || '—'}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '10px',
+                      color: 'var(--muted)',
+                      marginTop: 2,
+                    }}
+                  >
+                    {r.reported_at
+                      ? new Date(
+                          r.reported_at,
+                        ).toLocaleString()
+                      : '—'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </>

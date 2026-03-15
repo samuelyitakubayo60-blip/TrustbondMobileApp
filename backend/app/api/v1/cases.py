@@ -8,6 +8,7 @@ from app.database import get_db
 from app.models.case import Case, CaseReport
 from app.models.report import Report
 from app.models.location import Location
+from app.models.ml_prediction import MLPrediction
 from app.models.police_user import PoliceUser
 from app.api.v1.auth import get_current_admin_or_supervisor, get_current_user
 from app.schemas.case import CaseCreate, CaseUpdate, CaseResponse, CaseListResponse, CaseAddReports
@@ -34,6 +35,32 @@ def _generate_case_number(db: Session) -> str:
 
 
 def _case_to_response(c: Case) -> CaseResponse:
+    # Compute average ML trust score across reports linked to this case, if predictions exist.
+    avg_trust = None
+    scores: list[float] = []
+    for cr in getattr(c, "case_reports", []):
+        r = getattr(cr, "report", None)
+        if not r:
+            continue
+        preds = getattr(r, "ml_predictions", None) or []
+        if not preds:
+            continue
+        finals = [p for p in preds if getattr(p, "is_final", False)]
+        source = finals or preds
+        source.sort(
+            key=lambda p: getattr(p, "evaluated_at", None) or 0,
+            reverse=True,
+        )
+        latest: MLPrediction = source[0]
+        try:
+            ts = float(latest.trust_score) if latest.trust_score is not None else None
+        except Exception:
+            ts = None
+        if ts is not None:
+            scores.append(ts)
+    if scores:
+        avg_trust = sum(scores) / len(scores)
+
     return CaseResponse(
         case_id=c.case_id,
         case_number=c.case_number,
@@ -53,6 +80,7 @@ def _case_to_response(c: Case) -> CaseResponse:
         closed_at=c.closed_at,
         outcome=c.outcome,
         created_at=c.created_at,
+        average_trust_score=avg_trust,
     )
 
 
@@ -74,6 +102,9 @@ def list_cases(
         joinedload(Case.location),
         joinedload(Case.incident_type),
         joinedload(Case.assigned_to),
+        selectinload(Case.case_reports)
+        .selectinload(CaseReport.report)
+        .selectinload(Report.ml_predictions),
     )
 
     if current_user.role == "supervisor" and getattr(current_user, "assigned_location_id", None):

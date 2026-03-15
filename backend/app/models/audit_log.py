@@ -15,5 +15,6 @@ class AuditLog(Base):
     entity_id = Column(String(36))
     action_details = Column(JSONB)
     ip_address = Column(String(45))
+    user_agent = Column(String)
     success = Column(Boolean, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -188,6 +188,21 @@ const CaseManagement = ({ openModal }) => {
                 <div className="case-meta">
                   {c.location_name || 'Unknown'} · {c.incident_type_name || 'Mixed'} · {c.report_count} reports
                 </div>
+                {typeof c.average_trust_score === 'number' && (
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: 'var(--muted)',
+                      marginTop: 2,
+                    }}
+                  >
+                    Avg trust:{' '}
+                    <strong>
+                      {Math.round(c.average_trust_score)}
+                    </strong>{' '}
+                    / 100
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                 <span className={`badge ${

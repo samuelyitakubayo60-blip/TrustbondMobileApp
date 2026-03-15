@@ -62,6 +62,8 @@ class ReportResponse(BaseModel):
     app_version: Optional[str] = None
     network_type: Optional[str] = None
     battery_level: Optional[Decimal] = None
+    assignment_priority: Optional[str] = None
+    assignment_status: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -84,6 +86,9 @@ class EvidenceFileResponse(BaseModel):
     uploaded_at: Optional[datetime] = None
     media_latitude: Optional[Decimal] = None
     media_longitude: Optional[Decimal] = None
+    blur_score: Optional[Decimal] = None
+    tamper_score: Optional[Decimal] = None
+    ai_quality_label: Optional[str] = None
 
     class Config:
         from_attributes = True
