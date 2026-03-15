@@ -9,6 +9,11 @@ class ReportListItem {
   final double longitude;
   final DateTime reportedAt;
   final String ruleStatus;
+  final double? trustScore;
+  final String? reportNumber;
+  final List<String> contextTags;
+  final bool? isFlagged;
+  final String? flagReason;
 
   ReportListItem({
     required this.reportId,
@@ -20,9 +25,15 @@ class ReportListItem {
     required this.longitude,
     required this.reportedAt,
     required this.ruleStatus,
+    this.trustScore,
+    this.reportNumber,
+    this.contextTags = const [],
+    this.isFlagged,
+    this.flagReason,
   });
 
   factory ReportListItem.fromJson(Map<String, dynamic> json) {
+    final tags = json['context_tags'];
     return ReportListItem(
       reportId: _stringFromJson(json['report_id']),
       deviceId: _stringFromJson(json['device_id']),
@@ -33,6 +44,11 @@ class ReportListItem {
       longitude: _doubleFromJson(json['longitude']),
       reportedAt: DateTime.parse(_stringFromJson(json['reported_at'])),
       ruleStatus: json['rule_status'] as String? ?? 'pending',
+      trustScore: (json['trust_score'] as num?)?.toDouble(),
+      reportNumber: json['report_number'] as String?,
+      contextTags: tags is List ? (tags as List).map((e) => e.toString()).toList() : [],
+      isFlagged: json['is_flagged'] as bool?,
+      flagReason: json['flag_reason'] as String?,
     );
   }
 }
@@ -42,11 +58,17 @@ class ReportEvidenceItem {
   final String evidenceId;
   final String fileUrl;
   final String fileType; // photo | video
+  final String? aiQualityLabel; // good, fair, poor, suspicious (from ML/DB)
+  final double? blurScore;
+  final double? tamperScore;
 
   ReportEvidenceItem({
     required this.evidenceId,
     required this.fileUrl,
     required this.fileType,
+    this.aiQualityLabel,
+    this.blurScore,
+    this.tamperScore,
   });
 
   factory ReportEvidenceItem.fromJson(Map<String, dynamic> json) {
@@ -54,6 +76,9 @@ class ReportEvidenceItem {
       evidenceId: _stringFromJson(json['evidence_id']),
       fileUrl: _stringFromJson(json['file_url']),
       fileType: json['file_type'] as String? ?? 'photo',
+      aiQualityLabel: json['ai_quality_label'] as String?,
+      blurScore: (json['blur_score'] as num?)?.toDouble(),
+      tamperScore: (json['tamper_score'] as num?)?.toDouble(),
     );
   }
 }
@@ -70,6 +95,11 @@ class ReportDetailItem {
   final DateTime reportedAt;
   final String ruleStatus;
   final List<ReportEvidenceItem> evidenceFiles;
+  final double? trustScore;
+  final String? reportNumber;
+  final List<String> contextTags;
+  final bool? isFlagged;
+  final String? flagReason;
 
   ReportDetailItem({
     required this.reportId,
@@ -82,10 +112,16 @@ class ReportDetailItem {
     required this.reportedAt,
     required this.ruleStatus,
     this.evidenceFiles = const [],
+    this.trustScore,
+    this.reportNumber,
+    this.contextTags = const [],
+    this.isFlagged,
+    this.flagReason,
   });
 
   factory ReportDetailItem.fromJson(Map<String, dynamic> json) {
     final evidenceList = json['evidence_files'] as List<dynamic>? ?? [];
+    final tags = json['context_tags'];
     return ReportDetailItem(
       reportId: _stringFromJson(json['report_id']),
       deviceId: _stringFromJson(json['device_id']),
@@ -99,6 +135,11 @@ class ReportDetailItem {
       evidenceFiles: evidenceList
           .map((e) => ReportEvidenceItem.fromJson(e as Map<String, dynamic>))
           .toList(),
+      trustScore: (json['trust_score'] as num?)?.toDouble(),
+      reportNumber: json['report_number'] as String?,
+      contextTags: tags is List ? (tags as List).map((e) => e.toString()).toList() : [],
+      isFlagged: json['is_flagged'] as bool?,
+      flagReason: json['flag_reason'] as String?,
     );
   }
 }

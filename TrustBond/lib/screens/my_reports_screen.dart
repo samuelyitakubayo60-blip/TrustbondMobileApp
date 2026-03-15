@@ -217,6 +217,8 @@ class _MyReportsScreenState extends State<MyReportsScreen>
             timeLabel: timeAgo(r.reportedAt),
             statusLabel: formatStatus(r.ruleStatus),
             statusType: badgeTypeFromStatus(r.ruleStatus),
+            reportNumber: r.reportNumber,
+            trustScore: r.trustScore,
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => ReportDetailScreen(

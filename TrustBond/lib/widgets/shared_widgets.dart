@@ -155,6 +155,8 @@ class ReportItemCard extends StatelessWidget {
   final String statusLabel;
   final BadgeType statusType;
   final VoidCallback? onTap;
+  final String? reportNumber;
+  final double? trustScore;
 
   const ReportItemCard({
     super.key,
@@ -166,6 +168,8 @@ class ReportItemCard extends StatelessWidget {
     required this.statusLabel,
     required this.statusType,
     this.onTap,
+    this.reportNumber,
+    this.trustScore,
   });
 
   @override
@@ -205,6 +209,20 @@ class ReportItemCard extends StatelessWidget {
                       color: AppColors.text,
                     ),
                   ),
+                  if (reportNumber != null || trustScore != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      [
+                        if (reportNumber != null) reportNumber,
+                        if (trustScore != null) '${(trustScore ?? 0).round()}/100',
+                      ].join(' · '),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.muted,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 4),
                   Text(
                     description,

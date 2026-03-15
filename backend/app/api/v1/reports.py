@@ -663,7 +663,12 @@ def get_report(
     if device_id is not None:
         report = (
             db.query(Report)
-            .options(joinedload(Report.incident_type), joinedload(Report.evidence_files))
+            .options(
+                joinedload(Report.incident_type),
+                joinedload(Report.evidence_files),
+                joinedload(Report.device),
+                selectinload(Report.ml_predictions),
+            )
             .filter(Report.report_id == report_id, Report.device_id == device_id)
             .first()
         )
@@ -733,8 +738,20 @@ def get_report(
 
     incident_lat, incident_lon, incident_source, incident_location_info = _compute_incident_location_with_villages(report, db)
 
+    # Trust score for mobile: device or ML (same as list)
+    trust_score = None
+    if getattr(report, "device", None) and report.device.device_trust_score is not None:
+        trust_score = report.device.device_trust_score
+    if trust_score is None and getattr(report, "ml_predictions", None):
+        preds = [p for p in report.ml_predictions if p.is_final or (p.trust_score is not None)]
+        preds.sort(key=lambda p: (p.evaluated_at is None, p.evaluated_at), reverse=True)
+        if preds:
+            trust_score = preds[0].trust_score
+    context_tags_list = getattr(report, "context_tags", None) or []
+
     return ReportDetailResponse(
         report_id=report.report_id,
+        report_number=getattr(report, "report_number", None),
         device_id=report.device_id,
         incident_type_id=report.incident_type_id,
         description=report.description,
@@ -744,6 +761,10 @@ def get_report(
         rule_status=report.rule_status,
         village_location_id=report.village_location_id,
         incident_type_name=report.incident_type.type_name if report.incident_type else None,
+        trust_score=float(trust_score) if trust_score is not None else None,
+        context_tags=context_tags_list,
+        is_flagged=getattr(report, "is_flagged", None),
+        flag_reason=getattr(report, "flag_reason", None),
         incident_latitude=float(incident_lat) if incident_lat is not None else None,
         incident_longitude=float(incident_lon) if incident_lon is not None else None,
         incident_location_source=incident_source,
@@ -759,6 +780,9 @@ def get_report(
                 uploaded_at=ef.uploaded_at,
                 media_latitude=float(ef.media_latitude) if ef.media_latitude is not None else None,
                 media_longitude=float(ef.media_longitude) if ef.media_longitude is not None else None,
+                blur_score=float(ef.blur_score) if getattr(ef, "blur_score", None) is not None else None,
+                tamper_score=float(ef.tamper_score) if getattr(ef, "tamper_score", None) is not None else None,
+                ai_quality_label=getattr(ef, "ai_quality_label", None),
             )
             for ef in report.evidence_files
         ],

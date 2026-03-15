@@ -483,6 +483,8 @@ class _HomeScreenState extends State<HomeScreen> {
       statusType: mlPrediction != null 
           ? _getMLBadgeType(mlPrediction.predictionLabel)
           : badgeTypeFromStatus(report.ruleStatus),
+      reportNumber: report.reportNumber,
+      trustScore: report.trustScore ?? mlPrediction?.trustScore,
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => ReportDetailScreen(

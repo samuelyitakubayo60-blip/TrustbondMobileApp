@@ -97,6 +97,10 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 const SizedBox(height: 14),
                 _buildEvidenceSection(r),
               ],
+              if (_hasEvidenceQualityOrML(r)) ...[
+                const SizedBox(height: 14),
+                _buildEvidenceQualityCard(r),
+              ],
               const SizedBox(height: 14),
               _buildTimeline(r),
               const SizedBox(height: 28),
@@ -188,11 +192,36 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   }
 
   Widget _buildInfoCard(ReportDetailItem r) {
-    return _card([
+    final rows = <Widget>[
       _infoRow('Type', r.incidentTypeName ?? 'Incident'),
       _infoRow('Submitted', _formatDate(r.reportedAt)),
-      _infoRow('Report ID', r.reportId.substring(0, r.reportId.length.clamp(0, 12))),
-    ]);
+      _infoRow('Report', r.reportNumber ?? r.reportId.substring(0, r.reportId.length.clamp(0, 12))),
+    ];
+    if (r.trustScore != null) {
+      rows.add(_infoRow('Trust score', '${r.trustScore!.round()} / 100'));
+    }
+    if (r.contextTags.isNotEmpty) {
+      rows.add(_infoRow('Tags', r.contextTags.join(', ')));
+    }
+    if (r.isFlagged == true && (r.flagReason ?? '').isNotEmpty) {
+      rows.add(Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.flag, size: 14, color: AppColors.danger),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                r.flagReason!,
+                style: const TextStyle(fontSize: 11, color: AppColors.danger),
+              ),
+            ),
+          ],
+        ),
+      ));
+    }
+    return _card(rows);
   }
 
   Widget _buildDescCard(ReportDetailItem r) {
@@ -276,6 +305,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             final ev = r.evidenceFiles[i];
             final url = ApiConfig.evidenceFileUrl(ev.fileUrl);
             final isPhoto = ev.fileType.toLowerCase() == 'photo';
+            final quality = ev.aiQualityLabel;
             return GestureDetector(
               onTap: () {
                 if (isPhoto) {
@@ -290,33 +320,127 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                   ));
                 }
               },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: isPhoto
-                    ? Image.network(url,
-                        width: 80,
-                        height: 80,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                              width: 80,
-                              height: 80,
-                              color: AppColors.surface3,
-                              child: const Icon(Icons.broken_image,
-                                  color: AppColors.muted),
-                            ))
-                    : Container(
-                        width: 80,
-                        height: 80,
-                        color: AppColors.surface3,
-                        child: const Icon(Icons.videocam,
-                            color: AppColors.accent2, size: 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: isPhoto
+                        ? Image.network(url,
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                                  width: 80,
+                                  height: 80,
+                                  color: AppColors.surface3,
+                                  child: const Icon(Icons.broken_image,
+                                      color: AppColors.muted),
+                                ))
+                        : Container(
+                            width: 80,
+                            height: 80,
+                            color: AppColors.surface3,
+                            child: const Icon(Icons.videocam,
+                                color: AppColors.accent2, size: 28),
+                          ),
+                  ),
+                  if (quality != null && quality.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        quality.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: quality == 'good' || quality == 'fair'
+                              ? AppColors.accent
+                              : AppColors.muted,
+                        ),
                       ),
+                    ),
+                ],
               ),
             );
           },
         ),
       ),
     ]);
+  }
+
+  bool _hasEvidenceQualityOrML(ReportDetailItem r) {
+    if (r.trustScore != null) return true;
+    for (final ev in r.evidenceFiles) {
+      if (ev.aiQualityLabel != null ||
+          ev.blurScore != null ||
+          ev.tamperScore != null) return true;
+    }
+    return false;
+  }
+
+  Widget _buildEvidenceQualityCard(ReportDetailItem r) {
+    final rows = <Widget>[
+      const Row(
+        children: [
+          Text('🔬', style: TextStyle(fontSize: 14)),
+          SizedBox(width: 6),
+          Text('Evidence quality & verification',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        ],
+      ),
+      const SizedBox(height: 10),
+    ];
+
+    if (r.trustScore != null) {
+      final score = (r.trustScore ?? 0).round();
+      rows.add(Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.verified_user_outlined, size: 16, color: AppColors.accent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Report trust score: $score/100 (from verification system)',
+                style: const TextStyle(fontSize: 11, color: AppColors.text),
+              ),
+            ),
+          ],
+        ),
+      ));
+    }
+
+    for (var i = 0; i < r.evidenceFiles.length; i++) {
+      final ev = r.evidenceFiles[i];
+      final hasQuality = ev.aiQualityLabel != null ||
+          ev.blurScore != null ||
+          ev.tamperScore != null;
+      if (!hasQuality) continue;
+
+      final parts = <String>[
+        ev.fileType == 'video' ? 'Video ${i + 1}' : 'Photo ${i + 1}',
+        if (ev.aiQualityLabel != null) 'Quality: ${ev.aiQualityLabel}',
+        if (ev.blurScore != null) 'Blur: ${(ev.blurScore ?? 0).toStringAsFixed(2)}',
+        if (ev.tamperScore != null) 'Tamper: ${(ev.tamperScore ?? 0).toStringAsFixed(2)}',
+      ];
+      rows.add(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.photo_library_outlined, size: 14, color: AppColors.muted),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                parts.join(' · '),
+                style: const TextStyle(fontSize: 11, color: AppColors.muted),
+              ),
+            ),
+          ],
+        ),
+      ));
+    }
+
+    return _card(rows);
   }
 
   Widget _buildTimeline(ReportDetailItem r) {

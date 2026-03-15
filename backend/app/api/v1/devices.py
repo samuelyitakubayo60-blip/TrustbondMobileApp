@@ -112,6 +112,10 @@ def get_device_profile(device_hash: str, db: Session = Depends(get_db)):
         "flagged_reports": flagged,
         "last_ml_update": last_ml.isoformat() if last_ml else None,
         "achievements": achievements,
+        "spam_flags": getattr(device, "spam_flags", None) or 0,
+        "is_blacklisted": getattr(device, "is_blacklisted", False) or False,
+        "blacklist_reason": getattr(device, "blacklist_reason", None),
+        "last_seen_at": device.last_seen_at.isoformat() if getattr(device, "last_seen_at", None) else None,
     }
 
 

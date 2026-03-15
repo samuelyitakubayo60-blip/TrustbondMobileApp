@@ -22,11 +22,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _verifiedReports = 0;
   double _trustScore = 0;
   Map<String, bool>? _achievements;
+  bool _isBlacklisted = false;
+  String? _blacklistReason;
+  String? _lastSeenAt;
+  int _spamFlags = 0;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  String _formatLastSeen(String iso) {
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return 'Last active: —';
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return 'Last active: ${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return 'Last active: ${diff.inHours}h ago';
+    if (diff.inDays < 7) return 'Last active: ${diff.inDays}d ago';
+    return 'Last active: ${dt.month}/${dt.day}';
   }
 
   Future<void> _loadData() async {
@@ -52,6 +66,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _achievements = a != null
             ? Map<String, bool>.from(a.map((k, v) => MapEntry(k, v == true)))
             : null;
+        _isBlacklisted = profile['is_blacklisted'] as bool? ?? false;
+        _blacklistReason = profile['blacklist_reason'] as String?;
+        _lastSeenAt = profile['last_seen_at'] as String?;
+        _spamFlags = (profile['spam_flags'] as num?)?.toInt() ?? 0;
       });
     } catch (e) {
       debugPrint('Failed to load profile: $e');
@@ -165,8 +183,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ],
                 ),
+                if (_lastSeenAt != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    _formatLastSeen(_lastSeenAt!),
+                    style: const TextStyle(fontSize: 10, color: AppColors.muted),
+                  ),
+                ],
                 const SizedBox(height: 4),
-                const StatusBadge(label: 'Verified Device', type: BadgeType.ok),
+                _isBlacklisted
+                    ? StatusBadge(
+                        label: _blacklistReason ?? 'Under review',
+                        type: BadgeType.warn,
+                      )
+                    : StatusBadge(label: 'Verified Device', type: BadgeType.ok),
+                if (_spamFlags > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Spam flags: $_spamFlags',
+                      style: const TextStyle(fontSize: 10, color: AppColors.warn),
+                    ),
+                  ),
               ],
             ),
           ),
