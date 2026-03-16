@@ -52,11 +52,12 @@ class _MyReportsScreenState extends State<MyReportsScreen>
       _loading = true;
       _error = null;
     });
-    final deviceId = await _deviceService.getDeviceId();
+    final deviceId = await _deviceService.ensureDeviceId(apiService: _apiService);
     if (deviceId == null || deviceId.isEmpty) {
       setState(() {
         _loading = false;
         _deviceId = null;
+        _error = 'Could not register this device with server.';
       });
       return;
     }

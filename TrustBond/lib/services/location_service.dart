@@ -22,9 +22,9 @@ class LocationService {
   MusanzeMapData? _mapData;
 
   // ── configuration ──────────────────────────────────────
-  static const int _maxRetries = 2;
-  static const Duration _gpsFastTimeout = Duration(seconds: 10);
-  static const Duration _gpsSlowTimeout = Duration(seconds: 25);
+  static const int _maxRetries = 1;
+  static const Duration _gpsFastTimeout = Duration(seconds: 4);
+  static const Duration _gpsSlowTimeout = Duration(seconds: 8);
   // ───────────────────────────────────────────────────────
 
   /// Loads the GeoJSON data (cached after first load).
@@ -79,6 +79,13 @@ class LocationService {
       );
     }
 
+    // 2.5 Fast path: use last known position immediately when available.
+    // This gives an instant location (including offline scenarios).
+    final lastKnown = await Geolocator.getLastKnownPosition();
+    if (lastKnown != null) {
+      return LocationResult(position: lastKnown);
+    }
+
     // 3. Try to get a GPS fix – first fast, then slower, with retries
     Position? position;
     for (int attempt = 0; attempt <= _maxRetries; attempt++) {
@@ -110,6 +117,13 @@ class LocationService {
     }
 
     if (position == null) {
+      // Fallback to last known position when a fresh GPS fix times out.
+      // This avoids showing a hard failure when the device has a recent fix.
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null) {
+        return LocationResult(position: lastKnown);
+      }
+
       return LocationResult(
         errorType: LocationErrorType.timeout,
         error: 'Could not get a GPS fix after ${_maxRetries + 1} attempts. '
@@ -185,7 +199,7 @@ class LocationResult {
       return '${position!.latitude.toStringAsFixed(6)}, '
           '${position!.longitude.toStringAsFixed(6)}';
     }
-    return error ?? 'Unknown location';
+    return error ?? 'Location unavailable';
   }
 }
 

@@ -37,6 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
   double? _userLat;
   double? _userLng;
   VillageLocation? _userVillage;
+  String? _locationError;
 
   // ML-related state
   Map<String, MLPrediction> _mlPredictions = {};
@@ -63,11 +64,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Get user GPS location and village
     _locationService.getFullLocation().then((result) {
-      if (mounted && result.hasPosition) {
+      if (!mounted) return;
+      if (result.hasPosition) {
         setState(() {
           _userLat = result.latitude;
           _userLng = result.longitude;
           _userVillage = result.village;
+          _locationError = null;
+        });
+      } else {
+        setState(() {
+          _locationError = result.error;
         });
       }
     }).catchError((_) {});
@@ -75,11 +82,12 @@ class _HomeScreenState extends State<HomeScreen> {
     // Load sector-level hotspots for overview
     _loadSectorHotspots();
 
-    final deviceId = await _deviceService.getDeviceId();
+    final deviceId = await _deviceService.ensureDeviceId(apiService: _apiService);
     if (deviceId == null || deviceId.isEmpty) {
       setState(() {
         _loading = false;
         _deviceId = null;
+        _locationError ??= 'Could not register this device with server.';
       });
       return;
     }
@@ -208,7 +216,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   _userVillage != null
                       ? '${_userVillage!.village}, ${_userVillage!.cell}'
-                      : 'Outside Musanze District',
+                      : (_userLat != null && _userLng != null)
+                          ? '${_userLat!.toStringAsFixed(5)}, ${_userLng!.toStringAsFixed(5)}'
+                          : (_locationError ?? 'Detecting current location...'),
                   style: const TextStyle(fontSize: 11, color: AppColors.muted)),
                 RichText(
                   text: _userVillage != null
@@ -416,6 +426,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   mapData: _mapData!,
                   userLatitude: _userLat,
                   userLongitude: _userLng,
+                  userVillage: _userVillage,
                   sectorHotspots: _sectorHotspots,
                 ),
               )
@@ -436,7 +447,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Text(
                   _userVillage != null
                       ? '📍 ${_userVillage!.village}, ${_userVillage!.sector}'
-                      : '📍 Outside Musanze District · ${_mapData?.sectors.length ?? 0} sectors',
+                    : (_userLat != null && _userLng != null)
+                      ? '📍 Current GPS location detected'
+                      : '📍 Detecting current location... · ${_mapData?.sectors.length ?? 0} sectors',
                   style: const TextStyle(
                       fontSize: 9,
                       color: AppColors.muted,

@@ -52,6 +52,9 @@ class MapFeature {
 
 /// Holds all parsed data for the Musanze map.
 class MusanzeMapData {
+  static MusanzeMapData? _cached;
+  static Future<MusanzeMapData>? _loadingFuture;
+
   final List<MapFeature> features;
   final MapBounds bounds;
   final List<String> sectors;
@@ -179,8 +182,18 @@ class MusanzeMapData {
 
   /// Load and parse from bundled asset.
   static Future<MusanzeMapData> load() async {
-    final raw = await rootBundle.loadString('assets/musanze_boundaries.geojson');
-    return parse(raw);
+    if (_cached != null) return _cached!;
+    if (_loadingFuture != null) return _loadingFuture!;
+
+    _loadingFuture = () async {
+      final raw = await rootBundle.loadString('assets/musanze_boundaries.geojson');
+      final parsed = parse(raw);
+      _cached = parsed;
+      _loadingFuture = null;
+      return parsed;
+    }();
+
+    return _loadingFuture!;
   }
 
   /// Parse a GeoJSON string.

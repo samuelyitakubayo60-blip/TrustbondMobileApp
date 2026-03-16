@@ -219,6 +219,7 @@ class MusanzeMapPreviewPainter extends CustomPainter {
   final double padding;
   final double? userLatitude;
   final double? userLongitude;
+  final VillageLocation? userVillage;
   final List<Map<String, dynamic>> sectorHotspots;
 
   MusanzeMapPreviewPainter({
@@ -226,44 +227,98 @@ class MusanzeMapPreviewPainter extends CustomPainter {
     this.padding = 8,
     this.userLatitude,
     this.userLongitude,
+    this.userVillage,
     this.sectorHotspots = const [],
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final bounds = mapData.bounds;
+    // Focus on user's current area when available (cell-level zoom),
+    // otherwise keep full district preview.
+    final focusedFeatures = userVillage == null
+        ? mapData.features
+        : mapData.features
+            .where((f) =>
+                f.sector == userVillage!.sector &&
+                f.cell == userVillage!.cell)
+            .toList();
+
+    final previewFeatures = focusedFeatures.isEmpty ? mapData.features : focusedFeatures;
+
+    double minLng = double.infinity;
+    double maxLng = -double.infinity;
+    double minLat = double.infinity;
+    double maxLat = -double.infinity;
+
+    for (final f in previewFeatures) {
+      for (final ring in f.rings) {
+        for (final pt in ring) {
+          if (pt.dx < minLng) minLng = pt.dx;
+          if (pt.dx > maxLng) maxLng = pt.dx;
+          if (pt.dy < minLat) minLat = pt.dy;
+          if (pt.dy > maxLat) maxLat = pt.dy;
+        }
+      }
+    }
+
+    // Fallback to full map bounds if focused data is unexpectedly empty.
+    if (minLng == double.infinity || maxLng == -double.infinity ||
+        minLat == double.infinity || maxLat == -double.infinity) {
+      minLng = mapData.bounds.minLng;
+      maxLng = mapData.bounds.maxLng;
+      minLat = mapData.bounds.minLat;
+      maxLat = mapData.bounds.maxLat;
+    }
+
+    // Add small padding around focused bounds.
+    const pad = 0.0025;
+    minLng -= pad;
+    maxLng += pad;
+    minLat -= pad;
+    maxLat += pad;
+
+    final lngSpan = (maxLng - minLng).abs().clamp(0.0001, double.infinity);
+    final latSpan = (maxLat - minLat).abs().clamp(0.0001, double.infinity);
+
     final drawW = size.width - padding * 2;
     final drawH = size.height - padding * 2;
-    final geoAspect = bounds.lngSpan / bounds.latSpan;
+    final geoAspect = lngSpan / latSpan;
     final screenAspect = drawW / drawH;
     double scale, offsetX, offsetY;
 
     if (screenAspect > geoAspect) {
-      scale = drawH / bounds.latSpan;
-      offsetX = padding + (drawW - bounds.lngSpan * scale) / 2;
+      scale = drawH / latSpan;
+      offsetX = padding + (drawW - lngSpan * scale) / 2;
       offsetY = padding;
     } else {
-      scale = drawW / bounds.lngSpan;
+      scale = drawW / lngSpan;
       offsetX = padding;
-      offsetY = padding + (drawH - bounds.latSpan * scale) / 2;
+      offsetY = padding + (drawH - latSpan * scale) / 2;
     }
 
     Offset toScreen(ui.Offset geo) {
-      final x = offsetX + (geo.dx - bounds.minLng) * scale;
-      final y = offsetY + (bounds.maxLat - geo.dy) * scale;
+      final x = offsetX + (geo.dx - minLng) * scale;
+      final y = offsetY + (maxLat - geo.dy) * scale;
       return Offset(x, y);
     }
 
-    // Draw sector outlines only (lightweight for preview)
-    for (final feature in mapData.features) {
+    // Draw polygons for the focused region only.
+    for (final feature in previewFeatures) {
       final baseColor = sectorColor(feature.sector);
+      final isUserCell = userVillage != null &&
+          feature.sector == userVillage!.sector &&
+          feature.cell == userVillage!.cell;
       final fillPaint = Paint()
         ..style = PaintingStyle.fill
-        ..color = baseColor.withValues(alpha: 0.1);
+        ..color = isUserCell
+            ? baseColor.withValues(alpha: 0.22)
+            : baseColor.withValues(alpha: 0.10);
       final strokePaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.4
-        ..color = baseColor.withValues(alpha: 0.3);
+        ..strokeWidth = isUserCell ? 0.9 : 0.4
+        ..color = isUserCell
+            ? baseColor.withValues(alpha: 0.7)
+            : baseColor.withValues(alpha: 0.3);
 
       for (final ring in feature.rings) {
         if (ring.length < 3) continue;
@@ -280,8 +335,9 @@ class MusanzeMapPreviewPainter extends CustomPainter {
       }
     }
 
-    // Sector labels (small)
-    for (final sector in mapData.sectors) {
+    // Sector labels (small) for sectors visible in this preview scope.
+    final visibleSectors = previewFeatures.map((f) => f.sector).toSet().toList()..sort();
+    for (final sector in visibleSectors) {
       final centroid = mapData.sectorCentroid(sector);
       final pos = toScreen(centroid);
       final textPainter = TextPainter(
@@ -398,5 +454,8 @@ class MusanzeMapPreviewPainter extends CustomPainter {
   bool shouldRepaint(MusanzeMapPreviewPainter oldDelegate) =>
       oldDelegate.userLatitude != userLatitude ||
       oldDelegate.userLongitude != userLongitude ||
+      oldDelegate.userVillage?.village != userVillage?.village ||
+      oldDelegate.userVillage?.cell != userVillage?.cell ||
+      oldDelegate.userVillage?.sector != userVillage?.sector ||
       oldDelegate.sectorHotspots.length != sectorHotspots.length;
 }

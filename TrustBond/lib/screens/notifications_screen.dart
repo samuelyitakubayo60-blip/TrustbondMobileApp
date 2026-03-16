@@ -25,14 +25,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Future<void> _loadNotifications() async {
     setState(() => _loading = true);
     try {
-      final deviceId = await DeviceService().getDeviceId();
-      if (deviceId == null || deviceId.isEmpty) {
+      final ensuredDeviceId =
+          await DeviceService().ensureDeviceId(apiService: ApiService());
+      if (ensuredDeviceId == null || ensuredDeviceId.isEmpty) {
         setState(() => _loading = false);
         return;
       }
 
       // Build notifications from report status changes
-      final list = await ApiService().getMyReports(deviceId);
+      final list = await ApiService().getMyReports(ensuredDeviceId);
       final reports = list
           .map((e) => ReportListItem.fromJson(e as Map<String, dynamic>))
           .toList();
