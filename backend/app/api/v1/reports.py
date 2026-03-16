@@ -306,6 +306,15 @@ def create_report(
 
 
 def _build_report_response(r: Report, db: Optional[Session] = None) -> ReportResponse:
+    def _dt_sort_value(value: Optional[datetime]) -> float:
+        if value is None:
+            return float("-inf")
+        try:
+            dt = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+            return dt.timestamp()
+        except Exception:
+            return float("-inf")
+
     village_name = None
     if getattr(r, "village_location", None) and r.village_location:
         village_name = r.village_location.location_name
@@ -319,7 +328,10 @@ def _build_report_response(r: Report, db: Optional[Session] = None) -> ReportRes
             pass
 
     evidence_files = list(getattr(r, "evidence_files", None) or [])
-    evidence_files.sort(key=lambda x: (x.uploaded_at is None, x.uploaded_at), reverse=False)
+    evidence_files.sort(
+        key=lambda x: (_dt_sort_value(getattr(x, "uploaded_at", None)), str(getattr(x, "evidence_id", ""))),
+        reverse=False,
+    )
     evidence_preview = [
         EvidencePreview(evidence_id=ef.evidence_id, file_url=ef.file_url, file_type=ef.file_type)
         for ef in evidence_files[:3]
@@ -334,7 +346,11 @@ def _build_report_response(r: Report, db: Optional[Session] = None) -> ReportRes
     if hotspots:
         risk_rank = {"low": 0, "medium": 1, "high": 2}
         hotspots.sort(
-            key=lambda h: (risk_rank.get((h.risk_level or "").lower(), 0), h.incident_count, h.detected_at),
+            key=lambda h: (
+                risk_rank.get((getattr(h, "risk_level", "") or "").lower(), 0),
+                int(getattr(h, "incident_count", 0) or 0),
+                _dt_sort_value(getattr(h, "detected_at", None)),
+            ),
             reverse=True,
         )
         h: Hotspot = hotspots[0]
@@ -352,10 +368,17 @@ def _build_report_response(r: Report, db: Optional[Session] = None) -> ReportRes
         preds = [p for p in r.ml_predictions if p.is_final or p.trust_score is not None]
         if preds:
             preds.sort(
-                key=lambda p: (p.evaluated_at or datetime.min.replace(tzinfo=timezone.utc)),
+                key=lambda p: _dt_sort_value(getattr(p, "evaluated_at", None)),
                 reverse=True,
             )
             trust_score = preds[0].trust_score
+
+    trust_score_out = None
+    if trust_score is not None:
+        try:
+            trust_score_out = float(trust_score)
+        except Exception:
+            trust_score_out = None
 
     # Aggregate assignment priority/status for list views
     assignment_priority = None
@@ -392,7 +415,7 @@ def _build_report_response(r: Report, db: Optional[Session] = None) -> ReportRes
         incident_type_name=r.incident_type.type_name if r.incident_type else None,
         evidence_count=len(evidence_files),
         evidence_preview=evidence_preview,
-        trust_score=float(trust_score) if trust_score is not None else None,
+        trust_score=trust_score_out,
         hotspot_id=hotspot_id,
         hotspot_risk_level=hotspot_risk_level,
         hotspot_incident_count=hotspot_incident_count,
@@ -605,7 +628,14 @@ def list_reports(
             .order_by(Report.reported_at.desc())
             .all()
         )
-        return [_build_report_response(r, db) for r in reports]
+        items: list[ReportResponse] = []
+        for r in reports:
+            try:
+                items.append(_build_report_response(r, db))
+            except Exception:
+                # Skip malformed rows instead of failing the whole endpoint.
+                continue
+        return items
     if current_user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     query = db.query(Report).options(
@@ -644,8 +674,14 @@ def list_reports(
         .limit(limit)
         .all()
     )
+    items: list[ReportResponse] = []
+    for r in reports:
+        try:
+            items.append(_build_report_response(r, db))
+        except Exception:
+            continue
     return ReportListResponse(
-        items=[_build_report_response(r, db) for r in reports],
+        items=items,
         total=total,
         limit=limit,
         offset=offset,
@@ -697,6 +733,15 @@ def get_report(
         if not assigned_to_me:
             raise HTTPException(status_code=403, detail="You can only view reports assigned to you")
 
+    def _dt_sort_value(value: Optional[datetime]) -> float:
+        if value is None:
+            return float("-inf")
+        try:
+            dt = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+            return dt.timestamp()
+        except Exception:
+            return float("-inf")
+
     assignment_list = []
     if device_id is None and getattr(report, "assignments", None):
         for a in report.assignments:
@@ -715,7 +760,7 @@ def get_report(
                     officer_name=officer_name,
                 )
             )
-        assignment_list.sort(key=lambda x: x.assigned_at, reverse=True)
+        assignment_list.sort(key=lambda x: _dt_sort_value(x.assigned_at), reverse=True)
 
     review_list = []
     if device_id is None and getattr(report, "police_reviews", None):
@@ -734,7 +779,7 @@ def get_report(
                     reviewer_name=reviewer_name,
                 )
             )
-        review_list.sort(key=lambda x: x.reviewed_at, reverse=True)
+        review_list.sort(key=lambda x: _dt_sort_value(x.reviewed_at), reverse=True)
 
     incident_lat, incident_lon, incident_source, incident_location_info = _compute_incident_location_with_villages(report, db)
 
@@ -744,7 +789,7 @@ def get_report(
         trust_score = report.device.device_trust_score
     if trust_score is None and getattr(report, "ml_predictions", None):
         preds = [p for p in report.ml_predictions if p.is_final or (p.trust_score is not None)]
-        preds.sort(key=lambda p: (p.evaluated_at is None, p.evaluated_at), reverse=True)
+        preds.sort(key=lambda p: _dt_sort_value(getattr(p, "evaluated_at", None)), reverse=True)
         if preds:
             trust_score = preds[0].trust_score
     context_tags_list = getattr(report, "context_tags", None) or []
