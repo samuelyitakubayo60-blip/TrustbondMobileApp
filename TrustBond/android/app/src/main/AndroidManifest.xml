@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <!-- Motion: accelerometer used for report context (e.g. was device moving). No extra permission needed at normal rate. -->
     <!-- Only if you need >200Hz sensor sampling, add: android.permission.HIGH_SAMPLING_RATE_SENSORS -->
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false"/>

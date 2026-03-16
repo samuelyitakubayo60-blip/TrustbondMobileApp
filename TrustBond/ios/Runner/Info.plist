@@ -74,5 +74,7 @@
 	<string>TrustBond needs microphone access to record video with sound.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>TrustBond uses motion sensors to record whether the device was moving when you submit a report (e.g. in a vehicle vs stationary).</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>TrustBond uses your location while using the app to determine your current village and route reports to the correct authorities.</string>
 </dict>
 </plist>
