@@ -69,16 +69,21 @@ def get_device_profile(device_hash: str, db: Session = Depends(get_db)):
     # Aggregate report stats for this device.
     q = db.query(Report).filter(Report.device_id == device.device_id)
     total = q.count()
+    # Use current enum semantics:
+    # - status: pending | verified | flagged | rejected
+    # - rule_status: pending | passed | flagged | rejected
     trusted = (
         q.filter(
-            Report.rule_status.in_(["confirmed", "verified", "trusted"])
+            (Report.status == "verified") | (Report.rule_status == "passed")
         ).count()
         if total > 0
         else 0
     )
     flagged = (
         q.filter(
-            Report.rule_status.in_(["flagged", "rejected", "false_report"])
+            (Report.status == "rejected")
+            | (Report.rule_status.in_(["flagged", "rejected"]))
+            | (Report.is_flagged == True)
         ).count()
         if total > 0
         else 0

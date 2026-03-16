@@ -277,7 +277,7 @@ def get_home_insights(db: Session, device_id: str):
     total_reports = db.query(Report).filter(Report.device_id == device_id).count()
     verified_reports = db.query(Report).filter(
         Report.device_id == device_id,
-        Report.rule_status.in_(['confirmed', 'verified', 'trusted'])
+        (Report.status == 'verified') | (Report.rule_status == 'passed')
     ).count()
     
     # Get recent ML predictions
