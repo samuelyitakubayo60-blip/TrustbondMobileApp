@@ -1,0 +1,62 @@
+{
+  "feature_columns": [
+    "incident_count",
+    "avg_trust",
+    "cluster_density",
+    "time_window_hours"
+  ],
+  "labels": [
+    "low_activity",
+    "emerging",
+    "active",
+    "critical"
+  ],
+  "n_report_rows": 6388,
+  "n_cluster_rows": 1200,
+  "train_size": 900,
+  "test_size": 300,
+  "classification_report": {
+    "active": {
+      "precision": 1.0,
+      "recall": 0.9166666666666666,
+      "f1-score": 0.9565217391304348,
+      "support": 12.0
+    },
+    "critical": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 1.0
+    },
+    "emerging": {
+      "precision": 0.888,
+      "recall": 0.9736842105263158,
+      "f1-score": 0.9288702928870293,
+      "support": 114.0
+    },
+    "low_activity": {
+      "precision": 0.9815950920245399,
+      "recall": 0.9248554913294798,
+      "f1-score": 0.9523809523809523,
+      "support": 173.0
+    },
+    "accuracy": 0.9433333333333334,
+    "macro avg": {
+      "precision": 0.967398773006135,
+      "recall": 0.9538015921306155,
+      "f1-score": 0.9594432460996041,
+      "support": 300.0
+    },
+    "weighted avg": {
+      "precision": 0.9468265030674846,
+      "recall": 0.9433333333333334,
+      "f1-score": 0.9437712634019711,
+      "support": 300.0
+    }
+  },
+  "source_files": [
+    "report_credibility_training.csv",
+    "musanze_training_data.csv"
+  ],
+  "model_type": "RandomForestClassifier"
+}

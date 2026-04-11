@@ -1,0 +1,13 @@
+node_modules/
+vendor/
+build/
+*.log
+*.zip
+*.apk
+
+# Python cache artifacts
+__pycache__/
+*.py[cod]
+
+# Python virtual environments
+venv/
