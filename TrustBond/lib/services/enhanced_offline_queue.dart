@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-
-import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:uuid/uuid.dart';
+import 'package:http/http.dart' as http;
+import 'offline_database_service.dart';
+import 'background_sync_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../services/api_service.dart';
@@ -232,11 +232,8 @@ class EnhancedOfflineQueue {
     }
   }
 
-  Map<String, dynamic> _prepareReportDataForSubmission(
-    Map<String, dynamic> report, 
-    String deviceId
-  ) {
-    return {
+  Map<String, dynamic> _prepareReportDataForSubmission(Map<String, dynamic> report, String deviceId) {
+    final reportData = {
       'device_id': deviceId,
       'incident_type_id': report['incident_type_id'],
       'description': report['description'],
@@ -253,9 +250,12 @@ class EnhancedOfflineQueue {
       'battery_level': report['battery_level'],
       'motion_level': report['motion_level'],
       'village_location_id': report['village_location_id'],
-      'context_tags': jsonDecode(report['context_tags'] ?? '[]'),
+      'context_tags': _parseContextTags(report['context_tags']),
       'priority': report['priority'] ?? 'medium',
     };
+    
+    // Validate and clean the data before submission
+    return _validateReportData(reportData);
   }
 
   Future<void> _handleSyncError(String queueId, Object error, int attempts) async {
@@ -351,5 +351,90 @@ class EnhancedOfflineQueue {
 
   Future<void> cleanupOldItems() async {
     await _db.cleanupOldCompletedItems();
+  }
+
+  /// Parse context_tags from database string to proper list format
+  List<String> _parseContextTags(String? contextTagsStr) {
+    if (contextTagsStr == null || contextTagsStr.isEmpty) {
+      return [];
+    }
+    
+    try {
+      // Try to parse as JSON list
+      final parsed = jsonDecode(contextTagsStr);
+      if (parsed is List) {
+        return parsed.map((item) => item.toString()).toList();
+      }
+    } catch (e) {
+      // If JSON parsing fails, try to handle malformed strings
+      print('Warning: Failed to parse context_tags as JSON: $contextTagsStr');
+      
+      // Handle cases like "[Victim present]" (missing quotes)
+      if (contextTagsStr.startsWith('[') && contextTagsStr.endsWith(']')) {
+        final content = contextTagsStr.substring(1, contextTagsStr.length - 1);
+        if (content.isNotEmpty) {
+          // Split by comma and clean up each item
+          final items = content.split(',');
+          final result = <String>[];
+          
+          for (final item in items) {
+            final cleaned = item.trim();
+            // Remove quotes if present
+            if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+              result.add(cleaned.substring(1, cleaned.length - 1));
+            } else if (cleaned.startsWith("'") && cleaned.endsWith("'")) {
+              result.add(cleaned.substring(1, cleaned.length - 1));
+            } else if (cleaned.isNotEmpty) {
+              result.add(cleaned);
+            }
+          }
+          return result;
+        }
+      }
+      
+      // If all else fails, return empty list
+      print('Warning: Could not parse context_tags, using empty list: $contextTagsStr');
+      return [];
+    }
+    
+    return [];
+  }
+
+  /// Validate and clean report data before submission
+  Map<String, dynamic> _validateReportData(Map<String, dynamic> reportData) {
+    final validated = Map<String, dynamic>.from(reportData);
+    
+    // Ensure context_tags is a proper list
+    validated['context_tags'] = _parseContextTags(reportData['context_tags']?.toString());
+    
+    // Ensure numeric fields are proper types
+    if (validated['latitude'] != null) {
+      validated['latitude'] = double.tryParse(validated['latitude'].toString()) ?? 0.0;
+    }
+    if (validated['longitude'] != null) {
+      validated['longitude'] = double.tryParse(validated['longitude'].toString()) ?? 0.0;
+    }
+    if (validated['gps_accuracy'] != null) {
+      validated['gps_accuracy'] = double.tryParse(validated['gps_accuracy'].toString()) ?? 0.0;
+    }
+    if (validated['battery_level'] != null) {
+      validated['battery_level'] = double.tryParse(validated['battery_level'].toString()) ?? 0.0;
+    }
+    if (validated['movement_speed'] != null) {
+      validated['movement_speed'] = double.tryParse(validated['movement_speed'].toString()) ?? 0.0;
+    }
+    
+    // Ensure boolean fields are proper types
+    if (validated['was_stationary'] != null) {
+      validated['was_stationary'] = validated['was_stationary'].toString().toLowerCase() == 'true';
+    }
+    
+    // Clean up string fields
+    validated['description'] = validated['description']?.toString().trim() ?? '';
+    validated['device_hash'] = validated['device_hash']?.toString().trim() ?? '';
+    validated['status'] = validated['status']?.toString().trim() ?? 'pending';
+    validated['verification_status'] = validated['verification_status']?.toString().trim() ?? 'pending';
+    
+    return validated;
   }
 }
