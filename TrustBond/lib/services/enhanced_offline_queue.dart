@@ -37,7 +37,7 @@ class EnhancedOfflineQueue {
     // Prepare report data for SQLite
     final reportQueueData = {
       'queue_id': queueId,
-      'status': 'queued',
+      'sync_status': 'queued',
       'attempts': 0,
       'created_at': now,
       'updated_at': now,
@@ -264,14 +264,14 @@ class EnhancedOfflineQueue {
       final backoff = Duration(seconds: 5 * (attempts * attempts).clamp(1, 72));
       final nextAttempt = DateTime.now().add(backoff).toIso8601String();
       
-      await _db.updateReportStatus(queueId, 'error', error: error.toString());
+      await _db.updateReportStatus(queueId, 'failed', error: error.toString());
       await _db.updateReportWithServerData(queueId, {
         'attempts': attempts + 1,
         'next_attempt_at': nextAttempt,
       });
     } else {
       // Non-network error - mark as failed
-      await _db.updateReportStatus(queueId, 'error', error: error.toString());
+      await _db.updateReportStatus(queueId, 'failed', error: error.toString());
     }
   }
 
@@ -280,13 +280,13 @@ class EnhancedOfflineQueue {
       final backoff = Duration(seconds: 10 + attempts * 5);
       final nextAttempt = DateTime.now().add(backoff).toIso8601String();
       
-      await _db.updateEvidenceStatus(evidenceId, 'error', error: error.toString());
+      await _db.updateEvidenceStatus(evidenceId, 'failed', error: error.toString());
       await _db.updateEvidenceWithServerData(evidenceId, {
         'attempts': attempts + 1,
         'next_attempt_at': nextAttempt,
       });
     } else {
-      await _db.updateEvidenceStatus(evidenceId, 'error', error: error.toString());
+      await _db.updateEvidenceStatus(evidenceId, 'failed', error: error.toString());
     }
   }
 
@@ -343,7 +343,7 @@ class EnhancedOfflineQueue {
     final pendingReports = await _db.getPendingReports();
     
     for (final report in pendingReports) {
-      if (report['status'] == 'error') {
+      if (report['sync_status'] == 'failed') {
         await retryFailedReport(report['queue_id'] as String);
       }
     }

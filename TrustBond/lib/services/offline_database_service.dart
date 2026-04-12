@@ -161,7 +161,7 @@ class OfflineDatabaseService {
     return await db.query(
       'evidence_queue',
       where: 'queue_id = ? AND status IN (?, ?)',
-      whereArgs: [queueId, 'pending', 'error'],
+      whereArgs: [queueId, 'pending', 'failed'],
       orderBy: 'created_at ASC',
     );
   }
@@ -208,6 +208,7 @@ class OfflineDatabaseService {
     
     final cacheData = {
       'device_hash': deviceHash,
+      'created_at': DateTime.now().toIso8601String(), // Ensure created_at is present
       'updated_at': DateTime.now().toIso8601String(),
       'is_registered': 1,
       ...deviceData,
