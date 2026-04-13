@@ -10,8 +10,6 @@ from decimal import Decimal
 import joblib
 import pandas as pd
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-
 from app.models.ml_prediction import MLPrediction
 from app.models.report import Report
 from app.models.device import Device
@@ -150,6 +148,74 @@ def _load_model_and_meta():
     _MODEL = joblib.load(MODEL_PATH)
     _META = json.loads(META_PATH.read_text(encoding="utf-8"))
     return _MODEL, _META
+
+
+def _normalize_threshold_percent(value: Any, *, default: float) -> float:
+    """
+    Interpret thresholds stored either as ratios (0..1) or percentages (0..100).
+    """
+    try:
+        threshold = float(value)
+    except Exception:
+        threshold = default
+
+    if threshold <= 1.0:
+        threshold *= 100.0
+    return max(0.0, min(100.0, threshold))
+
+
+def _derive_prediction_thresholds(best_threshold_pct: float) -> tuple[float, float, float]:
+    """
+    Build monotonic label thresholds around the model's best threshold.
+
+    The trained threshold drives the "likely_real" boundary, while the lower
+    bands keep a similar relative spacing to the previous fixed cutoffs.
+    """
+    shift = best_threshold_pct - 85.0
+    likely_real_threshold = best_threshold_pct
+    suspicious_threshold = min(
+        likely_real_threshold - 5.0,
+        max(20.0, 60.0 + (shift * 0.5)),
+    )
+    uncertain_threshold = min(
+        suspicious_threshold - 5.0,
+        max(0.0, 30.0 + (shift * 0.25)),
+    )
+    return likely_real_threshold, suspicious_threshold, uncertain_threshold
+
+
+def _latest_predictions_for_reports(
+    db: Session,
+    *,
+    device_id: Optional[str] = None,
+) -> list[MLPrediction]:
+    """
+    Return the most recent prediction row for each report, ordered newest-first.
+
+    This keeps dashboards and device-level aggregates from double-counting
+    historical rescoring rows.
+    """
+    query = db.query(MLPrediction).join(Report, MLPrediction.report_id == Report.report_id)
+    if device_id is not None:
+        query = query.filter(Report.device_id == device_id)
+
+    predictions = (
+        query.order_by(
+            MLPrediction.evaluated_at.desc().nullslast(),
+            MLPrediction.prediction_id.desc(),
+        )
+        .all()
+    )
+
+    latest: list[MLPrediction] = []
+    seen_reports: set[str] = set()
+    for prediction in predictions:
+        report_key = str(prediction.report_id)
+        if report_key in seen_reports:
+            continue
+        seen_reports.add(report_key)
+        latest.append(prediction)
+    return latest
 
 
 def _bucket_time_of_day(dt: Optional[datetime]) -> Optional[str]:
@@ -465,7 +531,13 @@ def score_report_credibility(
         proba = model.predict_proba(X)[0]
         prob_real = float(proba[1])
 
-        best_threshold = float(meta.get("best_threshold", 0.5))
+        best_threshold_pct = _normalize_threshold_percent(
+            meta.get("best_threshold"),
+            default=85.0,
+        )
+        likely_real_threshold_pct, suspicious_threshold_pct, uncertain_threshold_pct = (
+            _derive_prediction_thresholds(best_threshold_pct)
+        )
 
         trust_score_pct = prob_real * 100.0
 
@@ -487,12 +559,14 @@ def score_report_credibility(
         elif community_net < 0:
             trust_score_pct = max(0.0, trust_score_pct + (community_net * 10.0))
 
-        # Re-evaluate labels based on final trust_score_pct
-        if trust_score_pct >= 85.0:
+        trust_score_pct = max(0.0, min(100.0, trust_score_pct))
+
+        # Re-evaluate labels based on final trust_score_pct and model threshold.
+        if trust_score_pct >= likely_real_threshold_pct:
             prediction_label = "likely_real"
-        elif trust_score_pct >= 60.0:
+        elif trust_score_pct >= suspicious_threshold_pct:
             prediction_label = "suspicious"
-        elif trust_score_pct >= 30.0:
+        elif trust_score_pct >= uncertain_threshold_pct:
             prediction_label = "uncertain"
         else:
             prediction_label = "fake"
@@ -534,16 +608,10 @@ def update_device_ml_aggregates(
     - device.metadata_json (stores ML breakdown + last update timestamps)
     """
     try:
-        # Pull recent final predictions for reports submitted by this device
-        preds = (
-            db.query(MLPrediction)
-            .join(Report, MLPrediction.report_id == Report.report_id)
-            .filter(Report.device_id == device.device_id)
-            .filter(MLPrediction.trust_score.isnot(None))
-            .order_by(MLPrediction.evaluated_at.desc().nullslast())
-            .limit(window)
-            .all()
-        )
+        # Pull the newest prediction per report, then cap by report window.
+        preds = _latest_predictions_for_reports(db, device_id=str(device.device_id))
+        if window > 0:
+            preds = preds[:window]
 
         ml_scores: list[float] = []
         confs: list[float] = []
@@ -690,38 +758,40 @@ def get_report_prediction(db: Session, report_id: str, device_id: str):
 def get_home_insights(db: Session):
     """Get ML insights for home dashboard"""
     total_reports = db.query(Report).count()
-    
-    # Get prediction counts - FIXED: Include uncertain
-    likely_real = db.query(MLPrediction).filter(
-        MLPrediction.prediction_label == "likely_real"
-    ).count()
-    
-    suspicious = db.query(MLPrediction).filter(
-        MLPrediction.prediction_label == "suspicious"
-    ).count()
-    
-    uncertain = db.query(MLPrediction).filter(
-        MLPrediction.prediction_label == "uncertain"
-    ).count()  # FIXED: Added uncertain count
-    
-    fake = db.query(MLPrediction).filter(
-        MLPrediction.prediction_label == "fake"
-    ).count()
-    
-    # Calculate average trust score
-    avg_score = db.query(MLPrediction).filter(
-        MLPrediction.trust_score.isnot(None)
-    ).with_entities(
-        func.avg(MLPrediction.trust_score)
-    ).scalar()
-    
+
+    latest_predictions = _latest_predictions_for_reports(db)
+    likely_real = 0
+    suspicious = 0
+    uncertain = 0
+    fake = 0
+    trust_scores: list[float] = []
+
+    for prediction in latest_predictions:
+        label = (prediction.prediction_label or "").lower()
+        if label == "likely_real":
+            likely_real += 1
+        elif label == "suspicious":
+            suspicious += 1
+        elif label == "uncertain":
+            uncertain += 1
+        elif label == "fake":
+            fake += 1
+
+        if prediction.trust_score is not None:
+            try:
+                trust_scores.append(float(prediction.trust_score))
+            except Exception:
+                pass
+
+    avg_score = sum(trust_scores) / len(trust_scores) if trust_scores else None
+
     return {
         "total_reports": total_reports,
         "likely_real_count": likely_real,
         "suspicious_count": suspicious,
         "uncertain_count": uncertain,  # FIXED: Added uncertain
         "fake_count": fake,
-        "average_trust_score": float(avg_score) if avg_score else None
+        "average_trust_score": avg_score,
     }
 
 
@@ -733,19 +803,9 @@ def get_device_ml_stats(db: Session, device_id: str):
     
     # Get all reports for this device
     reports = db.query(Report).filter(Report.device_id == device_id).all()
-    report_ids = [r.report_id for r in reports]
-    
-    # Get predictions for these reports (recent first)
-    predictions = []
-    if report_ids:
-        predictions = (
-            db.query(MLPrediction)
-            .filter(MLPrediction.report_id.in_(report_ids))
-            .order_by(MLPrediction.evaluated_at.desc().nullslast())
-            .all()
-        )
+    predictions = _latest_predictions_for_reports(db, device_id=device_id)
 
-    # Calculate distribution - FIXED: Include uncertain
+    # Calculate distribution from latest-per-report rows only.
     distribution = {"likely_real": 0, "suspicious": 0, "uncertain": 0, "fake": 0}
     for pred in predictions:
         label = (pred.prediction_label or "").lower()

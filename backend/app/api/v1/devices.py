@@ -428,26 +428,28 @@ async def get_report_prediction_endpoint(
     
     if not prediction:
         raise HTTPException(status_code=404, detail="Report not found or no prediction available")
+
+    def _safe_float(value):
+        return float(value) if value is not None else None
     
     return MLPredictionResponse(
         prediction_id=str(prediction.prediction_id),
         report_id=str(prediction.report_id),
-        trust_score=float(prediction.trust_score),
+        trust_score=_safe_float(prediction.trust_score),
         prediction_label=prediction.prediction_label,
         model_version=prediction.model_version,
-        confidence=float(prediction.confidence),
+        confidence=_safe_float(prediction.confidence),
         evaluated_at=prediction.evaluated_at.isoformat() if prediction.evaluated_at else None,
         is_final=prediction.is_final,
         explanation=prediction.explanation,
         processing_time=prediction.processing_time,
     )
 
-@router.get("/ml-insights", response_model=List[MLInsightResponse])
+@router.get("/ml-insights", response_model=MLInsightResponse)
 async def get_home_insights_endpoint(
     db: Session = Depends(get_db)
 ):
     """Get ML-powered insights for the home dashboard"""
-    # credibility_model.get_home_insights returns a summary dict, not a list of cards
     return get_home_insights(db)
 
 @router.get("/{device_id}/ml-stats", response_model=DeviceMLStatsResponse)
