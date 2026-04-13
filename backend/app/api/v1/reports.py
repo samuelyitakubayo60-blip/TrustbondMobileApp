@@ -60,6 +60,7 @@ from app.core.hotspot_auto import (
 from app.core.village_lookup import get_village_location_id, get_village_location_info
 from app.schemas.report import CommunityVoteRequest
 from sqlalchemy import text, or_, func, cast, String
+from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -683,9 +684,19 @@ def create_report(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Location validation failed: {e}")
     
+    incoming_report_id = report_data.report_id or uuid4()
+    if report_data.report_id:
+        existing_report = (
+            db.query(Report)
+            .filter(Report.report_id == report_data.report_id)
+            .first()
+        )
+        if existing_report:
+            raise HTTPException(status_code=409, detail="Report already exists")
+
     report_num = _generate_report_number(db) if hasattr(Report, "report_number") else None
     report = Report(
-        report_id=uuid4(),
+        report_id=incoming_report_id,
         report_number=report_num,
         device_id=device.device_id,
         incident_type_id=report_data.incident_type_id,
@@ -711,7 +722,11 @@ def create_report(
         report.village_location_id = village_id
         report.location_id = village_id
     db.add(report)
-    db.flush()  # Get report_id
+    try:
+        db.flush()  # Get report_id
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Report already exists")
 
     # Add evidence files
     for evidence_data in report_data.evidence_files:
@@ -763,7 +778,11 @@ def create_report(
             success=True,
         )
 
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="Report already exists")
         db.refresh(report)
         background_tasks.add_task(
             manager.broadcast,
@@ -783,7 +802,11 @@ def create_report(
     print("ML scoring completed")  # Debug log
     
     # FIXED: Commit ML prediction to ensure it's available for verification
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Report already exists")
     db.refresh(report)  # Ensure we have the latest data including ML predictions
 
     # Apply AI-enhanced rules
@@ -2417,7 +2440,7 @@ async def upload_evidence(
             file_url = upload_result.get("secure_url") or upload_result.get("url")
         except Exception as e:
             # In production mode with Cloudinary configured, we do NOT write to local disk.
-            # The client (mobile app) should handle offline/low-network by queuing uploads locally.
+            # The mobile client may queue retries locally and resend later.
             print(f"[Cloudinary] upload error for report {report_id}: {e}")
             raise HTTPException(status_code=500, detail=f"Cloudinary upload failed: {e}")
     else:
