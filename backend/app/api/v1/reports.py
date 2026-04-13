@@ -46,9 +46,7 @@ from app.api.v1.notifications import create_notification
 from app.core.report_rules import apply_rule_based_status, is_likely_screenshot_or_screen_recording
 from app.core.report_review import (
     needs_police_review_clause,
-    resolve_display_trust_score,
     resolve_ml_prediction_for_report,
-    resolve_ml_prediction_label_for_display,
 )
 from app.core.credibility_model import score_report_credibility, update_device_ml_aggregates, _json_safe
 from app.core.audit import log_action
@@ -809,21 +807,16 @@ def create_report(
         raise HTTPException(status_code=409, detail="Report already exists")
     db.refresh(report)  # Ensure we have the latest data including ML predictions
 
-    # Apply AI-enhanced rules
-    print(f"Applying AI-enhanced rules - evidence_count: {evidence_count}, description_length: {len(report_data.description or '')}")  # Debug log
-    
-    # Get ML prediction if available (now available after ML scoring)
+    # Rule verification is deterministic (location/speed/motion/incident validity).
+    rule_status, is_flagged, flag_reason = apply_rule_based_status(
+        report, evidence_count, db
+    )
+
+    # Get ML prediction if available (used for backend AI verification and trust scoring).
     from app.models.ml_prediction import MLPrediction
     ml_prediction = db.query(MLPrediction).filter(MLPrediction.report_id == report.report_id).order_by(MLPrediction.evaluated_at.desc()).first()
-    if ml_prediction:
-        print(f"Using ML prediction: {ml_prediction.prediction_label}, trust_score: {ml_prediction.trust_score}")  # Debug log
-    
-    # Apply AI-enhanced rules
-    from app.core.report_priority import apply_ai_enhanced_rules, calculate_report_priority
-    rule_status, is_flagged, flag_reason = apply_ai_enhanced_rules(
-        report, evidence_count, ml_prediction, db
-    )
-    print(f"AI-enhanced rule result - rule_status: {rule_status}, is_flagged: {is_flagged}, flag_reason: {flag_reason}")  # Debug log
+
+    from app.core.report_priority import calculate_report_priority
     
     # Calculate automatic priority
     priority = calculate_report_priority(report, ml_prediction, evidence_count, db)
@@ -838,42 +831,18 @@ def create_report(
     if rule_status == "rejected":
         report.status = "rejected"
         report.verification_status = "rejected"
+    elif is_flagged:
+        report.status = "pending"
+        report.verification_status = "under_review"
+    else:
+        report.status = "pending"
+        report.verification_status = "pending"
     
     # Set ai_ready = true to indicate AI processing complete
     report.ai_ready = True
     report.features_extracted_at = datetime.now(timezone.utc)
     
-    # Automated verification based on AI results
-    if rule_status == "passed" and not is_flagged:
-        # Auto-verify reports that pass AI rules
-        report.verification_status = "verified"
-        report.status = "verified"
-        print(f"Auto-verifying report {report.report_id} - AI rules passed")
-    elif rule_status == "rejected":
-        # Auto-reject reports that fail AI rules
-        report.verification_status = "rejected"
-        report.status = "rejected"
-        print(f"Auto-rejecting report {report.report_id} - AI rules rejected")
-    else:
-        # Only mark for review if there are specific concerns
-        review_reasons = {
-            "ai_suspicious_review",
-            "ai_uncertain_review",
-            "incident_description_mismatch",
-            "gibberish_description",
-            "evidence_time_mismatch",
-            "stale_live_capture_timestamp",
-            "device_burst_reporting",
-            "duplicate_description_recent",
-        }
-        if flag_reason in review_reasons:
-            report.verification_status = "under_review"
-            print(f"Rule/AI review reason ({flag_reason}) - setting verification_status to under_review")
-        else:
-            # Default to verified if no specific concerns
-            report.verification_status = "verified"
-            report.status = "verified"
-            print(f"Auto-verifying report {report.report_id} - no specific concerns found")
+    # AI decision is applied later in the combined rule+ML verification block.
 
     # Update device stats
     now_utc = datetime.now(timezone.utc)
@@ -1112,9 +1081,16 @@ def _build_report_response(r: Report, db: Optional[Session] = None, request_devi
 
     ml_prediction = resolve_ml_prediction_for_report(r)
     trust_factors = ml_prediction.explanation if ml_prediction else None
-    trust_score = resolve_display_trust_score(r)
-    if trust_score is not None:
-        trust_score = float(trust_score)
+    trust_score = (
+        float(ml_prediction.trust_score)
+        if ml_prediction is not None and ml_prediction.trust_score is not None
+        else None
+    )
+    ml_prediction_label = None
+    if ml_prediction is not None:
+        raw_label = getattr(ml_prediction, "prediction_label", None)
+        if raw_label is not None and str(raw_label).strip():
+            ml_prediction_label = str(raw_label).strip().lower()
 
     # Aggregate assignment priority/status for list views
     assignment_priority = None
@@ -1181,7 +1157,7 @@ def _build_report_response(r: Report, db: Optional[Session] = None, request_devi
         evidence_preview=evidence_preview,
         trust_score=float(trust_score) if trust_score is not None else None,
         trust_factors=trust_factors,
-        ml_prediction_label=resolve_ml_prediction_label_for_display(r),
+        ml_prediction_label=ml_prediction_label,
         hotspot_id=hotspot_id,
         hotspot_risk_level=hotspot_risk_level,
         hotspot_incident_count=hotspot_incident_count,
@@ -1721,8 +1697,18 @@ def get_report(
 
     incident_lat, incident_lon, incident_source, incident_location_info = _compute_incident_location_with_villages(report, db)
 
-    # Trust score and ML label: same resolution as list API (ML trust first, else device).
-    trust_score = resolve_display_trust_score(report)
+    # Trust score and ML label come from backend ML prediction only.
+    ml_prediction = resolve_ml_prediction_for_report(report)
+    trust_score = (
+        float(ml_prediction.trust_score)
+        if ml_prediction is not None and ml_prediction.trust_score is not None
+        else None
+    )
+    ml_prediction_label = None
+    if ml_prediction is not None:
+        raw_label = getattr(ml_prediction, "prediction_label", None)
+        if raw_label is not None and str(raw_label).strip():
+            ml_prediction_label = str(raw_label).strip().lower()
     context_tags_list = getattr(report, "context_tags", None) or []
 
     community_votes = {"real": 0, "false": 0, "unknown": 0}
@@ -1761,7 +1747,7 @@ def get_report(
         village_location_id=report.village_location_id,
         incident_type_name=report.incident_type.type_name if report.incident_type else None,
         trust_score=float(trust_score) if trust_score is not None else None,
-        ml_prediction_label=resolve_ml_prediction_label_for_display(report),
+        ml_prediction_label=ml_prediction_label,
         context_tags=context_tags_list,
         is_flagged=getattr(report, "is_flagged", None),
         flag_reason=getattr(report, "flag_reason", None),
