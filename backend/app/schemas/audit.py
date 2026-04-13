@@ -13,6 +13,7 @@ class AuditLogResponse(BaseModel):
     entity_type: Optional[str] = None
     entity_id: Optional[str] = None
     action_details: Optional[dict[str, Any]] = None
+    ip_address: Optional[str] = None
     user_agent: Optional[str] = None
     success: bool
     created_at: datetime

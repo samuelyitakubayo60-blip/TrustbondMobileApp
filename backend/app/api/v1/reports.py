@@ -272,23 +272,6 @@ def _to_utc(dt: Optional[datetime]) -> Optional[datetime]:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
-def _normalize_reported_at(
-    reported_at: Optional[datetime],
-    *,
-    now_utc: Optional[datetime] = None,
-) -> datetime:
-    """
-    Normalize client-reported timestamps while preventing far-future values from
-    poisoning duplicate and impossible-travel guards.
-    """
-    now_utc = now_utc or datetime.now(timezone.utc)
-    normalized = _to_utc(reported_at) or now_utc
-    max_future_skew = now_utc + timedelta(minutes=5)
-    if normalized > max_future_skew:
-        return now_utc
-    return normalized
-
-
 def _description_quality_score(description: Optional[str]) -> float:
     """Return a simple 0..100 quality score for report description text."""
     text = (description or "").strip().lower()
@@ -761,7 +744,6 @@ def create_report(
         if existing_report:
             raise HTTPException(status_code=409, detail="Report already exists")
 
-    reported_at = _normalize_reported_at(report_data.reported_at)
     report_num = _generate_report_number(db) if hasattr(Report, "report_number") else None
     report = Report(
         report_id=incoming_report_id,
@@ -775,7 +757,6 @@ def create_report(
         motion_level=report_data.motion_level,
         movement_speed=report_data.movement_speed,
         was_stationary=report_data.was_stationary,
-        reported_at=reported_at,
         rule_status="pending",  # Will be processed by verification engine
         status="pending",
         verification_status="pending",
@@ -1147,30 +1128,7 @@ def create_report(
     return report
 
 
-def _can_view_reporter_context(
-    report: Report,
-    *,
-    request_device_id: Optional[str] = None,
-    current_user: Optional[PoliceUser] = None,
-) -> bool:
-    if current_user is not None:
-        return True
-    if request_device_id is None:
-        return True
-    return str(report.device_id) == str(request_device_id)
-
-
-def _build_report_response(
-    r: Report,
-    db: Optional[Session] = None,
-    request_device_id: Optional[str] = None,
-    current_user: Optional[PoliceUser] = None,
-) -> ReportResponse:
-    can_view_sensitive = _can_view_reporter_context(
-        r,
-        request_device_id=request_device_id,
-        current_user=current_user,
-    )
+def _build_report_response(r: Report, db: Optional[Session] = None, request_device_id: Optional[str] = None) -> ReportResponse:
     village_name = None
     if getattr(r, "village_location", None) and r.village_location:
         village_name = r.village_location.location_name
@@ -1257,17 +1215,17 @@ def _build_report_response(
             if request_device_id and str(dict_device_id) == str(request_device_id):
                 user_vote = str(v)
 
-    # Get device metadata and trust score only for owner or police views.
-    device_metadata = getattr(r.device, "metadata_json", None) if can_view_sensitive and r.device else None
-    device_trust_score = getattr(r.device, "device_trust_score", None) if can_view_sensitive and r.device else None
-    total_reports = getattr(r.device, "total_reports", None) if can_view_sensitive and r.device else None
-    trusted_reports = getattr(r.device, "trusted_reports", None) if can_view_sensitive and r.device else None
+    # Get device metadata and trust score
+    device_metadata = getattr(r.device, "metadata_json", {}) if r.device else {}
+    device_trust_score = getattr(r.device, "device_trust_score", None) if r.device else None
+    total_reports = getattr(r.device, "total_reports", None) if r.device else None
+    trusted_reports = getattr(r.device, "trusted_reports", None) if r.device else None
 
     return ReportResponse(
         report_id=r.report_id,
         report_number=getattr(r, "report_number", None),
         case_id=linked_case_id,
-        device_id=r.device_id if can_view_sensitive else None,
+        device_id=r.device_id,
         incident_type_id=r.incident_type_id,
         description=r.description,
         latitude=r.latitude,
@@ -1371,7 +1329,7 @@ def list_related_reports(
         .all()
     )
 
-    return [_build_report_response(r, db, current_user=current_user) for r in related]
+    return [_build_report_response(r, db) for r in related]
 
 
 def _float_or_none(val) -> Optional[float]:
@@ -1522,15 +1480,7 @@ def list_reports(
             )
 
         reports = mobile_query.order_by(Report.reported_at.desc()).all()
-        return [
-            _build_report_response(
-                r,
-                db,
-                request_device_id=device_id,
-                current_user=current_user,
-            )
-            for r in reports
-        ]
+        return [_build_report_response(r, db, request_device_id=device_id) for r in reports]
     if current_user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     query = db.query(Report).options(
@@ -1662,15 +1612,7 @@ def list_reports(
         .all()
     )
     return ReportListResponse(
-        items=[
-            _build_report_response(
-                r,
-                db,
-                request_device_id=device_id,
-                current_user=current_user,
-            )
-            for r in reports
-        ],
+        items=[_build_report_response(r, db, request_device_id=device_id) for r in reports],
         total=total,
         limit=limit,
         offset=offset,
@@ -1844,12 +1786,6 @@ def get_report(
 
     incident_lat, incident_lon, incident_source, incident_location_info = _compute_incident_location_with_villages(report, db)
 
-    can_view_sensitive = _can_view_reporter_context(
-        report,
-        request_device_id=str(device_id) if device_id is not None else None,
-        current_user=current_user,
-    )
-
     # Trust score and ML label come from backend ML prediction only.
     ml_prediction = resolve_ml_prediction_for_report(report)
     trust_score = (
@@ -1874,32 +1810,16 @@ def get_report(
             if device_id and str(dict_device_id) == str(device_id):
                 user_vote = str(v)
 
-    # Get device metadata and trust score only for owner or police views.
-    device_metadata = (
-        getattr(report.device, "metadata_json", None)
-        if can_view_sensitive and report.device
-        else None
-    )
-    device_trust_score = (
-        getattr(report.device, "device_trust_score", None)
-        if can_view_sensitive and report.device
-        else None
-    )
-    total_reports = (
-        getattr(report.device, "total_reports", None)
-        if can_view_sensitive and report.device
-        else None
-    )
-    trusted_reports = (
-        getattr(report.device, "trusted_reports", None)
-        if can_view_sensitive and report.device
-        else None
-    )
+    # Get device metadata and trust score
+    device_metadata = getattr(report.device, "metadata_json", {}) if report.device else {}
+    device_trust_score = getattr(report.device, "device_trust_score", None) if report.device else None
+    total_reports = getattr(report.device, "total_reports", None) if report.device else None
+    trusted_reports = getattr(report.device, "trusted_reports", None) if report.device else None
 
     return ReportDetailResponse(
         report_id=report.report_id,
         report_number=getattr(report, "report_number", None),
-        device_id=report.device_id if can_view_sensitive else None,
+        device_id=report.device_id,
         incident_type_id=report.incident_type_id,
         description=report.description,
         latitude=report.latitude,
@@ -1951,6 +1871,15 @@ def get_report(
         total_reports=total_reports,
         trusted_reports=trusted_reports,
     )
+    
+    # DEBUG: Check what's being returned
+    print(f"🔍 DEBUG: Returning response with evidence files:")
+    print(f"   Evidence files in response: {len(response.evidence_files) if response.evidence_files else 0}")
+    if response.evidence_files:
+        for i, ef in enumerate(response.evidence_files, 1):
+            print(f"     {i}. {ef.evidence_id} - {ef.file_type} - {ef.file_url}")
+    
+    return response
 
 
 @router.post("/{report_id}/reviews", response_model=ReviewResponse, status_code=201)
@@ -2765,31 +2694,24 @@ def add_community_confirmation(
         if latest_ml:
             trust_score = float(latest_ml.trust_score) if latest_ml.trust_score is not None else 0.0
             prediction_label = (latest_ml.prediction_label or "").lower()
-            auto_verify_threshold = 70.0
-            under_review_threshold = 45.0
 
             # Get ML thresholds from system config
             from app.database import SessionLocal
             from app.models.system_config import SystemConfig
-
-            config_db = SessionLocal()
+            
+            db = SessionLocal()
             try:
-                auto_verify_config = config_db.query(SystemConfig).filter(
+                auto_verify_config = db.query(SystemConfig).filter(
                     SystemConfig.config_key == 'ml.auto_verification_threshold'
                 ).first()
-                under_review_config = config_db.query(SystemConfig).filter(
+                under_review_config = db.query(SystemConfig).filter(
                     SystemConfig.config_key == 'ml.under_review_threshold'
                 ).first()
-                if auto_verify_config:
-                    auto_verify_threshold = float(
-                        auto_verify_config.config_value.get('value', 70.0)
-                    )
-                if under_review_config:
-                    under_review_threshold = float(
-                        under_review_config.config_value.get('value', 45.0)
-                    )
+                
+                auto_verify_threshold = float(auto_verify_config.config_value.get('value', 70.0)) if auto_verify_config else 70.0
+                under_review_threshold = float(under_review_config.config_value.get('value', 45.0)) if under_review_config else 45.0
             finally:
-                config_db.close()
+                db.close()
 
             # Do not override police decisions; only move pending/under_review reports.
             if report.verification_status in ("pending", "under_review"):
@@ -2815,11 +2737,7 @@ def add_community_confirmation(
         # Best-effort only: community vote must not fail if state update is blocked
         pass
     
-    return _build_report_response(
-        report,
-        db,
-        request_device_id=device_id_str,
-    )
+    return _build_report_response(report, db, request_device_id=device_id_str)
 
 
 @router.get("/nearby-confirmations", response_model=List[ReportResponse])

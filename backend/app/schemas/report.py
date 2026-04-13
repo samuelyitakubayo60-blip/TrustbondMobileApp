@@ -34,7 +34,6 @@ class ReportCreate(BaseModel):
     app_version: Optional[str] = None
     network_type: Optional[str] = None
     battery_level: Optional[Decimal] = None
-    reported_at: Optional[datetime] = None
 
     @model_validator(mode="after")
     def require_device_identifier(self):
@@ -53,7 +52,7 @@ class ReportResponse(BaseModel):
     report_number: Optional[str] = None  # RPT-YYYY-NNNN
     # When set (e.g. list_reports with join), clients can filter reports by case without a dedicated endpoint.
     case_id: Optional[UUID] = None
-    device_id: Optional[UUID] = None
+    device_id: UUID
     incident_type_id: int
     description: Optional[str]
     latitude: Decimal
@@ -91,7 +90,7 @@ class ReportResponse(BaseModel):
     community_votes: Optional[Dict[str, int]] = None
     user_vote: Optional[str] = None
     # Device metadata fields
-    metadata_json: Optional[Dict[str, Any]] = None
+    metadata_json: Optional[Dict[str, Any]] = {}
     device_trust_score: Optional[float] = None
     total_reports: Optional[int] = None
     trusted_reports: Optional[int] = None

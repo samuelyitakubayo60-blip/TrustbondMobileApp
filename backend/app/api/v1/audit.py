@@ -12,32 +12,6 @@ from app.schemas.audit import AuditLogResponse
 router = APIRouter(prefix="/audit-logs", tags=["audit-logs"])
 
 
-_SENSITIVE_DETAIL_KEYS = {
-    "device_id",
-    "device_hash",
-    "ip_address",
-    "latitude",
-    "longitude",
-    "last_latitude",
-    "last_longitude",
-    "location_history",
-}
-
-
-def _sanitize_action_details(details: Optional[dict]) -> Optional[dict]:
-    if not isinstance(details, dict):
-        return details
-
-    safe = {}
-    for key, value in details.items():
-        key_lower = str(key).lower()
-        if key_lower in _SENSITIVE_DETAIL_KEYS:
-            safe[key] = "[redacted]"
-            continue
-        safe[key] = value
-    return safe
-
-
 @router.get("/", response_model=List[AuditLogResponse])
 def list_audit_logs(
     current_user: Annotated[PoliceUser, Depends(get_current_admin)],
@@ -89,7 +63,8 @@ def list_audit_logs(
                 action_type=l.action_type,
                 entity_type=l.entity_type,
                 entity_id=l.entity_id,
-                action_details=_sanitize_action_details(l.action_details),
+                action_details=l.action_details,
+                ip_address=l.ip_address,
                 user_agent=getattr(l, "user_agent", None),
                 success=l.success,
                 created_at=l.created_at,

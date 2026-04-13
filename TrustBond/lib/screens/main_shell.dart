@@ -82,8 +82,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void _startConnectivityWatcher() {
     _connectivitySub?.cancel();
     _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
-      final offline =
-          results.isEmpty || results.every((r) => r == ConnectivityResult.none);
+      final offline = results.contains(ConnectivityResult.none);
       if (_wasOffline && !offline) {
         unawaited(_queueService.scheduleSync(reason: 'connectivity'));
       }

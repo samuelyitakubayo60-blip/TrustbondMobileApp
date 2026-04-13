@@ -287,8 +287,7 @@ const getVerificationRequirements = (report, mlPrediction) => {
 const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
   const { user: me } = useAuth();
   const role = me?.role || "officer";
-  const canTriage =
-    role === "admin" || role === "supervisor" || role === "officer";
+  const canTriage = role === "admin" || role === "supervisor" || role === "officer";
 
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -326,7 +325,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
           console.log("Total reports:", res.total_reports);
           console.log("Trusted reports:", res.trusted_reports);
           if (res.evidence_files?.length > 0) {
-            console.log("First evidence file:", res.evidence_files[0]);
+            console.log('First evidence file:', res.evidence_files[0]);
           }
           setReport(res);
           setLoading(false);
@@ -421,7 +420,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
 
   const submitReview = async (decision) => {
     if (!reportId) return;
-
+    
     // Show reason modal first
     setPendingDecision(decision);
     setReviewReason("");
@@ -452,8 +451,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
             };
 
       const nowIso = new Date().toISOString();
-      const nextStatus =
-        pendingDecision === "confirmed" ? "verified" : "rejected";
+      const nextStatus = pendingDecision === "confirmed" ? "verified" : "rejected";
       const nextVerificationStatus =
         pendingDecision === "confirmed" ? "verified" : "rejected";
 
@@ -469,8 +467,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
           ...prev,
           status: nextStatus,
           verification_status: nextVerificationStatus,
-          rule_status:
-            pendingDecision === "confirmed" ? "passed" : prev.rule_status,
+          rule_status: pendingDecision === "confirmed" ? "passed" : prev.rule_status,
           is_flagged: pendingDecision === "rejected" ? true : false,
           flag_reason:
             pendingDecision === "rejected"
@@ -529,6 +526,9 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
   }
 
   const idLabel = report.report_number || String(report.report_id).slice(0, 8);
+  const deviceShort = report.device_id
+    ? String(report.device_id).slice(0, 4)
+    : "DEV";
   const trustScore = report.trust_score ?? 0;
   const trustFactors = report.trust_factors || {};
   const createdAt = formatLocalDateTime(report.reported_at);
@@ -607,7 +607,9 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
             disabled={!!savingDecision}
             style={{ display: "flex", alignItems: "center", gap: 4 }}
           >
-            {savingDecision === "confirmed" ? "Verifying…" : "Verify report"}
+            {savingDecision === "confirmed"
+              ? "Verifying…"
+              : "Verify report"}
           </button>
           <button
             className="btn btn-danger btn-sm"
@@ -617,7 +619,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
           >
             {savingDecision === "rejected" ? "Flagging…" : "Flag report"}
           </button>
-
+          
           {/* Assignment and Case Management: admin/supervisor only */}
           {(role === "admin" || role === "supervisor") && (
             <>
@@ -734,9 +736,12 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 </div>
               </div>
               <div className="detail-field">
-                <div className="dfl">Reporter ID</div>
-                <div className="dfv" style={{ fontSize: "11px" }}>
-                  Protected
+                <div className="dfl">Device</div>
+                <div
+                  className="dfv"
+                  style={{ fontSize: "11px", fontFamily: "monospace" }}
+                >
+                  {deviceShort}
                 </div>
               </div>
             </div>
@@ -792,9 +797,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                     Device Trust Score
                   </div>
                   <div style={{ marginTop: 6 }}>
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div
                         style={{
                           width: 60,
@@ -812,8 +815,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                               (report.device_trust_score || 0) >= 70
                                 ? "var(--success)"
                                 : (report.device_trust_score || 0) >= 40
-                                  ? "var(--warning)"
-                                  : "var(--danger)",
+                                ? "var(--warning)"
+                                : "var(--danger)",
                             transition: "width 0.3s ease",
                           }}
                         />
@@ -826,22 +829,16 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                             (report.device_trust_score || 0) >= 70
                               ? "var(--success)"
                               : (report.device_trust_score || 0) >= 40
-                                ? "var(--warning)"
-                                : "var(--danger)",
+                              ? "var(--warning)"
+                              : "var(--danger)",
                         }}
                       >
                         {Math.round(report.device_trust_score || 0)}
                       </span>
                     </div>
-                    <div
-                      style={{
-                        marginTop: 4,
-                        color: "var(--muted)",
-                        fontSize: 10,
-                      }}
-                    >
+                    <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
                       {report.total_reports || 0} total reports ·{" "}
-                      {report.trusted_reports || 0} confirmed
+                      {(report.trusted_reports || 0)} confirmed
                     </div>
                   </div>
                 </div>
@@ -862,73 +859,40 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                     {report.metadata_json?.location_history ? (
                       <>
                         <div style={{ fontSize: 11 }}>
-                          Last {report.metadata_json.location_history.length}{" "}
-                          locations
+                          Last {report.metadata_json.location_history.length} locations
                         </div>
-                        <div
-                          style={{
-                            marginTop: 4,
-                            color: "var(--muted)",
-                            fontSize: 10,
-                          }}
-                        >
+                        <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
                           {(() => {
-                            const history =
-                              report.metadata_json.location_history;
+                            const history = report.metadata_json.location_history;
                             if (history.length === 0) return "No history";
-
+                            
                             const latest = history[history.length - 1];
                             const earliest = history[0];
-
+                            
                             // Calculate time span
-                            const timeSpan =
-                              latest.timestamp && earliest.timestamp
-                                ? Math.round(
-                                    (new Date(latest.timestamp) -
-                                      new Date(earliest.timestamp)) /
-                                      (1000 * 60 * 60 * 24),
-                                  )
-                                : 0;
-
+                            const timeSpan = latest.timestamp && earliest.timestamp
+                              ? Math.round((new Date(latest.timestamp) - new Date(earliest.timestamp)) / (1000 * 60 * 60 * 24))
+                              : 0;
+                            
                             // Calculate movement radius if we have coordinates
                             let maxDistance = 0;
-                            if (
-                              history.length > 1 &&
-                              latest.latitude &&
-                              latest.longitude &&
-                              earliest.latitude &&
-                              earliest.longitude
-                            ) {
+                            if (history.length > 1 && latest.latitude && latest.longitude && earliest.latitude && earliest.longitude) {
                               // Simple distance calculation (haversine approximation)
                               const R = 6371; // Earth's radius in km
-                              const dLat =
-                                ((latest.latitude - earliest.latitude) *
-                                  Math.PI) /
-                                180;
-                              const dLon =
-                                ((latest.longitude - earliest.longitude) *
-                                  Math.PI) /
-                                180;
-                              const a =
-                                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                                Math.cos((earliest.latitude * Math.PI) / 180) *
-                                  Math.cos((latest.latitude * Math.PI) / 180) *
-                                  Math.sin(dLon / 2) *
-                                  Math.sin(dLon / 2);
-                              const c =
-                                2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                              const dLat = (latest.latitude - earliest.latitude) * Math.PI / 180;
+                              const dLon = (latest.longitude - earliest.longitude) * Math.PI / 180;
+                              const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                                        Math.cos(earliest.latitude * Math.PI / 180) * Math.cos(latest.latitude * Math.PI / 180) *
+                                        Math.sin(dLon/2) * Math.sin(dLon/2);
+                              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
                               maxDistance = R * c;
                             }
-
+                            
                             return (
                               <>
-                                Over {timeSpan}{" "}
-                                {timeSpan === 1 ? "day" : "days"}
+                                Over {timeSpan} {timeSpan === 1 ? 'day' : 'days'}
                                 {maxDistance > 0 && (
-                                  <span>
-                                    {" "}
-                                    · {maxDistance.toFixed(1)}km radius
-                                  </span>
+                                  <span> · {maxDistance.toFixed(1)}km radius</span>
                                 )}
                                 {history.length > 5 && (
                                   <span> · Active reporter</span>
@@ -939,30 +903,17 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                         </div>
                         {report.metadata_json.location_history.length > 1 && (
                           <div style={{ marginTop: 4, fontSize: 10 }}>
-                            <span
-                              style={{
-                                color:
-                                  report.metadata_json.location_history.length >
-                                  10
-                                    ? "var(--success)"
-                                    : "var(--muted)",
-                              }}
-                            >
-                              ●{" "}
-                              {report.metadata_json.location_history.length > 10
-                                ? "Highly active"
-                                : report.metadata_json.location_history.length >
-                                    5
-                                  ? "Moderately active"
-                                  : "Low activity"}
+                            <span style={{ 
+                              color: report.metadata_json.location_history.length > 10 ? 'var(--success)' : 'var(--muted)' 
+                            }}>
+                              ● {report.metadata_json.location_history.length > 10 ? 'Highly active' : 
+                                 report.metadata_json.location_history.length > 5 ? 'Moderately active' : 'Low activity'}
                             </span>
                           </div>
                         )}
                       </>
                     ) : (
-                      <span style={{ color: "var(--muted)" }}>
-                        No location history
-                      </span>
+                      <span style={{ color: "var(--muted)" }}>No location history</span>
                     )}
                   </div>
                 </div>
@@ -981,106 +932,60 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   </div>
                   <div style={{ marginTop: 6, color: "var(--text)" }}>
                     {(() => {
-                      const history =
-                        report.metadata_json?.location_history || [];
+                      const history = report.metadata_json?.location_history || [];
                       if (history.length < 2) {
-                        return (
-                          <span style={{ color: "var(--muted)", fontSize: 11 }}>
-                            Insufficient data
-                          </span>
-                        );
+                        return <span style={{ color: "var(--muted)", fontSize: 11 }}>Insufficient data</span>;
                       }
-
+                      
                       // Check for suspicious jumps (simplified analysis)
                       let suspiciousJumps = 0;
                       let totalDistance = 0;
-
+                      
                       for (let i = 1; i < history.length; i++) {
-                        const prev = history[i - 1];
+                        const prev = history[i-1];
                         const curr = history[i];
-
-                        if (
-                          prev.latitude &&
-                          prev.longitude &&
-                          curr.latitude &&
-                          curr.longitude
-                        ) {
+                        
+                        if (prev.latitude && prev.longitude && curr.latitude && curr.longitude) {
                           // Calculate distance between consecutive points
                           const R = 6371; // Earth's radius in km
-                          const dLat =
-                            ((curr.latitude - prev.latitude) * Math.PI) / 180;
-                          const dLon =
-                            ((curr.longitude - prev.longitude) * Math.PI) / 180;
-                          const a =
-                            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                            Math.cos((prev.latitude * Math.PI) / 180) *
-                              Math.cos((curr.latitude * Math.PI) / 180) *
-                              Math.sin(dLon / 2) *
-                              Math.sin(dLon / 2);
-                          const distance =
-                            R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                          const dLat = (curr.latitude - prev.latitude) * Math.PI / 180;
+                          const dLon = (curr.longitude - prev.longitude) * Math.PI / 180;
+                          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                                    Math.cos(prev.latitude * Math.PI / 180) * Math.cos(curr.latitude * Math.PI / 180) *
+                                    Math.sin(dLon/2) * Math.sin(dLon/2);
+                          const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
                           totalDistance += distance;
-
+                          
                           // Check for suspicious jumps (>50km in <1 hour)
-                          if (
-                            distance > 50 &&
-                            prev.timestamp &&
-                            curr.timestamp
-                          ) {
-                            const timeDiff =
-                              (new Date(curr.timestamp) -
-                                new Date(prev.timestamp)) /
-                              (1000 * 60 * 60); // hours
+                          if (distance > 50 && prev.timestamp && curr.timestamp) {
+                            const timeDiff = (new Date(curr.timestamp) - new Date(prev.timestamp)) / (1000 * 60 * 60); // hours
                             if (timeDiff < 1 && timeDiff > 0) {
                               suspiciousJumps++;
                             }
                           }
                         }
                       }
-
+                      
                       const avgDistance = totalDistance / (history.length - 1);
-                      const consistency =
-                        suspiciousJumps === 0
-                          ? avgDistance < 5
-                            ? "High"
-                            : avgDistance < 20
-                              ? "Medium"
-                              : "Low"
-                          : "Suspicious";
-
+                      const consistency = suspiciousJumps === 0 ? 
+                        (avgDistance < 5 ? 'High' : avgDistance < 20 ? 'Medium' : 'Low') : 'Suspicious';
+                      
                       return (
                         <>
                           <div style={{ fontSize: 11, fontWeight: 600 }}>
-                            <span
-                              style={{
-                                color:
-                                  consistency === "High"
-                                    ? "var(--success)"
-                                    : consistency === "Medium"
-                                      ? "var(--warning)"
-                                      : consistency === "Low"
-                                        ? "var(--orange)"
-                                        : "var(--danger)",
-                              }}
-                            >
+                            <span style={{
+                              color: consistency === 'High' ? 'var(--success)' :
+                                     consistency === 'Medium' ? 'var(--warning)' :
+                                     consistency === 'Low' ? 'var(--orange)' : 'var(--danger)'
+                            }}>
                               {consistency}
                             </span>
                           </div>
-                          <div
-                            style={{
-                              marginTop: 4,
-                              color: "var(--muted)",
-                              fontSize: 10,
-                            }}
-                          >
-                            Avg movement: {avgDistance.toFixed(1)}km between
-                            reports
+                          <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
+                            Avg movement: {avgDistance.toFixed(1)}km between reports
                             {suspiciousJumps > 0 && (
-                              <div
-                                style={{ color: "var(--danger)", marginTop: 2 }}
-                              >
-                                ⚠️ {suspiciousJumps} suspicious jump
-                                {suspiciousJumps > 1 ? "s" : ""}
+                              <div style={{ color: "var(--danger)", marginTop: 2 }}>
+                                ⚠️ {suspiciousJumps} suspicious jump{suspiciousJumps > 1 ? 's' : ''}
                               </div>
                             )}
                           </div>
@@ -1106,39 +1011,24 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                     {report.metadata_json?.last_activity ? (
                       <>
                         <div style={{ fontSize: 11 }}>
-                          Last active:{" "}
-                          {new Date(
-                            report.metadata_json.last_activity,
-                          ).toLocaleDateString()}
+                          Last active: {new Date(report.metadata_json.last_activity).toLocaleDateString()}
                         </div>
-                        <div
-                          style={{
-                            marginTop: 4,
-                            color: "var(--muted)",
-                            fontSize: 10,
-                          }}
-                        >
+                        <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
                           {(() => {
-                            const lastActive = new Date(
-                              report.metadata_json.last_activity,
-                            );
+                            const lastActive = new Date(report.metadata_json.last_activity);
                             const now = new Date();
-                            const hoursDiff =
-                              (now - lastActive) / (1000 * 60 * 60);
-
+                            const hoursDiff = (now - lastActive) / (1000 * 60 * 60);
+                            
                             if (hoursDiff < 1) return "Active now";
-                            if (hoursDiff < 24)
-                              return `${Math.round(hoursDiff)}h ago`;
-                            if (hoursDiff < 168)
-                              return `${Math.round(hoursDiff / 24)}d ago`;
+                            if (hoursDiff < 24) return `${Math.round(hoursDiff)}h ago`;
+                            if (hoursDiff < 168) return `${Math.round(hoursDiff / 24)}d ago`;
                             return `${Math.round(hoursDiff / 168)}w ago`;
                           })()}
                         </div>
                         {report.metadata_json.reporting_frequency && (
                           <div style={{ marginTop: 4, fontSize: 10 }}>
                             <span style={{ color: "var(--muted)" }}>
-                              Reports:{" "}
-                              {report.metadata_json.reporting_frequency}
+                              Reports: {report.metadata_json.reporting_frequency}
                             </span>
                           </div>
                         )}
@@ -1175,20 +1065,14 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                                 (mlPrediction.confidence || 0) >= 0.8
                                   ? "var(--success)"
                                   : (mlPrediction.confidence || 0) >= 0.6
-                                    ? "var(--warning)"
-                                    : "var(--danger)",
+                                  ? "var(--warning)"
+                                  : "var(--danger)",
                             }}
                           >
                             {Math.round((mlPrediction.confidence || 0) * 100)}%
                           </span>
                         </div>
-                        <div
-                          style={{
-                            marginTop: 4,
-                            color: "var(--muted)",
-                            fontSize: 10,
-                          }}
-                        >
+                        <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
                           {mlPrediction.prediction_label || "No prediction"}
                         </div>
                       </>
@@ -1263,7 +1147,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                     </div>
                   </div>
                 </div>
-              </div>
+
+                              </div>
             </div>
           </div>
 
@@ -1276,82 +1161,35 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
               >
                 {isReportVerified(report, mlPrediction)
                   ? "Verified"
-                  : report.verification_status === "pending"
-                    ? "Pending"
-                    : report.verification_status === "under_review"
-                      ? "Under Review"
-                      : report.verification_status === "rejected"
-                        ? "Rejected"
-                        : "Needs verification"}
+                  : report.verification_status === "pending" ? "Pending" 
+                  : report.verification_status === "under_review" ? "Under Review"
+                  : report.verification_status === "rejected" ? "Rejected"
+                  : "Needs verification"}
               </span>
             </div>
             <div style={{ padding: "12px" }}>
               {/* Current Status Analysis */}
-              <div
-                style={{
-                  marginBottom: "16px",
-                  padding: "12px",
-                  background: "var(--background)",
-                  borderRadius: "6px",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    marginBottom: "6px",
-                    color: "var(--text)",
-                  }}
-                >
+              <div style={{ marginBottom: "16px", padding: "12px", background: "var(--background)", borderRadius: "6px" }}>
+                <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px", color: "var(--text)" }}>
                   Current Status Analysis
                 </div>
                 {getVerificationStatus(report, mlPrediction)}
-
+                
                 {/* Automatic System Decisions */}
-                {(report.rule_status === "passed" ||
-                  report.rule_status === "flagged") && (
-                  <div
-                    style={{
-                      marginTop: "8px",
-                      padding: "8px",
-                      background: "rgba(76, 175, 80, 0.1)",
-                      borderRadius: "4px",
-                      border: "1px solid rgba(76, 175, 80, 0.3)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "var(--success)",
-                        fontWeight: 600,
-                      }}
-                    >
+                {(report.rule_status === "passed" || report.rule_status === "flagged") && (
+                  <div style={{ marginTop: "8px", padding: "8px", background: "rgba(76, 175, 80, 0.1)", borderRadius: "4px", border: "1px solid rgba(76, 175, 80, 0.3)" }}>
+                    <div style={{ fontSize: "11px", color: "var(--success)", fontWeight: 600 }}>
                       Automatic System Decision
                     </div>
-                    <div
-                      style={{
-                        fontSize: "10px",
-                        color: "var(--muted)",
-                        marginTop: "2px",
-                      }}
-                    >
-                      {report.rule_status === "passed"
+                    <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
+                      {report.rule_status === "passed" 
                         ? "Auto-approved by ML confidence and rule checks"
                         : "Auto-flagged by system rules for manual review"}
                     </div>
                     {mlPrediction && (
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          color: "var(--muted)",
-                          marginTop: "2px",
-                        }}
-                      >
-                        ML Confidence:{" "}
-                        {Math.round((mlPrediction.confidence || 0) * 100)}%
-                        {mlPrediction.confidence >= 80
-                          ? " (Auto-verified)"
-                          : " (Requires officer review)"}
+                      <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
+                        ML Confidence: {Math.round((mlPrediction.confidence || 0) * 100)}% 
+                        {mlPrediction.confidence >= 80 ? " (Auto-verified)" : " (Requires officer review)"}
                       </div>
                     )}
                   </div>
@@ -1359,77 +1197,28 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
 
                 {/* Manual Review Status */}
                 {report.reviews && report.reviews.length > 0 && (
-                  <div
-                    style={{
-                      marginTop: "8px",
-                      padding: "8px",
-                      background: "rgba(33, 150, 243, 0.1)",
-                      borderRadius: "4px",
-                      border: "1px solid rgba(33, 150, 243, 0.3)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "var(--primary)",
-                        fontWeight: 600,
-                      }}
-                    >
+                  <div style={{ marginTop: "8px", padding: "8px", background: "rgba(33, 150, 243, 0.1)", borderRadius: "4px", border: "1px solid rgba(33, 150, 243, 0.3)" }}>
+                    <div style={{ fontSize: "11px", color: "var(--primary)", fontWeight: 600 }}>
                       Manual Officer Review
                     </div>
-                    <div
-                      style={{
-                        fontSize: "10px",
-                        color: "var(--muted)",
-                        marginTop: "2px",
-                      }}
-                    >
-                      {report.reviews.length} review
-                      {report.reviews.length > 1 ? "s" : ""} completed
+                    <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
+                      {report.reviews.length} review{report.reviews.length > 1 ? 's' : ''} completed
                     </div>
                   </div>
                 )}
 
                 {/* Pending Status */}
                 {report.rule_status === "pending" && (
-                  <div
-                    style={{
-                      marginTop: "8px",
-                      padding: "8px",
-                      background: "rgba(255, 152, 0, 0.1)",
-                      borderRadius: "4px",
-                      border: "1px solid rgba(255, 152, 0, 0.3)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "var(--warning)",
-                        fontWeight: 600,
-                      }}
-                    >
+                  <div style={{ marginTop: "8px", padding: "8px", background: "rgba(255, 152, 0, 0.1)", borderRadius: "4px", border: "1px solid rgba(255, 152, 0, 0.3)" }}>
+                    <div style={{ fontSize: "11px", color: "var(--warning)", fontWeight: 600 }}>
                       ⏳ Pending System Processing
                     </div>
-                    <div
-                      style={{
-                        fontSize: "10px",
-                        color: "var(--muted)",
-                        marginTop: "2px",
-                      }}
-                    >
+                    <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
                       Report rules haven't been fully processed yet
                     </div>
                     {mlPrediction && (
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          color: "var(--muted)",
-                          marginTop: "2px",
-                        }}
-                      >
-                        Note: ML confidence is{" "}
-                        {Math.round((mlPrediction.confidence || 0) * 100)}% -
-                        should auto-verify once processed
+                      <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
+                        Note: ML confidence is {Math.round((mlPrediction.confidence || 0) * 100)}% - should auto-verify once processed
                       </div>
                     )}
                   </div>
@@ -1439,14 +1228,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
               {/* Flag Reason Details */}
               {report.flag_reason && (
                 <div style={{ marginBottom: "16px" }}>
-                  <div
-                    style={{
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      marginBottom: "6px",
-                      color: "var(--text)",
-                    }}
-                  >
+                  <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px", color: "var(--text)" }}>
                     Flag Reason Details
                   </div>
                   <div
@@ -1460,9 +1242,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                     }}
                   >
                     <div style={{ fontWeight: 600, marginBottom: "4px" }}>
-                      {report.flag_reason
-                        .replace(/_/g, " ")
-                        .replace(/\b\w/g, (l) => l.toUpperCase())}
+                      {report.flag_reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                     </div>
                     <div style={{ fontSize: "11px", color: "var(--muted)" }}>
                       {friendlyFlagReason(report.flag_reason)}
@@ -1474,87 +1254,42 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
               {/* Review History Timeline */}
               {report.reviews && report.reviews.length > 0 && (
                 <div style={{ marginBottom: "16px" }}>
-                  <div
-                    style={{
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      marginBottom: "6px",
-                      color: "var(--text)",
-                    }}
-                  >
+                  <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px", color: "var(--text)" }}>
                     Review History
                   </div>
                   <div style={{ fontSize: "11px" }}>
-                    {report.reviews
-                      .slice()
-                      .reverse()
-                      .map((review, index) => (
-                        <div
-                          key={review.review_id || index}
-                          style={{
-                            marginBottom: "8px",
-                            padding: "8px",
-                            background: "var(--background)",
-                            borderRadius: "4px",
-                            borderLeft: `3px solid ${
-                              review.decision === "confirmed"
-                                ? "var(--success)"
-                                : review.decision === "rejected"
-                                  ? "var(--danger)"
-                                  : "var(--warning)"
-                            }`,
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                            }}
-                          >
-                            <span
-                              style={{ fontWeight: 600, color: "var(--text)" }}
-                            >
-                              {review.decision === "confirmed"
-                                ? " Confirmed"
-                                : review.decision === "rejected"
-                                  ? " Rejected"
-                                  : review.decision}
-                            </span>
-                            <span
-                              style={{
-                                fontSize: "10px",
-                                color: "var(--muted)",
-                              }}
-                            >
-                              {review.reviewed_at
-                                ? formatLocalDateTime(review.reviewed_at)
-                                : "Unknown time"}
-                            </span>
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "10px",
-                              color: "var(--muted)",
-                              marginTop: "2px",
-                            }}
-                          >
-                            By: {review.reviewer_name || "Officer"}
-                          </div>
-                          {review.review_note && (
-                            <div
-                              style={{
-                                fontSize: "10px",
-                                color: "var(--text)",
-                                marginTop: "4px",
-                                fontStyle: "italic",
-                              }}
-                            >
-                              "{review.review_note}"
-                            </div>
-                          )}
+                    {report.reviews.slice().reverse().map((review, index) => (
+                      <div key={review.review_id || index} style={{ 
+                        marginBottom: "8px", 
+                        padding: "8px", 
+                        background: "var(--background)", 
+                        borderRadius: "4px",
+                        borderLeft: `3px solid ${
+                          review.decision === "confirmed" ? "var(--success)" :
+                          review.decision === "rejected" ? "var(--danger)" :
+                          "var(--warning)"
+                        }`
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontWeight: 600, color: "var(--text)" }}>
+                            {review.decision === "confirmed" ? " Confirmed" :
+                             review.decision === "rejected" ? " Rejected" :
+                             review.decision}
+                          </span>
+                          <span style={{ fontSize: "10px", color: "var(--muted)" }}>
+                            {review.reviewed_at ? formatLocalDateTime(review.reviewed_at) : "Unknown time"}
+                          </span>
                         </div>
-                      ))}
+                        <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
+                          By: {review.reviewer_name || "Officer"}
+                        </div>
+                        {review.review_note && (
+                          <div style={{ fontSize: "10px", color: "var(--text)", marginTop: "4px", fontStyle: "italic" }}>
+                            "{review.review_note}"
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -1562,14 +1297,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
               {/* Verification Requirements */}
               {!isReportVerified(report, mlPrediction) && (
                 <div>
-                  <div
-                    style={{
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      marginBottom: "6px",
-                      color: "var(--text)",
-                    }}
-                  >
+                  <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px", color: "var(--text)" }}>
                     Verification Requirements
                   </div>
                   <div style={{ fontSize: "11px", color: "var(--muted)" }}>
@@ -2292,84 +2020,49 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
 
       {/* Review Reason Modal */}
       {showReasonModal && (
-        <div
-          className="modal-overlay open"
-          onClick={(e) =>
-            e.target === e.currentTarget && setShowReasonModal(false)
-          }
-        >
+        <div className="modal-overlay open" onClick={(e) => e.target === e.currentTarget && setShowReasonModal(false)}>
           <div className="modal">
             <div className="modal-header">
               <div className="modal-title">
-                {pendingDecision === "confirmed"
-                  ? "Verify Report"
-                  : "Flag Report"}
+                {pendingDecision === "confirmed" ? "Verify Report" : "Flag Report"}
               </div>
-              <div
-                className="modal-close"
-                onClick={() => setShowReasonModal(false)}
-              >
-                ✕
-              </div>
+              <div className="modal-close" onClick={() => setShowReasonModal(false)}>✕</div>
             </div>
 
             <div className="input-group">
               <div className="input-label">Reason *</div>
-              <div
-                style={{
-                  fontSize: "11px",
-                  color: "var(--muted)",
-                  marginBottom: "6px",
-                }}
-              >
-                Please provide a reason for{" "}
-                {pendingDecision === "confirmed" ? "verifying" : "flagging"}{" "}
-                this report.
+              <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '6px' }}>
+                Please provide a reason for {pendingDecision === "confirmed" ? "verifying" : "flagging"} this report.
               </div>
               <textarea
                 rows="4"
-                placeholder={
-                  pendingDecision === "confirmed"
-                    ? "Explain why this report is verified and legitimate..."
-                    : "Explain why this report is being flagged..."
+                placeholder={pendingDecision === "confirmed" 
+                  ? "Explain why this report is verified and legitimate..." 
+                  : "Explain why this report is being flagged..."
                 }
                 value={reviewReason}
                 onChange={(e) => setReviewReason(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  border: "1px solid var(--border)",
-                  borderRadius: "4px",
-                }}
+                style={{ width: '100%', padding: '8px', border: '1px solid var(--border)', borderRadius: '4px' }}
               />
             </div>
-
-            <div
-              style={{
-                display: "flex",
-                gap: "8px",
-                justifyContent: "flex-end",
-              }}
-            >
-              <button
-                className="btn btn-outline"
-                onClick={() => setShowReasonModal(false)}
+            
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button 
+                className="btn btn-outline" 
+                onClick={() => setShowReasonModal(false)} 
                 disabled={!!savingDecision}
               >
                 Cancel
               </button>
-              <button
-                className={`btn ${pendingDecision === "confirmed" ? "btn-success" : "btn-danger"}`}
-                onClick={confirmReview}
+              <button 
+                className={`btn ${pendingDecision === "confirmed" ? "btn-success" : "btn-danger"}`} 
+                onClick={confirmReview} 
                 disabled={!reviewReason.trim() || !!savingDecision}
               >
-                {savingDecision === pendingDecision
-                  ? pendingDecision === "confirmed"
-                    ? "Verifying…"
-                    : "Flagging…"
-                  : pendingDecision === "confirmed"
-                    ? "Verify"
-                    : "Flag"}
+                {savingDecision === pendingDecision 
+                  ? (pendingDecision === "confirmed" ? "Verifying…" : "Flagging…")
+                  : (pendingDecision === "confirmed" ? "Verify" : "Flag")
+                }
               </button>
             </div>
           </div>

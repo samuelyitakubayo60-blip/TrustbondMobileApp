@@ -17,9 +17,9 @@ class MLInsightResponse(BaseModel):
     total_reports: int
     likely_real_count: int
     suspicious_count: int
-    uncertain_count: int
     fake_count: int
     average_trust_score: Optional[float] = None
+    processing_time_avg_ms: Optional[float] = None
 
 class DeviceMLStatsResponse(BaseModel):
     device_id: str

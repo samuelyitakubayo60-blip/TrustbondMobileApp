@@ -41,22 +41,19 @@ class OfflineReportQueueService {
 
   bool _isSyncing = false;
   DateTime? _lastSyncAt;
-  Future<void> _queueTail = Future<void>.value();
 
   Future<List<OfflineReportQueueItem>> getQueuedReports() async {
-    return _withQueueLock(() async {
-      final queue = await _loadQueue();
-      final recovered = queue
-          .map((item) => item.state == OfflineReportSyncState.syncing
-              ? item.copyWith(state: OfflineReportSyncState.pending)
-              : item)
-          .toList(growable: false);
-      if (!_sameQueue(queue, recovered)) {
-        await _saveQueue(recovered);
-      }
-      recovered.sort((a, b) => b.submittedAtDate.compareTo(a.submittedAtDate));
-      return recovered;
-    });
+    final queue = await _loadQueue();
+    final recovered = queue
+        .map((item) => item.state == OfflineReportSyncState.syncing
+            ? item.copyWith(state: OfflineReportSyncState.pending)
+            : item)
+        .toList(growable: false);
+    if (!_sameQueue(queue, recovered)) {
+      await _saveQueue(recovered);
+    }
+    recovered.sort((a, b) => b.submittedAtDate.compareTo(a.submittedAtDate));
+    return recovered;
   }
 
   Future<OfflineSubmitResult> submitReport({
@@ -111,62 +108,58 @@ class OfflineReportQueueService {
       lastError: null,
     );
 
-    await _withQueueLock(() async {
-      final queue = await _loadQueue();
-      queue.add(queueItem);
-      await _saveQueue(queue);
-    });
+    final queue = await _loadQueue();
+    queue.add(queueItem);
+    await _saveQueue(queue);
     AppRefreshBus.notify('offline_queue_saved');
 
-    // Always attempt an immediate sync after enqueue. If connectivity detection is
-    // briefly wrong, this still gives online users a chance to submit instantly.
-    await syncNow(reason: 'submit');
-    final remaining = await _withQueueLock(() => _findById(reportId));
-    return OfflineSubmitResult(
-      reportId: reportId,
-      queuedOffline: remaining != null,
-    );
+    if (!_isOfflineNetwork(currentNetworkType)) {
+      await syncNow(reason: 'submit');
+      final remaining = await _findById(reportId);
+      return OfflineSubmitResult(
+        reportId: reportId,
+        queuedOffline: remaining != null,
+      );
+    }
+
+    return OfflineSubmitResult(reportId: reportId, queuedOffline: true);
   }
 
   Future<void> retry(String reportId) async {
-    await _withQueueLock(() async {
-      final queue = await _loadQueue();
-      final updated = queue.map((item) {
-        if (item.localReportId != reportId) return item;
-        return item.copyWith(
-          state: OfflineReportSyncState.pending,
-          retryCount: 0,
-          nextRetryAt: null,
-          lastError: null,
-        );
-      }).toList(growable: false);
-      await _saveQueue(updated);
-    });
+    final queue = await _loadQueue();
+    final updated = queue.map((item) {
+      if (item.localReportId != reportId) return item;
+      return item.copyWith(
+        state: OfflineReportSyncState.pending,
+        retryCount: 0,
+        nextRetryAt: null,
+        lastError: null,
+      );
+    }).toList(growable: false);
+    await _saveQueue(updated);
     AppRefreshBus.notify('offline_queue_retry');
     unawaited(syncNow(reason: 'manual_retry'));
   }
 
   Future<int> removeItemsSyncedOnServer(Iterable<String> serverReportIds) async {
-    return _withQueueLock(() async {
-      final normalizedServerIds = serverReportIds
-          .map(_normalizeId)
-          .where((id) => id.isNotEmpty)
-          .toSet();
-      if (normalizedServerIds.isEmpty) return 0;
+    final normalizedServerIds = serverReportIds
+        .map(_normalizeId)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    if (normalizedServerIds.isEmpty) return 0;
 
-      final queue = await _loadQueue();
-      final originalCount = queue.length;
-      queue.removeWhere(
-        (item) => normalizedServerIds.contains(_normalizeId(item.localReportId)),
-      );
+    final queue = await _loadQueue();
+    final originalCount = queue.length;
+    queue.removeWhere(
+      (item) => normalizedServerIds.contains(_normalizeId(item.localReportId)),
+    );
 
-      final removed = originalCount - queue.length;
-      if (removed > 0) {
-        await _saveQueue(queue);
-        AppRefreshBus.notify('offline_queue_deduped');
-      }
-      return removed;
-    });
+    final removed = originalCount - queue.length;
+    if (removed > 0) {
+      await _saveQueue(queue);
+      AppRefreshBus.notify('offline_queue_deduped');
+    }
+    return removed;
   }
 
   Future<void> scheduleSync({String reason = 'manual'}) async {
@@ -175,29 +168,27 @@ class OfflineReportQueueService {
   }
 
   Future<void> syncNow({String reason = 'manual'}) async {
-    await _withQueueLock(() async {
-      if (_isSyncing) return;
-      if (!await _hasInternet()) return;
-      if (_lastSyncAt != null &&
-          DateTime.now().difference(_lastSyncAt!) < const Duration(seconds: 2)) {
-        return;
-      }
+    if (_isSyncing) return;
+    if (!await _hasInternet()) return;
+    if (_lastSyncAt != null &&
+        DateTime.now().difference(_lastSyncAt!) < const Duration(seconds: 2)) {
+      return;
+    }
 
-      _isSyncing = true;
-      _lastSyncAt = DateTime.now();
-      try {
-        await _recoverInterruptedSyncItems();
-        while (true) {
-          final next = await _nextEligibleItem();
-          if (next == null) break;
-          final shouldContinue = await _syncItem(next);
-          if (!shouldContinue) break;
-        }
-      } finally {
-        _isSyncing = false;
-        AppRefreshBus.notify('offline_queue_sync_complete_$reason');
+    _isSyncing = true;
+    _lastSyncAt = DateTime.now();
+    try {
+      await _recoverInterruptedSyncItems();
+      while (true) {
+        final next = await _nextEligibleItem();
+        if (next == null) break;
+        final shouldContinue = await _syncItem(next);
+        if (!shouldContinue) break;
       }
-    });
+    } finally {
+      _isSyncing = false;
+      AppRefreshBus.notify('offline_queue_sync_complete_$reason');
+    }
   }
 
   Future<void> _recoverInterruptedSyncItems() async {
@@ -239,7 +230,6 @@ class OfflineReportQueueService {
 
     String? resolvedDeviceId = item.deviceId;
     bool createdThisAttempt = false;
-    bool reportAlreadyExisted = false;
 
     try {
       final response = await _api.submitReport(_reportPayload(item));
@@ -247,14 +237,7 @@ class OfflineReportQueueService {
       createdThisAttempt = true;
     } on ApiRequestException catch (e) {
       if (e.statusCode == 409) {
-        if (_isAlreadyExistsConflict(e.message)) {
-          reportAlreadyExisted = true;
-          resolvedDeviceId ??= await _deviceService.ensureDeviceId();
-        } else if (_isDuplicateIncidentConflict(e.message)) {
-          return _handleRejectedSubmission(item, e.toString());
-        } else {
-          return _handleSyncFailure(item, e.toString());
-        }
+        resolvedDeviceId ??= await _deviceService.ensureDeviceId();
       } else {
         return _handleSyncFailure(item, e.toString());
       }
@@ -268,9 +251,6 @@ class OfflineReportQueueService {
     if (resolvedDeviceId == null || resolvedDeviceId.isEmpty) {
       return _handleSyncFailure(item, 'Could not resolve device ID for upload.');
     }
-    if (!createdThisAttempt && !reportAlreadyExisted) {
-      return _handleSyncFailure(item, 'Report submission did not return a reusable server state.');
-    }
 
     try {
       for (final media in item.mediaItems) {
@@ -278,35 +258,21 @@ class OfflineReportQueueService {
         if (!await mediaFile.exists()) {
           throw Exception('Queued media file is missing.');
         }
-        if (await _evidenceAlreadyUploaded(media)) {
-          continue;
-        }
-
-        try {
-          await _api.uploadEvidence(
-            item.localReportId,
-            resolvedDeviceId,
-            media.localPath,
-            mediaLatitude: item.latitude,
-            mediaLongitude: item.longitude,
-            capturedAt: DateTime.tryParse(media.capturedAt),
-            isLiveCapture: media.isLiveCapture,
-          );
-          await _markEvidenceUploaded(media);
-        } on EvidenceUploadException catch (e) {
-          if (e.statusCode == 409 && _isDuplicateEvidenceConflict(e.message)) {
-            await _markEvidenceUploaded(media);
-            continue;
-          }
-          rethrow;
-        }
+        await _api.uploadEvidence(
+          item.localReportId,
+          resolvedDeviceId,
+          media.localPath,
+          mediaLatitude: item.latitude,
+          mediaLongitude: item.longitude,
+          capturedAt: DateTime.tryParse(media.capturedAt),
+          isLiveCapture: media.isLiveCapture,
+        );
       }
     } catch (e) {
       if (createdThisAttempt) {
         try {
           await _api.deleteReport(item.localReportId, resolvedDeviceId);
         } catch (_) {}
-        await _clearEvidenceUploadMarkers(item.mediaItems);
       }
       return _handleSyncFailure(item, e.toString());
     }
@@ -317,32 +283,12 @@ class OfflineReportQueueService {
     return await _hasInternet();
   }
 
-  Future<bool> _handleRejectedSubmission(
-    OfflineReportQueueItem item,
-    String error,
-  ) async {
-    await _updateItem(
-      item.localReportId,
-      (current) => current.copyWith(
-        deviceId: current.deviceId ?? item.deviceId,
-        state: OfflineReportSyncState.failed,
-        retryCount: current.retryCount + 1,
-        nextRetryAt: null,
-        lastError: error,
-      ),
-    );
-    AppRefreshBus.notify('offline_queue_failed');
-    return await _hasInternet();
-  }
-
   Future<bool> _handleSyncFailure(
     OfflineReportQueueItem item,
     String error,
   ) async {
     final retryCount = item.retryCount + 1;
-    final transientNetworkError = _looksLikeTransientNetworkError(error);
-    final exhausted = !transientNetworkError &&
-        retryCount >= _maxAutomaticRetries;
+    final exhausted = retryCount >= _maxAutomaticRetries;
     final nextRetryAt = exhausted
         ? null
         : DateTime.now()
@@ -420,41 +366,9 @@ class OfflineReportQueueService {
     }
   }
 
-  Future<bool> _evidenceAlreadyUploaded(OfflineReportMediaItem media) async {
-    final marker = _evidenceUploadMarker(media);
-    return marker.exists();
-  }
-
-  Future<void> _markEvidenceUploaded(OfflineReportMediaItem media) async {
-    try {
-      final marker = _evidenceUploadMarker(media);
-      await marker.parent.create(recursive: true);
-      await marker.writeAsString(DateTime.now().toIso8601String());
-    } catch (_) {
-      // Best-effort only; marker failures should not roll back a successful upload.
-    }
-  }
-
-  Future<void> _clearEvidenceUploadMarkers(
-    List<OfflineReportMediaItem> mediaItems,
-  ) async {
-    for (final media in mediaItems) {
-      final marker = _evidenceUploadMarker(media);
-      try {
-        if (await marker.exists()) {
-          await marker.delete();
-        }
-      } catch (_) {}
-    }
-  }
-
   Future<Directory> _reportDirectory(String reportId) async {
     final baseDir = await getApplicationDocumentsDirectory();
     return Directory(p.join(baseDir.path, 'offline_reports', reportId));
-  }
-
-  File _evidenceUploadMarker(OfflineReportMediaItem media) {
-    return File('${media.localPath}.uploaded');
   }
 
   Future<List<OfflineReportQueueItem>> _loadQueue() async {
@@ -509,15 +423,8 @@ class OfflineReportQueueService {
   }
 
   Future<bool> _hasInternet() async {
-    try {
-      final connectivity = await Connectivity().checkConnectivity();
-      if (connectivity.isEmpty) return false;
-      return connectivity.any((result) => result != ConnectivityResult.none);
-    } catch (_) {
-      // Fall back to the app's device status helper if connectivity plugin throws.
-      final networkType = await _statusService.getNetworkType();
-      return !_isOfflineNetwork(networkType);
-    }
+    final connectivity = await Connectivity().checkConnectivity();
+    return !connectivity.contains(ConnectivityResult.none);
   }
 
   bool _sameQueue(
@@ -536,65 +443,6 @@ class OfflineReportQueueService {
         networkType.trim().isEmpty ||
         networkType.toLowerCase() == 'none' ||
         networkType.toLowerCase() == 'offline';
-  }
-
-  bool _looksLikeTransientNetworkError(String error) {
-    final normalized = error.toLowerCase();
-    const tokens = [
-      'socketexception',
-      'connection',
-      'network',
-      'timed out',
-      'timeout',
-      'handshake',
-      'dns',
-      'failed host lookup',
-      'connection reset',
-      'connection refused',
-      'unreachable',
-    ];
-    return tokens.any(normalized.contains);
-  }
-
-  bool _isAlreadyExistsConflict(String error) {
-    final normalized = error.toLowerCase();
-    const tokens = [
-      'report already exists',
-      'report exists',
-      'report already created',
-    ];
-    return tokens.any(normalized.contains);
-  }
-
-  bool _isDuplicateIncidentConflict(String error) {
-    final normalized = error.toLowerCase();
-    const tokens = [
-      'duplicate incident detected',
-      'duplicate incident',
-      'short time window',
-      'duplicate report detected',
-      'duplicate incident found',
-    ];
-    return tokens.any(normalized.contains);
-  }
-
-  bool _isDuplicateEvidenceConflict(String error) {
-    final normalized = error.toLowerCase();
-    const tokens = [
-      'duplicate_evidence_hash',
-      'duplicate evidence',
-      'evidence_blocked_reuse',
-      'reused from a previous report',
-      'original evidence',
-      'appears to have been reused',
-    ];
-    return tokens.any(normalized.contains);
-  }
-
-  Future<T> _withQueueLock<T>(Future<T> Function() action) {
-    final task = _queueTail.then((_) => action());
-    _queueTail = task.then((_) {}, onError: (_) {});
-    return task;
   }
 
   String _inferFileType(String path) {

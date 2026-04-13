@@ -476,7 +476,7 @@ class ApiService {
   }) {
     final typePart = _safeCacheComponent(locationType ?? 'all');
     final parentPart = parentId?.toString() ?? 'none';
-    return '$_publicLocationsCachePrefix${typePart}_${parentPart}_${limit}';
+    return '$_publicLocationsCachePrefix${typePart}_$parentPart_$limit';
   }
 
   String _buildPublicGeoJsonCacheKey({
@@ -486,7 +486,7 @@ class ApiService {
   }) {
     final typePart = _safeCacheComponent(locationType);
     final parentPart = parentId?.toString() ?? 'none';
-    return '$_publicGeoJsonCachePrefix${typePart}_${parentPart}_${limit}';
+    return '$_publicGeoJsonCachePrefix${typePart}_$parentPart_$limit';
   }
 
   String _buildPublicAlertsCacheKey({
@@ -498,7 +498,7 @@ class ApiService {
     final lat = latitude.toStringAsFixed(3);
     final lng = longitude.toStringAsFixed(3);
     final radius = radiusKm.toStringAsFixed(1);
-    return '$_publicAlertsCachePrefix${lat}_${lng}_${radius}_${limit}';
+    return '$_publicAlertsCachePrefix${lat}_$lng_$radius_$limit';
   }
 
   String _buildNearbyConfirmationsCacheKey({
@@ -510,7 +510,7 @@ class ApiService {
   }) {
     final lat = latitude.toStringAsFixed(3);
     final lng = longitude.toStringAsFixed(3);
-    return '$_nearbyConfirmationsCachePrefix${_safeCacheComponent(deviceId)}_${lat}_${lng}_${radiusMeters}_${limit}';
+    return '$_nearbyConfirmationsCachePrefix${_safeCacheComponent(deviceId)}_${lat}_$lng_$radiusMeters_$limit';
   }
 }
 
