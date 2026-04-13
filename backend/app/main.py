@@ -58,7 +58,6 @@ async def lifespan(app: FastAPI):
     from app.utils.ml_evaluator import ml_evaluator
     from app.database import SessionLocal
     from app.models.report import Report
-    from app.models.system_config import SystemConfig
     from sqlalchemy import or_
     from datetime import datetime, timezone
     
@@ -81,16 +80,6 @@ async def lifespan(app: FastAPI):
                 ).limit(50).all()
                 
                 logger.info(f"Found {len(pending_reports)} reports to process through AI")
-
-                trust_threshold = 65.0
-                threshold_row = db.query(SystemConfig).filter(
-                    SystemConfig.config_key == "ml.trust_threshold"
-                ).first()
-                if threshold_row and isinstance(threshold_row.config_value, dict):
-                    try:
-                        trust_threshold = float(threshold_row.config_value.get("value", 65.0))
-                    except Exception:
-                        trust_threshold = 65.0
                 
                 for report in pending_reports:
                     # Run ML evaluation
@@ -108,7 +97,7 @@ async def lifespan(app: FastAPI):
                     report.features_extracted_at = datetime.now(timezone.utc)
                     
                     # Auto-verify high-trust reports, auto-reject low-trust
-                    if trust_score >= trust_threshold:
+                    if trust_score >= 70.0:
                         report.verification_status = 'verified'
                         report.status = 'verified'
                         report.rule_status = 'passed'

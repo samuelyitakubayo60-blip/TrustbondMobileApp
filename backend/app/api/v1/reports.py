@@ -9,7 +9,6 @@ import io
 import os
 import math
 import hashlib
-import re
 
 import cloudinary
 import cloudinary.uploader
@@ -25,7 +24,6 @@ from app.models.device import Device
 from app.models.incident_type import IncidentType
 from app.models.location import Location
 from app.models.station import Station
-from app.models.system_config import SystemConfig
 from app.schemas.report import (
     ReportCreate,
     ReportResponse,
@@ -270,56 +268,6 @@ def _to_utc(dt: Optional[datetime]) -> Optional[datetime]:
     if dt is None:
         return None
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
-
-
-def _description_quality_score(description: Optional[str]) -> float:
-    """Return a simple 0..100 quality score for report description text."""
-    text = (description or "").strip().lower()
-    if not text:
-        return 0.0
-
-    words = re.findall(r"[a-z0-9']+", text)
-    if not words:
-        return 0.0
-
-    score = 45.0
-    word_count = len(words)
-    unique_ratio = len(set(words)) / float(word_count)
-
-    if word_count < 4:
-        score -= 25.0
-    elif word_count >= 10:
-        score += 20.0
-    elif word_count >= 6:
-        score += 10.0
-
-    if unique_ratio < 0.45:
-        score -= 15.0
-    elif unique_ratio > 0.70:
-        score += 8.0
-
-    if re.search(r"(.)\1{4,}", text):
-        score -= 20.0
-
-    if any(token in text for token in ("near", "at", "around", "today", "now", "street", "road")):
-        score += 7.0
-
-    return max(0.0, min(100.0, score))
-
-
-def _has_valid_live_evidence(evidence_files: List[Any]) -> bool:
-    """Require at least one live capture with capture timestamp and media coordinates."""
-    for ev in evidence_files:
-        if not getattr(ev, "is_live_capture", False):
-            continue
-        if getattr(ev, "captured_at", None) is None:
-            continue
-        if getattr(ev, "media_latitude", None) is None:
-            continue
-        if getattr(ev, "media_longitude", None) is None:
-            continue
-        return True
-    return False
 
 
 def _auto_reject_report_for_invalid_evidence(
@@ -851,6 +799,14 @@ def create_report(
     update_device_ml_aggregates(db, device, window=30)
     print("ML scoring completed")  # Debug log
     
+    # FIXED: Commit ML prediction to ensure it's available for verification
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Report already exists")
+    db.refresh(report)  # Ensure we have the latest data including ML predictions
+
     # Rule verification is deterministic (location/speed/motion/incident validity).
     rule_status, is_flagged, flag_reason = apply_rule_based_status(
         report, evidence_count, db
@@ -989,7 +945,23 @@ def create_report(
         success=True
     )
 
-    # Clear verification logic - BOTH rules AND ML must pass for auto-verification
+    # Create notifications for supervisors and admins about new report
+    from app.api.v1.notifications import create_role_notifications
+    create_role_notifications(
+        db,
+        title="New Report Submitted",
+        message=f"A new {incident_type.type_name or 'incident'} report has been submitted (ID: {report.report_number}).",
+        notif_type="report",
+        related_entity_type="report",
+        related_entity_id=str(report.report_id),
+        target_roles=["supervisor", "admin"],
+        target_location_id=report.village_location_id,
+    )
+
+    db.commit()
+    db.refresh(report)
+
+    # FIXED: Clear verification logic - BOTH rules AND ML must pass for auto-verification
     print(f"Verification check - rule_status: {rule_status}, is_flagged: {is_flagged}, verification_status: {report.verification_status}")  # Debug log
     
     if rule_status == "passed" and not is_flagged and report.verification_status != "under_review":
@@ -1003,58 +975,18 @@ def create_report(
             
             print(f"ML check - prediction: {prediction_label}, trust_score: {trust_score:.1f}%")  # Debug log
             
-            # Get ML threshold from system config using current request DB session.
-            trust_threshold = 65.0
-            fast_track_trust_threshold = 60.0
-            fast_track_description_min = 70.0
-            configs = (
-                db.query(SystemConfig)
-                .filter(
-                    SystemConfig.config_key.in_(
-                        [
-                            'ml.trust_threshold',
-                            'ml.fast_track_trust_threshold',
-                            'ml.fast_track_description_min_score',
-                        ]
-                    )
-                )
-                .all()
-            )
-            config_map = {c.config_key: c for c in configs}
-
-            trust_threshold_config = config_map.get('ml.trust_threshold')
-            if trust_threshold_config and isinstance(trust_threshold_config.config_value, dict):
-                try:
-                    trust_threshold = float(trust_threshold_config.config_value.get('value', 65.0))
-                except Exception:
-                    trust_threshold = 65.0
-
-            fast_track_trust_cfg = config_map.get('ml.fast_track_trust_threshold')
-            if fast_track_trust_cfg and isinstance(fast_track_trust_cfg.config_value, dict):
-                try:
-                    fast_track_trust_threshold = float(
-                        fast_track_trust_cfg.config_value.get('value', 60.0)
-                    )
-                except Exception:
-                    fast_track_trust_threshold = 60.0
-
-            fast_track_desc_cfg = config_map.get('ml.fast_track_description_min_score')
-            if fast_track_desc_cfg and isinstance(fast_track_desc_cfg.config_value, dict):
-                try:
-                    fast_track_description_min = float(
-                        fast_track_desc_cfg.config_value.get('value', 70.0)
-                    )
-                except Exception:
-                    fast_track_description_min = 70.0
-
-            description_score = _description_quality_score(report.description)
-            has_live_evidence = _has_valid_live_evidence(report_data.evidence_files)
-            fast_track_eligible = (
-                prediction_label != "fake"
-                and trust_score >= fast_track_trust_threshold
-                and description_score >= fast_track_description_min
-                and has_live_evidence
-            )
+            # Get ML thresholds from system config
+            from app.database import SessionLocal
+            from app.models.system_config import SystemConfig
+            
+            db_config = SessionLocal()
+            try:
+                trust_threshold_config = db_config.query(SystemConfig).filter(
+                    SystemConfig.config_key == 'ml.trust_threshold'
+                ).first()
+                trust_threshold = float(trust_threshold_config.config_value.get('value', 70.0)) if trust_threshold_config else 70.0
+            finally:
+                db_config.close()
             
             # ML must say "likely_real" AND have >= threshold trust score
             if prediction_label == "likely_real" and trust_score >= trust_threshold:
@@ -1072,13 +1004,6 @@ def create_report(
             else:
                 ml_safe = False
                 ml_reason = f"ML failed: unknown prediction {prediction_label}"
-
-            if not ml_safe and fast_track_eligible:
-                ml_safe = True
-                ml_reason = (
-                    "Fast-track passed: trustworthy description + valid live evidence "
-                    f"({description_score:.1f} description score, {trust_score:.1f}% ML trust)"
-                )
         else:
             ml_safe = False
             ml_reason = "ML failed: no ML prediction available"
@@ -1090,31 +1015,17 @@ def create_report(
             report.status = "verified"
             report.verification_status = "verified"
             print("✅ REPORT AUTO-VERIFIED: Both rules and ML passed")  # Debug log
-
+            db.commit()
+            
             # Count auto-verified reports toward device trusted_reports
             if hasattr(device, "trusted_reports"):
                 device.trusted_reports = (device.trusted_reports or 0) + 1
+                db.commit()
         else:
             print(f"❌ REPORT NOT AUTO-VERIFIED: {ml_reason}")  # Debug log
             # Keep status as "pending" for manual review
     else:
         print(f" REPORT NOT AUTO-VERIFIED: Rules failed - rule_status: {rule_status}, is_flagged: {is_flagged}")  # Debug log
-
-    # Create notifications for supervisors and admins about new report
-    from app.api.v1.notifications import create_role_notifications
-    create_role_notifications(
-        db,
-        title="New Report Submitted",
-        message=f"A new {incident_type.type_name or 'incident'} report has been submitted (ID: {report.report_number}).",
-        notif_type="report",
-        related_entity_type="report",
-        related_entity_id=str(report.report_id),
-        target_roles=["supervisor", "admin"],
-        target_location_id=report.village_location_id,
-    )
-
-    db.commit()
-    db.refresh(report)
 
     # Run hotspot auto-creation in background when criteria are met (no user intervention)
     background_tasks.add_task(run_hotspot_auto)
