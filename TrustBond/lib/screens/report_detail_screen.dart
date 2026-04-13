@@ -140,8 +140,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             ),
           ),
           StatusBadge(
-            label: formatStatus(r.ruleStatus),
-            type: badgeTypeFromStatus(r.ruleStatus),
+            label: formatStatus(r.workflowStatus),
+            type: badgeTypeFromStatus(r.workflowStatus),
           ),
         ],
       ),
@@ -149,7 +149,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   }
 
   Widget _buildStatusCard(ReportDetailItem r) {
-    final color = _statusColor(r.ruleStatus);
+    final status = r.workflowStatus;
+    final color = _statusColor(status);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -166,7 +167,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               shape: BoxShape.circle,
               color: color.withValues(alpha: 0.15),
             ),
-            child: Icon(_statusIcon(r.ruleStatus), color: color, size: 20),
+            child: Icon(_statusIcon(status), color: color, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -174,14 +175,14 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  formatStatus(r.ruleStatus),
+                  formatStatus(status),
                   style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                       color: color),
                 ),
                 Text(
-                  _statusDescription(r.ruleStatus),
+                  _statusDescription(status),
                   style:
                       const TextStyle(fontSize: 11, color: AppColors.muted),
                 ),
@@ -199,7 +200,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       _infoRow('Submitted', _formatDate(r.reportedAt)),
       _infoRow('Report', r.reportNumber ?? r.reportId.substring(0, r.reportId.length.clamp(0, 12))),
     ];
-    if (r.trustScore != null) {
+    if (r.workflowStatus == 'verified' && r.trustScore != null) {
       rows.add(_infoRow('Trust score', '${r.trustScore!.round()} / 100'));
     }
     if (r.contextTags.isNotEmpty) {
@@ -302,7 +303,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: r.evidenceFiles.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          separatorBuilder: (context, index) => const SizedBox(width: 8),
           itemBuilder: (context, i) {
             final ev = r.evidenceFiles[i];
             final url = ApiConfig.evidenceFileUrl(ev.fileUrl);
@@ -332,7 +333,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                             width: 80,
                             height: 80,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
+                            errorBuilder: (context, error, stackTrace) => Container(
                               width: 80,
                               height: 80,
                               color: AppColors.surface3,
@@ -384,7 +385,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     for (final ev in r.evidenceFiles) {
       if (ev.aiQualityLabel != null ||
           ev.blurScore != null ||
-          ev.tamperScore != null) return true;
+          ev.tamperScore != null) {
+        return true;
+      }
     }
     return false;
   }
@@ -402,7 +405,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       const SizedBox(height: 10),
     ];
 
-    if (r.trustScore != null) {
+    if (r.workflowStatus == 'verified' && r.trustScore != null) {
       final score = (r.trustScore ?? 0).round();
       rows.add(Padding(
         padding: const EdgeInsets.only(bottom: 8),

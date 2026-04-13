@@ -1,3 +1,5 @@
+// ignore_for_file: unused_field, unused_element, unnecessary_underscores, sized_box_for_whitespace
+
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -9,7 +11,6 @@ import '../models/musanze_map_data.dart';
 import '../services/location_service.dart';
 import '../services/api_service.dart';
 import '../services/hotspot_service.dart';
-import '../widgets/shared_widgets.dart';
 import '../widgets/musanze_map_painter.dart' show sectorColor;
 
 class SafetyMapScreen extends StatefulWidget {

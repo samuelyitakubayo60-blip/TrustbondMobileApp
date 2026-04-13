@@ -1,16 +1,17 @@
 import 'dart:async';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+
 import '../config/theme.dart';
 import '../services/api_service.dart';
 import '../services/device_service.dart';
-import '../services/offline_report_queue.dart';
-import '../services/app_refresh_bus.dart';
+import '../services/offline_report_queue_service.dart';
 import 'home_screen.dart';
 import 'safety_map_screen.dart';
 import 'report_step1_screen.dart';
 import 'my_reports_screen.dart';
 import 'profile_screen.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 
 /// Main navigation shell with 5-tab bottom nav.
 class MainShell extends StatefulWidget {
@@ -22,21 +23,46 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   late int _currentIndex;
+  final _apiService = ApiService();
+  final _deviceService = DeviceService();
+  final _queueService = OfflineReportQueueService();
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
-  Timer? _queueSyncTimer;
-  bool _syncInFlight = false;
+  bool _wasOffline = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _currentIndex = widget.initialIndex;
-    _ensureDeviceRegistered();
-    _startOfflineSync();
+    _bootstrap();
   }
 
-  /// Register the device with the backend on first launch.
+  Future<void> _bootstrap() async {
+    await _ensureDeviceRegistered();
+    _startConnectivityWatcher();
+    unawaited(_warmOfflineCaches());
+    unawaited(_queueService.scheduleSync(reason: 'startup'));
+  }
+
+  Future<void> _warmOfflineCaches() async {
+    try {
+      await _apiService.getIncidentTypes();
+    } catch (_) {
+      // Cache warmup is best effort.
+    }
+
+    try {
+      final deviceId = await _deviceService.getDeviceId();
+      if (deviceId != null && deviceId.isNotEmpty) {
+        await _apiService.getMyReports(deviceId);
+      }
+    } catch (_) {
+      // Cache warmup is best effort.
+    }
+  }
+
   Future<void> _ensureDeviceRegistered() async {
     final deviceService = DeviceService();
     final existing = await deviceService.getDeviceId();
@@ -53,30 +79,21 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
-  void _startOfflineSync() {
-    // Best-effort sync on app start.
-    _triggerOfflineSync('sync_startup');
-
-    // Keep retrying while app is open so temporary failures recover automatically.
-    _queueSyncTimer = Timer.periodic(const Duration(seconds: 20), (_) {
-      _triggerOfflineSync('sync_timer');
-    });
-
-    _connectivitySub = Connectivity().onConnectivityChanged.listen((r) async {
-      if (!r.contains(ConnectivityResult.none)) {
-        await _triggerOfflineSync('sync_connectivity');
+  void _startConnectivityWatcher() {
+    _connectivitySub?.cancel();
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
+      final offline = results.contains(ConnectivityResult.none);
+      if (_wasOffline && !offline) {
+        unawaited(_queueService.scheduleSync(reason: 'connectivity'));
       }
+      _wasOffline = offline;
     });
   }
 
-  Future<void> _triggerOfflineSync(String reason) async {
-    if (_syncInFlight) return;
-    _syncInFlight = true;
-    try {
-      await OfflineReportQueue().syncIfNeeded();
-      AppRefreshBus.notify(reason);
-    } finally {
-      _syncInFlight = false;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_queueService.scheduleSync(reason: 'resume'));
     }
   }
 
@@ -93,8 +110,8 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _connectivitySub?.cancel();
-    _queueSyncTimer?.cancel();
     super.dispose();
   }
 

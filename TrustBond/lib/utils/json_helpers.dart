@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 /// Helper methods for JSON parsing with null safety
 class JsonHelpers {
   /// Safely parse a double from JSON value

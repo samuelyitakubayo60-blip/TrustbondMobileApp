@@ -135,6 +135,8 @@ class StatusBadge extends StatelessWidget {
 
 enum BadgeType { ok, warn, err, info, mute }
 
+enum DeliveryUiState { pending, syncing, sent, failed }
+
 /// Converts a rule_status string to a BadgeType.
 BadgeType badgeTypeFromStatus(String status) {
   return switch (status.toLowerCase()) {
@@ -158,6 +160,10 @@ class ReportItemCard extends StatelessWidget {
   final VoidCallback? onTap;
   final String? reportNumber;
   final double? trustScore;
+  final DeliveryUiState? deliveryState;
+  final bool showDeliveryIndicator;
+  final VoidCallback? onRetryTap;
+  final bool showRetryLink;
 
   const ReportItemCard({
     super.key,
@@ -171,6 +177,10 @@ class ReportItemCard extends StatelessWidget {
     this.onTap,
     this.reportNumber,
     this.trustScore,
+    this.deliveryState,
+    this.showDeliveryIndicator = false,
+    this.onRetryTap,
+    this.showRetryLink = false,
   });
 
   @override

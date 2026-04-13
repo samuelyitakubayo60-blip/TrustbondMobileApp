@@ -1,44 +1,14 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'config/theme.dart';
 import 'screens/main_shell.dart';
 import 'screens/splash_screen.dart';
-import 'services/offline_integration_guide.dart';
 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize SQLite FFI for desktop platforms
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    try {
-      // Initialize FFI first
-      sqfliteFfiInit();
-      // Then set the database factory
-      databaseFactory = databaseFactoryFfi;
-      print('SQLite FFI initialized successfully for desktop platform');
-    } catch (e) {
-      print('SQLite FFI initialization failed: $e');
-      print('This is a known issue with SQLite FFI on Windows desktop');
-      print('The app will continue with online-only functionality for now');
-      // Don't set databaseFactory if FFI fails
-    }
-  }
-  
-  // Initialize the offline reporting system
-  try {
-    await OfflineReportingIntegration().initialize();
-    print('Offline reporting system initialized successfully');
-  } catch (e) {
-    print('Offline system initialization failed: $e');
-    print('Continuing without offline features');
-    // Continue with app startup even if offline system fails
-  }
-  
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
