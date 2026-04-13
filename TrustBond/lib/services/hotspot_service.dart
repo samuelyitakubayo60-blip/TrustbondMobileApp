@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 
 class Hotspot {
@@ -69,6 +70,7 @@ class Hotspot {
 class HotspotService {
   final String _baseUrl = ApiConfig.baseUrl;
   final http.Client _client = http.Client();
+  static const String _allHotspotsCacheKey = 'tb_cache_public_hotspots_v1';
 
   Future<List<Hotspot>> getAllHotspots() async {
     try {
@@ -82,11 +84,12 @@ class HotspotService {
       }
 
       final List<dynamic> data = json.decode(response.body);
+      await _saveCache(data);
       return data
           .map((json) => Hotspot.fromJson(json as Map<String, dynamic>))
           .toList();
-    } catch (e) {
-      return <Hotspot>[];
+    } catch (_) {
+      return _readCachedHotspots();
     }
   }
 
@@ -104,7 +107,7 @@ class HotspotService {
         throw Exception('Failed to load village hotspots: ${response.statusCode}');
       }
     } catch (_) {
-      rethrow;
+      return _readCachedHotspots();
     }
   }
 
@@ -122,7 +125,33 @@ class HotspotService {
         throw Exception('Failed to load cell hotspots: ${response.statusCode}');
       }
     } catch (_) {
-      rethrow;
+      return _readCachedHotspots();
+    }
+  }
+
+  Future<void> _saveCache(List<dynamic> data) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_allHotspotsCacheKey, jsonEncode(data));
+  }
+
+  Future<List<Hotspot>> _readCachedHotspots() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_allHotspotsCacheKey);
+    if (raw == null || raw.isEmpty) {
+      return <Hotspot>[];
+    }
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        return <Hotspot>[];
+      }
+      return decoded
+          .whereType<Map>()
+          .map((json) => Hotspot.fromJson(Map<String, dynamic>.from(json)))
+          .toList();
+    } catch (_) {
+      return <Hotspot>[];
     }
   }
 

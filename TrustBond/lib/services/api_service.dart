@@ -16,6 +16,11 @@ class ApiService {
   static const String _incidentTypesCacheKey = 'tb_cache_incident_types_v1';
   static const String _myReportsCachePrefix = 'tb_cache_my_reports_v1_';
   static const String _reportDetailCachePrefix = 'tb_cache_report_detail_v1_';
+  static const String _deviceProfileCachePrefix = 'tb_cache_device_profile_v1_';
+  static const String _publicLocationsCachePrefix = 'tb_cache_public_locations_v1_';
+  static const String _publicGeoJsonCachePrefix = 'tb_cache_public_geojson_v1_';
+  static const String _publicAlertsCachePrefix = 'tb_cache_public_alerts_v1_';
+  static const String _nearbyConfirmationsCachePrefix = 'tb_cache_nearby_confirmations_v1_';
 
   /// Common headers for API requests.
   static const Map<String, String> _jsonHeaders = {
@@ -39,18 +44,29 @@ class ApiService {
   /// Fetch per-device profile stats for the mobile Profile screen.
   /// Uses the anonymous device_hash (legacy-compatible).
   Future<Map<String, dynamic>> getDeviceProfile(String deviceHash) async {
-    final response = await _client
-        .get(
-          Uri.parse('${ApiConfig.devicesUrl}/profile/$deviceHash'),
-          headers: _getHeaders,
-        )
-        .timeout(_timeout);
+    final cacheKey = '$_deviceProfileCachePrefix$deviceHash';
+    try {
+      final response = await _client
+          .get(
+            Uri.parse('${ApiConfig.devicesUrl}/profile/$deviceHash'),
+            headers: _getHeaders,
+          )
+          .timeout(_timeout);
 
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        await _saveCache(cacheKey, data);
+        return data;
+      }
+
+      throw Exception('Failed to get device profile: ${response.statusCode}');
+    } catch (_) {
+      final cached = await _readCache(cacheKey);
+      if (cached is Map) {
+        return Map<String, dynamic>.from(cached);
+      }
+      rethrow;
     }
-
-    throw Exception('Failed to get device profile: ${response.statusCode}');
   }
 
   Future<List<dynamic>> getIncidentTypes() async {
@@ -213,18 +229,33 @@ class ApiService {
     int? parentId,
     int limit = 2000,
   }) async {
-    final uri = Uri.parse('${ApiConfig.publicLocationsUrl}/').replace(
-      queryParameters: {
-        if (locationType case final locType?) 'location_type': locType,
-        if (parentId case final pid?) 'parent_id': pid.toString(),
-        'limit': limit.toString(),
-      },
+    final cacheKey = _buildPublicLocationsCacheKey(
+      locationType: locationType,
+      parentId: parentId,
+      limit: limit,
     );
-    final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body) as List<dynamic>;
+    try {
+      final uri = Uri.parse('${ApiConfig.publicLocationsUrl}/').replace(
+        queryParameters: {
+          if (locationType case final locType?) 'location_type': locType,
+          if (parentId case final pid?) 'parent_id': pid.toString(),
+          'limit': limit.toString(),
+        },
+      );
+      final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as List<dynamic>;
+        await _saveCache(cacheKey, data);
+        return data;
+      }
+      throw Exception('Failed to load locations: ${response.statusCode}');
+    } catch (_) {
+      final cached = await _readCache(cacheKey);
+      if (cached is List) {
+        return cached;
+      }
+      rethrow;
     }
-    throw Exception('Failed to load locations: ${response.statusCode}');
   }
 
   /// Fetch polygon boundaries from backend as GeoJSON FeatureCollection.
@@ -233,18 +264,33 @@ class ApiService {
     int? parentId,
     int limit = 10000,
   }) async {
-    final uri = Uri.parse(ApiConfig.publicLocationsGeoJsonUrl).replace(
-      queryParameters: {
-        'location_type': locationType,
-        if (parentId != null) 'parent_id': parentId.toString(),
-        'limit': limit.toString(),
-      },
+    final cacheKey = _buildPublicGeoJsonCacheKey(
+      locationType: locationType,
+      parentId: parentId,
+      limit: limit,
     );
-    final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body) as Map<String, dynamic>;
+    try {
+      final uri = Uri.parse(ApiConfig.publicLocationsGeoJsonUrl).replace(
+        queryParameters: {
+          'location_type': locationType,
+          if (parentId != null) 'parent_id': parentId.toString(),
+          'limit': limit.toString(),
+        },
+      );
+      final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        await _saveCache(cacheKey, data);
+        return data;
+      }
+      throw Exception('Failed to load map polygons: ${response.statusCode}');
+    } catch (_) {
+      final cached = await _readCache(cacheKey);
+      if (cached is Map) {
+        return Map<String, dynamic>.from(cached);
+      }
+      rethrow;
     }
-    throw Exception('Failed to load map polygons: ${response.statusCode}');
   }
 
   /// Fetch nearby AI-generated public safety alerts around user location.
@@ -254,30 +300,46 @@ class ApiService {
     double radiusKm = 10.0,
     int limit = 20,
   }) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/v1/public/alerts').replace(
-      queryParameters: {
-        'latitude': latitude.toString(),
-        'longitude': longitude.toString(),
-        'radius_km': radiusKm.toString(),
-        'limit': limit.toString(),
-      },
+    final cacheKey = _buildPublicAlertsCacheKey(
+      latitude: latitude,
+      longitude: longitude,
+      radiusKm: radiusKm,
+      limit: limit,
     );
+    try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/v1/public/alerts').replace(
+        queryParameters: {
+          'latitude': latitude.toString(),
+          'longitude': longitude.toString(),
+          'radius_km': radiusKm.toString(),
+          'limit': limit.toString(),
+        },
+      );
 
-    final response = await _client
-        .get(
-          uri,
-          headers: _getHeaders,
-        )
-        .timeout(_timeout);
+      final response = await _client
+          .get(
+            uri,
+            headers: _getHeaders,
+          )
+          .timeout(_timeout);
 
-    if (response.statusCode == 200) {
-      final decoded = jsonDecode(response.body);
-      if (decoded is List) {
-        return decoded;
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is List) {
+          await _saveCache(cacheKey, decoded);
+          return decoded;
+        }
+        await _saveCache(cacheKey, <dynamic>[]);
+        return <dynamic>[];
       }
-      return <dynamic>[];
+      throw Exception('Failed to load public alerts: ${response.statusCode}');
+    } catch (_) {
+      final cached = await _readCache(cacheKey);
+      if (cached is List) {
+        return cached;
+      }
+      rethrow;
     }
-    throw Exception('Failed to load public alerts: ${response.statusCode}');
   }
 
   /// Upload evidence to an existing report (e.g. add evidence later). deviceId is required.
@@ -371,18 +433,84 @@ class ApiService {
       },
     );
 
-    final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body) as List<dynamic>;
-    }
-    String message = 'Failed to load nearby confirmations (${response.statusCode})';
+    final cacheKey = _buildNearbyConfirmationsCacheKey(
+      deviceId: deviceId,
+      latitude: latitude,
+      longitude: longitude,
+      radiusMeters: radiusMeters,
+      limit: limit,
+    );
+
     try {
-      final err = jsonDecode(response.body);
-      if (err is Map && err['detail'] != null) {
-        message = err['detail'].toString();
+      final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as List<dynamic>;
+        await _saveCache(cacheKey, data);
+        return data;
       }
-    } catch (_) {}
-    throw Exception(message);
+      String message = 'Failed to load nearby confirmations (${response.statusCode})';
+      try {
+        final err = jsonDecode(response.body);
+        if (err is Map && err['detail'] != null) {
+          message = err['detail'].toString();
+        }
+      } catch (_) {}
+      throw Exception(message);
+    } catch (_) {
+      final cached = await _readCache(cacheKey);
+      if (cached is List) {
+        return cached;
+      }
+      rethrow;
+    }
+  }
+
+  String _safeCacheComponent(String value) {
+    return value.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_');
+  }
+
+  String _buildPublicLocationsCacheKey({
+    String? locationType,
+    int? parentId,
+    required int limit,
+  }) {
+    final typePart = _safeCacheComponent(locationType ?? 'all');
+    final parentPart = parentId?.toString() ?? 'none';
+    return '$_publicLocationsCachePrefix${typePart}_$parentPart_$limit';
+  }
+
+  String _buildPublicGeoJsonCacheKey({
+    required String locationType,
+    int? parentId,
+    required int limit,
+  }) {
+    final typePart = _safeCacheComponent(locationType);
+    final parentPart = parentId?.toString() ?? 'none';
+    return '$_publicGeoJsonCachePrefix${typePart}_$parentPart_$limit';
+  }
+
+  String _buildPublicAlertsCacheKey({
+    required double latitude,
+    required double longitude,
+    required double radiusKm,
+    required int limit,
+  }) {
+    final lat = latitude.toStringAsFixed(3);
+    final lng = longitude.toStringAsFixed(3);
+    final radius = radiusKm.toStringAsFixed(1);
+    return '$_publicAlertsCachePrefix${lat}_$lng_$radius_$limit';
+  }
+
+  String _buildNearbyConfirmationsCacheKey({
+    required String deviceId,
+    required double latitude,
+    required double longitude,
+    required int radiusMeters,
+    required int limit,
+  }) {
+    final lat = latitude.toStringAsFixed(3);
+    final lng = longitude.toStringAsFixed(3);
+    return '$_nearbyConfirmationsCachePrefix${_safeCacheComponent(deviceId)}_${lat}_$lng_$radiusMeters_$limit';
   }
 }
 

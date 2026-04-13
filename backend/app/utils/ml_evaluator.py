@@ -34,10 +34,10 @@ class MLEvaluator:
             
             # Set defaults if not found
             defaults = {
-                'trust_threshold': 70.0,
+                'trust_threshold': 65.0,
                 'confidence_threshold': 0.7,
                 'under_review_threshold': 45.0,
-                'auto_verification_threshold': 70.0,
+                'auto_verification_threshold': 65.0,
                 'max_trust_score': 95.0,
                 'min_trust_score': 5.0,
             }

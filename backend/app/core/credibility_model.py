@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -381,6 +382,62 @@ def _compute_trust_factors(db: Session, report: Report, device: Device, evidence
     return factors
 
 
+def _description_quality_adjustment(report: Report) -> float:
+    """Return a bounded trust adjustment based on description quality signals."""
+    description = (getattr(report, "description", None) or "").strip().lower()
+    if not description:
+        return -25.0
+
+    words = re.findall(r"[a-z0-9']+", description)
+    if not words:
+        return -20.0
+
+    score = 0.0
+    word_count = len(words)
+    unique_ratio = len(set(words)) / float(word_count)
+
+    if word_count < 4:
+        score -= 12.0
+    elif word_count >= 10:
+        score += 5.0
+
+    if unique_ratio < 0.45:
+        score -= 8.0
+
+    if re.search(r"(.)\1{4,}", description):
+        score -= 12.0
+
+    if any(token in description for token in ("near", "at", "around", "today", "now", "street", "road")):
+        score += 4.0
+
+    incident_type_name = ""
+    if getattr(report, "incident_type", None) is not None:
+        incident_type_name = str(getattr(report.incident_type, "type_name", "") or "").lower()
+
+    keyword_map = {
+        "theft": ("stolen", "thief", "robbery", "snatched", "burglary"),
+        "assault": ("assault", "beaten", "fight", "attacked", "violence"),
+        "drug": ("drug", "narcotic", "selling", "dealer", "substance"),
+        "harassment": ("harass", "threat", "abuse", "intimidat", "insult"),
+        "accident": ("crash", "accident", "collision", "injured", "hit"),
+    }
+
+    matched_incident_context = False
+    for kind, hints in keyword_map.items():
+        if kind in incident_type_name:
+            if any(h in description for h in hints):
+                score += 6.0
+                matched_incident_context = True
+            else:
+                score -= 3.0
+            break
+
+    if not matched_incident_context and word_count >= 8:
+        score += 1.5
+
+    return max(-30.0, min(10.0, score))
+
+
 def score_report_credibility(
     db: Session,
     report: Report,
@@ -411,6 +468,10 @@ def score_report_credibility(
         best_threshold = float(meta.get("best_threshold", 0.5))
 
         trust_score_pct = prob_real * 100.0
+
+        # Description quality contributes directly to AI trust so text quality
+        # and incident-context hints are reflected in the final decision.
+        trust_score_pct += _description_quality_adjustment(report)
         
         # Apply anti-spam / coordination penalty before community votes
         factors = _compute_trust_factors(db, report, device, evidence_count, prob_real)
