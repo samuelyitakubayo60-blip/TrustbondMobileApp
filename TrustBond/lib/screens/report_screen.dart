@@ -18,7 +18,7 @@ import '../models/report_model.dart';
 
 import '../models/evidence_attachment.dart';
 
-
+import 'package:trustbond/services/mobile_verification_service.dart';
 
 /// Camera works only on Android/iOS. On Windows/Web use gallery.
 
@@ -690,7 +690,26 @@ class _ReportScreenState extends State<ReportScreen> {
 
       MotionSample motion = await collectMotionSample(durationSeconds: 1.2);
 
+      // Perform mobile rule-based verification
+      final verificationService = MobileVerificationService();
+      final evidenceFiles = _attachments.map((att) => File(att.path)).toList();
+      final evidenceMetadata = _attachments.map((att) => {
+        'mediaLatitude': att.mediaLatitude,
+        'mediaLongitude': att.mediaLongitude,
+        'capturedAt': att.capturedAt?.toIso8601String(),
+        'isLiveCapture': att.isLiveCapture,
+      }).toList();
 
+      final mobileVerification = await verificationService.verifyReport(
+        reportLocation: _currentPosition!,
+        evidenceFiles: evidenceFiles,
+        evidenceMetadata: evidenceMetadata,
+      );
+
+      print('Mobile verification result: ${mobileVerification.status}');
+      print('Location consistency: ${mobileVerification.locationConsistencyCheck}');
+      print('Evidence source valid: ${mobileVerification.evidenceSourceValid}');
+      print('Tampering detected: ${mobileVerification.evidenceTamperingDetected}');
 
       final report = ReportModel(
 
@@ -718,9 +737,11 @@ class _ReportScreenState extends State<ReportScreen> {
 
       );
 
+      // Add mobile verification results to report data
+      final reportData = report.toJson();
+      reportData.addAll(mobileVerification.toJson());
 
-
-      final result = await _apiService.submitReport(report.toJson());
+      final result = await _apiService.submitReport(reportData);
 
       final reportId = result['report_id'] as String?;
 

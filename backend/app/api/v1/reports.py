@@ -786,33 +786,40 @@ def create_report(
     db.commit()
     db.refresh(report)  # Ensure we have the latest data including ML predictions
 
-    # Apply AI-enhanced rules
-    print(f"Applying AI-enhanced rules - evidence_count: {evidence_count}, description_length: {len(report_data.description or '')}")  # Debug log
-    
-    # Get ML prediction if available (now available after ML scoring)
+    # Get ML prediction for AI verification
     from app.models.ml_prediction import MLPrediction
     ml_prediction = db.query(MLPrediction).filter(MLPrediction.report_id == report.report_id).order_by(MLPrediction.evaluated_at.desc()).first()
     if ml_prediction:
-        print(f"Using ML prediction: {ml_prediction.prediction_label}, trust_score: {ml_prediction.trust_score}")  # Debug log
+        print(f"Using ML prediction for AI verification: {ml_prediction.prediction_label}, trust_score: {ml_prediction.trust_score}")  # Debug log
     
-    # Apply AI-enhanced rules
-    from app.core.report_priority import apply_ai_enhanced_rules, calculate_report_priority
-    rule_status, is_flagged, flag_reason = apply_ai_enhanced_rules(
-        report, evidence_count, ml_prediction, db
-    )
-    print(f"AI-enhanced rule result - rule_status: {rule_status}, is_flagged: {is_flagged}, flag_reason: {flag_reason}")  # Debug log
+    # Simple AI verification based on ML prediction
+    ai_status = "pending"
+    is_flagged = False
+    flag_reason = None
     
-    # Calculate automatic priority
-    priority = calculate_report_priority(report, ml_prediction, evidence_count, db)
-    print(f"Calculated report priority: {priority}")  # Debug log
+    if ml_prediction:
+        if ml_prediction.prediction_label == "likely_real" and (ml_prediction.trust_score or 0) >= 70:
+            ai_status = "passed"
+        elif ml_prediction.prediction_label in ["fake", "suspicious"] or (ml_prediction.trust_score or 0) < 30:
+            ai_status = "rejected"
+        else:
+            ai_status = "flagged"
+            is_flagged = True
+            flag_reason = f"AI uncertainty: {ml_prediction.prediction_label} (score: {ml_prediction.trust_score})"
+    else:
+        # No ML prediction - flag for review
+        ai_status = "flagged"
+        is_flagged = True
+        flag_reason = "No ML prediction available"
     
-    # Apply results to report
-    report.rule_status = rule_status
+    print(f"AI verification result - status: {ai_status}, flagged: {is_flagged}")  # Debug log
+    
+    # Apply AI results to report
+    report.rule_status = ai_status  # Keep field for compatibility
     report.is_flagged = is_flagged
-    report.priority = priority  # Save calculated priority
     if is_flagged and flag_reason:
         report.flag_reason = flag_reason
-    if rule_status == "rejected":
+    if ai_status == "rejected":
         report.status = "rejected"
         report.verification_status = "rejected"
     
@@ -820,37 +827,57 @@ def create_report(
     report.ai_ready = True
     report.features_extracted_at = datetime.now(timezone.utc)
     
-    # Automated verification based on AI results
-    if rule_status == "passed" and not is_flagged:
-        # Auto-verify reports that pass AI rules
+    # Two-stage verification: Mobile Rules + Backend AI
+    mobile_rules_passed = (
+        report_data.mobile_rule_status == "passed" and
+        (report_data.location_consistency_check is True) and
+        (report_data.evidence_source_valid is True) and
+        (report_data.evidence_tampering_detected is False)
+    )
+    
+    print(f"Mobile rules status: {report_data.mobile_rule_status}, consistency: {report_data.location_consistency_check}, source_valid: {report_data.evidence_source_valid}, tampering: {report_data.evidence_tampering_detected}")
+    print(f"Backend AI status: {ai_status}, flagged: {is_flagged}")
+    
+    # Both mobile rules AND backend AI must pass for auto-verification
+    if mobile_rules_passed and ai_status == "passed" and not is_flagged:
+        # Both stages passed - auto-verify
         report.verification_status = "verified"
         report.status = "verified"
-        print(f"Auto-verifying report {report.report_id} - AI rules passed")
-    elif rule_status == "rejected":
-        # Auto-reject reports that fail AI rules
+        print(f"AUTO-VERIFIED: Report {report.report_id} - Mobile rules + Backend AI both passed")
+    elif ai_status == "rejected" or report_data.mobile_rule_status == "failed":
+        # Either stage rejected - auto-reject
         report.verification_status = "rejected"
         report.status = "rejected"
-        print(f"Auto-rejecting report {report.report_id} - AI rules rejected")
+        rejection_reason = []
+        if report_data.mobile_rule_status == "failed":
+            rejection_reason.append("mobile_rules_failed")
+        if ai_status == "rejected":
+            rejection_reason.append("backend_ai_rejected")
+        print(f"AUTO-REJECTED: Report {report.report_id} - {' + '.join(rejection_reason)}")
     else:
-        # Only mark for review if there are specific concerns
-        review_reasons = {
-            "ai_suspicious_review",
-            "ai_uncertain_review",
-            "incident_description_mismatch",
-            "gibberish_description",
-            "evidence_time_mismatch",
-            "stale_live_capture_timestamp",
-            "device_burst_reporting",
-            "duplicate_description_recent",
-        }
-        if flag_reason in review_reasons:
-            report.verification_status = "under_review"
-            print(f"Rule/AI review reason ({flag_reason}) - setting verification_status to under_review")
-        else:
-            # Default to verified if no specific concerns
-            report.verification_status = "verified"
-            report.status = "verified"
-            print(f"Auto-verifying report {report.report_id} - no specific concerns found")
+        # Any stage flagged/warning or mixed results - human review
+        report.verification_status = "under_review"
+        report.status = "pending"
+        review_reasons = []
+        if not mobile_rules_passed:
+            review_reasons.append("mobile_rules_issue")
+        if is_flagged:
+            review_reasons.append(f"backend_ai_flagged: {flag_reason}")
+        if ai_status not in ["passed", "rejected"]:
+            review_reasons.append(f"backend_ai_{ai_status}")
+        print(f"HUMAN REVIEW NEEDED: Report {report.report_id} - {' + '.join(review_reasons)}")
+    
+    # Store mobile verification results for audit trail
+    report.feature_vector = report.feature_vector or {}
+    if isinstance(report.feature_vector, dict):
+        report.feature_vector.update({
+            "mobile_rule_status": report_data.mobile_rule_status,
+            "mobile_rule_details": report_data.mobile_rule_details,
+            "location_consistency_check": report_data.location_consistency_check,
+            "evidence_source_valid": report_data.evidence_source_valid,
+            "evidence_tampering_detected": report_data.evidence_tampering_detected,
+            "mobile_rules_passed": mobile_rules_passed
+        })
 
     # Update device stats
     now_utc = datetime.now(timezone.utc)
@@ -969,71 +996,48 @@ def create_report(
     db.commit()
     db.refresh(report)
 
-    # FIXED: Clear verification logic - BOTH rules AND ML must pass for auto-verification
-    print(f"Verification check - rule_status: {rule_status}, is_flagged: {is_flagged}, verification_status: {report.verification_status}")  # Debug log
+    # AI-PRIMARY with human oversight for flagged reports
+    print(f" AI-PRIMARY VERIFICATION - rule_status: {rule_status}, is_flagged: {is_flagged}")  # Debug log
     
-    if rule_status == "passed" and not is_flagged and report.verification_status != "under_review":
-        # Rules passed, now check ML
-        ml_safe = False
-        ml_reason = ""
+    if rule_status == "passed" and not is_flagged:
+        # AI makes final decision for clean reports
+        report.status = "verified"
+        report.verification_status = "verified"
+        print(" AI-PRIMARY: Report auto-verified - AI rules passed")  # Debug log
+        db.commit()
         
-        if ml_prediction:
-            trust_score = float(ml_prediction.trust_score) if ml_prediction.trust_score else 0
-            prediction_label = ml_prediction.prediction_label
-            
-            print(f"ML check - prediction: {prediction_label}, trust_score: {trust_score:.1f}%")  # Debug log
-            
-            # Get ML thresholds from system config
-            from app.database import SessionLocal
-            from app.models.system_config import SystemConfig
-            
-            db_config = SessionLocal()
-            try:
-                trust_threshold_config = db_config.query(SystemConfig).filter(
-                    SystemConfig.config_key == 'ml.trust_threshold'
-                ).first()
-                trust_threshold = float(trust_threshold_config.config_value.get('value', 70.0)) if trust_threshold_config else 70.0
-            finally:
-                db_config.close()
-            
-            # ML must say "likely_real" AND have >= threshold trust score
-            if prediction_label == "likely_real" and trust_score >= trust_threshold:
-                ml_safe = True
-                ml_reason = f"ML passed: likely_real with sufficient trust ({trust_score:.1f}% >= {trust_threshold:.1f}%)"
-            elif prediction_label == "likely_real" and trust_score < trust_threshold:
-                ml_safe = False
-                ml_reason = f"ML failed: likely_real but low trust ({trust_score:.1f}% < {trust_threshold:.1f}%)"
-            elif prediction_label in ["suspicious", "uncertain"]:
-                ml_safe = False
-                ml_reason = f"ML failed: {prediction_label} prediction (needs review)"
-            elif prediction_label == "fake":
-                ml_safe = False
-                ml_reason = "ML failed: fake prediction (should be rejected)"
-            else:
-                ml_safe = False
-                ml_reason = f"ML failed: unknown prediction {prediction_label}"
-        else:
-            ml_safe = False
-            ml_reason = "ML failed: no ML prediction available"
-        
-        print(f"ML decision: {ml_reason}")  # Debug log
-        
-        # Auto-verify ONLY if both rules AND ML pass
-        if ml_safe:
-            report.status = "verified"
-            report.verification_status = "verified"
-            print("✅ REPORT AUTO-VERIFIED: Both rules and ML passed")  # Debug log
+        # Count auto-verified reports toward device trusted_reports
+        if hasattr(device, "trusted_reports"):
+            device.trusted_reports = (device.trusted_reports or 0) + 1
             db.commit()
-            
-            # Count auto-verified reports toward device trusted_reports
-            if hasattr(device, "trusted_reports"):
-                device.trusted_reports = (device.trusted_reports or 0) + 1
-                db.commit()
-        else:
-            print(f"❌ REPORT NOT AUTO-VERIFIED: {ml_reason}")  # Debug log
-            # Keep status as "pending" for manual review
+    elif rule_status == "rejected":
+        # Clear rejections are auto-rejected
+        report.status = "rejected"
+        report.verification_status = "rejected"
+        print(f" AI-PRIMARY: Report auto-rejected - {rule_status}")  # Debug log
+        db.commit()
     else:
-        print(f" REPORT NOT AUTO-VERIFIED: Rules failed - rule_status: {rule_status}, is_flagged: {is_flagged}")  # Debug log
+        # Flagged reports need human review
+        report.status = "pending"
+        report.verification_status = "under_review"
+        print(f"👮‍♂️ HUMAN REVIEW NEEDED: Report flagged - {flag_reason}")  # Debug log
+        db.commit()
+    
+    # Auto-remove rejected reports to keep system clean
+    if report.verification_status == "rejected" and report.status == "rejected":
+        print(f" Auto-removing rejected report {report.report_id} - {report.flag_reason}")
+        # Add to audit log before removal
+        log_action(
+            db,
+            "report_auto_removed",
+            entity_type="report",
+            entity_id=str(report.report_id),
+            actor_type="system",
+            action_details={"reason": report.flag_reason, "auto_removed": True},
+            success=True
+        )
+        # Schedule background task for actual removal (to avoid blocking)
+        background_tasks.add_task(_auto_remove_rejected_report, str(report.report_id))
 
     # Run hotspot auto-creation in background when criteria are met (no user intervention)
     background_tasks.add_task(run_hotspot_auto)
@@ -1575,7 +1579,7 @@ def get_report(
         raise HTTPException(status_code=404, detail="Report not found")
 
     # DEBUG: Check evidence files loading
-    print(f"🔍 DEBUG: Report {report_id} evidence files:")
+    print(f" DEBUG: Report {report_id} evidence files:")
     print(f"   Raw evidence_files attribute: {getattr(report, 'evidence_files', 'NOT_FOUND')}")
     print(f"   Evidence files count: {len(report.evidence_files) if report.evidence_files else 0}")
     if report.evidence_files:
@@ -1584,15 +1588,10 @@ def get_report(
     else:
         print("   No evidence files found in query result")
 
-    # Enforce mobile community visibility rules for non-owners.
+    # AI-PRIMARY: No community voting needed - AI makes all decisions
+    # Community confirmation is deprecated in AI-primary mode
     if device_id is not None and report.device_id != device_id:
-        eligible = (
-            getattr(report, "rule_status", None) == "passed"
-            and not bool(getattr(report, "is_flagged", False))
-            and getattr(report, "verification_status", None) in ("pending", "under_review")
-        )
-        if not eligible:
-            raise HTTPException(status_code=403, detail="You can only view reports eligible for community confirmation")
+        raise HTTPException(status_code=403, detail="Community confirmation not available in AI-primary mode")
     # Officers may only view reports assigned to them
     if device_id is None and current_user and getattr(current_user, "role", None) == "officer":
         assigned_to_me = any(
@@ -1975,10 +1974,15 @@ def add_review(
             report.device.flagged_reports = (report.device.flagged_reports or 0) + 1
         
     else:
-        # investigation
-        report.verification_status = "under_review"
+        # Human review for flagged reports - police can make final decisions
+        report.verification_status = "verified"
+        report.status = "verified"
+        report.is_flagged = False
+        report.flag_reason = None
         if body.review_note:
-            report.flag_reason = body.review_note
+            print(f" POLICE VERIFIED: Report {report_id} manually verified - {body.review_note}")
+        else:
+            print(f" POLICE VERIFIED: Report {report_id} manually verified")
 
     existing_review = (
         db.query(PoliceReview)
@@ -2502,29 +2506,22 @@ async def upload_evidence(
             "device_burst_reporting",
             "duplicate_description_recent",
         }
-        if flag_reason in review_reasons:
-            report_after.verification_status = "under_review"
-            print(f"Rule/AI review reason after evidence upload ({flag_reason}) - setting verification_status to under_review")  # Debug log
-        
-        # FIXED: Auto-verify if AI-enhanced rules pass and not flagged, using trust_score threshold
-        ai_safe = True
-        ml_trust_ok = True
-        
-        if ml_prediction:
-            if ml_prediction.prediction_label in ["fake", "suspicious", "uncertain"]:
-                ai_safe = False
-                print(f"AI marked report as {ml_prediction.prediction_label} - not auto-verifying after evidence upload")  # Debug log
-            
-            # Use trust_score threshold (70%) for consistency
-            trust_score = float(ml_prediction.trust_score) if ml_prediction.trust_score else 0
-            if trust_score < 70.0:
-                ml_trust_ok = False
-                print(f"ML trust score too low ({trust_score:.1f}% < 70%) - not auto-verifying after evidence upload")  # Debug log
-        
-        if rule_status == "passed" and not is_flagged and ai_safe and ml_trust_ok and report_after.verification_status != "under_review":
+        # AI-PRIMARY with human oversight for flagged reports
+        if rule_status == "passed" and not is_flagged:
+            # AI makes final decision for clean reports
             report_after.status = "verified"
             report_after.verification_status = "verified"
-            print("Report auto-verified after evidence upload with AI safety check")  # Debug log
+            print(" AI-PRIMARY: Report auto-verified after evidence upload - rules passed")
+        elif rule_status == "rejected":
+            # Clear rejections are auto-rejected
+            report_after.status = "rejected"
+            report_after.verification_status = "rejected"
+            print(f" AI-PRIMARY: Report auto-rejected after evidence upload - {rule_status}")
+        else:
+            # Flagged reports need human review
+            report_after.status = "pending"
+            report_after.verification_status = "under_review"
+            print(f" HUMAN REVIEW NEEDED: Report flagged after evidence upload - {flag_reason}")
         db.commit()
     
     await manager.broadcast({"type": "refresh_data", "entity": "report", "action": "evidence_added"})
@@ -2615,26 +2612,9 @@ def add_community_confirmation(
             finally:
                 db.close()
 
-            # Do not override police decisions; only move pending/under_review reports.
-            if report.verification_status in ("pending", "under_review"):
-                if report.rule_status == "passed" and not bool(getattr(report, "is_flagged", False)) and prediction_label == "likely_real" and trust_score >= auto_verify_threshold:
-                    report.status = "verified"
-                    report.verification_status = "verified"
-                    report.is_flagged = False
-                    report.flag_reason = None
-                elif trust_score >= under_review_threshold:
-                    report.status = "pending"
-                    report.verification_status = "under_review"
-                else:
-                    report.status = "rejected"
-                    report.verification_status = "rejected"
-                    report.is_flagged = True
-                    if not report.flag_reason:
-                        report.flag_reason = "community_low_trust"
-
-                db.add(report)
-                db.commit()
-                db.refresh(report)
+            # AI-PRIMARY: Community voting disabled - AI makes all decisions
+            # Community votes only affect ML model training, not verification status
+            print(" AI-PRIMARY: Community vote processed, but verification status unchanged")
     except Exception:
         # Best-effort only: community vote must not fail if state update is blocked
         pass
@@ -2653,56 +2633,11 @@ def list_nearby_confirmations(
     db: Session = Depends(get_db),
 ):
     """
-    Return candidate reports for community confirmation:
-    - in radius around the provided GPS coords
-    - not belonging to the requester device
-    - rule_status passed, and verification_status not yet verified/rejected
+    AI-PRIMARY: Community confirmation disabled - return empty list
+    In AI-primary mode, there are no pending reports for community confirmation.
     """
-    if not device_id and not device_hash:
-        raise HTTPException(status_code=400, detail="device_id or device_hash is required")
-
-    from math import cos, radians
-    from app.models.device import Device
-
-    device: Device | None = None
-    if device_id:
-        device = db.query(Device).filter(Device.device_id == device_id).first()
-    if device is None and device_hash:
-        device = db.query(Device).filter(Device.device_hash == device_hash).first()
-
-    if not device:
-        raise HTTPException(status_code=404, detail="Device not found")
-
-    lat = float(latitude)
-    lon = float(longitude)
-
-    # Bounding box approximation (then refine with haversine in python)
-    lat_delta = radius_meters / 111000.0
-    lon_delta = radius_meters / (111000.0 * max(0.1, cos(radians(lat))))
-
-    from_dt = datetime.now(timezone.utc) - timedelta(days=3)
-
-    q = (
-        db.query(Report)
-        .options(
-            joinedload(Report.incident_type),
-            joinedload(Report.village_location),
-            joinedload(Report.device),
-            joinedload(Report.ml_predictions),
-            selectinload(Report.case_reports),
-        )
-        .filter(
-            Report.is_flagged == False,
-            Report.rule_status == "passed",
-            Report.verification_status.in_(["pending", "under_review"]),
-            Report.reported_at >= from_dt,
-            Report.latitude.between(lat - lat_delta, lat + lat_delta),
-            Report.longitude.between(lon - lon_delta, lon + lon_delta),
-            Report.device_id != device.device_id,
-        )
-        .order_by(Report.reported_at.desc())
-        .limit(limit * 3)
-    )
+    # AI-PRIMARY: No community confirmation needed
+    return []
 
     import math
 
@@ -2771,7 +2706,7 @@ def delete_report(
 
 
 def _check_and_create_auto_case(report_id: str):
-    """Background task to check if a verified report can form a new case using proper location-based clustering"""
+    """Background task to add verified report to existing case or create new case using proper location-based clustering"""
     from app.database import SessionLocal
     
     db = SessionLocal()
@@ -2810,8 +2745,101 @@ def _check_and_create_auto_case(report_id: str):
         # Convert radius to kilometers for distance calculation
         cluster_radius_km = cluster_radius_meters / 1000.0
         
+        # STRATEGY 1: Try to add to existing case first
+        existing_case_added = _try_add_to_existing_case(db, report, cluster_radius_km)
+        if existing_case_added:
+            return
+        
+        # STRATEGY 2: Create new case if no existing case found
+        _create_new_case_for_report(db, report, cluster_radius_km, min_reports_threshold)
+    
+    except Exception as e:
+        print(f"Error in auto-case processing for report {report_id}: {e}")
+    finally:
+        db.close()
+
+
+def _try_add_to_existing_case(db: Session, report: Report, cluster_radius_km: float) -> bool:
+    """Try to add report to existing compatible case"""
+    try:
+        from app.models.case import Case
+        from app.models.case_reports import case_reports_table
+        
+        # Find existing cases with same incident type that are still open
+        compatible_cases = db.query(Case).filter(
+            Case.incident_type_id == report.incident_type_id,
+            Case.status.in_(['open', 'assigned', 'in_progress']),
+            Case.latitude.isnot(None),
+            Case.longitude.isnot(None)
+        ).all()
+        
+        if not compatible_cases:
+            return False
+        
+        from math import radians, cos, sin, asin, sqrt
+        
+        def calculate_distance(lat1, lon1, lat2, lon2):
+            lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+            dlat = lat2 - lat1
+            dlon = lon2 - lon1
+            a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+            c = 2 * asin(sqrt(a))
+            return 6371 * c  # Returns distance in kilometers
+        
+        # Priority 1: Same village (most precise)
+        if report.village_location_id:
+            for case in compatible_cases:
+                if case.location_id == report.village_location_id:
+                    # Add report to this case
+                    db.execute(
+                        case_reports_table.insert().values(
+                            case_id=case.case_id,
+                            report_id=report.report_id,
+                            added_at=datetime.now(timezone.utc)
+                        )
+                    )
+                    # Update case report count and timestamp
+                    case.report_count = (case.report_count or 0) + 1
+                    case.updated_at = datetime.now(timezone.utc)
+                    db.commit()
+                    print(f"Added report {report.report_id} to existing case {case.case_number} (same village)")
+                    return True
+        
+        # Priority 2: Geographic proximity (fallback)
+        for case in compatible_cases:
+            distance = calculate_distance(
+                report.latitude, report.longitude,
+                float(case.latitude), float(case.longitude)
+            )
+            if distance <= cluster_radius_km:
+                # Add report to this case
+                db.execute(
+                    case_reports_table.insert().values(
+                        case_id=case.case_id,
+                        report_id=report.report_id,
+                        added_at=datetime.now(timezone.utc)
+                    )
+                )
+                # Update case report count and timestamp
+                case.report_count = (case.report_count or 0) + 1
+                case.updated_at = datetime.now(timezone.utc)
+                db.commit()
+                print(f"Added report {report.report_id} to existing case {case.case_number} (within {cluster_radius_km * 1000:.0f}m)")
+                return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"Error trying to add report to existing case: {e}")
+        return False
+
+
+def _create_new_case_for_report(db: Session, report: Report, cluster_radius_km: float, min_reports_threshold: int):
+    """Create new case for report if enough similar reports exist"""
+    try:
+        from app.models.case_reports import case_reports_table
+        
         # Strategy 1: Cluster by same village/location (preferred)
-        village_reports = []
         if report.village_location_id:
             village_reports = db.query(Report).filter(
                 Report.incident_type_id == report.incident_type_id,
@@ -2830,7 +2858,7 @@ def _check_and_create_auto_case(report_id: str):
             if len(village_reports) >= min_reports_threshold:
                 case_stats = _create_case_from_reports(db, village_reports)
                 if case_stats['cases_created'] > 0:
-                    print(f"Auto-created village-based case {case_stats['case_number']} with {len(village_reports)} reports in village {report.village_location_id}")
+                    print(f"Created new village-based case {case_stats['case_number']} with {len(village_reports)} reports in village {report.village_location_id}")
                     return
         
         # Strategy 2: Geographic clustering using GPS coordinates (fallback)
@@ -2868,12 +2896,205 @@ def _check_and_create_auto_case(report_id: str):
         if len(clustered_reports) >= min_reports_threshold:
             case_stats = _create_case_from_reports(db, clustered_reports)
             if case_stats['cases_created'] > 0:
-                print(f"Auto-created geo-clustered case {case_stats['case_number']} with {len(clustered_reports)} reports within {cluster_radius_meters}m")
+                print(f"Created new geo-clustered case {case_stats['case_number']} with {len(clustered_reports)} reports within {cluster_radius_km * 1000:.0f}m")
     
     except Exception as e:
-        print(f"Error in auto-case creation for report {report_id}: {e}")
+        print(f"Error creating new case for report: {e}")
+
+
+def _auto_remove_rejected_report(report_id: str):
+    """Background task to safely remove rejected reports"""
+    from app.database import SessionLocal
+    
+    db = SessionLocal()
+    try:
+        report = db.query(Report).filter(Report.report_id == report_id).first()
+        if not report:
+            return
+        
+        # Double-check it's still rejected before removal
+        if report.verification_status == "rejected" and report.status == "rejected":
+            # Remove evidence files first
+            from app.models.evidence import EvidenceFile
+            evidence_files = db.query(EvidenceFile).filter(EvidenceFile.report_id == report_id).all()
+            for evidence in evidence_files:
+                db.delete(evidence)
+            
+            # Remove ML predictions
+            from app.models.ml_prediction import MLPrediction
+            ml_predictions = db.query(MLPrediction).filter(MLPrediction.report_id == report_id).all()
+            for ml_pred in ml_predictions:
+                db.delete(ml_pred)
+            
+            # Remove case associations
+            from app.models.case_reports import case_reports_table
+            db.execute(case_reports_table.delete().where(case_reports_table.c.report_id == report_id))
+            
+            # Finally remove the report
+            db.delete(report)
+            db.commit()
+            
+            print(f" Successfully removed rejected report {report_id}")
+            
+            # Broadcast removal to keep clients in sync
+            from app.api.v1.ws import manager
+            try:
+                background_tasks.add_task(
+                    manager.broadcast,
+                    {"type": "refresh_data", "entity": "report", "action": "deleted", "report_id": report_id}
+                )
+            except Exception as broadcast_error:
+                print(f"Warning: Could not broadcast report removal: {broadcast_error}")
+        
+    except Exception as e:
+        print(f"Error removing rejected report {report_id}: {e}")
+        db.rollback()
     finally:
         db.close()
+
+
+def _balance_workload_and_reassign(db: Session):
+    """Smart workload balancing across multiple officers"""
+    try:
+        from app.models.case import Case
+        from app.models.police_user import PoliceUser
+        from sqlalchemy import func
+        
+        # Get all active officers
+        officers = db.query(PoliceUser).filter(
+            PoliceUser.is_active == True,
+            PoliceUser.role == 'officer'
+        ).all()
+        
+        if len(officers) <= 1:
+            return  # No balancing needed with 0 or 1 officer
+        
+        # Get current case counts per officer
+        case_counts = db.query(
+            Case.assigned_to_id,
+            func.count(Case.case_id).label('active_cases')
+        ).filter(
+            Case.status.in_(['open', 'assigned', 'in_progress']),
+            Case.assigned_to_id.isnot(None)
+        ).group_by(Case.assigned_to_id).all()
+        
+        # Create workload dictionary
+        workload = {str(officer.police_user_id): 0 for officer in officers}
+        for officer_id, count in case_counts:
+            workload[str(officer_id)] = count
+        
+        # Find overloaded and underloaded officers
+        avg_cases = sum(workload.values()) / len(workload)
+        overloaded = [oid for oid, count in workload.items() if count > avg_cases + 2]
+        underloaded = [oid for oid, count in workload.items() if count < avg_cases - 1]
+        
+        if not overloaded or not underloaded:
+            return  # Workload is already balanced
+        
+        # Reassign cases from overloaded to underloaded officers
+        reassigned = 0
+        for overloaded_officer in overloaded:
+            # Get newest cases from overloaded officer
+            cases_to_reassign = db.query(Case).filter(
+                Case.assigned_to_id == overloaded_officer,
+                Case.status == 'assigned',  # Only reassign assigned cases, not in-progress
+                Case.created_at >= datetime.now(timezone.utc) - timedelta(days=1)  # Only recent cases
+            ).order_by(Case.created_at.desc()).limit(2).all()
+            
+            for case in cases_to_reassign:
+                if underloaded:
+                    # Find least loaded underloaded officer
+                    target_officer = min(underloaded, key=lambda oid: workload[oid])
+                    
+                    # Reassign case
+                    case.assigned_to_id = target_officer
+                    case.status = 'assigned'
+                    case.updated_at = datetime.now(timezone.utc)
+                    
+                    # Update workload tracking
+                    workload[overloaded_officer] -= 1
+                    workload[target_officer] += 1
+                    
+                    # Remove from underloaded if they're now balanced
+                    if workload[target_officer] >= avg_cases - 1:
+                        underloaded.remove(target_officer)
+                    
+                    reassigned += 1
+                    
+                    print(f"🔄 Reassigned case {case.case_number} from officer {overloaded_officer} to officer {target_officer}")
+        
+        if reassigned > 0:
+            db.commit()
+            print(f" Workload balanced: {reassigned} cases reassigned across {len(officers)} officers")
+            
+            # Broadcast changes to keep clients synchronized
+            try:
+                from app.api.v1.ws import manager
+                background_tasks.add_task(
+                    manager.broadcast,
+                    {"type": "refresh_data", "entity": "case", "action": "reassigned"}
+                )
+            except Exception as broadcast_error:
+                print(f"Warning: Could not broadcast case reassignments: {broadcast_error}")
+    
+    except Exception as e:
+        print(f"Error in workload balancing: {e}")
+        db.rollback()
+
+
+def _handle_officer_case_finalization(db: Session, officer_id: str):
+    """Reassign cases when an officer finalizes their current cases"""
+    try:
+        from app.models.case import Case
+        from app.models.police_user import PoliceUser
+        
+        # Check if officer has any active cases
+        active_cases = db.query(Case).filter(
+            Case.assigned_to_id == officer_id,
+            Case.status.in_(['open', 'assigned', 'in_progress'])
+        ).count()
+        
+        if active_cases > 0:
+            return  # Officer still has active cases
+        
+        # Find other active officers to reassign new cases to
+        other_officers = db.query(PoliceUser).filter(
+            PoliceUser.is_active == True,
+            PoliceUser.role == 'officer',
+            PoliceUser.police_user_id != officer_id
+        ).all()
+        
+        if not other_officers:
+            return  # No other officers available
+        
+        # Assign new unassigned cases to other officers
+        unassigned_cases = db.query(Case).filter(
+            Case.assigned_to_id.is_(None),
+            Case.status == 'open'
+        ).order_by(Case.created_at.asc()).limit(5).all()
+        
+        for case in unassigned_cases:
+            # Assign to least loaded officer
+            least_loaded = min(other_officers, key=lambda officer: 
+                db.query(Case).filter(
+                    Case.assigned_to_id == officer.police_user_id,
+                    Case.status.in_(['open', 'assigned', 'in_progress'])
+                ).count()
+            )
+            
+            case.assigned_to_id = least_loaded.police_user_id
+            case.status = 'assigned'
+            case.updated_at = datetime.now(timezone.utc)
+            
+            print(f" Assigned unassigned case {case.case_number} to officer {least_loaded.police_user_id}")
+        
+        if unassigned_cases:
+            db.commit()
+            print(f" Redistributed {len(unassigned_cases)} unassigned cases after officer {officer_id} finalized all cases")
+    
+    except Exception as e:
+        print(f"Error handling officer case finalization: {e}")
+        db.rollback()
 
 def _assign_officer_to_case_based_on_location(db: Session, case_lat: float, case_lon: float) -> Optional[int]:
     try:
@@ -2924,7 +3145,7 @@ def _assign_officer_to_case_based_on_location(db: Session, case_lat: float, case
 
 def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, int]:
     """Create a case from a cluster of reports"""
-    stats = {'cases_created': 0}
+    stats = {'cases_created': 0, 'case_number': None}
     
     try:
         from app.models.case import Case, CaseReport
@@ -2974,6 +3195,7 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
         
         db.commit()
         stats['cases_created'] += 1
+        stats['case_number'] = case_number
         print(f"Created auto-case {case.case_number} with {len(reports)} reports")
         
     except Exception as e:
@@ -3039,6 +3261,9 @@ def _create_auto_cases(db: Session) -> Dict[str, int]:
                 stats['cases_created'] += case_stats['cases_created']
                 village_id, incident_type_id = village_key.split('_')
                 logger.info(f"Created village-based case for village {village_id}, incident type {incident_type_id}")
+                case_stats = _create_auto_cases(db)
+                logger.info(f"Created {case_stats['cases_created']} new cases automatically")
+                _balance_workload_and_reassign(db)
         
         # Strategy 2: Geographic clustering for reports without village assignment
         unassigned_reports = [r for r in verified_reports if not r.village_location_id]

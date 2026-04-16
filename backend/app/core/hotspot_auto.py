@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from math import atan2, cos, radians, sin, sqrt
 from typing import Any, Dict, List, Optional, Tuple
+from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session, selectinload
@@ -208,8 +209,8 @@ def create_hotspots_from_reports(
     analyze_all_reports: bool = False,
 ) -> int:
     """
-    Pipeline:
-    Reports -> trust filtering -> DBSCAN clusters -> hotspots with risk levels.
+    Enhanced Pipeline:
+    Reports -> trust filtering -> village-based clustering -> geographic DBSCAN -> hotspots with risk levels.
     """
     effective_time_window_hours = max(1, int(time_window_hours or DEFAULT_TIME_WINDOW_HOURS))
     since = datetime.now(timezone.utc) - timedelta(hours=effective_time_window_hours)
@@ -231,7 +232,8 @@ def create_hotspots_from_reports(
         reports_query = reports_query.filter(Report.reported_at >= since)
     reports = reports_query.all()
 
-    points: List[Dict[str, Any]] = []
+    # Filter eligible reports
+    eligible_reports = []
     for r in reports:
         if not _is_report_eligible(r):
             continue
@@ -248,20 +250,149 @@ def create_hotspots_from_reports(
         if trust < float(trust_min):
             continue
 
-        points.append(
-            {
-                "report": r,
-                "lat": lat,
-                "lon": lon,
-                "trust": trust,
-                "incident_type_id": int(r.incident_type_id),
-                "reported_at": r.reported_at,
-            }
-        )
+        eligible_reports.append({
+            "report": r,
+            "lat": lat,
+            "lon": lon,
+            "trust": trust,
+            "incident_type_id": int(r.incident_type_id),
+            "reported_at": r.reported_at,
+            "village_location_id": r.village_location_id,
+        })
 
-    if len(points) < max(1, int(min_incidents)):
+    if len(eligible_reports) < max(1, int(min_incidents)):
         return 0
 
+    # Strategy 1: Village-based clustering (preferred)
+    village_hotspots_created = _create_village_based_hotspots(
+        db, eligible_reports, min_incidents, effective_time_window_hours
+    )
+
+    # Strategy 2: Geographic clustering for remaining reports
+    geographic_hotspots_created = _create_geographic_hotspots(
+        db, eligible_reports, radius_meters, min_incidents, effective_time_window_hours
+    )
+
+    total_created = village_hotspots_created + geographic_hotspots_created
+    print(f"Created {total_created} hotspots: {village_hotspots_created} village-based, {geographic_hotspots_created} geographic")
+    
+    return total_created
+
+
+def _create_village_based_hotspots(
+    db: Session, 
+    reports: List[Dict[str, Any]], 
+    min_incidents: int, 
+    time_window_hours: int
+) -> int:
+    """Create hotspots based on village clustering (most accurate)"""
+    created = 0
+    
+    # Group reports by village and incident type
+    village_groups = {}
+    for report in reports:
+        village_key = f"{report['village_location_id']}_{report['incident_type_id']}"
+        if village_key not in village_groups:
+            village_groups[village_key] = []
+        village_groups[village_key].append(report)
+    
+    # Create hotspots for village groups with enough incidents
+    for village_key, village_reports in village_groups.items():
+        if len(village_reports) < min_incidents:
+            continue
+        
+        village_id, incident_type_id = village_key.split('_')
+        
+        # Calculate center and statistics
+        incident_count = len(village_reports)
+        center_lat = sum(r["lat"] for r in village_reports) / incident_count
+        center_long = sum(r["lon"] for r in village_reports) / incident_count
+        avg_trust = sum(r["trust"] for r in village_reports) / incident_count
+        
+        # Risk classification
+        area_sqkm = 0.01  # Village area approximation
+        cluster_density = incident_count / area_sqkm
+        classification_result = predict_cluster_classification(
+            incident_count=incident_count,
+            avg_trust=avg_trust,
+            cluster_density=cluster_density,
+            time_window_hours=time_window_hours,
+        )
+        risk_level = classification_to_risk_level(classification_result["classification"])
+        
+        # Create or update hotspot
+        existing_hotspot = db.query(Hotspot).filter(
+            Hotspot.incident_type_id == int(incident_type_id),
+            Hotspot.center_lat.between(center_lat - 0.001, center_lat + 0.001),
+            Hotspot.center_long.between(center_long - 0.001, center_long + 0.001),
+            Hotspot.detected_at >= datetime.now(timezone.utc) - timedelta(hours=24)
+        ).first()
+        
+        if existing_hotspot:
+            # Update existing hotspot
+            existing_hotspot.center_lat = Decimal(str(center_lat))
+            existing_hotspot.center_long = Decimal(str(center_long))
+            existing_hotspot.radius_meters = Decimal("300")  # Village radius
+            existing_hotspot.incident_count = incident_count
+            existing_hotspot.risk_level = risk_level
+            existing_hotspot.time_window_hours = time_window_hours
+            existing_hotspot.detected_at = datetime.now(timezone.utc)
+            
+            # Refresh report associations
+            db.execute(
+                text("DELETE FROM hotspot_reports WHERE hotspot_id = :hotspot_id"),
+                {"hotspot_id": existing_hotspot.hotspot_id},
+            )
+            
+            for report in village_reports:
+                db.execute(
+                    text("INSERT INTO hotspot_reports (hotspot_id, report_id) VALUES (:hotspot_id, :report_id)"),
+                    {"hotspot_id": existing_hotspot.hotspot_id, "report_id": report["report"].report_id},
+                )
+            
+            print(f"Updated village-based hotspot for village {village_id}, incident type {incident_type_id}")
+        else:
+            # Create new hotspot
+            hotspot = Hotspot(
+                hotspot_id=str(uuid4()),  # Need to import uuid4
+                center_lat=Decimal(str(center_lat)),
+                center_long=Decimal(str(center_long)),
+                radius_meters=Decimal("300"),  # Village radius
+                incident_count=incident_count,
+                risk_level=risk_level,
+                time_window_hours=time_window_hours,
+                incident_type_id=int(incident_type_id),
+                detected_at=datetime.now(timezone.utc),
+            )
+            
+            db.add(hotspot)
+            db.flush()
+            
+            # Link reports to hotspot
+            for report in village_reports:
+                db.execute(
+                    text("INSERT INTO hotspot_reports (hotspot_id, report_id) VALUES (:hotspot_id, :report_id)"),
+                    {"hotspot_id": hotspot.hotspot_id, "report_id": report["report"].report_id},
+                )
+            
+            created += 1
+            print(f"Created village-based hotspot {hotspot.hotspot_id} for village {village_id}, incident type {incident_type_id}")
+    
+    return created
+
+
+def _create_geographic_hotspots(
+    db: Session,
+    reports: List[Dict[str, Any]], 
+    radius_meters: float, 
+    min_incidents: int, 
+    time_window_hours: int
+) -> int:
+    """Create hotspots using geographic DBSCAN clustering (fallback)"""
+    # Convert reports to points format for DBSCAN
+    points = reports  # Already in correct format
+    
+    # Apply DBSCAN clustering
     labels = _dbscan(points, max(50.0, float(radius_meters)), max(1, int(min_incidents)))
     clusters: Dict[int, List[Dict[str, Any]]] = {}
     for idx, label in enumerate(labels):
@@ -291,7 +422,7 @@ def create_hotspots_from_reports(
             incident_count=incident_count,
             avg_trust=avg_trust,
             cluster_density=cluster_density,
-            time_window_hours=effective_time_window_hours,
+            time_window_hours=time_window_hours,
         )
         risk_level = classification_to_risk_level(classification_result["classification"])
 
@@ -300,20 +431,21 @@ def create_hotspots_from_reports(
             Hotspot.center_lat.between(center_lat - 0.01, center_lat + 0.01),
             Hotspot.center_long.between(center_long - 0.01, center_long + 0.01),
         )
-        if not analyze_all_reports:
-            existing_query = existing_query.filter(Hotspot.detected_at >= since)
+        existing_query = existing_query.filter(Hotspot.detected_at >= datetime.now(timezone.utc) - timedelta(hours=24))
         existing = existing_query.order_by(Hotspot.detected_at.desc()).first()
 
         hotspot = existing
         if hotspot is None:
             hotspot = Hotspot(
-                center_lat=center_lat,
-                center_long=center_long,
+                hotspot_id=str(uuid4()),
+                center_lat=Decimal(str(center_lat)),
+                center_long=Decimal(str(center_long)),
                 radius_meters=Decimal(str(radius_meters)),
                 incident_count=incident_count,
                 risk_level=risk_level,
-                time_window_hours=effective_time_window_hours,
+                time_window_hours=time_window_hours,
                 incident_type_id=dominant_incident_type_id,
+                detected_at=datetime.now(timezone.utc),
             )
             db.add(hotspot)
             db.flush()
@@ -324,8 +456,9 @@ def create_hotspots_from_reports(
             hotspot.radius_meters = Decimal(str(radius_meters))
             hotspot.incident_count = incident_count
             hotspot.risk_level = risk_level
-            hotspot.time_window_hours = effective_time_window_hours
+            hotspot.time_window_hours = time_window_hours
             hotspot.incident_type_id = dominant_incident_type_id
+            hotspot.detected_at = datetime.now(timezone.utc)
             db.execute(
                 text("DELETE FROM hotspot_reports WHERE hotspot_id = :hotspot_id"),
                 {"hotspot_id": hotspot.hotspot_id},
@@ -343,9 +476,5 @@ def create_hotspots_from_reports(
                     "report_id": str(p["report"].report_id),
                 },
             )
-
-        # Keep score in-memory for API response computations through linked reports.
-        _ = avg_trust
-
-    db.commit()
+    
     return created

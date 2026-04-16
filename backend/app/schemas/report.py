@@ -33,6 +33,13 @@ class ReportCreate(BaseModel):
     app_version: Optional[str] = None
     network_type: Optional[str] = None
     battery_level: Optional[Decimal] = None
+    
+    # Mobile rule-based verification results
+    mobile_rule_status: Optional[str] = None  # "passed", "failed", "warning"
+    mobile_rule_details: Optional[Dict[str, Any]] = None  # Details of mobile rule checks
+    location_consistency_check: Optional[bool] = None  # Location consistency between report and evidence
+    evidence_source_valid: Optional[bool] = None  # Evidence not downloaded/screenshotted
+    evidence_tampering_detected: Optional[bool] = None  # Screenshot/screen recording detection
 
     @model_validator(mode="after")
     def require_device_identifier(self):
