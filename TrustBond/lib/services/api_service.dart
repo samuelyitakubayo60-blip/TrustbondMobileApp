@@ -1,6 +1,9 @@
+// ignore_for_file: use_null_aware_elements
+
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 
 class ApiService {
@@ -10,6 +13,9 @@ class ApiService {
 
   final http.Client _client = http.Client();
   static const Duration _timeout = Duration(seconds: 60);
+  static const String _incidentTypesCacheKey = 'tb_cache_incident_types_v1';
+  static const String _myReportsCachePrefix = 'tb_cache_my_reports_v1_';
+  static const String _reportDetailCachePrefix = 'tb_cache_report_detail_v1_';
 
   /// Common headers for API requests.
   static const Map<String, String> _jsonHeaders = {
@@ -48,15 +54,25 @@ class ApiService {
   }
 
   Future<List<dynamic>> getIncidentTypes() async {
-    final response = await _client.get(
-      Uri.parse('${ApiConfig.incidentTypesUrl}/'),
-      headers: _getHeaders,
-    ).timeout(_timeout);
-    
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+    try {
+      final response = await _client.get(
+        Uri.parse('${ApiConfig.incidentTypesUrl}/'),
+        headers: _getHeaders,
+      ).timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as List<dynamic>;
+        await _saveCache(_incidentTypesCacheKey, data);
+        return data;
+      }
+      throw Exception('Failed to get incident types: ${response.statusCode}');
+    } catch (_) {
+      final cached = await _readCache(_incidentTypesCacheKey);
+      if (cached is List) {
+        return cached;
+      }
+      rethrow;
     }
-    throw Exception('Failed to get incident types: ${response.statusCode}');
   }
 
   /// List reports for the given device (my reports).
@@ -64,11 +80,58 @@ class ApiService {
     final uri = Uri.parse('${ApiConfig.reportsUrl}/').replace(
       queryParameters: {'device_id': deviceId},
     );
-    final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body) as List<dynamic>;
+    final cacheKey = '$_myReportsCachePrefix$deviceId';
+    try {
+      final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as List<dynamic>;
+        await _saveCache(cacheKey, data);
+        await _cacheReportDetailStubs(deviceId, data);
+        return data;
+      }
+      throw Exception('Failed to get my reports: ${response.statusCode}');
+    } catch (_) {
+      final cached = await _readCache(cacheKey);
+      if (cached is List) {
+        return cached;
+      }
+      rethrow;
     }
-    throw Exception('Failed to get my reports: ${response.statusCode}');
+  }
+
+  Future<void> _cacheReportDetailStubs(String deviceId, List<dynamic> listData) async {
+    for (final item in listData) {
+      if (item is! Map) continue;
+      final map = Map<String, dynamic>.from(item);
+      final reportId = map['report_id']?.toString();
+      if (reportId == null || reportId.isEmpty) continue;
+      final key = _detailCacheKey(reportId, deviceId);
+      final minimal = Map<String, dynamic>.from(map)
+        ..putIfAbsent('evidence_files', () => <dynamic>[])
+        ..putIfAbsent('community_votes', () => <String, int>{})
+        ..putIfAbsent('user_vote', () => null);
+      await _saveCache(key, minimal);
+    }
+  }
+
+  String _detailCacheKey(String reportId, String deviceId) {
+    return '$_reportDetailCachePrefix${reportId}_$deviceId';
+  }
+
+  Future<void> _saveCache(String key, Object data) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(key, jsonEncode(data));
+  }
+
+  Future<dynamic> _readCache(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(key);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return jsonDecode(raw);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Get a single report; deviceId must match the report owner.
@@ -76,11 +139,36 @@ class ApiService {
     final uri = Uri.parse('${ApiConfig.reportsUrl}/$reportId').replace(
       queryParameters: {'device_id': deviceId},
     );
-    final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+    final detailCacheKey = _detailCacheKey(reportId, deviceId);
+    try {
+      final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        await _saveCache(detailCacheKey, data);
+        return data;
+      }
+      throw Exception('Failed to get report: ${response.statusCode}');
+    } catch (_) {
+      final cachedDetail = await _readCache(detailCacheKey);
+      if (cachedDetail is Map) {
+        return Map<String, dynamic>.from(cachedDetail);
+      }
+
+      final listCache = await _readCache('$_myReportsCachePrefix$deviceId');
+      if (listCache is List) {
+        for (final item in listCache) {
+          if (item is! Map) continue;
+          final map = Map<String, dynamic>.from(item);
+          if (map['report_id']?.toString() == reportId) {
+            return map
+              ..putIfAbsent('evidence_files', () => <dynamic>[])
+              ..putIfAbsent('community_votes', () => <String, int>{})
+              ..putIfAbsent('user_vote', () => null);
+          }
+        }
+      }
+      rethrow;
     }
-    throw Exception('Failed to get report: ${response.statusCode}');
   }
 
   Future<Map<String, dynamic>> submitReport(Map<String, dynamic> reportData) async {
@@ -104,7 +192,7 @@ class ApiService {
             : err['detail'].toString();
       }
     } catch (_) {}
-    throw Exception('$message (HTTP ${response.statusCode})');
+    throw ApiRequestException(message, response.statusCode);
   }
 
   /// Delete a report (used for rollback if evidence upload fails).
@@ -127,8 +215,8 @@ class ApiService {
   }) async {
     final uri = Uri.parse('${ApiConfig.publicLocationsUrl}/').replace(
       queryParameters: {
-        if (locationType != null) 'location_type': locationType,
-        if (parentId != null) 'parent_id': parentId.toString(),
+        if (locationType case final locType?) 'location_type': locType,
+        if (parentId case final pid?) 'parent_id': pid.toString(),
         'limit': limit.toString(),
       },
     );
@@ -306,4 +394,14 @@ class EvidenceUploadException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class ApiRequestException implements Exception {
+  final String message;
+  final int statusCode;
+
+  ApiRequestException(this.message, this.statusCode);
+
+  @override
+  String toString() => '$message (HTTP $statusCode)';
 }

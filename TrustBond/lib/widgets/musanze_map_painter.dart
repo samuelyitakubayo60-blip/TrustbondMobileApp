@@ -219,7 +219,7 @@ class MusanzeMapPainter extends CustomPainter {
         }
         
         // Draw hotspot circle (size based on incident count)
-        final radius = incidentCount != null ? (4.0 + (incidentCount / 5).clamp(0, 4)).toDouble() : 6.0;
+        final radius = (4.0 + (incidentCount / 5).clamp(0, 4)).toDouble();
         
         // Outer glow
         canvas.drawCircle(
@@ -380,7 +380,7 @@ class MusanzeMapPreviewPainter extends CustomPainter {
         }
         
         // Draw hotspot circle (size based on incident count)
-        final radius = incidentCount != null ? (4.0 + (incidentCount / 5).clamp(0, 4)).toDouble() : 6.0;
+        final radius = (4.0 + (incidentCount / 5).clamp(0, 4)).toDouble();
         
         // Outer glow
         canvas.drawCircle(

@@ -111,10 +111,12 @@ def is_likely_screenshot_or_screen_recording(
     return False
 
 
-# Configurable thresholds (can be moved to config later) - FIXED for better UX
-MIN_DESCRIPTION_LENGTH = 3  # Reduced from 5 for faster approval
-MIN_DESCRIPTION_LENGTH_WITH_EVIDENCE = 1  # Reduced from 3 for faster approval
-HIGH_SEVERITY_WEIGHT = 2.5  # Increased from 2.0 to reduce false flagging
+# Deterministic validation thresholds for rule engine.
+# AI/ML credibility analysis happens separately in backend scoring.
+MAX_GPS_ACCURACY_METERS = 200.0
+HIGH_SPEED_MPS = 30.0
+IMPOSSIBLE_SPEED_MPS = 55.0
+STATIONARY_SPEED_TOLERANCE_MPS = 2.0
 
 
 def apply_rule_based_status(
@@ -126,41 +128,64 @@ def apply_rule_based_status(
     Apply rule-based logic to set rule_status and is_flagged.
     Returns (rule_status, is_flagged, flag_reason or None).
     """
-    description = (report.description or "").strip()
-    has_description = len(description) >= MIN_DESCRIPTION_LENGTH
-    has_short_description = len(description) >= MIN_DESCRIPTION_LENGTH_WITH_EVIDENCE
-    has_evidence = evidence_count > 0
-
-    # Load incident type for severity
+    # Validate incident type exists and is active (domain validity).
     incident_type = (
         db.query(IncidentType)
         .filter(IncidentType.incident_type_id == report.incident_type_id)
         .first()
     )
-    severity = float(incident_type.severity_weight) if incident_type and incident_type.severity_weight else 1.0
+    if incident_type is None:
+        return "rejected", True, "invalid_incident_type"
 
-    # Rule 1: Reject — no description and no evidence (too sparse to be useful)
-    if not has_short_description and not has_evidence:
-        return "rejected", True, "no_description_or_evidence"
+    # Validate coordinates range.
+    try:
+        lat = float(report.latitude)
+        lon = float(report.longitude)
+    except Exception:
+        return "rejected", True, "invalid_coordinates"
+    if lat < -90 or lat > 90 or lon < -180 or lon > 180:
+        return "rejected", True, "invalid_coordinates"
 
-    # Rule 2: Flag — has evidence but no/minimal description
-    if has_evidence and not has_description:
-        return "flagged", True, "no_description_with_evidence"
+    # Validate GPS accuracy quality.
+    gps_accuracy = getattr(report, "gps_accuracy", None)
+    if gps_accuracy is not None:
+        try:
+            gps_acc = float(gps_accuracy)
+            if gps_acc <= 0:
+                return "flagged", True, "invalid_gps_accuracy"
+            if gps_acc > MAX_GPS_ACCURACY_METERS:
+                return "flagged", True, "poor_gps_accuracy"
+        except Exception:
+            return "flagged", True, "invalid_gps_accuracy"
 
-    # Rule 3: Flag — very short description (even with evidence)
-    if has_short_description and not has_description and has_evidence:
-        return "flagged", True, "minimal_description"
+    # Validate speed plausibility.
+    speed_mps = getattr(report, "movement_speed", None)
+    if speed_mps is not None:
+        try:
+            speed = float(speed_mps)
+            if speed < 0:
+                return "flagged", True, "invalid_movement_speed"
+            if speed > IMPOSSIBLE_SPEED_MPS:
+                return "rejected", True, "implausible_speed"
+            if speed > HIGH_SPEED_MPS:
+                return "flagged", True, "high_speed_report"
+        except Exception:
+            return "flagged", True, "invalid_movement_speed"
 
-    # Rule 4: Flag — high severity incident type (needs review)
-    if severity >= HIGH_SEVERITY_WEIGHT:
-        return "flagged", True, "high_severity_incident"
+    # Validate motion consistency.
+    motion_level = getattr(report, "motion_level", None)
+    if motion_level is not None and str(motion_level).strip():
+        motion = str(motion_level).strip().lower()
+        if motion not in {"low", "medium", "high"}:
+            return "flagged", True, "invalid_motion_level"
 
-    # Rule 5: Pass — has reasonable description; optional evidence
-    if has_description:
-        return "passed", False, None
+    was_stationary = getattr(report, "was_stationary", None)
+    if was_stationary is True and speed_mps is not None:
+        try:
+            if float(speed_mps) > STATIONARY_SPEED_TOLERANCE_MPS:
+                return "flagged", True, "stationary_motion_mismatch"
+        except Exception:
+            return "flagged", True, "stationary_motion_mismatch"
 
-    # Default: pending (e.g. short description but has evidence)
-    if has_evidence:
-        return "passed", False, None
-    
-    return "pending", False, None
+    # Deterministic rule checks passed; deeper validity/trust is handled by AI/ML pipeline.
+    return "passed", False, None

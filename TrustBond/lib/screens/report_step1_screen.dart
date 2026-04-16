@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../widgets/shared_widgets.dart';
 import '../services/api_service.dart';
-import '../services/local_cache_service.dart';
 import 'report_step2_screen.dart';
 
 class ReportStep1Screen extends StatefulWidget {
@@ -14,11 +13,9 @@ class ReportStep1Screen extends StatefulWidget {
 
 class _ReportStep1ScreenState extends State<ReportStep1Screen> {
   final _apiService = ApiService();
-  final _cache = LocalCacheService();
   List<Map<String, dynamic>> _types = [];
   bool _loading = true;
   String? _error;
-  bool _showingCached = false;
   int? _selectedTypeId;
   String? _selectedTypeName;
 
@@ -31,26 +28,13 @@ class _ReportStep1ScreenState extends State<ReportStep1Screen> {
   Future<void> _loadTypes() async {
     try {
       final data = await _apiService.getIncidentTypes();
-      await _cache.cacheIncidentTypes(data);
       setState(() {
         _types = List<Map<String, dynamic>>.from(
           data.map((e) => Map<String, dynamic>.from(e as Map)),
         );
-        _showingCached = false;
         _loading = false;
       });
     } catch (e) {
-      final cached = await _cache.getCachedIncidentTypes();
-      if (cached.isNotEmpty) {
-        setState(() {
-          _types = cached;
-          _showingCached = true;
-          _loading = false;
-          _error = null;
-        });
-        return;
-      }
-
       debugPrint('Failed to load incident types: $e');
       setState(() {
         _error = e.toString();
@@ -146,28 +130,6 @@ class _ReportStep1ScreenState extends State<ReportStep1Screen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_showingCached)
-            Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.surface2,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.wifi_off, size: 14, color: AppColors.muted),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Offline mode: using last synced incident types.',
-                      style: TextStyle(fontSize: 11, color: AppColors.muted),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           const Text('What type of incident?',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),

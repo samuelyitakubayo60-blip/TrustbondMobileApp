@@ -8,9 +8,6 @@ import '../services/api_service.dart';
 import '../services/device_service.dart';
 import '../services/location_service.dart';
 import '../services/hotspot_service.dart';
-import '../services/offline_report_queue.dart';
-import '../services/local_cache_service.dart';
-import '../services/offline_integration_guide.dart';
 import '../services/app_refresh_bus.dart';
 import '../models/report_model.dart';
 import '../utils/json_helpers.dart';
@@ -30,10 +27,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final _deviceService = DeviceService();
   final _locationService = LocationService();
   final _hotspotService = HotspotService();
-  final _queue = OfflineReportQueue();
-  final _offlineIntegration = OfflineReportingIntegration();
-  final _cache = LocalCacheService();
-  Timer? _syncTimer;
   StreamSubscription<String>? _refreshSub;
 
   String? _deviceId;
@@ -44,9 +37,6 @@ class _HomeScreenState extends State<HomeScreen> {
   double _trustScore = 0;
   MusanzeMapData? _mapData;
   List<Map<String, dynamic>> _hotspots = [];
-  OfflineQueueStats _queueStats =
-      const OfflineQueueStats(queuedCount: 0, errorCount: 0);
-  bool _showingCachedReports = false;
 
   // GPS location state
   double? _userLat;
@@ -58,10 +48,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadData();
     _loadCurrentLocation();
-    _refreshQueueStats();
-    _syncTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      _refreshQueueStats();
-    });
     _refreshSub = AppRefreshBus.stream.listen((_) {
       _loadData();
     });
@@ -69,15 +55,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _syncTimer?.cancel();
     _refreshSub?.cancel();
     super.dispose();
-  }
-
-  Future<void> _refreshQueueStats() async {
-    final stats = await _queue.getStats();
-    if (!mounted) return;
-    setState(() => _queueStats = stats);
   }
 
   Future<void> _loadData() async {
@@ -114,7 +93,6 @@ class _HomeScreenState extends State<HomeScreen> {
       
       // Load reports
       final list = await _apiService.getMyReports(deviceId);
-        await _cache.cacheReports(deviceId, list);
       final reports = list
           .map((e) => ReportListItem.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -128,7 +106,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _totalReports = reports.length;
         _verifiedReports = verified;
         _trustScore = deviceTrustScore;
-        _showingCachedReports = false;
         _loading = false;
       });
       
@@ -136,34 +113,13 @@ class _HomeScreenState extends State<HomeScreen> {
       _loadHotspots();
     } catch (e) {
       debugPrint('Failed to load reports on home: $e');
-      final cachedDeviceId = _deviceId ?? await _deviceService.getDeviceId();
-      if (cachedDeviceId != null && cachedDeviceId.isNotEmpty) {
-        final cached = await _cache.getCachedReports(cachedDeviceId);
-        if (cached.isNotEmpty) {
-          final reports = cached
-              .map((e) => ReportListItem.fromJson(e))
-              .toList(growable: false);
-          final verified = reports.where((r) => r.verifiedAt != null).length;
-          setState(() {
-            _recentReports = reports.take(3).toList();
-            _totalReports = reports.length;
-            _verifiedReports = verified;
-            _showingCachedReports = true;
-            _loading = false;
-          });
-          return;
-        }
-      }
-
       setState(() => _loading = false);
     }
   }
 
   Future<void> _loadHotspots() async {
     try {
-      print('🔍 DEBUG: _loadHotspots called');
       final hotspots = await _hotspotService.getAllHotspots();
-      print('🔍 DEBUG: Got ${hotspots.length} hotspots from service');
       if (mounted) {
         final transformedHotspots = hotspots.map((h) => {
           'latitude': h.centerLat,
@@ -171,11 +127,9 @@ class _HomeScreenState extends State<HomeScreen> {
           'risk_level': h.riskLevel,
           'incident_count': h.incidentCount,
         }).toList();
-        print('🔍 DEBUG: Transformed hotspots: $transformedHotspots');
         setState(() {
           _hotspots = transformedHotspots;
         });
-        print('🔍 DEBUG: setState called with ${_hotspots.length} hotspots');
       }
     } catch (e) {
       debugPrint('Failed to load hotspots: $e');
@@ -206,8 +160,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: CustomScrollView(
             slivers: [
               SliverToBoxAdapter(child: _buildHeader()),
-              if (_queueStats.totalCount > 0)
-                SliverToBoxAdapter(child: _buildSyncIndicator()),
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 sliver: SliverList(
@@ -243,48 +195,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSyncIndicator() {
-    final pending = _queueStats.queuedCount;
-    final errors = _queueStats.errorCount;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.surface2,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: errors > 0
-                ? AppColors.warn.withValues(alpha: 0.5)
-                : AppColors.accent.withValues(alpha: 0.4),
-          ),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: errors > 0 ? AppColors.warn : AppColors.accent,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                pending > 0
-                    ? 'Background sync in progress: $pending item${pending == 1 ? '' : 's'} pending'
-                    : "Couldn't send $errors report${errors == 1 ? '' : 's'} - tap to retry",
-                style: const TextStyle(fontSize: 11.5, color: AppColors.text),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
@@ -299,11 +209,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? '${_userVillage!.village}, ${_userVillage!.cell}'
                       : 'Good morning,',
                   style: const TextStyle(fontSize: 11, color: AppColors.muted)),
-                if (_showingCachedReports)
-                  const Text(
-                    'Offline mode: showing cached reports',
-                    style: TextStyle(fontSize: 10, color: AppColors.muted),
-                  ),
                 RichText(
                   text: const TextSpan(
                     style:
@@ -712,14 +617,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildReportItem(ReportListItem report) {
     final icon = iconForIncidentType(report.incidentTypeName ?? '');
     final bgColor = colorForIncidentType(report.incidentTypeName ?? '');
+    final statusKey = report.workflowStatus;
     return ReportItemCard(
       icon: icon,
       iconBg: bgColor.withValues(alpha: 0.1),
       typeName: report.incidentTypeName ?? 'Incident',
       description: report.description ?? 'No description',
       timeLabel: timeAgo(report.reportedAt),
-      statusLabel: formatStatus(report.ruleStatus),
-      statusType: badgeTypeFromStatus(report.ruleStatus),
+      statusLabel: formatStatus(statusKey),
+      statusType: badgeTypeFromStatus(statusKey),
+      trustScore: statusKey == 'verified' ? report.trustScore : null,
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => ReportDetailScreen(

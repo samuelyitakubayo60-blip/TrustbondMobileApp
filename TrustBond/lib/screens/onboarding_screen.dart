@@ -529,7 +529,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: (_acceptedTerms && !_isContinuing)
-                    ? () => _continueWithLocation(context)
+                    ? _continueWithLocation
                     : null,
                 child: _isContinuing
                     ? const SizedBox(
@@ -557,7 +557,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  Future<void> _continueWithLocation(BuildContext context) async {
+  Future<void> _continueWithLocation() async {
     if (_isContinuing || !_acceptedTerms) return;
 
     setState(() => _isContinuing = true);
@@ -566,8 +566,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     final loc = LocationService();
     final result = await loc.getCurrentPosition();
 
+    if (!mounted) return;
+
     if (result.hasError && result.canOpenSettings) {
-      // ignore: use_build_context_synchronously
       await showDialog(
         context: context,
         builder: (_) => AlertDialog(
@@ -595,9 +596,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ],
         ),
       );
+
+      if (!mounted) return;
     }
 
-    // ignore: use_build_context_synchronously
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const MainShell()),
     );

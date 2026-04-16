@@ -7,7 +7,6 @@ import '../services/device_service.dart';
 import '../services/location_service.dart';
 import '../services/hotspot_service.dart';
 import '../models/report_model.dart';
-import '../utils/json_helpers.dart'; // Import global JSON helpers
 import 'report_detail_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {

@@ -15,6 +15,7 @@ class EvidenceFileCreate(BaseModel):
 
 
 class ReportCreate(BaseModel):
+    report_id: Optional[UUID] = None
     device_id: Optional[UUID] = None
     device_hash: Optional[str] = None
     incident_type_id: int

@@ -46,9 +46,7 @@ from app.api.v1.notifications import create_notification
 from app.core.report_rules import apply_rule_based_status, is_likely_screenshot_or_screen_recording
 from app.core.report_review import (
     needs_police_review_clause,
-    resolve_display_trust_score,
     resolve_ml_prediction_for_report,
-    resolve_ml_prediction_label_for_display,
 )
 from app.core.credibility_model import score_report_credibility, update_device_ml_aggregates, _json_safe
 from app.core.audit import log_action
@@ -60,6 +58,7 @@ from app.core.hotspot_auto import (
 from app.core.village_lookup import get_village_location_id, get_village_location_info
 from app.schemas.report import CommunityVoteRequest
 from sqlalchemy import text, or_, func, cast, String
+from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -683,9 +682,19 @@ def create_report(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Location validation failed: {e}")
     
+    incoming_report_id = report_data.report_id or uuid4()
+    if report_data.report_id:
+        existing_report = (
+            db.query(Report)
+            .filter(Report.report_id == report_data.report_id)
+            .first()
+        )
+        if existing_report:
+            raise HTTPException(status_code=409, detail="Report already exists")
+
     report_num = _generate_report_number(db) if hasattr(Report, "report_number") else None
     report = Report(
-        report_id=uuid4(),
+        report_id=incoming_report_id,
         report_number=report_num,
         device_id=device.device_id,
         incident_type_id=report_data.incident_type_id,
@@ -711,7 +720,11 @@ def create_report(
         report.village_location_id = village_id
         report.location_id = village_id
     db.add(report)
-    db.flush()  # Get report_id
+    try:
+        db.flush()  # Get report_id
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Report already exists")
 
     # Add evidence files
     for evidence_data in report_data.evidence_files:
@@ -763,7 +776,11 @@ def create_report(
             success=True,
         )
 
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="Report already exists")
         db.refresh(report)
         background_tasks.add_task(
             manager.broadcast,
@@ -783,36 +800,27 @@ def create_report(
     print("ML scoring completed")  # Debug log
     
     # FIXED: Commit ML prediction to ensure it's available for verification
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Report already exists")
     db.refresh(report)  # Ensure we have the latest data including ML predictions
 
-    # Get ML prediction for AI verification
+    # Rule verification is deterministic (location/speed/motion/incident validity).
+    rule_status, is_flagged, flag_reason = apply_rule_based_status(
+        report, evidence_count, db
+    )
+
+    # Get ML prediction if available (used for backend AI verification and trust scoring).
     from app.models.ml_prediction import MLPrediction
     ml_prediction = db.query(MLPrediction).filter(MLPrediction.report_id == report.report_id).order_by(MLPrediction.evaluated_at.desc()).first()
-    if ml_prediction:
-        print(f"Using ML prediction for AI verification: {ml_prediction.prediction_label}, trust_score: {ml_prediction.trust_score}")  # Debug log
+
+    from app.core.report_priority import calculate_report_priority
     
-    # Simple AI verification based on ML prediction
-    ai_status = "pending"
-    is_flagged = False
-    flag_reason = None
-    
-    if ml_prediction:
-        if ml_prediction.prediction_label == "likely_real" and (ml_prediction.trust_score or 0) >= 70:
-            ai_status = "passed"
-        elif ml_prediction.prediction_label in ["fake", "suspicious"] or (ml_prediction.trust_score or 0) < 30:
-            ai_status = "rejected"
-        else:
-            ai_status = "flagged"
-            is_flagged = True
-            flag_reason = f"AI uncertainty: {ml_prediction.prediction_label} (score: {ml_prediction.trust_score})"
-    else:
-        # No ML prediction - flag for review
-        ai_status = "flagged"
-        is_flagged = True
-        flag_reason = "No ML prediction available"
-    
-    print(f"AI verification result - status: {ai_status}, flagged: {is_flagged}")  # Debug log
+    # Calculate automatic priority
+    priority = calculate_report_priority(report, ml_prediction, evidence_count, db)
+    print(f"Calculated report priority: {priority}")  # Debug log
     
     # Apply AI results to report
     report.rule_status = ai_status  # Keep field for compatibility
@@ -822,62 +830,18 @@ def create_report(
     if ai_status == "rejected":
         report.status = "rejected"
         report.verification_status = "rejected"
+    elif is_flagged:
+        report.status = "pending"
+        report.verification_status = "under_review"
+    else:
+        report.status = "pending"
+        report.verification_status = "pending"
     
     # Set ai_ready = true to indicate AI processing complete
     report.ai_ready = True
     report.features_extracted_at = datetime.now(timezone.utc)
     
-    # Two-stage verification: Mobile Rules + Backend AI
-    mobile_rules_passed = (
-        report_data.mobile_rule_status == "passed" and
-        (report_data.location_consistency_check is True) and
-        (report_data.evidence_source_valid is True) and
-        (report_data.evidence_tampering_detected is False)
-    )
-    
-    print(f"Mobile rules status: {report_data.mobile_rule_status}, consistency: {report_data.location_consistency_check}, source_valid: {report_data.evidence_source_valid}, tampering: {report_data.evidence_tampering_detected}")
-    print(f"Backend AI status: {ai_status}, flagged: {is_flagged}")
-    
-    # Both mobile rules AND backend AI must pass for auto-verification
-    if mobile_rules_passed and ai_status == "passed" and not is_flagged:
-        # Both stages passed - auto-verify
-        report.verification_status = "verified"
-        report.status = "verified"
-        print(f"AUTO-VERIFIED: Report {report.report_id} - Mobile rules + Backend AI both passed")
-    elif ai_status == "rejected" or report_data.mobile_rule_status == "failed":
-        # Either stage rejected - auto-reject
-        report.verification_status = "rejected"
-        report.status = "rejected"
-        rejection_reason = []
-        if report_data.mobile_rule_status == "failed":
-            rejection_reason.append("mobile_rules_failed")
-        if ai_status == "rejected":
-            rejection_reason.append("backend_ai_rejected")
-        print(f"AUTO-REJECTED: Report {report.report_id} - {' + '.join(rejection_reason)}")
-    else:
-        # Any stage flagged/warning or mixed results - human review
-        report.verification_status = "under_review"
-        report.status = "pending"
-        review_reasons = []
-        if not mobile_rules_passed:
-            review_reasons.append("mobile_rules_issue")
-        if is_flagged:
-            review_reasons.append(f"backend_ai_flagged: {flag_reason}")
-        if ai_status not in ["passed", "rejected"]:
-            review_reasons.append(f"backend_ai_{ai_status}")
-        print(f"HUMAN REVIEW NEEDED: Report {report.report_id} - {' + '.join(review_reasons)}")
-    
-    # Store mobile verification results for audit trail
-    report.feature_vector = report.feature_vector or {}
-    if isinstance(report.feature_vector, dict):
-        report.feature_vector.update({
-            "mobile_rule_status": report_data.mobile_rule_status,
-            "mobile_rule_details": report_data.mobile_rule_details,
-            "location_consistency_check": report_data.location_consistency_check,
-            "evidence_source_valid": report_data.evidence_source_valid,
-            "evidence_tampering_detected": report_data.evidence_tampering_detected,
-            "mobile_rules_passed": mobile_rules_passed
-        })
+    # AI decision is applied later in the combined rule+ML verification block.
 
     # Update device stats
     now_utc = datetime.now(timezone.utc)
@@ -1093,9 +1057,16 @@ def _build_report_response(r: Report, db: Optional[Session] = None, request_devi
 
     ml_prediction = resolve_ml_prediction_for_report(r)
     trust_factors = ml_prediction.explanation if ml_prediction else None
-    trust_score = resolve_display_trust_score(r)
-    if trust_score is not None:
-        trust_score = float(trust_score)
+    trust_score = (
+        float(ml_prediction.trust_score)
+        if ml_prediction is not None and ml_prediction.trust_score is not None
+        else None
+    )
+    ml_prediction_label = None
+    if ml_prediction is not None:
+        raw_label = getattr(ml_prediction, "prediction_label", None)
+        if raw_label is not None and str(raw_label).strip():
+            ml_prediction_label = str(raw_label).strip().lower()
 
     # Aggregate assignment priority/status for list views
     assignment_priority = None
@@ -1162,7 +1133,7 @@ def _build_report_response(r: Report, db: Optional[Session] = None, request_devi
         evidence_preview=evidence_preview,
         trust_score=float(trust_score) if trust_score is not None else None,
         trust_factors=trust_factors,
-        ml_prediction_label=resolve_ml_prediction_label_for_display(r),
+        ml_prediction_label=ml_prediction_label,
         hotspot_id=hotspot_id,
         hotspot_risk_level=hotspot_risk_level,
         hotspot_incident_count=hotspot_incident_count,
@@ -1697,8 +1668,18 @@ def get_report(
 
     incident_lat, incident_lon, incident_source, incident_location_info = _compute_incident_location_with_villages(report, db)
 
-    # Trust score and ML label: same resolution as list API (ML trust first, else device).
-    trust_score = resolve_display_trust_score(report)
+    # Trust score and ML label come from backend ML prediction only.
+    ml_prediction = resolve_ml_prediction_for_report(report)
+    trust_score = (
+        float(ml_prediction.trust_score)
+        if ml_prediction is not None and ml_prediction.trust_score is not None
+        else None
+    )
+    ml_prediction_label = None
+    if ml_prediction is not None:
+        raw_label = getattr(ml_prediction, "prediction_label", None)
+        if raw_label is not None and str(raw_label).strip():
+            ml_prediction_label = str(raw_label).strip().lower()
     context_tags_list = getattr(report, "context_tags", None) or []
 
     community_votes = {"real": 0, "false": 0, "unknown": 0}
@@ -1737,7 +1718,7 @@ def get_report(
         village_location_id=report.village_location_id,
         incident_type_name=report.incident_type.type_name if report.incident_type else None,
         trust_score=float(trust_score) if trust_score is not None else None,
-        ml_prediction_label=resolve_ml_prediction_label_for_display(report),
+        ml_prediction_label=ml_prediction_label,
         context_tags=context_tags_list,
         is_flagged=getattr(report, "is_flagged", None),
         flag_reason=getattr(report, "flag_reason", None),
@@ -2421,7 +2402,7 @@ async def upload_evidence(
             file_url = upload_result.get("secure_url") or upload_result.get("url")
         except Exception as e:
             # In production mode with Cloudinary configured, we do NOT write to local disk.
-            # The client (mobile app) should handle offline/low-network by queuing uploads locally.
+            # The mobile client may queue retries locally and resend later.
             print(f"[Cloudinary] upload error for report {report_id}: {e}")
             raise HTTPException(status_code=500, detail=f"Cloudinary upload failed: {e}")
     else:

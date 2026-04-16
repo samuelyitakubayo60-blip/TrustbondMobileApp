@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../utils/date_time_utils.dart';
 
 /// One report as returned from GET /reports (list or detail).
@@ -23,6 +24,8 @@ class ReportListItem {
   final String ruleStatus;
 
   final String? status;
+
+  final String? verificationStatus;
 
   final double? trustScore;
 
@@ -60,6 +63,8 @@ class ReportListItem {
 
     this.status,
 
+    this.verificationStatus,
+
     this.trustScore,
 
     this.reportNumber,
@@ -91,27 +96,31 @@ class ReportListItem {
         reportedAt: parseApiDateTimeToLocal(_stringFromJson(json['reported_at'])),
         ruleStatus: json['rule_status'] as String? ?? 'pending',
         status: json['status'] as String?,
+        verificationStatus: json['verification_status'] as String?,
         trustScore: _doubleFromJson(json['trust_score']),
         reportNumber: json['report_number'] as String?,
-        contextTags: tags is List ? (tags as List).map((e) => e.toString()).toList() : [],
+        contextTags: tags is List ? tags.map((e) => e.toString()).toList() : [],
         isFlagged: json['is_flagged'] as bool?,
         flagReason: json['flag_reason'] as String?,
         verifiedAt: json['verified_at'] != null ? parseApiDateTimeToLocal(json['verified_at'] as String) : null,
       );
     } catch (e) {
-      print('Error parsing ReportListItem: $e');
-      print('JSON data: $json');
+      debugPrint('Error parsing ReportListItem: $e');
+      debugPrint('JSON data: $json');
       
       // Try to identify the specific field causing issues
       final fields = ['report_id', 'device_id', 'incident_type_id', 'latitude', 'longitude', 'reported_at', 'trust_score'];
       for (final field in fields) {
         final value = json[field];
-        print('Field $field: $value (type: ${value.runtimeType})');
+        debugPrint('Field $field: $value (type: ${value.runtimeType})');
       }
       
       rethrow;
     }
   }
+
+  String get workflowStatus =>
+      (verificationStatus ?? status ?? ruleStatus).trim().toLowerCase();
 
 }
 
@@ -203,6 +212,8 @@ class ReportDetailItem {
 
   final String? status;
 
+  final String? verificationStatus;
+
   final List<ReportEvidenceItem> evidenceFiles;
 
   final double? trustScore;
@@ -244,6 +255,8 @@ class ReportDetailItem {
     required this.ruleStatus,
 
     this.status,
+
+    this.verificationStatus,
 
     this.evidenceFiles = const [],
 
@@ -302,6 +315,8 @@ class ReportDetailItem {
 
       status: json['status'] as String?,
 
+      verificationStatus: json['verification_status'] as String?,
+
       evidenceFiles: evidenceList
 
           .map((e) => ReportEvidenceItem.fromJson(e as Map<String, dynamic>))
@@ -312,7 +327,7 @@ class ReportDetailItem {
 
       reportNumber: json['report_number'] as String?,
 
-      contextTags: tags is List ? (tags as List).map((e) => e.toString()).toList() : [],
+      contextTags: tags is List ? tags.map((e) => e.toString()).toList() : [],
 
       isFlagged: json['is_flagged'] as bool?,
 
@@ -327,6 +342,9 @@ class ReportDetailItem {
     );
 
   }
+
+  String get workflowStatus =>
+      (verificationStatus ?? status ?? ruleStatus).trim().toLowerCase();
 
 }
 
