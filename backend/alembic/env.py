@@ -16,7 +16,6 @@ from app.models import (
     PoliceUser,
     PoliceReview,
     Hotspot,
-    IncidentGroup,
     ReportAssignment,
     Notification,
     AuditLog,

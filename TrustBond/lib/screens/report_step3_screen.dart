@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
-
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
-
+import 'package:http/http.dart' as http;
+import 'package:crypto/crypto.dart';
 import '../config/theme.dart';
 import '../services/device_status_service.dart';
 import '../services/motion_service.dart';
@@ -40,12 +42,14 @@ class ReportStep3Screen extends StatefulWidget {
 
 class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   final _picker = ImagePicker();
+  final _record = Record();
   final _statusService = DeviceStatusService();
   final _queueService = OfflineReportQueueService();
 
   final List<_EvidenceFile> _files = [];
   bool _submitting = false;
   String? _error;
+  bool _isRecording = false;
 
   Future<String> _sanitizePhotoPath(String sourcePath) async {
     try {
@@ -89,6 +93,47 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
       final sanitizedPath = await _sanitizePhotoPath(img.path);
       setState(() => _files
           .add(_EvidenceFile(path: sanitizedPath, type: 'photo', isLive: false)));
+    }
+  }
+
+  Future<void> _pickAudio() async {
+    try {
+      if (await _record.hasPermission()) {
+        setState(() => _isRecording = true);
+        
+        final directory = await getTemporaryDirectory();
+        final path = '${directory.path}/tb_audio_${DateTime.now().microsecondsSinceEpoch}.m4a';
+        
+        await _record.start(
+          path: path,
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          samplingRate: 44100,
+        );
+        
+        // Record for maximum 60 seconds
+        await Future.delayed(const Duration(seconds: 60));
+        
+        await _record.stop();
+        setState(() => _isRecording = false);
+        
+        setState(() => _files
+            .add(_EvidenceFile(path: path, type: 'audio', isLive: true)));
+      }
+    } catch (e) {
+      setState(() => _isRecording = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Audio recording failed: ${e.toString()}')),
+      );
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    try {
+      await _record.stop();
+      setState(() => _isRecording = false);
+    } catch (e) {
+      setState(() => _isRecording = false);
     }
   }
 
@@ -189,7 +234,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
                             fontSize: 16, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
                     const Text(
-                        'Photos and videos strengthen report credibility',
+                        'Photos, videos, and audio strengthen report credibility',
                         style:
                             TextStyle(fontSize: 12, color: AppColors.muted)),
                     const SizedBox(height: 16),
@@ -255,7 +300,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
           const Text('Upload Evidence',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
-          const Text('Take a photo, record video, or choose from gallery',
+          const Text('Take a photo, record video, record audio, or choose from gallery',
               style: TextStyle(fontSize: 11, color: AppColors.muted),
               textAlign: TextAlign.center),
           const SizedBox(height: 14),
@@ -265,6 +310,8 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
               _actionChip('📷 Photo', _pickPhoto),
               const SizedBox(width: 8),
               _actionChip('🎥 Video', _pickVideo),
+              const SizedBox(width: 8),
+              _actionChip(_isRecording ? '⏹️ Stop' : '🎤 Audio', _isRecording ? _stopRecording : _pickAudio),
               const SizedBox(width: 8),
               _actionChip('🖼️ Gallery', _pickGallery),
             ],
@@ -315,13 +362,21 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
                   child: f.type == 'photo'
                       ? Image.file(File(f.path),
                           width: 44, height: 44, fit: BoxFit.cover)
-                      : Container(
-                          width: 44,
-                          height: 44,
-                          color: AppColors.surface3,
-                          child: const Icon(Icons.videocam,
-                              color: AppColors.accent2, size: 22),
-                        ),
+                      : f.type == 'video'
+                          ? Container(
+                              width: 44,
+                              height: 44,
+                              color: AppColors.surface3,
+                              child: const Icon(Icons.videocam,
+                                  color: AppColors.accent2, size: 22),
+                            )
+                          : Container(
+                              width: 44,
+                              height: 44,
+                              color: AppColors.surface3,
+                              child: const Icon(Icons.mic,
+                                  color: AppColors.accent3, size: 22),
+                            ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -329,15 +384,15 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        f.type == 'photo' ? 'Photo' : 'Video',
+                        f.type == 'photo' ? 'Photo' : f.type == 'video' ? 'Video' : 'Audio',
                         style: const TextStyle(
                             fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                       Text(
-                        f.isLive ? 'Live capture ✓' : 'From gallery',
+                        f.isLive ? 'Live capture ✓' : f.type == 'audio' ? 'Audio recording' : 'From gallery',
                         style: TextStyle(
                           fontSize: 10,
-                          color: f.isLive
+                          color: f.isLive || f.type == 'audio'
                               ? AppColors.accent
                               : AppColors.muted,
                         ),

@@ -1,6 +1,6 @@
 from typing import Annotated, List, Optional, Dict, Any
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session, joinedload, selectinload
 from datetime import datetime, timezone
 from pydantic import BaseModel
@@ -488,6 +488,7 @@ def get_hotspot_params(db: Session = Depends(get_db)):
 @router.post("/recompute")
 def recompute_hotspots(
     current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)],
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     payload: Optional[RecomputeHotspotsPayload] = None,
     time_window_hours: Optional[int] = Query(None),
