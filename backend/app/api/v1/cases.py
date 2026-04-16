@@ -149,6 +149,23 @@ def _case_to_response(c: Case) -> CaseResponse:
     if scores:
         avg_trust = sum(scores) / len(scores)
 
+    # Get location information
+    location_name = None
+    if c.location:
+        location_name = c.location.location_name
+    elif c.latitude and c.longitude:
+        # If case has coordinates but no location, create a descriptive name
+        location_name = f"Case Location ({float(c.latitude):.4f}, {float(c.longitude):.4f})"
+    else:
+        # Try to get location from the first report in the case
+        case_reports = getattr(c, "case_reports", [])
+        if case_reports:
+            first_report = getattr(case_reports[0], "report", None)
+            if first_report and first_report.village_location:
+                location_name = first_report.village_location.location_name
+            elif first_report and first_report.latitude and first_report.longitude:
+                location_name = f"Report Location ({float(first_report.latitude):.4f}, {float(first_report.longitude):.4f})"
+
     return CaseResponse(
         case_id=c.case_id,
         case_number=c.case_number,
@@ -157,7 +174,7 @@ def _case_to_response(c: Case) -> CaseResponse:
         title=c.title,
         description=c.description,
         location_id=c.location_id,
-        location_name=c.location.location_name if c.location else None,
+        location_name=location_name,
         incident_type_id=c.incident_type_id,
         incident_type_name=c.incident_type.type_name if c.incident_type else None,
         assigned_to_id=c.assigned_to_id,
@@ -551,6 +568,7 @@ def get_case(
         joinedload(Case.location),
         joinedload(Case.incident_type),
         joinedload(Case.assigned_to),
+        joinedload(Case.case_reports).joinedload(CaseReport.report).joinedload(Report.village_location),
     ).filter(Case.case_id == cid)
 
     if current_user.role == "supervisor":

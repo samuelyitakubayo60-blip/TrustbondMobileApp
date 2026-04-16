@@ -23,6 +23,7 @@ from app.core.hotspot_auto import (
     get_hotspot_trust_min_from_db,
 )
 from app.core.village_lookup import get_village_location_info
+from app.core.websocket import manager
 
 router = APIRouter(prefix="/hotspots", tags=["hotspots"])
 

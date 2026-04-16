@@ -52,6 +52,10 @@ class EmailNotificationService:
     """Service for sending email notifications to police users."""
     
     def __init__(self):
+        # Load environment variables if not already loaded
+        from dotenv import load_dotenv
+        load_dotenv()
+        
         self.smtp_server = os.getenv("SMTP_HOST", "smtp.gmail.com")
         self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
         self.smtp_username = os.getenv("SMTP_USER", "")
@@ -168,7 +172,7 @@ class EmailNotificationService:
                 </div>
                 
                 <div style="padding: 20px; background-color: #f8f9fa;">
-                    <p>Dear {police_user.full_name or police_user.badge_number},</p>
+                    <p>Dear {f"{police_user.first_name} {police_user.last_name}".strip() or police_user.email},</p>
                     
                     <p>A new case has been assigned to you:</p>
                     
@@ -529,7 +533,7 @@ class EmailNotificationService:
                 </div>
                 
                 <div style="padding: 20px; background-color: #f8f9fa;">
-                    <p>Dear {police_user.full_name or police_user.badge_number},</p>
+                    <p>Dear {f"{police_user.first_name} {police_user.last_name}".strip() or police_user.email},</p>
                     
                     <p>A {description} has been assigned to you for review:</p>
                     

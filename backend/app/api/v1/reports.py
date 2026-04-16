@@ -3905,7 +3905,7 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
         
         # Update report status to indicate they're in a case
         for report in reports:
-            report.status = "in_case"
+            report.status = "verified"
         
         db.commit()
         stats['cases_created'] += 1

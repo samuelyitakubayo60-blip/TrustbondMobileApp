@@ -109,61 +109,65 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
           <div className="input-group">
             <div className="input-label">Location</div>
             <div>
-              {caseItem.latitude && caseItem.longitude ? (
+              {caseItem.location_name || (caseItem.latitude && caseItem.longitude) ? (
                 <div>
-                  <div style={{ fontSize: '11px', fontFamily: 'monospace', marginBottom: '4px' }}>
-                    {parseFloat(caseItem.latitude).toFixed(6)}, {parseFloat(caseItem.longitude).toFixed(6)}
+                  <div style={{ fontSize: '13px', marginBottom: '4px', color: 'var(--text)' }}>
+                    {caseItem.location_name || 
+                      `${parseFloat(caseItem.latitude).toFixed(6)}, ${parseFloat(caseItem.longitude).toFixed(6)}`
+                    }
                   </div>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    <button
-                      onClick={() => {
-                        const lat = parseFloat(caseItem.latitude);
-                        const lon = parseFloat(caseItem.longitude);
-                        window.open(
-                          `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`,
-                          '_blank'
-                        );
-                      }}
-                      style={{
-                        padding: '4px 8px',
-                        fontSize: '10px',
-                        backgroundColor: 'var(--primary)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '3px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px'
-                      }}
-                    >
-                      🚗 Navigate
-                    </button>
-                    <button
-                      onClick={() => {
-                        const lat = parseFloat(caseItem.latitude);
-                        const lon = parseFloat(caseItem.longitude);
-                        window.open(
-                          `https://www.google.com/maps?q=${lat},${lon}`,
-                          '_blank'
-                        );
-                      }}
-                      style={{
-                        padding: '4px 8px',
-                        fontSize: '10px',
-                        backgroundColor: 'var(--secondary)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '3px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px'
-                      }}
-                    >
-                      📍 View Map
-                    </button>
-                  </div>
+                  {caseItem.latitude && caseItem.longitude && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => {
+                          const lat = parseFloat(caseItem.latitude);
+                          const lon = parseFloat(caseItem.longitude);
+                          window.open(
+                            `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`,
+                            '_blank'
+                          );
+                        }}
+                        style={{
+                          padding: '4px 8px',
+                          fontSize: '10px',
+                          backgroundColor: 'var(--primary)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px'
+                        }}
+                      >
+                        🚗 Navigate
+                      </button>
+                      <button
+                        onClick={() => {
+                          const lat = parseFloat(caseItem.latitude);
+                          const lon = parseFloat(caseItem.longitude);
+                          window.open(
+                            `https://www.google.com/maps?q=${lat},${lon}`,
+                            '_blank'
+                          );
+                        }}
+                        style={{
+                          padding: '4px 8px',
+                          fontSize: '10px',
+                          backgroundColor: 'var(--secondary)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px'
+                        }}
+                      >
+                        📍 View Map
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <span style={{ color: 'var(--muted)', fontSize: '12px' }}>
