@@ -2697,6 +2697,129 @@ def purge_outside_musanze_reports_admin(
     }
 
 
+@router.post("/{report_id}/evidence/{evidence_id}/validate")
+def validate_evidence(
+    report_id: UUID,
+    evidence_id: UUID,
+    ground_truth_label: str = Form(...),
+    verification_confidence: Optional[float] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
+    request: Request = None,
+):
+    """
+    Validate evidence with ground truth label for AI training.
+    
+    Args:
+        ground_truth_label: "real", "fake", or "manipulated"
+        verification_confidence: 0-100 confidence in the ground truth assessment
+    """
+    if ground_truth_label not in ("real", "fake", "manipulated"):
+        raise HTTPException(status_code=400, detail="ground_truth_label must be real, fake, or manipulated")
+    
+    # Verify evidence exists and belongs to report
+    evidence = db.query(EvidenceFile).filter(
+        EvidenceFile.evidence_id == evidence_id,
+        EvidenceFile.report_id == report_id
+    ).first()
+    
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    
+    # Update evidence with ground truth
+    evidence.ground_truth_label = ground_truth_label
+    evidence.evidence_verified_by = current_user.police_user_id
+    evidence.evidence_verified_at = datetime.now(timezone.utc)
+    evidence.verification_confidence = verification_confidence
+    
+    # Log the validation action
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    
+    log_action(
+        db,
+        "evidence_validated",
+        actor_type="police_user",
+        actor_id=current_user.police_user_id,
+        entity_type="evidence_file",
+        entity_id=str(evidence_id),
+        action_details={
+            "ground_truth_label": ground_truth_label,
+            "verification_confidence": verification_confidence,
+            "ai_analysis": {
+                "blur_score": float(evidence.blur_score) if evidence.blur_score else None,
+                "tamper_score": float(evidence.tamper_score) if evidence.tamper_score else None,
+                "quality_label": evidence.quality_label.value if evidence.quality_label else None
+            }
+        },
+        ip_address=client_ip,
+        user_agent=user_agent,
+        success=True,
+    )
+    
+    db.commit()
+    
+    return {
+        "evidence_id": str(evidence.evidence_id),
+        "ground_truth_label": evidence.ground_truth_label,
+        "verified_at": evidence.evidence_verified_at,
+        "verified_by": current_user.police_user_id,
+        "ai_analysis": {
+            "blur_score": float(evidence.blur_score) if evidence.blur_score else None,
+            "tamper_score": float(evidence.tamper_score) if evidence.tamper_score else None,
+            "quality_label": evidence.quality_label.value if evidence.quality_label else None
+        }
+    }
+
+
+@router.get("/evidence-training-data")
+def get_evidence_training_data(
+    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)],
+    db: Session = Depends(get_db),
+    limit: int = Query(100, ge=1, le=1000),
+    include_unvalidated: bool = Query(False),
+):
+    """
+    Get evidence data with AI analysis and ground truth for ML training.
+    
+    Args:
+        limit: Maximum number of records to return
+        include_unvalidated: Include evidence without ground truth labels
+    """
+    query = db.query(EvidenceFile).options(
+        joinedload(EvidenceFile.report)
+    )
+    
+    if not include_unvalidated:
+        query = query.filter(EvidenceFile.ground_truth_label.isnot(None))
+    
+    evidence_list = query.limit(limit).all()
+    
+    training_data = []
+    for evidence in evidence_list:
+        training_data.append({
+            "evidence_id": str(evidence.evidence_id),
+            "report_id": str(evidence.report_id),
+            "file_type": evidence.file_type,
+            "file_size": evidence.file_size,
+            "blur_score": float(evidence.blur_score) if evidence.blur_score else None,
+            "tamper_score": float(evidence.tamper_score) if evidence.tamper_score else None,
+            "quality_label": evidence.quality_label.value if evidence.quality_label else None,
+            "ground_truth_label": evidence.ground_truth_label,
+            "verification_confidence": float(evidence.verification_confidence) if evidence.verification_confidence else None,
+            "verified_by": evidence.evidence_verified_by,
+            "verified_at": evidence.evidence_verified_at.isoformat() if evidence.evidence_verified_at else None,
+            "is_live_capture": evidence.is_live_capture,
+            "ai_checked_at": evidence.ai_checked_at.isoformat() if evidence.ai_checked_at else None,
+        })
+    
+    return {
+        "training_data": training_data,
+        "total_count": len(training_data),
+        "includes_unvalidated": include_unvalidated,
+    }
+
+
 @router.post("/{report_id}/evidence")
 async def upload_evidence(
     report_id: str,

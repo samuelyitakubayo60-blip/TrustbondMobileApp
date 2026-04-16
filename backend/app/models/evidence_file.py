@@ -31,6 +31,11 @@ class EvidenceFile(Base):
     tamper_score = Column(Numeric(6, 3))
     quality_label = Column(ENUM(EvidenceQuality, name="evidence_quality"), default=EvidenceQuality.fair)
     ai_checked_at = Column(DateTime)  # timestamp without time zone
+    ground_truth_label = Column(String(10))  # real, fake, manipulated
+    evidence_verified_by = Column(Integer)  # police_user_id
+    evidence_verified_at = Column(DateTime)
+    verification_confidence = Column(Numeric(5, 2))  # 0-100 confidence in ground truth
+    used_for_evidence_training = Column(Boolean, default=False)
     cloudinary_public_id = Column(String(255))
     cloudinary_url = Column(String(500))
 
