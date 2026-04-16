@@ -11,8 +11,55 @@ from typing import List, Optional
 from datetime import datetime
 import logging
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.police_user import PoliceUser
+from app.models.location import Location
+from app.database import SessionLocal
+
+
+def get_location_hierarchy_from_coordinates(db: Session, latitude: float, longitude: float) -> str:
+    """
+    Convert coordinates to location hierarchy (sector, cell, village).
+    
+    Args:
+        db: Database session
+        latitude: Latitude coordinate
+        longitude: Longitude coordinate
+        
+    Returns:
+        Location hierarchy string (e.g., "Sector, Cell, Village") or coordinates if no location found
+    """
+    try:
+        from app.core.village_lookup import get_village_location_info
+        
+        # Get village location info using the proper lookup service
+        location_info = get_village_location_info(db, latitude, longitude)
+        
+        if location_info:
+            # Build location hierarchy in order: Sector, Cell, Village
+            location_parts = []
+            
+            # Add sector if available
+            if location_info.get("sector_name"):
+                location_parts.append(location_info["sector_name"])
+            
+            # Add cell if available
+            if location_info.get("cell_name"):
+                location_parts.append(location_info["cell_name"])
+            
+            # Add village if available
+            if location_info.get("village_name"):
+                location_parts.append(location_info["village_name"])
+            
+            if location_parts:
+                return ", ".join(location_parts)
+        
+        # Fallback to coordinates if no location found
+        return f"{float(latitude):.4f}, {float(longitude):.4f}"
+        
+    except Exception as e:
+        logger.error(f"Error getting location hierarchy: {e}")
+        return f"{float(latitude):.4f}, {float(longitude):.4f}"
 
 
 def generate_google_maps_link(latitude: float, longitude: float, address: str = None) -> dict:
@@ -156,11 +203,23 @@ class EmailNotificationService:
         
         case_url = f"{self.frontend_url}/cases/{case_number}"
         
-        # Generate Google Maps links for navigation
-        maps_links = generate_google_maps_link(
-            float(location.split(',')[0]) if ',' in location else 0,
-            float(location.split(',')[1]) if ',' in location else 0
-        )
+        # Convert coordinates to location hierarchy and generate Google Maps links
+        # Handle both coordinate strings (lat, lon) and location descriptions
+        location_display = location
+        maps_links = generate_google_maps_link(0, 0)  # Default location
+        
+        if ',' in location and location.replace(',', '').replace('.', '').replace(' ', '').replace('-', '').isdigit():
+            # This looks like coordinates, convert to location hierarchy
+            try:
+                lat, lon = float(location.split(',')[0]), float(location.split(',')[1])
+                db = SessionLocal()
+                try:
+                    location_display = get_location_hierarchy_from_coordinates(db, lat, lon)
+                    maps_links = generate_google_maps_link(lat, lon)
+                finally:
+                    db.close()
+            except (ValueError, IndexError):
+                pass
         
         html_body = f"""
         <html>
@@ -180,7 +239,7 @@ class EmailNotificationService:
                         <h3>{case_number}</h3>
                         <p><strong>Title:</strong> {case_title}</p>
                         <p><strong>Incident Type:</strong> {incident_type}</p>
-                        <p><strong>Location:</strong> {location}</p>
+                        <p><strong>Location:</strong> {location_display}</p>
                         <p><strong>Reports:</strong> {report_count}</p>
                     </div>
                     
@@ -218,7 +277,7 @@ class EmailNotificationService:
         
         Title: {case_title}
         Incident Type: {incident_type}
-        Location: {location}
+        Location: {location_display}
         Reports: {report_count}
         
         Please review the case details at: {case_url}
@@ -264,11 +323,22 @@ class EmailNotificationService:
         
         case_url = f"{self.frontend_url}/cases/{case_number}"
         
-        # Generate Google Maps links for navigation
-        maps_links = generate_google_maps_link(
-            float(location.split(',')[0]) if ',' in location else 0,
-            float(location.split(',')[1]) if ',' in location else 0
-        )
+        # Convert coordinates to location hierarchy and generate Google Maps links
+        location_display = location
+        maps_links = generate_google_maps_link(0, 0)  # Default location
+        
+        if ',' in location and location.replace(',', '').replace('.', '').replace(' ', '').replace('-', '').isdigit():
+            # This looks like coordinates, convert to location hierarchy
+            try:
+                lat, lon = float(location.split(',')[0]), float(location.split(',')[1])
+                db = SessionLocal()
+                try:
+                    location_display = get_location_hierarchy_from_coordinates(db, lat, lon)
+                    maps_links = generate_google_maps_link(lat, lon)
+                finally:
+                    db.close()
+            except (ValueError, IndexError):
+                pass
         
         html_body = f"""
         <html>
@@ -288,7 +358,7 @@ class EmailNotificationService:
                         <h3>{case_number}</h3>
                         <p><strong>Title:</strong> {case_title}</p>
                         <p><strong>Incident Type:</strong> {incident_type}</p>
-                        <p><strong>Location:</strong> {location}</p>
+                        <p><strong>Location:</strong> {location_display}</p>
                         <p><strong>Reports:</strong> {report_count}</p>
                         <p><strong>Status:</strong> Auto-generated from AI-verified reports</p>
                     </div>
@@ -327,7 +397,7 @@ class EmailNotificationService:
         
         Title: {case_title}
         Incident Type: {incident_type}
-        Location: {location}
+        Location: {location_display}
         Reports: {report_count}
         Status: Auto-generated from AI-verified reports
         
@@ -394,11 +464,22 @@ class EmailNotificationService:
         
         report_url = f"{self.frontend_url}/reports/{report_id}"
         
-        # Generate Google Maps links for navigation
-        maps_links = generate_google_maps_link(
-            float(location.split(',')[0]) if ',' in location else 0,
-            float(location.split(',')[1]) if ',' in location else 0
-        )
+        # Convert coordinates to location hierarchy and generate Google Maps links
+        location_display = location
+        maps_links = generate_google_maps_link(0, 0)  # Default location
+        
+        if ',' in location and location.replace(',', '').replace('.', '').replace(' ', '').replace('-', '').isdigit():
+            # This looks like coordinates, convert to location hierarchy
+            try:
+                lat, lon = float(location.split(',')[0]), float(location.split(',')[1])
+                db = SessionLocal()
+                try:
+                    location_display = get_location_hierarchy_from_coordinates(db, lat, lon)
+                    maps_links = generate_google_maps_link(lat, lon)
+                finally:
+                    db.close()
+            except (ValueError, IndexError):
+                pass
         
         html_body = f"""
         <html>
@@ -417,7 +498,7 @@ class EmailNotificationService:
                     <div style="background-color: white; padding: 15px; border-left: 4px solid {status_color}; margin: 15px 0;">
                         <p><strong>Report ID:</strong> {report_id}</p>
                         <p><strong>Incident Type:</strong> {incident_type}</p>
-                        <p><strong>Location:</strong> {location}</p>
+                        <p><strong>Location:</strong> {location_display}</p>
                         <p><strong>Status:</strong> {status_text}</p>
                         {f'<p><strong>Reason:</strong> {flag_reason}</p>' if flag_reason else ''}
                     </div>
@@ -454,7 +535,7 @@ class EmailNotificationService:
         {title}: {report_id}
         
         Incident Type: {incident_type}
-        Location: {location}
+        Location: {location_display}
         Status: {status_text}
         {f'Reason: {flag_reason}' if flag_reason else ''}
         
@@ -503,11 +584,24 @@ class EmailNotificationService:
         
         report_url = f"{self.frontend_url}/reports/{report_id}"
         
-        # Generate Google Maps links for navigation
-        maps_links = generate_google_maps_link(
-            float(location.split(',')[0]) if ',' in location else 0,
-            float(location.split(',')[1]) if ',' in location else 0
-        )
+        # Convert coordinates to location hierarchy if needed
+        db = SessionLocal()
+        try:
+            if ',' in location and location.replace(',', '').replace('.', '').replace(' ', '').replace('-', '').isdigit():
+                # This looks like coordinates, convert to location hierarchy
+                try:
+                    lat, lon = float(location.split(',')[0]), float(location.split(',')[1])
+                    location_display = get_location_hierarchy_from_coordinates(db, lat, lon)
+                    maps_links = generate_google_maps_link(lat, lon)
+                except (ValueError, IndexError):
+                    location_display = location
+                    maps_links = generate_google_maps_link(0, 0)
+            else:
+                # This is already a location description
+                location_display = location
+                maps_links = generate_google_maps_link(0, 0)
+        finally:
+            db.close()
         
         # Customize title and color based on assignment type
         if assignment_type == "boundary":
@@ -540,7 +634,7 @@ class EmailNotificationService:
                     <div style="background-color: white; padding: 15px; border-left: 4px solid {color}; margin: 15px 0;">
                         <h3>{report_id[:8]}...</h3>
                         <p><strong>Incident Type:</strong> {incident_type}</p>
-                        <p><strong>Location:</strong> {location}</p>
+                        <p><strong>Location:</strong> {location_display}</p>
                         <p><strong>Reason:</strong> {flag_reason}</p>
                     </div>
                     
@@ -618,12 +712,25 @@ class EmailNotificationService:
         
         subject = f"New Hotspots Detected: {hotspot_count} Safety Hotspots"
         
-        # Generate Google Maps links if coordinates available
+        # Convert coordinates to location hierarchy and generate Google Maps links
+        location_display = hotspot_location
         maps_links = None
+        
         if hotspot_coordinates:
             try:
                 lat, lon = hotspot_coordinates.split(',')
-                maps_links = generate_google_maps_link(float(lat), float(lon))
+                lat_float, lon_float = float(lat), float(lon)
+                maps_links = generate_google_maps_link(lat_float, lon_float)
+                
+                # Convert coordinates to location hierarchy
+                db = SessionLocal()
+                try:
+                    location_hierarchy = get_location_hierarchy_from_coordinates(db, lat_float, lon_float)
+                    if location_hierarchy and location_hierarchy != f"{lat_float:.4f}, {lon_float:.4f}":
+                        # Use location hierarchy if found, otherwise keep original location description
+                        location_display = location_hierarchy
+                finally:
+                    db.close()
             except:
                 pass
         
@@ -646,7 +753,7 @@ class EmailNotificationService:
                         <p><strong>Hotspots Detected:</strong> {hotspot_count}</p>
                         <p><strong>Analysis:</strong> AI-powered clustering of verified reports</p>
                         <p><strong>Priority:</strong> Requires immediate attention</p>
-                        {f'<p><strong>Primary Location:</strong> {hotspot_location}</p>' if hotspot_location else ''}
+                        {f'<p><strong>Primary Location:</strong> {location_display}</p>' if location_display else ''}
                         {f'<p><strong>Coordinates:</strong> {hotspot_coordinates}</p>' if hotspot_coordinates else ''}
                     </div>
                     
@@ -678,7 +785,7 @@ class EmailNotificationService:
         
         Analysis: AI-powered clustering of verified reports
         Priority: Requires immediate attention
-        {f'Primary Location: {hotspot_location}' if hotspot_location else ''}
+        {f'Primary Location: {location_display}' if location_display else ''}
         {f'Coordinates: {hotspot_coordinates}' if hotspot_coordinates else ''}
         
         Action Required: Please review the Safety Map to assess these hotspots.
@@ -687,12 +794,8 @@ class EmailNotificationService:
         {f'Navigate to hotspot: {maps_links["navigation"]}' if maps_links else ''}
         
         This is an automated notification from the TrustBond system.
+        Hotspots are generated using AI-powered analysis of report patterns.
         """
-        
-        # Send to all users with email
-        emails = [user.email for user in users_with_email]
-        if self.send_email(emails, subject, html_body, text_body):
-            successful_sends = len(emails)
         
         return successful_sends
 

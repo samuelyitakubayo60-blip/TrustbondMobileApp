@@ -630,7 +630,7 @@ def run_hotspot_auto():
             min_incidents=mi,
             radius_meters=rm,
             trust_min=trust_min,
-            analyze_all_reports=True,
+            analyze_all_reports=False,  # Use time window for real-time updates
         )
         if created > 0:
             print(f"Background hotspot creation: {created} new hotspots created")
@@ -649,13 +649,17 @@ def run_hotspot_auto():
             
             # Create notifications for admins and supervisors about new hotspots
             from app.api.v1.notifications import create_role_notifications
+            
+            # Get the most recently created hotspot for notification
+            latest_hotspot = db.query(Hotspot).order_by(Hotspot.detected_at.desc()).first() if created > 0 else None
+            
             create_role_notifications(
                 db,
                 title="New Hotspots Detected",
                 message=f"{created} new safety hotspots have been automatically detected based on recent reports.",
                 notif_type="system",
                 related_entity_type="hotspot",
-                related_entity_id=str(hotspot.hotspot_id) if created == 1 else None,
+                related_entity_id=str(latest_hotspot.hotspot_id) if created == 1 and latest_hotspot else None,
                 target_roles=["admin", "supervisor"],
                 send_email=True  # Enable email notifications for hotspots
             )
@@ -1430,6 +1434,29 @@ def create_report(
         if hasattr(device, "trusted_reports"):
             device.trusted_reports = (device.trusted_reports or 0) + 1
             db.commit()
+        
+        # Trigger real-time auto-case creation after report verification
+        try:
+            from app.api.v1.reports import _create_auto_cases
+            case_stats = _create_auto_cases(db)
+            if case_stats['cases_created'] > 0:
+                print(f"🚨 Real-time auto-case creation: {case_stats['cases_created']} cases created from new verified report")
+                # Broadcast case creation to all connected clients
+                manager.broadcast({"type": "refresh_data", "entity": "case", "action": "created"})
+                # Balance workload after new cases are created
+                _balance_workload_and_reassign(db)
+                # Broadcast workload changes
+                manager.broadcast({"type": "refresh_data", "entity": "case", "action": "reassigned"})
+        except Exception as e:
+            print(f"Error in real-time auto-case creation: {e}")
+            db.rollback()
+        
+        # Trigger real-time hotspot recomputation after report verification
+        try:
+            background_tasks.add_task(run_hotspot_auto)
+            print("🔥 Real-time hotspot recomputation triggered after report verification")
+        except Exception as e:
+            print(f"Error triggering real-time hotspot recomputation: {e}")
     elif rule_status == "rejected":
         # Clear rejections are auto-rejected
         report.status = "rejected"
@@ -2507,6 +2534,30 @@ def add_review(
     db.commit()
     db.refresh(review)
     reviewer_name = f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email
+    
+    # Trigger real-time auto-case creation after manual verification
+    if body.decision.lower() == "verified":
+        try:
+            from app.api.v1.reports import _create_auto_cases
+            case_stats = _create_auto_cases(db)
+            if case_stats['cases_created'] > 0:
+                print(f"🚨 Real-time auto-case creation: {case_stats['cases_created']} cases created from manually verified report")
+                # Broadcast case creation to all connected clients
+                manager.broadcast({"type": "refresh_data", "entity": "case", "action": "created"})
+                # Balance workload after new cases are created
+                _balance_workload_and_reassign(db)
+                # Broadcast workload changes
+                manager.broadcast({"type": "refresh_data", "entity": "case", "action": "reassigned"})
+        except Exception as e:
+            print(f"Error in real-time auto-case creation: {e}")
+            db.rollback()
+        
+        # Trigger real-time hotspot recomputation after manual verification
+        try:
+            background_tasks.add_task(run_hotspot_auto)
+            print("🔥 Real-time hotspot recomputation triggered after manual verification")
+        except Exception as e:
+            print(f"Error triggering real-time hotspot recomputation: {e}")
     
     background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "report", "action": "reviewed"})
 
@@ -3911,6 +3962,12 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
         stats['cases_created'] += 1
         stats['case_number'] = case_number
         print(f"Created auto-case {case.case_number} with {len(reports)} reports")
+        
+        # Broadcast case creation to all connected clients for real-time updates
+        try:
+            manager.broadcast({"type": "refresh_data", "entity": "case", "action": "created"})
+        except Exception as e:
+            print(f"Warning: Could not broadcast case creation: {e}")
         
         # Send email notifications for auto case creation
         try:

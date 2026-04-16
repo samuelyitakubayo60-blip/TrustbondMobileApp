@@ -354,7 +354,6 @@ def _create_village_based_hotspots(
         else:
             # Create new hotspot
             hotspot = Hotspot(
-                hotspot_id=str(uuid4()),  # Need to import uuid4
                 center_lat=Decimal(str(center_lat)),
                 center_long=Decimal(str(center_long)),
                 radius_meters=Decimal("300"),  # Village radius
@@ -437,7 +436,6 @@ def _create_geographic_hotspots(
         hotspot = existing
         if hotspot is None:
             hotspot = Hotspot(
-                hotspot_id=str(uuid4()),
                 center_lat=Decimal(str(center_lat)),
                 center_long=Decimal(str(center_long)),
                 radius_meters=Decimal(str(radius_meters)),

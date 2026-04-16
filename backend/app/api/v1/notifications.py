@@ -2,7 +2,7 @@ from uuid import uuid4
 from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.core.websocket import manager
 from app.api.v1.ws import notification_manager
 import asyncio
@@ -337,27 +337,65 @@ def _send_email_notification(
         if notif_type == "assignment" and related_entity_type == "case":
             # Case assignment notification
             from app.models.case import Case
-            case = db.query(Case).filter(Case.case_id == related_entity_id).first()
+            case = db.query(Case).options(
+                joinedload(Case.location),
+                joinedload(Case.incident_type)
+            ).filter(Case.case_id == related_entity_id).first()
             if case:
+                # Build location description with hierarchy
+                location_desc = ""
+                if case.location:
+                    location_parts = []
+                    if case.location.location_name:
+                        location_parts.append(case.location.location_name)
+                    
+                    # Get parent location hierarchy (village -> cell -> sector -> district)
+                    current_location = case.location
+                    hierarchy_parts = []
+                    while current_location and current_location.parent:
+                        current_location = current_location.parent
+                        if current_location and current_location.location_name:
+                            hierarchy_parts.append(current_location.location_name)
+                    
+                    # Add hierarchy in reverse order (sector -> cell -> village)
+                    if hierarchy_parts:
+                        location_parts.extend(reversed(hierarchy_parts))
+                    
+                    location_desc = ", ".join(location_parts)
+                elif case.latitude and case.longitude:
+                    location_desc = f"{float(case.latitude):.4f}, {float(case.longitude):.4f}"
+                else:
+                    location_desc = "Location not specified"
+                
                 email_service.send_case_assignment_notification(
                     police_user,
                     case.case_number,
                     case.title,
-                    case.incident_type.incident_type_name if case.incident_type else "Unknown",
-                    f"{case.latitude}, {case.longitude}",
+                    case.incident_type.type_name if case.incident_type else "Unknown",
+                    location_desc,
                     case.report_count or 0
                 )
         elif notif_type == "assignment" and related_entity_type == "report":
             # Report assignment notification
             from app.models.report import Report
+            from app.services.email_notification_service import get_location_hierarchy_from_coordinates
             report = db.query(Report).filter(Report.report_id == related_entity_id).first()
             if report:
                 assignment_type = "boundary" if "out of boundary" in message.lower() else "flagged"
+                
+                # Convert coordinates to location hierarchy
+                location_display = f"{report.latitude}, {report.longitude}"
+                if report.latitude and report.longitude:
+                    try:
+                        location_display = get_location_hierarchy_from_coordinates(db, float(report.latitude), float(report.longitude))
+                    except Exception:
+                        pass  # Keep coordinates if conversion fails
+                
                 email_service.send_report_assignment_notification(
                     police_user,
                     str(report.report_id),
                     report.incident_type.incident_type_name if report.incident_type else "Unknown",
-                    f"{report.latitude}, {report.longitude}",
+                    location_display,
                     report.flag_reason or "Requires review",
                     assignment_type
                 )
@@ -388,14 +426,23 @@ def _send_role_email_notifications(
         # Send appropriate email based on notification type
         if notif_type == "system" and related_entity_type == "case":
             # Auto-generated case notification
+            from app.services.email_notification_service import get_location_hierarchy_from_coordinates
             case = db.query(Case).filter(Case.case_id == related_entity_id).first()
             if case:
+                # Convert coordinates to location hierarchy
+                location_display = f"{case.latitude}, {case.longitude}"
+                if case.latitude and case.longitude:
+                    try:
+                        location_display = get_location_hierarchy_from_coordinates(db, float(case.latitude), float(case.longitude))
+                    except Exception:
+                        pass  # Keep coordinates if conversion fails
+                
                 email_service.send_auto_case_notification(
                     users,
                     case.case_number,
                     case.title,
                     case.incident_type.incident_type_name if case.incident_type else "Unknown",
-                    f"{case.latitude}, {case.longitude}",
+                    location_display,
                     case.report_count or 0
                 )
         elif notif_type == "system" and related_entity_type == "hotspot":
@@ -418,13 +465,22 @@ def _send_role_email_notifications(
                 email_service.send_hotspot_notification(users, hotspot_count)
         elif notif_type == "report" and related_entity_type == "report":
             # Report verification notification
+            from app.services.email_notification_service import get_location_hierarchy_from_coordinates
             report = db.query(Report).filter(Report.report_id == related_entity_id).first()
             if report:
+                # Convert coordinates to location hierarchy
+                location_display = f"{report.latitude}, {report.longitude}"
+                if report.latitude and report.longitude:
+                    try:
+                        location_display = get_location_hierarchy_from_coordinates(db, float(report.latitude), float(report.longitude))
+                    except Exception:
+                        pass  # Keep coordinates if conversion fails
+                
                 email_service.send_report_verification_notification(
                     users,
                     str(report.report_id),
                     report.incident_type.incident_type_name if report.incident_type else "Unknown",
-                    f"{report.latitude}, {report.longitude}",
+                    location_display,
                     report.verification_status or "pending",
                     report.flag_reason
                 )
