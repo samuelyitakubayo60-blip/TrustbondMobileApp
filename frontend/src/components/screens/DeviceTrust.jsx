@@ -894,8 +894,8 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                     const metadata = d.metadata_json || d.metadata || {};
                     const locationAnalysis = analyzeLocationConsistency(metadata);
                     
-                    // Try multiple possible field names for location
-                    const lastLocation = 
+                    // Get location from backend-provided last_location field or fallback to metadata
+                    const lastLocation = d.last_location || 
                       // Check metadata_json first
                       (d.metadata_json?.last_latitude && d.metadata_json?.last_longitude) ||
                       (d.metadata_json?.latitude && d.metadata_json?.longitude) ||
@@ -905,7 +905,7 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                       // Check direct device fields
                       (d.last_latitude && d.last_longitude) ||
                       (d.latitude && d.longitude)
-                        ? formatLocation(
+                        ? d.last_location || formatLocation(
                             d.metadata_json?.last_latitude || d.metadata_json?.latitude || 
                             d.metadata?.last_latitude || d.metadata?.latitude ||
                             d.last_latitude || d.latitude,

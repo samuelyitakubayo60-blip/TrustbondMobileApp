@@ -201,15 +201,39 @@ def list_devices(
     # Build per-device last activity and sector information from most recent report.
     items = []
     for d in devices:
+        # Get actual report statistics for this device
+        device_reports = db.query(Report).filter(Report.device_id == d.device_id).all()
+        actual_total = len(device_reports)
+        actual_trusted = sum(1 for r in device_reports if r.rule_status in ["confirmed", "verified", "trusted"])
+        actual_flagged = sum(1 for r in device_reports if r.rule_status in ["flagged", "rejected", "false_report"])
+        
+        # Get most recent report for location and activity data
         last_report = None
         last_active = getattr(d, "last_seen_at", None)
         sector_location_id = None
         sector_name = None
+        last_location = None
+        
+        if device_reports:
+            last_report = max(device_reports, key=lambda r: r.reported_at or r.created_at)
+            if not last_active:
+                last_active = last_report.reported_at or last_report.created_at
+            
+            # Get location hierarchy from last report
+            if last_report.village_location:
+                sector_location_id = last_report.village_location.location_id
+                sector_name = last_report.village_location.location_name
+            elif last_report.latitude and last_report.longitude:
+                last_location = f"{float(last_report.latitude):.4f}, {float(last_report.longitude):.4f}"
+        
+        # Get ML data from device metadata and latest predictions
         ml_avg_trust = None
         ml_fake_rate = None
         ml_last_pred_at = None
         ml_avg_conf = None
         ml_last_conf = None
+        
+        # Try device metadata first
         try:
             meta = getattr(d, "metadata_json", None)
             if isinstance(meta, dict) and isinstance(meta.get("ml"), dict):
@@ -220,25 +244,23 @@ def list_devices(
                 ml_avg_conf = ml.get("avg_confidence")
                 ml_last_conf = ml.get("last_confidence")
         except Exception:
-            ml_avg_trust = None
-            ml_fake_rate = None
-            ml_last_pred_at = None
-            ml_avg_conf = None
-            ml_last_conf = None
-        # Fallback to most recent report if last_seen_at is not yet populated
-        if last_active is None:
-            last_report = (
-                db.query(Report)
-                .options(joinedload(Report.village_location))
+            pass
+        
+        # If no ML data in metadata, check latest ML prediction
+        if ml_avg_trust is None and device_reports:
+            latest_ml = (
+                db.query(MLPrediction)
+                .join(Report, MLPrediction.report_id == Report.report_id)
                 .filter(Report.device_id == d.device_id)
-                .order_by(Report.reported_at.desc())
+                .order_by(MLPrediction.evaluated_at.desc())
                 .first()
             )
-            if last_report:
-                last_active = last_report.reported_at
-                if last_report.village_location:
-                    sector_location_id = last_report.village_location.location_id
-                    sector_name = last_report.village_location.location_name
+            if latest_ml:
+                ml_avg_trust = float(latest_ml.trust_score)
+                ml_fake_rate = float(latest_ml.fake_rate) if latest_ml.fake_rate else None
+                ml_last_pred_at = latest_ml.evaluated_at.isoformat() if latest_ml.evaluated_at else None
+                ml_avg_conf = float(latest_ml.confidence) if latest_ml.confidence else None
+                ml_last_conf = ml_avg_conf  # Use same confidence for both
         items.append(
             {
                 "device_id": str(d.device_id),
@@ -249,9 +271,9 @@ def list_devices(
                 "device_trust_score": float(d.device_trust_score)
                 if d.device_trust_score
                 else 0,
-                "total_reports": d.total_reports or 0,
-                "trusted_reports": d.trusted_reports or 0,
-                "flagged_reports": d.flagged_reports or 0,
+                "total_reports": actual_total,  # Use actual count from reports
+                "trusted_reports": actual_trusted,  # Use actual trusted count
+                "flagged_reports": actual_flagged,  # Use actual flagged count (REJECTED column)
                 "spam_flags": getattr(d, "spam_flags", 0) or 0,
                 "is_banned": getattr(d, "is_banned", False) or False,
                 "is_blacklisted": getattr(d, "is_blacklisted", False) or False,
@@ -259,13 +281,17 @@ def list_devices(
                 "metadata_json": getattr(d, "metadata_json", {}),  # Add metadata field
                 "ml_avg_trust": float(ml_avg_trust) if ml_avg_trust is not None else None,
                 "ml_fake_rate": float(ml_fake_rate) if ml_fake_rate is not None else None,
-                "ml_last_prediction_at": ml_last_pred_at,
+                "ml_last_prediction_at": ml_last_pred_at,  # LAST ML column
                 "ml_avg_confidence": float(ml_avg_conf) if ml_avg_conf is not None else None,
                 "ml_last_confidence": float(ml_last_conf) if ml_last_conf is not None else None,
                 "first_seen_at": d.first_seen_at.isoformat() if d.first_seen_at else None,
-                "last_active_at": last_active.isoformat() if last_active else None,
+                "last_active_at": last_active.isoformat() if last_active else None,  # LAST ACTIVE column
                 "sector_location_id": sector_location_id,
                 "sector_name": sector_name,
+                "last_location": last_location,  # LAST LOCATION column
+                # Add location consistency analysis data
+                "location_consistency": None,
+                "movement_radius_km": None,
             }
         )
     since_30d = datetime.now(timezone.utc) - timedelta(days=30)
