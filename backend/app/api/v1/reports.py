@@ -119,6 +119,7 @@ def _enforce_device_submission_guards(
     Anti-abuse controls:
     1) Block same device submitting duplicate incident repeatedly in a short window.
     2) Block impossible movement patterns (e.g. 20km in 5 minutes).
+    3) Rate limiting - prevent suspicious rapid submissions.
     """
     now_utc = datetime.now(timezone.utc)
     current_lat = float(report_data.latitude)
@@ -209,6 +210,136 @@ def _enforce_device_submission_guards(
             raise HTTPException(
                 status_code=400,
                 detail="Impossible movement pattern detected for this device (large distance in short time). Report blocked for integrity checks.",
+            )
+
+    # Professional rate limiting: Balance security with emergency reporting needs
+    
+    # Check for suspicious rapid submissions (last 10 minutes)
+    rate_limit_window = now_utc - timedelta(minutes=10)  # Last 10 minutes
+    recent_submissions = (
+        db.query(Report)
+        .filter(
+            Report.device_id == device.device_id,
+            Report.reported_at >= rate_limit_window,
+        )
+        .count()
+    )
+    
+    # Allow max 8 reports per 10 minutes per device (reasonable for multiple incidents)
+    max_submissions_per_10min = 8
+    if recent_submissions >= max_submissions_per_10min:
+        _log_blocked_attempt(
+            db,
+            action_type="report_blocked_rate_limit",
+            request=request,
+            device=device,
+            details={
+                "recent_submissions": recent_submissions,
+                "time_window_minutes": 10,
+                "max_allowed": max_submissions_per_10min,
+                "current_incident_type": int(report_data.incident_type_id),
+            },
+        )
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded: Maximum {max_submissions_per_10min} reports allowed per 10 minutes. For emergency assistance, please contact authorities directly.",
+        )
+    
+    # Check for very suspicious activity (multiple submissions in 2 minutes)
+    very_recent_window = now_utc - timedelta(minutes=2)  # Last 2 minutes
+    very_recent_submissions = (
+        db.query(Report)
+        .filter(
+            Report.device_id == device.device_id,
+            Report.reported_at >= very_recent_window,
+        )
+        .count()
+    )
+    
+    # Allow max 3 reports per 2 minutes per device (prevents spam but allows legitimate multiple reports)
+    max_submissions_per_2min = 3
+    if very_recent_submissions >= max_submissions_per_2min:
+        _log_blocked_attempt(
+            db,
+            action_type="report_blocked_suspicious_activity",
+            request=request,
+            device=device,
+            details={
+                "very_recent_submissions": very_recent_submissions,
+                "time_window_minutes": 2,
+                "max_allowed": max_submissions_per_2min,
+                "current_incident_type": int(report_data.incident_type_id),
+            },
+        )
+        raise HTTPException(
+            status_code=429,
+            detail=f"Please wait at least 2 minutes before submitting additional reports. This helps ensure system stability for all users.",
+        )
+    
+    # Check for extreme spam (multiple submissions in 30 seconds)
+    extreme_window = now_utc - timedelta(seconds=30)  # Last 30 seconds
+    extreme_submissions = (
+        db.query(Report)
+        .filter(
+            Report.device_id == device.device_id,
+            Report.reported_at >= extreme_window,
+        )
+        .count()
+    )
+    
+    # Allow max 1 report per 30 seconds per device (prevents automated spam)
+    max_submissions_per_30sec = 1
+    if extreme_submissions >= max_submissions_per_30sec:
+        _log_blocked_attempt(
+            db,
+            action_type="report_blocked_extreme_spam",
+            request=request,
+            device=device,
+            details={
+                "extreme_submissions": extreme_submissions,
+                "time_window_seconds": 30,
+                "max_allowed": max_submissions_per_30sec,
+                "current_incident_type": int(report_data.incident_type_id),
+            },
+        )
+        raise HTTPException(
+            status_code=429,
+            detail=f"Please wait at least 30 seconds between report submissions. Automated submissions are not allowed.",
+        )
+    
+    # Additional check: Prevent obvious bot behavior (same incident type repeatedly)
+    very_recent_reports = (
+        db.query(Report)
+        .filter(
+            Report.device_id == device.device_id,
+            Report.reported_at >= very_recent_window,
+        )
+        .order_by(Report.reported_at.desc())
+        .limit(5)
+        .all()
+    )
+    
+    if len(very_recent_reports) >= 3:
+        # Check if last 3 reports are all the same incident type (potential bot behavior)
+        recent_incident_types = [r.incident_type_id for r in very_recent_reports[:3]]
+        current_incident_type = int(report_data.incident_type_id)
+        
+        if len(set(recent_incident_types)) == 1 and recent_incident_types[0] == current_incident_type:
+            _log_blocked_attempt(
+                db,
+                action_type="report_blocked_repetitive_bot_behavior",
+                request=request,
+                device=device,
+                details={
+                    "current_incident_type": current_incident_type,
+                    "recent_incident_types": recent_incident_types,
+                    "identical_count": 3,
+                    "time_window_minutes": 2,
+                },
+            )
+            raise HTTPException(
+                status_code=429,
+                detail=f"Multiple identical reports detected. Please ensure each report represents a unique incident. If this is an error, please wait 2 minutes.",
             )
 
 
@@ -807,20 +938,33 @@ def create_report(
         raise HTTPException(status_code=409, detail="Report already exists")
     db.refresh(report)  # Ensure we have the latest data including ML predictions
 
-    # Rule verification is deterministic (location/speed/motion/incident validity).
-    rule_status, is_flagged, flag_reason = apply_rule_based_status(
-        report, evidence_count, db
-    )
-
-    # Get ML prediction if available (used for backend AI verification and trust scoring).
+    # Get ML prediction for AI verification
     from app.models.ml_prediction import MLPrediction
     ml_prediction = db.query(MLPrediction).filter(MLPrediction.report_id == report.report_id).order_by(MLPrediction.evaluated_at.desc()).first()
-
-    from app.core.report_priority import calculate_report_priority
+    if ml_prediction:
+        print(f"Using ML prediction for AI verification: {ml_prediction.prediction_label}, trust_score: {ml_prediction.trust_score}")  # Debug log
     
-    # Calculate automatic priority
-    priority = calculate_report_priority(report, ml_prediction, evidence_count, db)
-    print(f"Calculated report priority: {priority}")  # Debug log
+    # Simple AI verification based on ML prediction
+    ai_status = "pending"
+    is_flagged = False
+    flag_reason = None
+    
+    if ml_prediction:
+        if ml_prediction.prediction_label == "likely_real" and (ml_prediction.trust_score or 0) >= 70:
+            ai_status = "passed"
+        elif ml_prediction.prediction_label in ["fake", "suspicious"] or (ml_prediction.trust_score or 0) < 30:
+            ai_status = "rejected"
+        else:
+            ai_status = "flagged"
+            is_flagged = True
+            flag_reason = f"AI uncertainty: {ml_prediction.prediction_label} (score: {ml_prediction.trust_score})"
+    else:
+        # No ML prediction - flag for review
+        ai_status = "flagged"
+        is_flagged = True
+        flag_reason = "No ML prediction available"
+    
+    print(f"AI verification result - status: {ai_status}, flagged: {is_flagged}")  # Debug log
     
     # Apply AI results to report
     report.rule_status = ai_status  # Keep field for compatibility
@@ -830,18 +974,62 @@ def create_report(
     if ai_status == "rejected":
         report.status = "rejected"
         report.verification_status = "rejected"
-    elif is_flagged:
-        report.status = "pending"
-        report.verification_status = "under_review"
-    else:
-        report.status = "pending"
-        report.verification_status = "pending"
     
     # Set ai_ready = true to indicate AI processing complete
     report.ai_ready = True
     report.features_extracted_at = datetime.now(timezone.utc)
     
-    # AI decision is applied later in the combined rule+ML verification block.
+    # Two-stage verification: Mobile Rules + Backend AI
+    mobile_rules_passed = (
+        report_data.mobile_rule_status == "passed" and
+        (report_data.location_consistency_check is True) and
+        (report_data.evidence_source_valid is True) and
+        (report_data.evidence_tampering_detected is False)
+    )
+    
+    print(f"Mobile rules status: {report_data.mobile_rule_status}, consistency: {report_data.location_consistency_check}, source_valid: {report_data.evidence_source_valid}, tampering: {report_data.evidence_tampering_detected}")
+    print(f"Backend AI status: {ai_status}, flagged: {is_flagged}")
+    
+    # Both mobile rules AND backend AI must pass for auto-verification
+    if mobile_rules_passed and ai_status == "passed" and not is_flagged:
+        # Both stages passed - auto-verify
+        report.verification_status = "verified"
+        report.status = "verified"
+        print(f"AUTO-VERIFIED: Report {report.report_id} - Mobile rules + Backend AI both passed")
+    elif ai_status == "rejected" or report_data.mobile_rule_status == "failed":
+        # Either stage rejected - auto-reject
+        report.verification_status = "rejected"
+        report.status = "rejected"
+        rejection_reason = []
+        if report_data.mobile_rule_status == "failed":
+            rejection_reason.append("mobile_rules_failed")
+        if ai_status == "rejected":
+            rejection_reason.append("backend_ai_rejected")
+        print(f"AUTO-REJECTED: Report {report.report_id} - {' + '.join(rejection_reason)}")
+    else:
+        # Any stage flagged/warning or mixed results - human review
+        report.verification_status = "under_review"
+        report.status = "pending"
+        review_reasons = []
+        if not mobile_rules_passed:
+            review_reasons.append("mobile_rules_issue")
+        if is_flagged:
+            review_reasons.append(f"backend_ai_flagged: {flag_reason}")
+        if ai_status not in ["passed", "rejected"]:
+            review_reasons.append(f"backend_ai_{ai_status}")
+        print(f"HUMAN REVIEW NEEDED: Report {report.report_id} - {' + '.join(review_reasons)}")
+    
+    # Store mobile verification results for audit trail
+    report.feature_vector = report.feature_vector or {}
+    if isinstance(report.feature_vector, dict):
+        report.feature_vector.update({
+            "mobile_rule_status": report_data.mobile_rule_status,
+            "mobile_rule_details": report_data.mobile_rule_details,
+            "location_consistency_check": report_data.location_consistency_check,
+            "evidence_source_valid": report_data.evidence_source_valid,
+            "evidence_tampering_detected": report_data.evidence_tampering_detected,
+            "mobile_rules_passed": mobile_rules_passed
+        })
 
     # Update device stats
     now_utc = datetime.now(timezone.utc)
