@@ -37,6 +37,7 @@ def create_notification(
     notif_type: str = "assignment",
     related_entity_type: str | None = "report",
     related_entity_id: str | None = None,
+    send_email: bool = False,
 ) -> Notification:
     n = Notification(
         notification_id=uuid4(),
@@ -56,6 +57,10 @@ def create_notification(
         notification_manager.increment_notification_count(str(police_user_id))
     )
     
+    # Send email notification if requested
+    if send_email:
+        _send_email_notification(db, police_user_id, title, message, notif_type, related_entity_type, related_entity_id)
+    
     return n
 
 
@@ -70,6 +75,7 @@ def create_role_notifications(
     target_location_id: int | None = None,
     target_station_id: int | None = None,
     exclude_user_id: int | None = None,
+    send_email: bool = False,
 ) -> List[Notification]:
     """
     Create notifications for users based on roles, location, or station.
@@ -128,6 +134,10 @@ def create_role_notifications(
         _run_async_now_or_schedule(
             notification_manager.increment_notification_count(str(user.police_user_id))
         )
+    
+    # Send email notifications if requested
+    if send_email and users:
+        _send_role_email_notifications(db, users, title, message, notif_type, related_entity_type, related_entity_id)
     
     return notifications
 
@@ -303,3 +313,124 @@ def register_mobile_token(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _send_email_notification(
+    db: Session,
+    police_user_id: int,
+    title: str,
+    message: str | None,
+    notif_type: str,
+    related_entity_type: str | None,
+    related_entity_id: str | None,
+):
+    """Send email notification to a single police user."""
+    try:
+        from app.services.email_notification_service import email_service
+        from app.models.police_user import PoliceUser
+        
+        police_user = db.query(PoliceUser).filter(PoliceUser.police_user_id == police_user_id).first()
+        if not police_user or not police_user.email:
+            return
+        
+        # Send appropriate email based on notification type
+        if notif_type == "assignment" and related_entity_type == "case":
+            # Case assignment notification
+            from app.models.case import Case
+            case = db.query(Case).filter(Case.case_id == related_entity_id).first()
+            if case:
+                email_service.send_case_assignment_notification(
+                    police_user,
+                    case.case_number,
+                    case.title,
+                    case.incident_type.incident_type_name if case.incident_type else "Unknown",
+                    f"{case.latitude}, {case.longitude}",
+                    case.report_count or 0
+                )
+        elif notif_type == "assignment" and related_entity_type == "report":
+            # Report assignment notification
+            from app.models.report import Report
+            report = db.query(Report).filter(Report.report_id == related_entity_id).first()
+            if report:
+                assignment_type = "boundary" if "out of boundary" in message.lower() else "flagged"
+                email_service.send_report_assignment_notification(
+                    police_user,
+                    str(report.report_id),
+                    report.incident_type.incident_type_name if report.incident_type else "Unknown",
+                    f"{report.latitude}, {report.longitude}",
+                    report.flag_reason or "Requires review",
+                    assignment_type
+                )
+        
+    except Exception as e:
+        # Log error but don't fail the notification creation
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to send email notification: {str(e)}")
+
+
+def _send_role_email_notifications(
+    db: Session,
+    users: List[PoliceUser],
+    title: str,
+    message: str | None,
+    notif_type: str,
+    related_entity_type: str | None,
+    related_entity_id: str | None,
+):
+    """Send email notifications to multiple police users by role."""
+    try:
+        from app.services.email_notification_service import email_service
+        from app.models.case import Case
+        from app.models.report import Report
+        from app.models.hotspot import Hotspot
+        
+        # Send appropriate email based on notification type
+        if notif_type == "system" and related_entity_type == "case":
+            # Auto-generated case notification
+            case = db.query(Case).filter(Case.case_id == related_entity_id).first()
+            if case:
+                email_service.send_auto_case_notification(
+                    users,
+                    case.case_number,
+                    case.title,
+                    case.incident_type.incident_type_name if case.incident_type else "Unknown",
+                    f"{case.latitude}, {case.longitude}",
+                    case.report_count or 0
+                )
+        elif notif_type == "system" and related_entity_type == "hotspot":
+            # Hotspot detection notification
+            if related_entity_id:
+                hotspot = db.query(Hotspot).filter(Hotspot.hotspot_id == related_entity_id).first()
+                if hotspot:
+                    hotspot_count = 1  # Single hotspot notification
+                    hotspot_location = f"Radius {hotspot.radius_meters}m"
+                    hotspot_coordinates = f"{hotspot.center_lat},{hotspot.center_long}"
+                    email_service.send_hotspot_notification(
+                        users,
+                        hotspot_count,
+                        hotspot_location,
+                        hotspot_coordinates
+                    )
+            else:
+                # Multiple hotspots notification
+                hotspot_count = int(message.split()[0]) if message and message.split()[0].isdigit() else 1
+                email_service.send_hotspot_notification(users, hotspot_count)
+        elif notif_type == "report" and related_entity_type == "report":
+            # Report verification notification
+            report = db.query(Report).filter(Report.report_id == related_entity_id).first()
+            if report:
+                email_service.send_report_verification_notification(
+                    users,
+                    str(report.report_id),
+                    report.incident_type.incident_type_name if report.incident_type else "Unknown",
+                    f"{report.latitude}, {report.longitude}",
+                    report.verification_status or "pending",
+                    report.flag_reason
+                )
+        
+    except Exception as e:
+        # Log error but don't fail the notification creation
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to send email notification: {str(e)}")

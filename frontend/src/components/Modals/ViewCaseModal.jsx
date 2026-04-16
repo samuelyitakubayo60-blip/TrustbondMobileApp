@@ -106,6 +106,72 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
             <div className="input-label">Assigned Officer</div>
             <div>{caseItem.assigned_to_name || 'Unassigned'}</div>
           </div>
+          <div className="input-group">
+            <div className="input-label">Location</div>
+            <div>
+              {caseItem.latitude && caseItem.longitude ? (
+                <div>
+                  <div style={{ fontSize: '11px', fontFamily: 'monospace', marginBottom: '4px' }}>
+                    {parseFloat(caseItem.latitude).toFixed(6)}, {parseFloat(caseItem.longitude).toFixed(6)}
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => {
+                        const lat = parseFloat(caseItem.latitude);
+                        const lon = parseFloat(caseItem.longitude);
+                        window.open(
+                          `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`,
+                          '_blank'
+                        );
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '10px',
+                        backgroundColor: 'var(--primary)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px'
+                      }}
+                    >
+                      🚗 Navigate
+                    </button>
+                    <button
+                      onClick={() => {
+                        const lat = parseFloat(caseItem.latitude);
+                        const lon = parseFloat(caseItem.longitude);
+                        window.open(
+                          `https://www.google.com/maps?q=${lat},${lon}`,
+                          '_blank'
+                        );
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '10px',
+                        backgroundColor: 'var(--secondary)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px'
+                      }}
+                    >
+                      📍 View Map
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <span style={{ color: 'var(--muted)', fontSize: '12px' }}>
+                  Location not available
+                </span>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="input-group" style={{ marginBottom: 10 }}>
@@ -129,6 +195,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                     <th>Village</th>
                     <th>Status</th>
                     <th>Date</th>
+                    <th>Navigation</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -141,11 +208,65 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                       <td>{r.village_name || '-'}</td>
                       <td>{r.rule_status || r.status || '-'}</td>
                       <td style={{ fontSize: 11 }}>{formatLocalDate(r.reported_at)}</td>
+                      <td>
+                        {r.latitude && r.longitude ? (
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            <button
+                              onClick={() => {
+                                const lat = parseFloat(r.latitude);
+                                const lon = parseFloat(r.longitude);
+                                window.open(
+                                  `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`,
+                                  '_blank'
+                                );
+                              }}
+                              style={{
+                                padding: "4px 8px",
+                                fontSize: "10px",
+                                backgroundColor: "var(--primary)",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "3px",
+                                cursor: "pointer",
+                              }}
+                              title="Navigate to location"
+                            >
+                              🚗
+                            </button>
+                            <button
+                              onClick={() => {
+                                const lat = parseFloat(r.latitude);
+                                const lon = parseFloat(r.longitude);
+                                window.open(
+                                  `https://www.google.com/maps?q=${lat},${lon}`,
+                                  '_blank'
+                                );
+                              }}
+                              style={{
+                                padding: "4px 8px",
+                                fontSize: "10px",
+                                backgroundColor: "var(--secondary)",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "3px",
+                                cursor: "pointer",
+                              }}
+                              title="View on map"
+                            >
+                              📍
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--muted)', fontSize: '10px' }}>
+                            No location
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {!reports.length && (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>
+                      <td colSpan={6} style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>
                         No reports linked to this case.
                       </td>
                     </tr>

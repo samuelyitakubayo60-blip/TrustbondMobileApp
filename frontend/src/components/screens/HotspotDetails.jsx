@@ -456,6 +456,59 @@ const HotspotDetails = ({ hotspotId, wsRefreshKey }) => {
                     <span style={{ fontSize: "12px", color: "var(--muted)" }}>Radius:</span>
                     <span style={{ fontSize: "12px", fontWeight: "600" }}>{hotspot.radius_meters || 0}m</span>
                   </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "12px", color: "var(--muted)" }}>Navigation:</span>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        onClick={() => {
+                          const lat = Number(hotspot.center_lat || hotspot.lat || 0);
+                          const lng = Number(hotspot.center_long || hotspot.lng || 0);
+                          window.open(
+                            `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+                            '_blank'
+                          );
+                        }}
+                        style={{
+                          padding: "4px 8px",
+                          fontSize: "10px",
+                          backgroundColor: "var(--primary)",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "3px",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "3px"
+                        }}
+                      >
+                        🚗 Navigate
+                      </button>
+                      <button
+                        onClick={() => {
+                          const lat = Number(hotspot.center_lat || hotspot.lat || 0);
+                          const lng = Number(hotspot.center_long || hotspot.lng || 0);
+                          window.open(
+                            `https://www.google.com/maps?q=${lat},${lng}`,
+                            '_blank'
+                          );
+                        }}
+                        style={{
+                          padding: "4px 8px",
+                          fontSize: "10px",
+                          backgroundColor: "var(--secondary)",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "3px",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "3px"
+                        }}
+                      >
+                        📍 View Map
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

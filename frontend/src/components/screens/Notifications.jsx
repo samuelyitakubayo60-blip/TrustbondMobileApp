@@ -96,6 +96,30 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
       return;
     }
     if (entityType === 'hotspot' && entityId) {
+      // For hotspot notifications, try to get location data and show navigation options
+      try {
+        const hotspotData = await api.get(`/api/v1/hotspots/${entityId}`);
+        if (hotspotData && hotspotData.latitude && hotspotData.longitude) {
+          const lat = parseFloat(hotspotData.latitude);
+          const lon = parseFloat(hotspotData.longitude);
+          
+          // Show navigation options
+          const navigateToHotspot = window.confirm(
+            `Navigate to hotspot location?\n\nLocation: ${hotspotData.village_name || 'Unknown'}\nCoords: ${lat.toFixed(6)}, ${lon.toFixed(6)}\n\nClick OK for navigation, Cancel for hotspot details.`
+          );
+          
+          if (navigateToHotspot) {
+            window.open(
+              `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`,
+              '_blank'
+            );
+            return;
+          }
+        }
+      } catch (error) {
+        // If hotspot data fetch fails, fall back to hotspot details
+        console.log('Could not fetch hotspot location data, navigating to details');
+      }
       goToScreen?.('hotspots', 4);
       return;
     }

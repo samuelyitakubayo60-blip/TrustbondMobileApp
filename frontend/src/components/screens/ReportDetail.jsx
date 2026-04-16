@@ -722,6 +722,67 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 </div>
               </div>
               <div className="detail-field">
+                <div className="dfl">Navigation</div>
+                <div className="dfv">
+                  {report.latitude && report.longitude ? (
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <button
+                        onClick={() => {
+                          const lat = parseFloat(report.latitude);
+                          const lon = parseFloat(report.longitude);
+                          window.open(
+                            `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`,
+                            '_blank'
+                          );
+                        }}
+                        style={{
+                          padding: "6px 12px",
+                          fontSize: "11px",
+                          backgroundColor: "var(--primary)",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px"
+                        }}
+                      >
+                        🚗 Navigate
+                      </button>
+                      <button
+                        onClick={() => {
+                          const lat = parseFloat(report.latitude);
+                          const lon = parseFloat(report.longitude);
+                          window.open(
+                            `https://www.google.com/maps?q=${lat},${lon}`,
+                            '_blank'
+                          );
+                        }}
+                        style={{
+                          padding: "6px 12px",
+                          fontSize: "11px",
+                          backgroundColor: "var(--secondary)",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px"
+                        }}
+                      >
+                        📍 View Map
+                      </button>
+                    </div>
+                  ) : (
+                    <span style={{ color: "var(--muted)", fontSize: "12px" }}>
+                      Location not available
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="detail-field">
                 <div className="dfl">GPS Accuracy</div>
                 <div className="dfv" style={{ fontSize: "12px" }}>
                   {report.gps_accuracy != null

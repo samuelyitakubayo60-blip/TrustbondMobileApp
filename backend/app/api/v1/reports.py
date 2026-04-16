@@ -480,8 +480,11 @@ def run_hotspot_auto():
                 db,
                 title="New Hotspots Detected",
                 message=f"{created} new safety hotspots have been automatically detected based on recent reports.",
-                notif_type="hotspot",
+                notif_type="system",
+                related_entity_type="hotspot",
+                related_entity_id=str(hotspot.hotspot_id) if created == 1 else None,
                 target_roles=["admin", "supervisor"],
+                send_email=True  # Enable email notifications for hotspots
             )
         db.commit()
     except Exception as e:
@@ -489,8 +492,6 @@ def run_hotspot_auto():
         db.rollback()
     finally:
         db.close()
-
-
 def _purge_outside_musanze_reports(db: Session, recompute_hotspots: bool = True) -> tuple[int, int]:
     """Delete reports outside covered village polygons and optionally recompute hotspots.
 
@@ -895,6 +896,53 @@ def create_report(
 
         client_ip = request.client.host if request.client else None
         user_agent = request.headers.get("user-agent")
+        
+        # Auto-assign boundary-rejected report to officer in nearest station for review
+        assigned_officer_id = None
+        try:
+            assigned_officer_id = _assign_officer_to_report_based_on_location(db, float(report.latitude), float(report.longitude))
+            if assigned_officer_id:
+                report.verified_by = assigned_officer_id
+                report.handling_station_id = db.query(PoliceUser.station_id).filter(PoliceUser.police_user_id == assigned_officer_id).scalar()
+                print(f"Auto-assigned boundary-rejected report {report.report_id} to officer {assigned_officer_id}")
+        except Exception as e:
+            print(f"Failed to auto-assign boundary-rejected report {report.report_id}: {e}")
+        
+        # Send email notification for boundary flagging
+        try:
+            from app.api.v1.notifications import create_role_notifications
+            create_role_notifications(
+                db=db,
+                title=f"Report Rejected - Out of Boundary: {report.report_id[:8]}...",
+                message=f"Report automatically rejected: {report.flag_reason}. Location: {report.latitude}, {report.longitude}" + (f" Assigned to officer {assigned_officer_id}" if assigned_officer_id else ""),
+                notif_type="report",
+                related_entity_type="report",
+                related_entity_id=str(report.report_id),
+                target_roles=["supervisor", "admin"],
+                send_email=True
+            )
+            
+            # Send notification to assigned officer if one was assigned
+            if assigned_officer_id:
+                from app.api.v1.notifications import create_notification
+                create_notification(
+                    db=db,
+                    police_user_id=assigned_officer_id,
+                    title=f"Boundary Report Assigned: {report.report_id[:8]}...",
+                    message=f"Out-of-boundary report assigned for review: {report.flag_reason}. Location: {report.latitude}, {report.longitude}",
+                    notif_type="assignment",
+                    related_entity_type="report",
+                    related_entity_id=str(report.report_id),
+                    send_email=True
+                )
+                
+                # Trigger workload balancing after assignment
+                try:
+                    _balance_report_workload_and_reassign(db)
+                except Exception as e:
+                    print(f"Failed to balance report workload after boundary assignment: {e}")
+        except Exception as e:
+            print(f"Failed to send email notification for boundary rejection {report.report_id}: {e}")
         log_action(
             db,
             "report_created_out_of_boundary",
@@ -1018,6 +1066,53 @@ def create_report(
         if ai_status not in ["passed", "rejected"]:
             review_reasons.append(f"backend_ai_{ai_status}")
         print(f"HUMAN REVIEW NEEDED: Report {report.report_id} - {' + '.join(review_reasons)}")
+        
+        # Auto-assign flagged report to officer in nearest station
+        assigned_officer_id = None
+        try:
+            assigned_officer_id = _assign_officer_to_report_based_on_location(db, float(report.latitude), float(report.longitude))
+            if assigned_officer_id:
+                report.verified_by = assigned_officer_id
+                report.handling_station_id = db.query(PoliceUser.station_id).filter(PoliceUser.police_user_id == assigned_officer_id).scalar()
+                print(f"Auto-assigned flagged report {report.report_id} to officer {assigned_officer_id}")
+        except Exception as e:
+            print(f"Failed to auto-assign flagged report {report.report_id}: {e}")
+        
+        # Send email notification for flagged report
+        try:
+            from app.api.v1.notifications import create_role_notifications
+            create_role_notifications(
+                db=db,
+                title=f"Report Flagged for Review: {report.report_id[:8]}...",
+                message=f"Report requires human review: {' + '.join(review_reasons)}. Incident type: {report.incident_type_id}" + (f" Assigned to officer {assigned_officer_id}" if assigned_officer_id else ""),
+                notif_type="report",
+                related_entity_type="report",
+                related_entity_id=str(report.report_id),
+                target_roles=["supervisor", "admin"],
+                send_email=True
+            )
+            
+            # Send notification to assigned officer if one was assigned
+            if assigned_officer_id:
+                from app.api.v1.notifications import create_notification
+                create_notification(
+                    db=db,
+                    police_user_id=assigned_officer_id,
+                    title=f"Report Assigned for Review: {report.report_id[:8]}...",
+                    message=f"Flagged report assigned to you: {' + '.join(review_reasons)}. Please review and take action.",
+                    notif_type="assignment",
+                    related_entity_type="report",
+                    related_entity_id=str(report.report_id),
+                    send_email=True
+                )
+                
+                # Trigger workload balancing after assignment
+                try:
+                    _balance_report_workload_and_reassign(db)
+                except Exception as e:
+                    print(f"Failed to balance report workload after assignment: {e}")
+        except Exception as e:
+            print(f"Failed to send email notification for flagged report {report.report_id}: {e}")
     
     # Store mobile verification results for audit trail
     report.feature_vector = report.feature_vector or {}
@@ -3122,6 +3217,88 @@ def _auto_remove_rejected_report(report_id: str):
         db.close()
 
 
+def _balance_report_workload_and_reassign(db: Session):
+    """Smart workload balancing for assigned reports across multiple officers"""
+    try:
+        from app.models.report import Report
+        from app.models.police_user import PoliceUser
+        from sqlalchemy import func
+        
+        # Get all active officers
+        officers = db.query(PoliceUser).filter(
+            PoliceUser.is_active == True,
+            PoliceUser.role == 'officer'
+        ).all()
+        
+        if len(officers) < 2:
+            return  # Need at least 2 officers for balancing
+        
+        # Calculate current report workload per officer
+        workload = {str(officer.police_user_id): 0 for officer in officers}
+        for officer_id, count in db.query(Report.verified_by, func.count(Report.report_id)).filter(
+            Report.verified_by.in_([o.police_user_id for o in officers]),
+            Report.status.in_(['pending', 'under_review'])
+        ).group_by(Report.verified_by).all():
+            workload[str(officer_id)] = count
+        
+        # Find overloaded and underloaded officers
+        avg_reports = sum(workload.values()) / len(workload)
+        overloaded = [oid for oid, count in workload.items() if count > avg_reports + 3]  # Threshold of 3 reports above average
+        underloaded = [oid for oid, count in workload.items() if count < avg_reports - 1]  # Threshold of 1 report below average
+        
+        if not overloaded or not underloaded:
+            return  # Workload is already balanced
+        
+        # Reassign reports from overloaded to underloaded officers
+        reassigned = 0
+        for overloaded_officer in overloaded:
+            # Get newest assigned reports from overloaded officer (only flagged/boundary reports)
+            reports_to_reassign = db.query(Report).filter(
+                Report.verified_by == int(overloaded_officer),
+                Report.status.in_(['pending', 'under_review']),
+                Report.is_flagged == True,  # Only reassign flagged reports
+                Report.reported_at >= datetime.now(timezone.utc) - timedelta(hours=6)  # Only recent reports (6 hours)
+            ).order_by(Report.reported_at.desc()).limit(2).all()
+            
+            for report in reports_to_reassign:
+                if underloaded:
+                    # Find least loaded underloaded officer
+                    target_officer = min(underloaded, key=lambda oid: workload[oid])
+                    
+                    # Reassign report
+                    old_officer_id = report.verified_by
+                    report.verified_by = int(target_officer)
+                    report.handling_station_id = db.query(PoliceUser.station_id).filter(PoliceUser.police_user_id == int(target_officer)).scalar()
+                    
+                    # Update workload tracking
+                    workload[overloaded_officer] -= 1
+                    workload[target_officer] += 1
+                    
+                    # Remove from underloaded if they're now balanced
+                    if workload[target_officer] >= avg_reports - 1:
+                        underloaded.remove(target_officer)
+                    
+                    reassigned += 1
+                    
+                    print(f"🔄 Reassigned report {report.report_id} from officer {old_officer_id} to officer {target_officer}")
+        
+        if reassigned > 0:
+            db.commit()
+            print(f" Report workload balanced: {reassigned} reports reassigned across {len(officers)} officers")
+            
+            # Broadcast changes to keep clients synchronized
+            try:
+                from app.api.v1.ws import manager
+                from app.core.websocket import manager as ws_manager
+                ws_manager.broadcast({"type": "refresh_data", "entity": "report", "action": "reassigned"})
+            except Exception as broadcast_error:
+                print(f"Warning: Could not broadcast report reassignments: {broadcast_error}")
+    
+    except Exception as e:
+        print(f"Error in report workload balancing: {e}")
+        db.rollback()
+
+
 def _balance_workload_and_reassign(db: Session):
     """Smart workload balancing across multiple officers"""
     try:
@@ -3265,6 +3442,56 @@ def _handle_officer_case_finalization(db: Session, officer_id: str):
         print(f"Error handling officer case finalization: {e}")
         db.rollback()
 
+def _assign_officer_to_report_based_on_location(db: Session, report_lat: float, report_lon: float) -> Optional[int]:
+    """Assign an officer to a flagged report based on station proximity and workload."""
+    try:
+        from app.models.station import Station
+        from app.models.police_user import PoliceUser
+        from app.models.report import Report
+        from math import radians, cos, sin, asin, sqrt
+        from sqlalchemy import func
+
+        def calculate_distance(lat1, lon1, lat2, lon2):
+            if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
+                return float('inf')
+            lat1, lon1, lat2, lon2 = map(radians, map(float, [lat1, lon1, lat2, lon2]))
+            dlat = lat2 - lat1
+            dlon = lon2 - lon1
+            a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+            c = 2 * asin(sqrt(a))
+            return 6371 * c
+
+        stations = db.query(Station).filter(Station.is_active == True).all()
+        if not stations:
+            return None
+
+        ranked_stations = sorted(stations, key=lambda s: calculate_distance(report_lat, report_lon, s.latitude, s.longitude))
+
+        for station in ranked_stations:
+            officers = db.query(PoliceUser).filter(
+                PoliceUser.is_active == True,
+                PoliceUser.role == 'officer',
+                PoliceUser.station_id == station.station_id
+            ).all()
+
+            if officers:
+                officer_ids = [o.police_user_id for o in officers]
+                # Count assigned reports (not cases) for workload
+                report_counts = db.query(Report.verified_by, func.count(Report.report_id)).filter(
+                    Report.verified_by.in_(officer_ids),
+                    Report.status.in_(['pending', 'under_review'])
+                ).group_by(Report.verified_by).all()
+                
+                count_dict = dict(report_counts)
+                selected_officer = min(officers, key=lambda o: count_dict.get(o.police_user_id, 0))
+                return selected_officer.police_user_id
+        
+        return None
+    except Exception as e:
+        logger.error(f"Error assigning officer to report: {e}")
+        return None
+
+
 def _assign_officer_to_case_based_on_location(db: Session, case_lat: float, case_lon: float) -> Optional[int]:
     try:
         from app.models.station import Station
@@ -3358,14 +3585,51 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
                 case_reports_table.insert().values(
                     case_id=case.case_id,
                     report_id=report.report_id,
-                    added_at=datetime.now(timezone.utc)
                 )
             )
+        
+        # Update report status to indicate they're in a case
+        for report in reports:
+            report.status = "in_case"
         
         db.commit()
         stats['cases_created'] += 1
         stats['case_number'] = case_number
         print(f"Created auto-case {case.case_number} with {len(reports)} reports")
+        
+        # Send email notifications for auto case creation
+        try:
+            from app.api.v1.notifications import create_role_notifications
+            from app.models.police_user import PoliceUser
+            
+            # Notify supervisors and admins about auto case creation
+            create_role_notifications(
+                db=db,
+                title=f"Auto-Generated Case: {case.case_number}",
+                message=f"A new case has been automatically created from {len(reports)} verified reports. Case: {case.title}",
+                notif_type="system",
+                related_entity_type="case",
+                related_entity_id=str(case.case_id),
+                target_roles=["supervisor", "admin"],
+                send_email=True
+            )
+            
+            # Notify assigned officer if case was assigned
+            if case.assigned_to_id:
+                from app.api.v1.notifications import create_notification
+                create_notification(
+                    db=db,
+                    police_user_id=case.assigned_to_id,
+                    title=f"Case Assigned: {case.case_number}",
+                    message=f"You have been assigned to auto-generated case: {case.title}",
+                    notif_type="assignment",
+                    related_entity_type="case",
+                    related_entity_id=str(case.case_id),
+                    send_email=True
+                )
+                
+        except Exception as e:
+            print(f"Failed to send email notifications for case {case.case_number}: {e}")
         
     except Exception as e:
         print(f"Error creating case from reports: {e}")
