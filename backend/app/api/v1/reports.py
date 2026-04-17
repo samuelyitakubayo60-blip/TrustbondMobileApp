@@ -669,6 +669,39 @@ def run_hotspot_auto():
         db.rollback()
     finally:
         db.close()
+
+
+def run_auto_case_realtime():
+    """Background task to run case auto-linking/creation after live report changes."""
+    db = SessionLocal()
+    try:
+        case_stats = _create_auto_cases(db)
+        if case_stats.get("cases_created", 0) > 0:
+            print(
+                f"Realtime auto-case run: created {case_stats['cases_created']} case(s)"
+            )
+            try:
+                _balance_workload_and_reassign(db)
+            except Exception as balance_error:
+                print(f"Warning: workload balancing failed after auto-case run: {balance_error}")
+    except Exception as e:
+        print(f"Error in realtime auto-case run: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+def run_auto_case_for_report(report_id: str):
+    """Background task wrapper for single-report real-time auto-case processing."""
+    try:
+        logger.info("[AUTO_CASE] Triggered realtime processing for report %s", report_id)
+        _check_and_create_auto_case(report_id)
+    except Exception as e:
+        logger.error(
+            "[AUTO_CASE] Error in realtime processing for report %s: %s",
+            report_id,
+            e,
+        )
 def _purge_outside_musanze_reports(db: Session, recompute_hotspots: bool = True) -> tuple[int, int]:
     """Delete reports outside covered village polygons and optionally recompute hotspots.
 
@@ -1435,28 +1468,7 @@ def create_report(
             device.trusted_reports = (device.trusted_reports or 0) + 1
             db.commit()
         
-        # Trigger real-time auto-case creation after report verification
-        try:
-            from app.api.v1.reports import _create_auto_cases
-            case_stats = _create_auto_cases(db)
-            if case_stats['cases_created'] > 0:
-                print(f"🚨 Real-time auto-case creation: {case_stats['cases_created']} cases created from new verified report")
-                # Broadcast case creation to all connected clients
-                manager.broadcast({"type": "refresh_data", "entity": "case", "action": "created"})
-                # Balance workload after new cases are created
-                _balance_workload_and_reassign(db)
-                # Broadcast workload changes
-                manager.broadcast({"type": "refresh_data", "entity": "case", "action": "reassigned"})
-        except Exception as e:
-            print(f"Error in real-time auto-case creation: {e}")
-            db.rollback()
-        
-        # Trigger real-time hotspot recomputation after report verification
-        try:
-            background_tasks.add_task(run_hotspot_auto)
-            print("🔥 Real-time hotspot recomputation triggered after report verification")
-        except Exception as e:
-            print(f"Error triggering real-time hotspot recomputation: {e}")
+        # Real-time automation is queued once below after final lifecycle state is settled.
     elif rule_status == "rejected":
         # Clear rejections are auto-rejected
         report.status = "rejected"
@@ -1469,6 +1481,15 @@ def create_report(
         report.verification_status = "under_review"
         print(f"👮‍♂️ HUMAN REVIEW NEEDED: Report flagged - {flag_reason}")  # Debug log
         db.commit()
+
+    # Keep device-level ML/behavior metadata in sync with the final lifecycle outcome.
+    # This ensures Device Profile "ML reasons (aggregated)" reflects latest trusted/flagged updates.
+    try:
+        if device is not None:
+            update_device_ml_aggregates(db, device, window=30)
+            db.commit()
+    except Exception:
+        db.rollback()
     
     # Auto-remove rejected reports to keep system clean
     if report.verification_status == "rejected" and report.status == "rejected":
@@ -1486,12 +1507,10 @@ def create_report(
         # Schedule background task for actual removal (to avoid blocking)
         background_tasks.add_task(_auto_remove_rejected_report, str(report.report_id))
 
-    # Run hotspot auto-creation in background when criteria are met (no user intervention)
+    # Always refresh hotspots for live changes; create/merge cases only for verified reports.
     background_tasks.add_task(run_hotspot_auto)
-    
-    # Auto-create cases if this report was verified and can form a cluster
     if report.verification_status == "verified":
-        background_tasks.add_task(_check_and_create_auto_case, str(report.report_id))
+        background_tasks.add_task(run_auto_case_for_report, str(report.report_id))
     
     background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "report", "action": "created"})
     
@@ -2476,6 +2495,10 @@ def add_review(
     user_agent = request.headers.get("user-agent")
     
     try:
+        # Recompute device aggregates after police final decision and ML override updates.
+        if getattr(report, "device", None) is not None:
+            update_device_ml_aggregates(db, report.device, window=30)
+
         db.commit()
         
         # Log the successful action
@@ -2535,29 +2558,11 @@ def add_review(
     db.refresh(review)
     reviewer_name = f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email
     
-    # Trigger real-time auto-case creation after manual verification
-    if body.decision.lower() == "verified":
-        try:
-            from app.api.v1.reports import _create_auto_cases
-            case_stats = _create_auto_cases(db)
-            if case_stats['cases_created'] > 0:
-                print(f"🚨 Real-time auto-case creation: {case_stats['cases_created']} cases created from manually verified report")
-                # Broadcast case creation to all connected clients
-                manager.broadcast({"type": "refresh_data", "entity": "case", "action": "created"})
-                # Balance workload after new cases are created
-                _balance_workload_and_reassign(db)
-                # Broadcast workload changes
-                manager.broadcast({"type": "refresh_data", "entity": "case", "action": "reassigned"})
-        except Exception as e:
-            print(f"Error in real-time auto-case creation: {e}")
-            db.rollback()
-        
-        # Trigger real-time hotspot recomputation after manual verification
-        try:
-            background_tasks.add_task(run_hotspot_auto)
-            print("🔥 Real-time hotspot recomputation triggered after manual verification")
-        except Exception as e:
-            print(f"Error triggering real-time hotspot recomputation: {e}")
+    # Trigger real-time automation after police review decisions.
+    # Cases need verified outcomes; hotspots should refresh for any final decision change.
+    if report.verification_status == "verified":
+        background_tasks.add_task(run_auto_case_for_report, str(report.report_id))
+    background_tasks.add_task(run_hotspot_auto)
     
     background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "report", "action": "reviewed"})
 
@@ -3298,6 +3303,7 @@ def list_nearby_confirmations(
 def delete_report(
     report_id: str,
     device_id: Optional[str] = Query(None, description="Device ID of the original reporter"),
+    background_tasks: BackgroundTasks = None,
     current_user: Annotated[Optional[PoliceUser], Depends(get_optional_user)] = None,
     db: Session = Depends(get_db),
 ):
@@ -3332,6 +3338,9 @@ def delete_report(
 
     db.delete(report)
     db.commit()
+    if background_tasks is not None:
+        # Recompute hotspots after deletions so map stays live and accurate.
+        background_tasks.add_task(run_hotspot_auto)
     return {}
 
 
@@ -3343,6 +3352,12 @@ def _check_and_create_auto_case(report_id: str):
     try:
         report = db.query(Report).filter(Report.report_id == report_id).first()
         if not report or report.verification_status != "verified":
+            logger.info(
+                "[AUTO_CASE] Skip report %s: report_exists=%s verification_status=%s",
+                report_id,
+                bool(report),
+                getattr(report, "verification_status", None),
+            )
             return
         
         # Check if report is already in a case
@@ -3352,6 +3367,7 @@ def _check_and_create_auto_case(report_id: str):
         ).first()
         
         if existing_case:
+            logger.info("[AUTO_CASE] Skip report %s: already linked to case", report_id)
             return
         
         # Get clustering parameters from system config
@@ -3371,6 +3387,15 @@ def _check_and_create_auto_case(report_id: str):
             cluster_radius_meters = dbscan_config.config_value.get('value', 200)
         if min_samples_config:
             min_reports_threshold = min_samples_config.config_value.get('value', 3)
+
+        logger.info(
+            "[AUTO_CASE] Start report %s: incident_type=%s village=%s radius_m=%s min_reports=%s",
+            report_id,
+            report.incident_type_id,
+            report.village_location_id,
+            cluster_radius_meters,
+            min_reports_threshold,
+        )
         
         # Convert radius to kilometers for distance calculation
         cluster_radius_km = cluster_radius_meters / 1000.0
@@ -3378,6 +3403,7 @@ def _check_and_create_auto_case(report_id: str):
         # STRATEGY 1: Try to add to existing case first
         existing_case_added = _try_add_to_existing_case(db, report, cluster_radius_km)
         if existing_case_added:
+            logger.info("[AUTO_CASE] Report %s attached to existing case", report_id)
             return
         
         # STRATEGY 2: Create new case if no existing case found
@@ -3402,6 +3428,12 @@ def _try_add_to_existing_case(db: Session, report: Report, cluster_radius_km: fl
             Case.latitude.isnot(None),
             Case.longitude.isnot(None)
         ).all()
+
+        logger.info(
+            "[AUTO_CASE] Existing-case scan report=%s compatible_cases=%s",
+            report.report_id,
+            len(compatible_cases),
+        )
         
         if not compatible_cases:
             return False
@@ -3441,6 +3473,13 @@ def _try_add_to_existing_case(db: Session, report: Report, cluster_radius_km: fl
                 report.latitude, report.longitude,
                 float(case.latitude), float(case.longitude)
             )
+            logger.info(
+                "[AUTO_CASE] Distance check report=%s case=%s distance_km=%.3f threshold_km=%.3f",
+                report.report_id,
+                case.case_number,
+                distance,
+                cluster_radius_km,
+            )
             if distance <= cluster_radius_km:
                 # Add report to this case
                 db.execute(
@@ -3475,7 +3514,7 @@ def _create_new_case_for_report(db: Session, report: Report, cluster_radius_km: 
                 Report.incident_type_id == report.incident_type_id,
                 Report.verification_status == "verified",
                 Report.village_location_id == report.village_location_id,
-                Report.report_id != report_id,
+                Report.report_id != report.report_id,
                 ~Report.report_id.in_(
                     db.query(case_reports_table.c.report_id).distinct()
                 )
@@ -3483,6 +3522,13 @@ def _create_new_case_for_report(db: Session, report: Report, cluster_radius_km: 
             
             # Add the current report
             village_reports.insert(0, report)
+            logger.info(
+                "[AUTO_CASE] Village candidate report=%s count=%s threshold=%s village=%s",
+                report.report_id,
+                len(village_reports),
+                min_reports_threshold,
+                report.village_location_id,
+            )
             
             # Create case if enough reports in same village
             if len(village_reports) >= min_reports_threshold:
@@ -3490,6 +3536,13 @@ def _create_new_case_for_report(db: Session, report: Report, cluster_radius_km: 
                 if case_stats['cases_created'] > 0:
                     print(f"Created new village-based case {case_stats['case_number']} with {len(village_reports)} reports in village {report.village_location_id}")
                     return
+            else:
+                logger.info(
+                    "[AUTO_CASE] Village threshold not met report=%s %s/%s",
+                    report.report_id,
+                    len(village_reports),
+                    min_reports_threshold,
+                )
         
         # Strategy 2: Geographic clustering using GPS coordinates (fallback)
         from math import radians, cos, sin, asin, sqrt
@@ -3506,7 +3559,7 @@ def _create_new_case_for_report(db: Session, report: Report, cluster_radius_km: 
         nearby_reports = db.query(Report).filter(
             Report.incident_type_id == report.incident_type_id,
             Report.verification_status == "verified",
-            Report.report_id != report_id,
+            Report.report_id != report.report_id,
             ~Report.report_id.in_(
                 db.query(case_reports_table.c.report_id).distinct()
             )
@@ -3521,12 +3574,27 @@ def _create_new_case_for_report(db: Session, report: Report, cluster_radius_km: 
             )
             if distance <= cluster_radius_km:  # Use configured radius
                 clustered_reports.append(other_report)
+
+        logger.info(
+            "[AUTO_CASE] Geo candidate report=%s count=%s threshold=%s radius_km=%.3f",
+            report.report_id,
+            len(clustered_reports),
+            min_reports_threshold,
+            cluster_radius_km,
+        )
         
         # Create case if enough reports geographically clustered
         if len(clustered_reports) >= min_reports_threshold:
             case_stats = _create_case_from_reports(db, clustered_reports)
             if case_stats['cases_created'] > 0:
                 print(f"Created new geo-clustered case {case_stats['case_number']} with {len(clustered_reports)} reports within {cluster_radius_km * 1000:.0f}m")
+        else:
+            logger.info(
+                "[AUTO_CASE] Geo threshold not met report=%s %s/%s",
+                report.report_id,
+                len(clustered_reports),
+                min_reports_threshold,
+            )
     
     except Exception as e:
         print(f"Error creating new case for report: {e}")
@@ -3965,7 +4033,13 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
         
         # Broadcast case creation to all connected clients for real-time updates
         try:
-            manager.broadcast({"type": "refresh_data", "entity": "case", "action": "created"})
+            import asyncio
+            payload = {"type": "refresh_data", "entity": "case", "action": "created"}
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(manager.broadcast(payload))
+            except RuntimeError:
+                asyncio.run(manager.broadcast(payload))
         except Exception as e:
             print(f"Warning: Could not broadcast case creation: {e}")
         

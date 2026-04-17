@@ -52,7 +52,6 @@ async def lifespan(app: FastAPI):
     # Process existing pending reports through AI on startup
     import asyncio
     import logging
-    from app.api.v1.reports import _create_auto_cases
     from app.utils.ml_evaluator import ml_evaluator
     from app.database import SessionLocal
     from app.models.report import Report
@@ -111,9 +110,15 @@ async def lifespan(app: FastAPI):
                 
                 db.commit()
                 
-                # Create auto cases from newly verified reports
-                case_stats = _create_auto_cases(db)
-                logger.info(f"Created {case_stats['cases_created']} new cases automatically")
+                # Auto-case/hotspot creation runs on live report/review events.
+                # Startup stays focused on AI backlog hydration for older pending rows.
+                # Safety catch-up: process already-verified unlinked reports once per startup.
+                try:
+                    from app.api.v1.reports import run_auto_case_realtime
+                    run_auto_case_realtime()
+                    logger.info("Startup auto-case catch-up completed")
+                except Exception as catchup_err:
+                    logger.warning(f"Startup auto-case catch-up failed: {catchup_err}")
                 
             finally:
                 db.close()

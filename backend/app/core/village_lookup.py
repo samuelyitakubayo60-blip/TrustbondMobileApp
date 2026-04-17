@@ -33,8 +33,11 @@ def get_village_location_info(db: Session, latitude: float, longitude: float) ->
     """
     Return village name and parent hierarchy (cell, sector, district) for the point (lat, lon).
     Returns None if point is not inside any village.
-    Returns dict with: location_id, village_name, cell_name (optional),
-    sector_name (optional), district_name (optional).
+    Returns dict with:
+    - village_location_id/location_id, village_name
+    - cell_location_id/cell_name (optional)
+    - sector_location_id/sector_name (optional)
+    - district_location_id/district_name (optional)
     """
     loc_id = get_village_location_id(db, latitude, longitude)
     if loc_id is None:
@@ -44,25 +47,46 @@ def get_village_location_info(db: Session, latitude: float, longitude: float) ->
         return None
     out = {
         "location_id": loc_id,
+        "village_location_id": loc_id,
         "village_name": village.location_name,
+        "cell_location_id": None,
         "cell_name": None,
+        "sector_location_id": None,
         "sector_name": None,
+        "district_location_id": None,
         "district_name": None,
     }
     if village.parent_location_id:
-        cell = db.query(Location).filter(Location.location_id == village.parent_location_id).first()
-        if cell:
-            out["cell_name"] = cell.location_name
-            if cell.parent_location_id:
-                sector = db.query(Location).filter(Location.location_id == cell.parent_location_id).first()
-                if sector:
-                    out["sector_name"] = sector.location_name
-                    if sector.parent_location_id:
-                        district = (
-                            db.query(Location)
-                            .filter(Location.location_id == sector.parent_location_id)
-                            .first()
-                        )
-                        if district:
-                            out["district_name"] = district.location_name
+        parent = db.query(Location).filter(Location.location_id == village.parent_location_id).first()
+        if parent:
+            if parent.location_type == "cell":
+                out["cell_location_id"] = parent.location_id
+                out["cell_name"] = parent.location_name
+                if parent.parent_location_id:
+                    sector = db.query(Location).filter(Location.location_id == parent.parent_location_id).first()
+                    if sector:
+                        out["sector_location_id"] = sector.location_id
+                        out["sector_name"] = sector.location_name
+                        if sector.parent_location_id:
+                            district = (
+                                db.query(Location)
+                                .filter(Location.location_id == sector.parent_location_id)
+                                .first()
+                            )
+                            if district:
+                                out["district_location_id"] = district.location_id
+                                out["district_name"] = district.location_name
+            elif parent.location_type == "sector":
+                # Some datasets have village directly under sector (no cell level).
+                out["sector_location_id"] = parent.location_id
+                out["sector_name"] = parent.location_name
+                if parent.parent_location_id:
+                    district = (
+                        db.query(Location)
+                        .filter(Location.location_id == parent.parent_location_id)
+                        .first()
+                    )
+                    if district:
+                        out["district_location_id"] = district.location_id
+                        out["district_name"] = district.location_name
     return out

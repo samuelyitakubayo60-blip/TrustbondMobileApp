@@ -741,6 +741,7 @@ def update_case(
 def delete_case(
     case_id: str,
     current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)],
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """Delete a case (and its links). Admin/supervisor only."""
@@ -760,6 +761,19 @@ def delete_case(
     db.query(CaseReport).filter(CaseReport.case_id == cid).delete(synchronize_session=False)
     db.delete(case)
     db.commit()
+
+    # Re-run auto-case grouping after deletions so eligible verified reports can
+    # immediately be regrouped into cases in real time.
+    try:
+        from app.api.v1.reports import run_auto_case_realtime
+        background_tasks.add_task(run_auto_case_realtime)
+    except Exception:
+        pass
+
+    background_tasks.add_task(
+        manager.broadcast,
+        {"type": "refresh_data", "entity": "case", "action": "deleted"},
+    )
     return {}
 
 

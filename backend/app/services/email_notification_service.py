@@ -179,7 +179,9 @@ class EmailNotificationService:
         case_title: str,
         incident_type: str,
         location: str,
-        report_count: int
+        report_count: int,
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
     ) -> bool:
         """
         Send email notification when a case is assigned to an officer.
@@ -203,10 +205,18 @@ class EmailNotificationService:
         
         case_url = f"{self.frontend_url}/cases/{case_number}"
         
-        # Convert coordinates to location hierarchy and generate Google Maps links
+        # Build display + one unified case-level maps link.
         # Handle both coordinate strings (lat, lon) and location descriptions
         location_display = location
-        maps_links = generate_google_maps_link(0, 0)  # Default location
+        maps_links = None
+
+        if latitude is not None and longitude is not None:
+            try:
+                lat_f = float(latitude)
+                lon_f = float(longitude)
+                maps_links = generate_google_maps_link(lat_f, lon_f)
+            except (TypeError, ValueError):
+                maps_links = None
         
         if ',' in location and location.replace(',', '').replace('.', '').replace(' ', '').replace('-', '').isdigit():
             # This looks like coordinates, convert to location hierarchy
@@ -215,7 +225,8 @@ class EmailNotificationService:
                 db = SessionLocal()
                 try:
                     location_display = get_location_hierarchy_from_coordinates(db, lat, lon)
-                    maps_links = generate_google_maps_link(lat, lon)
+                    if maps_links is None:
+                        maps_links = generate_google_maps_link(lat, lon)
                 finally:
                     db.close()
             except (ValueError, IndexError):
@@ -249,18 +260,10 @@ class EmailNotificationService:
                         <a href="{case_url}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">
                             View Case Details
                         </a>
-                        <a href="{maps_links['navigation']}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">
-                            🚗 Navigate to Location
-                        </a>
+                        {f'<a href="{maps_links["navigation"]}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">🚗 Navigate to Case Area</a>' if maps_links else ''}
                     </div>
                     
-                    <div style="background-color: #e3f2fd; padding: 10px; border-radius: 4px; margin: 15px 0;">
-                        <p style="margin: 0; font-size: 14px;">
-                            <strong>📍 Quick Navigation:</strong> 
-                            <a href="{maps_links['view']}" style="color: #1976d2; text-decoration: none;">View on Map</a> | 
-                            <a href="{maps_links['navigation']}" style="color: #1976d2; text-decoration: none;">Get Directions</a>
-                        </p>
-                    </div>
+                    {f'<div style="background-color: #e3f2fd; padding: 10px; border-radius: 4px; margin: 15px 0;"><p style="margin: 0; font-size: 14px;"><strong>📍 Quick Navigation:</strong> <a href="{maps_links["view"]}" style="color: #1976d2; text-decoration: none;">View on Map</a> | <a href="{maps_links["navigation"]}" style="color: #1976d2; text-decoration: none;">Get Directions</a></p></div>' if maps_links else ''}
                     
                     <p style="font-size: 12px; color: #666; margin-top: 20px;">
                         This is an automated notification from the TrustBond system. 
@@ -281,6 +284,7 @@ class EmailNotificationService:
         Reports: {report_count}
         
         Please review the case details at: {case_url}
+        {f'Navigate to case area: {maps_links["navigation"]}' if maps_links else ''}
         
         This is an automated notification from the TrustBond system.
         """
@@ -294,7 +298,9 @@ class EmailNotificationService:
         case_title: str,
         incident_type: str,
         location: str,
-        report_count: int
+        report_count: int,
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
     ) -> int:
         """
         Send email notification to multiple users when a case is auto-created.
@@ -323,9 +329,17 @@ class EmailNotificationService:
         
         case_url = f"{self.frontend_url}/cases/{case_number}"
         
-        # Convert coordinates to location hierarchy and generate Google Maps links
+        # Build display + one unified case-level maps link.
         location_display = location
-        maps_links = generate_google_maps_link(0, 0)  # Default location
+        maps_links = None
+
+        if latitude is not None and longitude is not None:
+            try:
+                lat_f = float(latitude)
+                lon_f = float(longitude)
+                maps_links = generate_google_maps_link(lat_f, lon_f)
+            except (TypeError, ValueError):
+                maps_links = None
         
         if ',' in location and location.replace(',', '').replace('.', '').replace(' ', '').replace('-', '').isdigit():
             # This looks like coordinates, convert to location hierarchy
@@ -334,7 +348,8 @@ class EmailNotificationService:
                 db = SessionLocal()
                 try:
                     location_display = get_location_hierarchy_from_coordinates(db, lat, lon)
-                    maps_links = generate_google_maps_link(lat, lon)
+                    if maps_links is None:
+                        maps_links = generate_google_maps_link(lat, lon)
                 finally:
                     db.close()
             except (ValueError, IndexError):
@@ -369,18 +384,10 @@ class EmailNotificationService:
                         <a href="{case_url}" style="background-color: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">
                             Review Case Details
                         </a>
-                        <a href="{maps_links['navigation']}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">
-                            🚗 Navigate to Location
-                        </a>
+                        {f'<a href="{maps_links["navigation"]}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">🚗 Navigate to Case Area</a>' if maps_links else ''}
                     </div>
                     
-                    <div style="background-color: #fef2f2; padding: 10px; border-radius: 4px; margin: 15px 0;">
-                        <p style="margin: 0; font-size: 14px;">
-                            <strong>📍 Quick Navigation:</strong> 
-                            <a href="{maps_links['view']}" style="color: #dc2626; text-decoration: none;">View on Map</a> | 
-                            <a href="{maps_links['navigation']}" style="color: #dc2626; text-decoration: none;">Get Directions</a>
-                        </p>
-                    </div>
+                    {f'<div style="background-color: #fef2f2; padding: 10px; border-radius: 4px; margin: 15px 0;"><p style="margin: 0; font-size: 14px;"><strong>📍 Quick Navigation:</strong> <a href="{maps_links["view"]}" style="color: #dc2626; text-decoration: none;">View on Map</a> | <a href="{maps_links["navigation"]}" style="color: #dc2626; text-decoration: none;">Get Directions</a></p></div>' if maps_links else ''}
                     
                     <p style="font-size: 12px; color: #666; margin-top: 20px;">
                         This is an automated notification from the TrustBond system. 
@@ -404,6 +411,7 @@ class EmailNotificationService:
         This case was automatically created when multiple verified reports were clustered together.
         
         Review the case details at: {case_url}
+        {f'Navigate to case area: {maps_links["navigation"]}' if maps_links else ''}
         
         This is an automated notification from the TrustBond system.
         """

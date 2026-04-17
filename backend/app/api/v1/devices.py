@@ -12,6 +12,7 @@ from app.database import get_db
 from app.models.device import Device
 from app.models.report import Report
 from app.models.ml_prediction import MLPrediction
+from app.models.location import Location
 from app.schemas.device import DeviceCreate, DeviceResponse
 from app.api.v1.auth import get_current_admin_or_supervisor
 from app.models.police_user import PoliceUser
@@ -21,8 +22,42 @@ from app.core.credibility_model import (
     get_home_insights,
     get_device_ml_stats
 )
+from app.core.village_lookup import get_village_location_info
 
 router = APIRouter(prefix="/devices", tags=["devices"])
+
+
+def _report_is_trusted(report: Report) -> bool:
+    """Normalize report trust semantics across legacy/new status fields."""
+    rule_status = str(getattr(report, "rule_status", "") or "").strip().lower()
+    status = str(getattr(report, "status", "") or "").strip().lower()
+    verification_status = str(getattr(report, "verification_status", "") or "").strip().lower()
+    return (
+        rule_status in {"confirmed", "verified", "trusted", "passed"}
+        or status in {"verified"}
+        or verification_status in {"verified"}
+    )
+
+
+def _report_is_rejected_or_flagged(report: Report) -> bool:
+    """Normalize rejected/flagged semantics used by the device registry table."""
+    rule_status = str(getattr(report, "rule_status", "") or "").strip().lower()
+    status = str(getattr(report, "status", "") or "").strip().lower()
+    verification_status = str(getattr(report, "verification_status", "") or "").strip().lower()
+    return (
+        rule_status in {"flagged", "rejected", "false_report", "failed"}
+        or status in {"flagged", "rejected"}
+        or verification_status in {"rejected"}
+    )
+
+
+def _safe_float(value):
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 @router.post("/register", response_model=DeviceResponse)
@@ -204,27 +239,75 @@ def list_devices(
         # Get actual report statistics for this device
         device_reports = db.query(Report).filter(Report.device_id == d.device_id).all()
         actual_total = len(device_reports)
-        actual_trusted = sum(1 for r in device_reports if r.rule_status in ["confirmed", "verified", "trusted"])
-        actual_flagged = sum(1 for r in device_reports if r.rule_status in ["flagged", "rejected", "false_report"])
+        actual_trusted = sum(1 for r in device_reports if _report_is_trusted(r))
+        actual_flagged = sum(1 for r in device_reports if _report_is_rejected_or_flagged(r))
         
         # Get most recent report for location and activity data
         last_report = None
         last_active = getattr(d, "last_seen_at", None)
         sector_location_id = None
         sector_name = None
+        cell_location_id = None
+        cell_name = None
+        village_location_id = None
+        village_name = None
         last_location = None
+        last_latitude = None
+        last_longitude = None
         
         if device_reports:
             last_report = max(device_reports, key=lambda r: r.reported_at or r.created_at)
             if not last_active:
                 last_active = last_report.reported_at or last_report.created_at
             
-            # Get location hierarchy from last report
-            if last_report.village_location:
-                sector_location_id = last_report.village_location.location_id
-                sector_name = last_report.village_location.location_name
-            elif last_report.latitude and last_report.longitude:
-                last_location = f"{float(last_report.latitude):.4f}, {float(last_report.longitude):.4f}"
+            # Resolve coordinates + admin hierarchy from latest report location.
+            lat_f = _safe_float(getattr(last_report, "latitude", None))
+            lon_f = _safe_float(getattr(last_report, "longitude", None))
+            if lat_f is not None and lon_f is not None:
+                last_latitude = lat_f
+                last_longitude = lon_f
+                last_location = f"{lat_f:.4f}, {lon_f:.4f}"
+                location_info = get_village_location_info(db, lat_f, lon_f)
+                if isinstance(location_info, dict):
+                    sector_location_id = location_info.get("sector_location_id")
+                    sector_name = location_info.get("sector_name")
+                    cell_location_id = location_info.get("cell_location_id")
+                    cell_name = location_info.get("cell_name")
+                    village_location_id = location_info.get("village_location_id")
+                    village_name = location_info.get("village_name")
+
+            # Fallback to report location relation if polygon lookup did not resolve.
+            if village_name is None and getattr(last_report, "village_location", None):
+                village = last_report.village_location
+                village_location_id = getattr(village, "location_id", None)
+                village_name = getattr(village, "location_name", None)
+                parent_id = getattr(village, "parent_location_id", None)
+                if parent_id:
+                    parent = db.query(Location).filter(Location.location_id == parent_id).first()
+                    if parent and parent.location_type == "cell":
+                        cell_location_id = parent.location_id
+                        cell_name = parent.location_name
+                        if parent.parent_location_id:
+                            sector = db.query(Location).filter(Location.location_id == parent.parent_location_id).first()
+                            if sector:
+                                sector_location_id = sector.location_id
+                                sector_name = sector.location_name
+                    elif parent and parent.location_type == "sector":
+                        sector_location_id = parent.location_id
+                        sector_name = parent.location_name
+
+        # Metadata fallback for admin names/ids if report-derived values are unavailable.
+        meta = getattr(d, "metadata_json", None)
+        if isinstance(meta, dict):
+            sector_location_id = sector_location_id or meta.get("last_sector_location_id")
+            sector_name = sector_name or meta.get("last_sector_name")
+            cell_location_id = cell_location_id or meta.get("last_cell_location_id")
+            cell_name = cell_name or meta.get("last_cell_name")
+            village_location_id = village_location_id or meta.get("last_village_location_id")
+            village_name = village_name or meta.get("last_village_name")
+
+        hierarchy_parts = [name for name in [sector_name, cell_name, village_name] if name]
+        last_location_hierarchy = " > ".join(hierarchy_parts) if hierarchy_parts else None
         
         # Get ML data from device metadata and latest predictions
         ml_avg_trust = None
@@ -238,11 +321,11 @@ def list_devices(
             meta = getattr(d, "metadata_json", None)
             if isinstance(meta, dict) and isinstance(meta.get("ml"), dict):
                 ml = meta.get("ml") or {}
-                ml_avg_trust = ml.get("avg_trust_score")
-                ml_fake_rate = ml.get("fake_rate")
+                ml_avg_trust = _safe_float(ml.get("avg_trust_score"))
+                ml_fake_rate = _safe_float(ml.get("fake_rate"))
                 ml_last_pred_at = ml.get("last_prediction_at")
-                ml_avg_conf = ml.get("avg_confidence")
-                ml_last_conf = ml.get("last_confidence")
+                ml_avg_conf = _safe_float(ml.get("avg_confidence"))
+                ml_last_conf = _safe_float(ml.get("last_confidence"))
         except Exception:
             pass
         
@@ -256,10 +339,13 @@ def list_devices(
                 .first()
             )
             if latest_ml:
-                ml_avg_trust = float(latest_ml.trust_score)
-                ml_fake_rate = float(latest_ml.fake_rate) if latest_ml.fake_rate else None
+                ml_avg_trust = _safe_float(latest_ml.trust_score)
+                # MLPrediction does not store aggregate fake_rate; derive a single-point proxy.
+                if latest_ml.prediction_label is not None:
+                    normalized_label = str(latest_ml.prediction_label).strip().lower()
+                    ml_fake_rate = 1.0 if normalized_label == "fake" else 0.0
                 ml_last_pred_at = latest_ml.evaluated_at.isoformat() if latest_ml.evaluated_at else None
-                ml_avg_conf = float(latest_ml.confidence) if latest_ml.confidence else None
+                ml_avg_conf = _safe_float(latest_ml.confidence)
                 ml_last_conf = ml_avg_conf  # Use same confidence for both
         items.append(
             {
@@ -288,7 +374,14 @@ def list_devices(
                 "last_active_at": last_active.isoformat() if last_active else None,  # LAST ACTIVE column
                 "sector_location_id": sector_location_id,
                 "sector_name": sector_name,
+                "cell_location_id": cell_location_id,
+                "cell_name": cell_name,
+                "village_location_id": village_location_id,
+                "village_name": village_name,
                 "last_location": last_location,  # LAST LOCATION column
+                "last_latitude": last_latitude,
+                "last_longitude": last_longitude,
+                "last_location_hierarchy": last_location_hierarchy,
                 # Add location consistency analysis data
                 "location_consistency": None,
                 "movement_radius_km": None,

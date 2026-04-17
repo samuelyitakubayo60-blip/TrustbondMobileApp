@@ -79,6 +79,27 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
 
   if (!isOpen || !caseItem) return null;
 
+  const caseLat = Number(caseItem?.latitude);
+  const caseLon = Number(caseItem?.longitude);
+  const hasCaseCoords = Number.isFinite(caseLat) && Number.isFinite(caseLon);
+  const reportCoords = reports
+    .map((r) => ({
+      lat: Number(r?.latitude),
+      lon: Number(r?.longitude),
+    }))
+    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
+  const derivedLat =
+    reportCoords.length > 0
+      ? reportCoords.reduce((acc, p) => acc + p.lat, 0) / reportCoords.length
+      : null;
+  const derivedLon =
+    reportCoords.length > 0
+      ? reportCoords.reduce((acc, p) => acc + p.lon, 0) / reportCoords.length
+      : null;
+  const navLat = hasCaseCoords ? caseLat : derivedLat;
+  const navLon = hasCaseCoords ? caseLon : derivedLon;
+  const hasUnifiedCoords = Number.isFinite(navLat) && Number.isFinite(navLon);
+
   return (
     <div className="modal-overlay open" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ maxWidth: 820 }}>
@@ -109,21 +130,19 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
           <div className="input-group">
             <div className="input-label">Location</div>
             <div>
-              {caseItem.location_name || (caseItem.latitude && caseItem.longitude) ? (
+              {caseItem.location_name || hasUnifiedCoords ? (
                 <div>
                   <div style={{ fontSize: '13px', marginBottom: '4px', color: 'var(--text)' }}>
                     {caseItem.location_name || 
-                      `${parseFloat(caseItem.latitude).toFixed(6)}, ${parseFloat(caseItem.longitude).toFixed(6)}`
+                      `${Number(navLat).toFixed(6)}, ${Number(navLon).toFixed(6)}`
                     }
                   </div>
-                  {caseItem.latitude && caseItem.longitude && (
+                  {hasUnifiedCoords && (
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       <button
                         onClick={() => {
-                          const lat = parseFloat(caseItem.latitude);
-                          const lon = parseFloat(caseItem.longitude);
                           window.open(
-                            `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`,
+                            `https://www.google.com/maps/dir/?api=1&destination=${navLat},${navLon}`,
                             '_blank'
                           );
                         }}
@@ -140,14 +159,12 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                           gap: '3px'
                         }}
                       >
-                        🚗 Navigate
+                        🚗 Navigate to Case Area
                       </button>
                       <button
                         onClick={() => {
-                          const lat = parseFloat(caseItem.latitude);
-                          const lon = parseFloat(caseItem.longitude);
                           window.open(
-                            `https://www.google.com/maps?q=${lat},${lon}`,
+                            `https://www.google.com/maps?q=${navLat},${navLon}`,
                             '_blank'
                           );
                         }}
@@ -166,6 +183,11 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                       >
                         📍 View Map
                       </button>
+                      {!hasCaseCoords && reportCoords.length > 0 && (
+                        <span style={{ fontSize: '10px', color: 'var(--muted)', alignSelf: 'center' }}>
+                          Using linked reports center point
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -199,7 +221,6 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                     <th>Village</th>
                     <th>Status</th>
                     <th>Date</th>
-                    <th>Navigation</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -212,65 +233,11 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                       <td>{r.village_name || '-'}</td>
                       <td>{r.rule_status || r.status || '-'}</td>
                       <td style={{ fontSize: 11 }}>{formatLocalDate(r.reported_at)}</td>
-                      <td>
-                        {r.latitude && r.longitude ? (
-                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                            <button
-                              onClick={() => {
-                                const lat = parseFloat(r.latitude);
-                                const lon = parseFloat(r.longitude);
-                                window.open(
-                                  `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`,
-                                  '_blank'
-                                );
-                              }}
-                              style={{
-                                padding: "4px 8px",
-                                fontSize: "10px",
-                                backgroundColor: "var(--primary)",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "3px",
-                                cursor: "pointer",
-                              }}
-                              title="Navigate to location"
-                            >
-                              🚗
-                            </button>
-                            <button
-                              onClick={() => {
-                                const lat = parseFloat(r.latitude);
-                                const lon = parseFloat(r.longitude);
-                                window.open(
-                                  `https://www.google.com/maps?q=${lat},${lon}`,
-                                  '_blank'
-                                );
-                              }}
-                              style={{
-                                padding: "4px 8px",
-                                fontSize: "10px",
-                                backgroundColor: "var(--secondary)",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "3px",
-                                cursor: "pointer",
-                              }}
-                              title="View on map"
-                            >
-                              📍
-                            </button>
-                          </div>
-                        ) : (
-                          <span style={{ color: 'var(--muted)', fontSize: '10px' }}>
-                            No location
-                          </span>
-                        )}
-                      </td>
                     </tr>
                   ))}
                   {!reports.length && (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>
+                      <td colSpan={5} style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>
                         No reports linked to this case.
                       </td>
                     </tr>

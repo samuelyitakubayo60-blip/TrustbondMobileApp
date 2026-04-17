@@ -62,8 +62,10 @@ const analyzeLocationConsistency = (metadata) => {
 };
 
 const formatLocation = (lat, lng) => {
-  if (!lat || !lng) return 'Unknown';
-  return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  const nLat = Number(lat);
+  const nLng = Number(lng);
+  if (!Number.isFinite(nLat) || !Number.isFinite(nLng)) return 'Unknown';
+  return `${nLat.toFixed(4)}, ${nLng.toFixed(4)}`;
 };
 
 const formatTimestamp = (timestamp) => {
@@ -73,6 +75,51 @@ const formatTimestamp = (timestamp) => {
   } catch {
     return 'Invalid';
   }
+};
+
+const formatShortDate = (value) => {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString();
+};
+
+const normalizePercentValue = (value) => {
+  if (value == null) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  // Some APIs provide 0..1 ratios, others 0..100 percentages.
+  return n <= 1 ? n * 100 : n;
+};
+
+const resolveLastLocation = (device) => {
+  const coords = device?.last_location || null;
+  const hierarchy =
+    device?.last_location_hierarchy ||
+    [device?.sector_name, device?.cell_name, device?.village_name]
+      .filter(Boolean)
+      .join(' > ') ||
+    null;
+  if (coords) return { coords, hierarchy };
+  const lat =
+    device?.metadata_json?.last_latitude ??
+    device?.metadata_json?.latitude ??
+    device?.metadata?.last_latitude ??
+    device?.metadata?.latitude ??
+    device?.last_latitude ??
+    device?.latitude;
+  const lng =
+    device?.metadata_json?.last_longitude ??
+    device?.metadata_json?.longitude ??
+    device?.metadata?.last_longitude ??
+    device?.metadata?.longitude ??
+    device?.last_longitude ??
+    device?.longitude;
+  const fallbackCoords = formatLocation(lat, lng);
+  return {
+    coords: fallbackCoords !== 'Unknown' ? fallbackCoords : null,
+    hierarchy,
+  };
 };
 
 const DeviceTrust = ({ wsRefreshKey }) => {
@@ -148,10 +195,37 @@ const DeviceTrust = ({ wsRefreshKey }) => {
       const mlStats = await api.get(
         `/api/v1/devices/${deviceId}/ml-stats`,
       );
+      const trustedReports =
+        dev.trusted_reports ?? dev.confirmed_reports ?? dev.verified_reports ?? 0;
+      const flaggedReports = dev.flagged_reports ?? dev.rejected_reports ?? 0;
+      const distribution = mlStats?.prediction_distribution || {};
+      const likelyReal = Number(distribution.likely_real || 0);
+      const suspicious = Number(distribution.suspicious || 0);
+      const uncertain = Number(distribution.uncertain || 0);
+      const fake = Number(distribution.fake || 0);
       setSelectedProfile({
         ...mlStats,
         device_hash: dev.device_hash,
         device_trust_score: dev.device_trust_score,
+        total_reports: dev.total_reports ?? mlStats?.total_reports ?? 0,
+        trusted_reports: trustedReports,
+        verified_reports: trustedReports, // backward compatibility with existing UI fragments
+        flagged_reports: flaggedReports,
+        spam_flags: dev.spam_flags ?? mlStats?.behavior?.spam_signal ?? 0,
+        ml_avg_trust: dev.ml_avg_trust ?? mlStats?.ml?.avg_trust_score ?? null,
+        ml_fake_rate: dev.ml_fake_rate ?? mlStats?.ml?.fake_rate ?? null,
+        ml_last_confidence:
+          dev.ml_last_confidence ?? mlStats?.ml?.last_confidence ?? null,
+        ml_last_prediction_at:
+          dev.ml_last_prediction_at ?? mlStats?.last_prediction_at ?? null,
+        last_active_at: dev.last_active_at ?? null,
+        last_location: dev.last_location ?? null,
+        last_location_hierarchy: dev.last_location_hierarchy ?? null,
+        prediction_distribution: distribution,
+        credible_reports: likelyReal,
+        suspicious_reports: suspicious + uncertain,
+        fake_reports: fake,
+        model_versions: mlStats?.ml?.model_versions || [],
       });
     } catch {
       setSelectedProfile(null);
@@ -437,12 +511,54 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                   Reports:{' '}
                   <strong>{selectedProfile.total_reports}</strong> total ·{' '}
                   <span style={{ color: 'var(--success)' }}>
-                    {selectedProfile.verified_reports} verified
+                    {selectedProfile.trusted_reports} trusted
                   </span>{' '}
                   ·{' '}
                   <span style={{ color: 'var(--danger)' }}>
                     {selectedProfile.flagged_reports} flagged
                   </span>
+                </div>
+
+                <div style={{ marginBottom: '10px', fontSize: '12px', color: 'var(--muted)' }}>
+                  ML Avg: <strong style={{ color: 'var(--text)' }}>
+                    {selectedProfile.ml_avg_trust != null
+                      ? Math.round(selectedProfile.ml_avg_trust)
+                      : '—'}
+                  </strong>
+                  {' · '}
+                  Fake %: <strong style={{ color: 'var(--text)' }}>
+                    {normalizePercentValue(selectedProfile.ml_fake_rate) != null
+                      ? `${Math.round(normalizePercentValue(selectedProfile.ml_fake_rate))}%`
+                      : '—'}
+                  </strong>
+                  {' · '}
+                  Conf: <strong style={{ color: 'var(--text)' }}>
+                    {normalizePercentValue(selectedProfile.ml_last_confidence) != null
+                      ? `${Math.round(normalizePercentValue(selectedProfile.ml_last_confidence))}%`
+                      : '—'}
+                  </strong>
+                  {' · '}
+                  Last ML: <strong style={{ color: 'var(--text)' }}>
+                    {formatShortDate(selectedProfile.ml_last_prediction_at)}
+                  </strong>
+                </div>
+
+                <div style={{ marginBottom: '10px', fontSize: '12px', color: 'var(--muted)' }}>
+                  Last active: <strong style={{ color: 'var(--text)' }}>
+                    {formatShortDate(selectedProfile.last_active_at)}
+                  </strong>
+                  {' · '}
+                  Last location: <strong style={{ color: 'var(--text)' }}>
+                    {selectedProfile.last_location || '—'}
+                  </strong>
+                  {selectedProfile.last_location_hierarchy && (
+                    <>
+                      {' · '}
+                      <span style={{ color: 'var(--text)' }}>
+                        {selectedProfile.last_location_hierarchy}
+                      </span>
+                    </>
+                  )}
                 </div>
 
                 {(selectedProfile.ml || selectedProfile.behavior) && (
@@ -554,7 +670,7 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                               0,
                               Math.min(
                                 100,
-                                (selectedProfile.verified_reports || 0) /
+                                (selectedProfile.trusted_reports || 0) /
                                   Math.max(1, selectedProfile.total_reports || 1) *
                                   100,
                               ),
@@ -607,7 +723,7 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                           style={{
                             width: `${Math.max(
                               0,
-                              Math.min(100, (selectedProfile.suspicious_reports || 0) * 20),
+                              Math.min(100, (selectedProfile.spam_flags || 0) * 10),
                             )}%`,
                             background: 'var(--danger)',
                           }}
@@ -893,34 +1009,7 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                     // Analyze location data
                     const metadata = d.metadata_json || d.metadata || {};
                     const locationAnalysis = analyzeLocationConsistency(metadata);
-                    
-                    // Get location from backend-provided last_location field or fallback to metadata
-                    const lastLocation = d.last_location || 
-                      // Check metadata_json first
-                      (d.metadata_json?.last_latitude && d.metadata_json?.last_longitude) ||
-                      (d.metadata_json?.latitude && d.metadata_json?.longitude) ||
-                      // Check metadata field
-                      (d.metadata?.last_latitude && d.metadata?.last_longitude) ||
-                      (d.metadata?.latitude && d.metadata?.longitude) ||
-                      // Check direct device fields
-                      (d.last_latitude && d.last_longitude) ||
-                      (d.latitude && d.longitude)
-                        ? d.last_location || formatLocation(
-                            d.metadata_json?.last_latitude || d.metadata_json?.latitude || 
-                            d.metadata?.last_latitude || d.metadata?.latitude ||
-                            d.last_latitude || d.latitude,
-                            d.metadata_json?.last_longitude || d.metadata_json?.longitude ||
-                            d.metadata?.last_longitude || d.metadata?.longitude ||
-                            d.last_longitude || d.longitude
-                          )
-                        : 'Unknown';
-                    const locationScoreColor = locationAnalysis.consistency_score === null
-                      ? 'var(--muted)'
-                      : locationAnalysis.consistency_score >= 80 
-                      ? 'var(--success)' 
-                      : locationAnalysis.consistency_score >= 60 
-                      ? 'var(--warning)' 
-                      : 'var(--danger)';
+                    const locationView = resolveLastLocation(d);
                     const locationScoreBadge = locationAnalysis.consistency_score === null
                       ? 'b-gray'
                       : locationAnalysis.consistency_score >= 80 
@@ -976,25 +1065,21 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                            d.ml_stats?.avg_trust_score != null ? Math.round(d.ml_stats.avg_trust_score) : '—'}
                         </td>
                         <td style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                          {d.ml_fake_rate != null
-                            ? `${Math.round(d.ml_fake_rate * 100)}%`
-                            : d.ml_stats?.fake_rate != null
-                              ? `${Math.round(d.ml_stats.fake_rate * 100)}%`
+                          {normalizePercentValue(d.ml_fake_rate) != null
+                            ? `${Math.round(normalizePercentValue(d.ml_fake_rate))}%`
+                            : normalizePercentValue(d.ml_stats?.fake_rate) != null
+                              ? `${Math.round(normalizePercentValue(d.ml_stats?.fake_rate))}%`
                               : '—'}
                         </td>
                         <td style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                          {d.ml_last_confidence != null
-                            ? `${Math.round(d.ml_last_confidence * 100)}%`
-                            : d.ml_stats?.last_confidence != null
-                              ? `${Math.round(d.ml_stats.last_confidence * 100)}%`
+                          {normalizePercentValue(d.ml_last_confidence) != null
+                            ? `${Math.round(normalizePercentValue(d.ml_last_confidence))}%`
+                            : normalizePercentValue(d.ml_stats?.last_confidence) != null
+                              ? `${Math.round(normalizePercentValue(d.ml_stats?.last_confidence))}%`
                               : '—'}
                         </td>
                         <td style={{ fontSize: '10px', color: 'var(--muted)' }}>
-                          {d.ml_last_prediction_at
-                            ? new Date(d.ml_last_prediction_at).toLocaleDateString()
-                            : d.ml_stats?.last_prediction_at
-                              ? new Date(d.ml_stats.last_prediction_at).toLocaleDateString()
-                              : '—'}
+                          {formatShortDate(d.ml_last_prediction_at || d.ml_stats?.last_prediction_at)}
                         </td>
                         <td
                           style={{
@@ -1002,14 +1087,25 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                             color: 'var(--muted)',
                           }}
                         >
-                          {d.last_active_at
-                            ? new Date(d.last_active_at).toLocaleDateString()
-                            : '—'}
+                          {formatShortDate(d.last_active_at)}
                         </td>
                         <td style={{ fontSize: '10px', color: 'var(--muted)', maxWidth: 120 }}>
-                          <div title={lastLocation === 'Unknown' ? 'No location data' : lastLocation}>
-                            {lastLocation === 'Unknown' ? '—' : lastLocation}
+                          <div
+                            title={
+                              locationView.coords || locationView.hierarchy
+                                ? [locationView.coords, locationView.hierarchy]
+                                    .filter(Boolean)
+                                    .join(' | ')
+                                : 'No location data'
+                            }
+                          >
+                            {locationView.coords || '—'}
                           </div>
+                          {locationView.hierarchy && (
+                            <div style={{ fontSize: '8px', color: 'var(--muted)', marginTop: 2 }}>
+                              {locationView.hierarchy}
+                            </div>
+                          )}
                           {(d.metadata_json?.last_location_timestamp || d.metadata?.last_location_timestamp) && (
                             <div style={{ fontSize: '8px', color: 'var(--muted)', marginTop: 2 }}>
                               {formatTimestamp(d.metadata_json?.last_location_timestamp || d.metadata?.last_location_timestamp).split(',')[0]}

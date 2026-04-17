@@ -373,7 +373,9 @@ def _send_email_notification(
                     case.title,
                     case.incident_type.type_name if case.incident_type else "Unknown",
                     location_desc,
-                    case.report_count or 0
+                    case.report_count or 0,
+                    latitude=float(case.latitude) if case.latitude is not None else None,
+                    longitude=float(case.longitude) if case.longitude is not None else None,
                 )
         elif notif_type == "assignment" and related_entity_type == "report":
             # Report assignment notification
@@ -394,7 +396,7 @@ def _send_email_notification(
                 email_service.send_report_assignment_notification(
                     police_user,
                     str(report.report_id),
-                    report.incident_type.incident_type_name if report.incident_type else "Unknown",
+                    report.incident_type.type_name if report.incident_type else "Unknown",
                     location_display,
                     report.flag_reason or "Requires review",
                     assignment_type
@@ -441,9 +443,11 @@ def _send_role_email_notifications(
                     users,
                     case.case_number,
                     case.title,
-                    case.incident_type.incident_type_name if case.incident_type else "Unknown",
+                    case.incident_type.type_name if case.incident_type else "Unknown",
                     location_display,
-                    case.report_count or 0
+                    case.report_count or 0,
+                    latitude=float(case.latitude) if case.latitude is not None else None,
+                    longitude=float(case.longitude) if case.longitude is not None else None,
                 )
         elif notif_type == "system" and related_entity_type == "hotspot":
             # Hotspot detection notification
@@ -479,7 +483,7 @@ def _send_role_email_notifications(
                 email_service.send_report_verification_notification(
                     users,
                     str(report.report_id),
-                    report.incident_type.incident_type_name if report.incident_type else "Unknown",
+                    report.incident_type.type_name if report.incident_type else "Unknown",
                     location_display,
                     report.verification_status or "pending",
                     report.flag_reason
