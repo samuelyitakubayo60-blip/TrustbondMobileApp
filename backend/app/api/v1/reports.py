@@ -64,6 +64,27 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_evidence_file_url(raw: str | None) -> str | None:
+    """
+    Ensure evidence file_url is stored as a usable URL/path, not a bare filename.
+    - https://... stays as-is (Cloudinary / remote)
+    - /uploads/... stays as-is (local static mount)
+    - bare filename becomes /uploads/evidence/<filename>
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    if s.startswith("http://") or s.startswith("https://"):
+        return s
+    if s.startswith("/uploads/"):
+        return s
+    if s.startswith("/"):
+        return s
+    return f"/uploads/evidence/{s}"
+
 # Evidence AI Analysis functions
 def detect_blur(image_bytes: bytes) -> tuple[float, bool]:
     """Detect image blur using Laplacian variance method."""
@@ -1070,10 +1091,13 @@ def create_report(
 
     # Add evidence files
     for evidence_data in report_data.evidence_files:
+        normalized_url = _normalize_evidence_file_url(getattr(evidence_data, "file_url", None))
+        if not normalized_url:
+            continue
         evidence = EvidenceFile(
             evidence_id=uuid4(),
             report_id=report.report_id,
-            file_url=evidence_data.file_url,
+            file_url=normalized_url,
             file_type=evidence_data.file_type,
             media_latitude=evidence_data.media_latitude,
             media_longitude=evidence_data.media_longitude,
@@ -2013,6 +2037,7 @@ def get_report(
     report_id: UUID,
     device_id: Optional[UUID] = Query(None, description="Device ID (mobile owner). If omitted, auth required."),
     current_user: Annotated[Optional[PoliceUser], Depends(get_optional_user)] = None,
+    request: Request = None,
     db: Session = Depends(get_db),
 ):
     """Get one report. With device_id: only if device owns it. Without: require auth (police). Returns report with evidence_files."""
@@ -2051,15 +2076,21 @@ def get_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    # DEBUG: Check evidence files loading
-    print(f" DEBUG: Report {report_id} evidence files:")
-    print(f"   Raw evidence_files attribute: {getattr(report, 'evidence_files', 'NOT_FOUND')}")
-    print(f"   Evidence files count: {len(report.evidence_files) if report.evidence_files else 0}")
-    if report.evidence_files:
-        for i, ef in enumerate(report.evidence_files, 1):
-            print(f"     {i}. {ef.evidence_id} - {ef.file_type} - {ef.file_url}")
-    else:
-        print("   No evidence files found in query result")
+    def _absolute_evidence_url(raw: str | None) -> str | None:
+        if not raw:
+            return None
+        s = str(raw).strip()
+        if not s:
+            return None
+        if s.startswith("http://") or s.startswith("https://"):
+            return s
+        # If the DB stored only a filename, assume it's under our dev uploads path.
+        if not s.startswith("/"):
+            s = f"/uploads/evidence/{s}"
+        if request is None:
+            return s
+        base = str(request.base_url).rstrip("/")
+        return f"{base}{s}"
 
     # AI-PRIMARY: No community voting needed - AI makes all decisions
     # Community confirmation is deprecated in AI-primary mode
@@ -2234,7 +2265,7 @@ def get_report(
             EvidenceFileResponse(
                 evidence_id=ef.evidence_id,
                 report_id=ef.report_id,
-                file_url=ef.file_url,
+                file_url=_absolute_evidence_url(getattr(ef, "file_url", None)) or "",
                 file_type=ef.file_type,
                 uploaded_at=ef.uploaded_at,
                 media_latitude=float(ef.media_latitude) if ef.media_latitude is not None else None,
@@ -2255,13 +2286,6 @@ def get_report(
         total_reports=total_reports,
         trusted_reports=trusted_reports,
     )
-    
-    # DEBUG: Check what's being returned
-    print(f"🔍 DEBUG: Returning response with evidence files:")
-    print(f"   Evidence files in response: {len(response.evidence_files) if response.evidence_files else 0}")
-    if response.evidence_files:
-        for i, ef in enumerate(response.evidence_files, 1):
-            print(f"     {i}. {ef.evidence_id} - {ef.file_type} - {ef.file_url}")
     
     return response
 

@@ -34,10 +34,22 @@ import api from "./api/client";
 function App() {
   const { user, loading, logout } = useAuth();
   const { refreshKey: wsRefreshKey } = useRealtime();
+  const initialReportId = (() => {
+    if (typeof window === "undefined") return null;
+    const path = window.location.pathname || "/";
+    if (path.startsWith("/reports/") && path !== "/reports" && path !== "/reports/detail") {
+      const parts = path.split("/");
+      return parts[2] || null;
+    }
+    return null;
+  })();
   const [currentScreen, setCurrentScreen] = useState(() => {
     if (typeof window === "undefined") return "dashboard";
     const path = window.location.pathname || "/";
     if (path.startsWith("/hotspots/")) return "hotspot-details";
+    if (path.startsWith("/reports/") && path !== "/reports" && path !== "/reports/detail") {
+      return "report-detail";
+    }
     switch (path) {
       case "/":
         return "dashboard";
@@ -79,7 +91,7 @@ function App() {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("tb-mode") === "light";
   });
-  const [selectedReportId, setSelectedReportId] = useState(null);
+  const [selectedReportId, setSelectedReportId] = useState(initialReportId);
   const [selectedHotspotId, setSelectedHotspotId] = useState(null);
   const [selectedIncidentType, setSelectedIncidentType] = useState(null);
   const [selectedStation, setSelectedStation] = useState(null);
@@ -113,7 +125,10 @@ function App() {
       case "reports":
         return "/reports";
       case "report-detail":
-        return "/reports/detail";
+        {
+          const rid = props?.reportId || selectedReportId;
+          return rid ? `/reports/${rid}` : "/reports";
+        }
       case "case-management":
         return "/cases";
       case "hotspot-details":
@@ -153,6 +168,12 @@ function App() {
         setSelectedHotspotId(parts[2]);
         return "hotspot-details";
       }
+    }
+    if (path.startsWith("/reports/") && path !== "/reports" && path !== "/reports/detail") {
+      const parts = path.split("/");
+      const rid = parts[2];
+      if (rid) setSelectedReportId(rid);
+      return "report-detail";
     }
 
     switch (path) {
@@ -218,7 +239,9 @@ function App() {
   const titles = {
     dashboard: "Dashboard",
     reports: "Reports",
-    "report-detail": "Report Detail — RPT-0041",
+    "report-detail": selectedReportId
+      ? `Report Detail — ${String(selectedReportId).slice(0, 8)}`
+      : "Report Detail",
     "case-management": "Case Management",
     "hotspot-details": "Hotspot Details",
     hotspots: "Crime Hotspots",
@@ -325,7 +348,7 @@ function App() {
 
   const handleOpenReport = (reportId) => {
     setSelectedReportId(reportId);
-    goToScreen("report-detail", 0, {});
+    goToScreen("report-detail", 0, { reportId });
   };
 
   const openModal = (modalName) => {

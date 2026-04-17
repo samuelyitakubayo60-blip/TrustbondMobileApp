@@ -31,6 +31,45 @@ const friendlyFlagReason = (reason) => {
   return m[reason] || reason.replaceAll("_", " ");
 };
 
+const normalizePercent = (value) => {
+  if (value == null) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return n <= 1 ? n * 100 : n;
+};
+
+const formatCoords = (lat, lon) => {
+  const nLat = Number(lat);
+  const nLon = Number(lon);
+  if (!Number.isFinite(nLat) || !Number.isFinite(nLon)) return "—";
+  return `${nLat.toFixed(6)}, ${nLon.toFixed(6)}`;
+};
+
+const friendlyPredictionLabel = (label) => {
+  const key = String(label || "").trim().toLowerCase();
+  if (!key) return "—";
+  const map = {
+    likely_real: "Likely real",
+    suspicious: "Suspicious",
+    uncertain: "Uncertain",
+    fake: "Likely fake",
+    real: "Likely real",
+  };
+  return map[key] || key.replace(/_/g, " ");
+};
+
+const relativeTime = (isoLike) => {
+  if (!isoLike) return null;
+  const t = new Date(isoLike);
+  if (Number.isNaN(t.getTime())) return null;
+  const now = new Date();
+  const hours = (now - t) / (1000 * 60 * 60);
+  if (hours < 1) return "Active now";
+  if (hours < 24) return `${Math.round(hours)}h ago`;
+  if (hours < 24 * 7) return `${Math.round(hours / 24)}d ago`;
+  return `${Math.round(hours / (24 * 7))}w ago`;
+};
+
 // Verification helper functions
 const isReportVerified = (report, mlPrediction) => {
   const status = (report.rule_status || "").toLowerCase();
@@ -287,7 +326,6 @@ const getVerificationRequirements = (report, mlPrediction) => {
 const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
   const { user: me } = useAuth();
   const role = me?.role || "officer";
-  const canTriage = role === "admin" || role === "supervisor" || role === "officer";
 
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -316,17 +354,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
         .get(`/api/v1/reports/${reportId}`)
         .then((res) => {
           if (!mounted) return;
-          console.log("🔍 REPORT DETAIL API RESPONSE:");
-          console.log("Full response:", res);
-          console.log("Evidence files:", res.evidence_files);
-          console.log("Evidence files count:", res.evidence_files?.length || 0);
-          console.log("Device metadata:", res.metadata_json);
-          console.log("Device trust score:", res.device_trust_score);
-          console.log("Total reports:", res.total_reports);
-          console.log("Trusted reports:", res.trusted_reports);
-          if (res.evidence_files?.length > 0) {
-            console.log('First evidence file:', res.evidence_files[0]);
-          }
           setReport(res);
           setLoading(false);
         })
@@ -393,20 +420,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
       cancelled = true;
     };
   }, [report]);
-
-  const reload = async () => {
-    if (!reportId) return;
-    setLoading(true);
-    setError("");
-    try {
-      const res = await api.get(`/api/v1/reports/${reportId}`);
-      setReport(res);
-    } catch (err) {
-      setError(err?.data?.detail || err?.message || "Failed to load report.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const refreshInBackground = async () => {
     if (!reportId) return;
@@ -534,6 +547,14 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
   const createdAt = formatLocalDateTime(report.reported_at);
   const assignments = report.assignments || [];
   const hasCase = report.case_id; // Assuming case_id is available
+  const locationHierarchy = [
+    report.incident_sector_name,
+    report.incident_cell_name,
+    report.incident_village_name || report.village_name,
+  ]
+    .filter(Boolean)
+    .join(" > ");
+  const coordsText = formatCoords(report.latitude, report.longitude);
 
   // Status configuration
   const getStatusConfig = (status) => {
@@ -709,7 +730,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
               <div className="detail-field">
                 <div className="dfl">Location</div>
                 <div className="dfv">
-                  {report.incident_village_name || report.village_name || "—"}
+                  {locationHierarchy || "—"}
                 </div>
               </div>
               <div className="detail-field">
@@ -718,7 +739,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   className="dfv"
                   style={{ fontSize: "11px", fontFamily: "monospace" }}
                 >
-                  {report.latitude}, {report.longitude}
+                  {coordsText}
                 </div>
               </div>
               <div className="detail-field">
@@ -748,7 +769,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                           gap: "4px"
                         }}
                       >
-                        🚗 Navigate
+                        🚗 Navigate to report
                       </button>
                       <button
                         onClick={() => {
@@ -772,7 +793,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                           gap: "4px"
                         }}
                       >
-                        📍 View Map
+                        📍 Open map
                       </button>
                     </div>
                   ) : (
@@ -899,7 +920,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                     </div>
                     <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
                       {report.total_reports || 0} total reports ·{" "}
-                      {(report.trusted_reports || 0)} confirmed
+                      {(report.trusted_reports || 0)} trusted
                     </div>
                   </div>
                 </div>
@@ -1069,36 +1090,47 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                     Activity Pattern
                   </div>
                   <div style={{ marginTop: 6, color: "var(--text)" }}>
-                    {report.metadata_json?.last_activity ? (
-                      <>
-                        <div style={{ fontSize: 11 }}>
-                          Last active: {new Date(report.metadata_json.last_activity).toLocaleDateString()}
-                        </div>
-                        <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
-                          {(() => {
-                            const lastActive = new Date(report.metadata_json.last_activity);
-                            const now = new Date();
-                            const hoursDiff = (now - lastActive) / (1000 * 60 * 60);
-                            
-                            if (hoursDiff < 1) return "Active now";
-                            if (hoursDiff < 24) return `${Math.round(hoursDiff)}h ago`;
-                            if (hoursDiff < 168) return `${Math.round(hoursDiff / 24)}d ago`;
-                            return `${Math.round(hoursDiff / 168)}w ago`;
-                          })()}
-                        </div>
-                        {report.metadata_json.reporting_frequency && (
-                          <div style={{ marginTop: 4, fontSize: 10 }}>
-                            <span style={{ color: "var(--muted)" }}>
-                              Reports: {report.metadata_json.reporting_frequency}
-                            </span>
+                    {(() => {
+                      const total = Number(report.total_reports || 0);
+                      const lastActiveIso =
+                        report.metadata_json?.last_activity ||
+                        report.metadata_json?.last_location_timestamp ||
+                        report.reported_at;
+                      const rel = relativeTime(lastActiveIso);
+                      if (total <= 1) {
+                        return (
+                          <span style={{ color: "var(--muted)", fontSize: 11 }}>
+                            Limited history (first report)
+                          </span>
+                        );
+                      }
+                      if (!rel) {
+                        return (
+                          <span style={{ color: "var(--muted)", fontSize: 11 }}>
+                            Activity history unavailable
+                          </span>
+                        );
+                      }
+                      return (
+                        <>
+                          <div style={{ fontSize: 11 }}>
+                            Last active:{" "}
+                            {lastActiveIso
+                              ? new Date(lastActiveIso).toLocaleDateString()
+                              : "—"}
                           </div>
-                        )}
-                      </>
-                    ) : (
-                      <span style={{ color: "var(--muted)", fontSize: 11 }}>
-                        First report or limited data
-                      </span>
-                    )}
+                          <div
+                            style={{
+                              marginTop: 4,
+                              color: "var(--muted)",
+                              fontSize: 10,
+                            }}
+                          >
+                            {rel}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -1112,7 +1144,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                       textTransform: "uppercase",
                     }}
                   >
-                    ML Insights
+                    AI Assessment
                   </div>
                   <div style={{ marginTop: 6, color: "var(--text)" }}>
                     {mlPrediction ? (
@@ -1123,22 +1155,22 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                             style={{
                               fontWeight: 600,
                               color:
-                                (mlPrediction.confidence || 0) >= 0.8
+                                (normalizePercent(mlPrediction.confidence) || 0) >= 80
                                   ? "var(--success)"
-                                  : (mlPrediction.confidence || 0) >= 0.6
+                                  : (normalizePercent(mlPrediction.confidence) || 0) >= 60
                                   ? "var(--warning)"
                                   : "var(--danger)",
                             }}
                           >
-                            {Math.round((mlPrediction.confidence || 0) * 100)}%
+                            {Math.round(normalizePercent(mlPrediction.confidence) || 0)}%
                           </span>
                         </div>
                         <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
-                          {mlPrediction.prediction_label || "No prediction"}
+                          Result: {friendlyPredictionLabel(mlPrediction.prediction_label)}
                         </div>
                       </>
                     ) : (
-                      <span style={{ color: "var(--muted)" }}>No ML data</span>
+                      <span style={{ color: "var(--muted)" }}>No AI assessment yet</span>
                     )}
                   </div>
                 </div>
@@ -1213,162 +1245,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
             </div>
           </div>
 
-          {/* Enhanced Status Tracking Card */}
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">Report Status Tracking</div>
-              <span
-                className={`badge ${isReportVerified(report, mlPrediction) ? "b-green" : "b-orange"}`}
-              >
-                {isReportVerified(report, mlPrediction)
-                  ? "Verified"
-                  : report.verification_status === "pending" ? "Pending" 
-                  : report.verification_status === "under_review" ? "Under Review"
-                  : report.verification_status === "rejected" ? "Rejected"
-                  : "Needs verification"}
-              </span>
-            </div>
-            <div style={{ padding: "12px" }}>
-              {/* Current Status Analysis */}
-              <div style={{ marginBottom: "16px", padding: "12px", background: "var(--background)", borderRadius: "6px" }}>
-                <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px", color: "var(--text)" }}>
-                  Current Status Analysis
-                </div>
-                {getVerificationStatus(report, mlPrediction)}
-                
-                {/* Automatic System Decisions */}
-                {(report.rule_status === "passed" || report.rule_status === "flagged") && (
-                  <div style={{ marginTop: "8px", padding: "8px", background: "rgba(76, 175, 80, 0.1)", borderRadius: "4px", border: "1px solid rgba(76, 175, 80, 0.3)" }}>
-                    <div style={{ fontSize: "11px", color: "var(--success)", fontWeight: 600 }}>
-                      Automatic System Decision
-                    </div>
-                    <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
-                      {report.rule_status === "passed" 
-                        ? "Auto-approved by ML confidence and rule checks"
-                        : "Auto-flagged by system rules for manual review"}
-                    </div>
-                    {mlPrediction && (
-                      <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
-                        ML Confidence: {Math.round((mlPrediction.confidence || 0) * 100)}% 
-                        {mlPrediction.confidence >= 80 ? " (Auto-verified)" : " (Requires officer review)"}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Manual Review Status */}
-                {report.reviews && report.reviews.length > 0 && (
-                  <div style={{ marginTop: "8px", padding: "8px", background: "rgba(33, 150, 243, 0.1)", borderRadius: "4px", border: "1px solid rgba(33, 150, 243, 0.3)" }}>
-                    <div style={{ fontSize: "11px", color: "var(--primary)", fontWeight: 600 }}>
-                      Manual Officer Review
-                    </div>
-                    <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
-                      {report.reviews.length} review{report.reviews.length > 1 ? 's' : ''} completed
-                    </div>
-                  </div>
-                )}
-
-                {/* Pending Status */}
-                {report.rule_status === "pending" && (
-                  <div style={{ marginTop: "8px", padding: "8px", background: "rgba(255, 152, 0, 0.1)", borderRadius: "4px", border: "1px solid rgba(255, 152, 0, 0.3)" }}>
-                    <div style={{ fontSize: "11px", color: "var(--warning)", fontWeight: 600 }}>
-                      ⏳ Pending System Processing
-                    </div>
-                    <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
-                      Report rules haven't been fully processed yet
-                    </div>
-                    {mlPrediction && (
-                      <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
-                        Note: ML confidence is {Math.round((mlPrediction.confidence || 0) * 100)}% - should auto-verify once processed
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Flag Reason Details */}
-              {report.flag_reason && (
-                <div style={{ marginBottom: "16px" }}>
-                  <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px", color: "var(--text)" }}>
-                    Flag Reason Details
-                  </div>
-                  <div
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: 6,
-                      background: "rgba(255, 152, 0, 0.12)",
-                      border: "1px solid rgba(255, 152, 0, 0.35)",
-                      color: "var(--text)",
-                      fontSize: 12,
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, marginBottom: "4px" }}>
-                      {report.flag_reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                    </div>
-                    <div style={{ fontSize: "11px", color: "var(--muted)" }}>
-                      {friendlyFlagReason(report.flag_reason)}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Review History Timeline */}
-              {report.reviews && report.reviews.length > 0 && (
-                <div style={{ marginBottom: "16px" }}>
-                  <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px", color: "var(--text)" }}>
-                    Review History
-                  </div>
-                  <div style={{ fontSize: "11px" }}>
-                    {report.reviews.slice().reverse().map((review, index) => (
-                      <div key={review.review_id || index} style={{ 
-                        marginBottom: "8px", 
-                        padding: "8px", 
-                        background: "var(--background)", 
-                        borderRadius: "4px",
-                        borderLeft: `3px solid ${
-                          review.decision === "confirmed" ? "var(--success)" :
-                          review.decision === "rejected" ? "var(--danger)" :
-                          "var(--warning)"
-                        }`
-                      }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontWeight: 600, color: "var(--text)" }}>
-                            {review.decision === "confirmed" ? " Confirmed" :
-                             review.decision === "rejected" ? " Rejected" :
-                             review.decision}
-                          </span>
-                          <span style={{ fontSize: "10px", color: "var(--muted)" }}>
-                            {review.reviewed_at ? formatLocalDateTime(review.reviewed_at) : "Unknown time"}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
-                          By: {review.reviewer_name || "Officer"}
-                        </div>
-                        {review.review_note && (
-                          <div style={{ fontSize: "10px", color: "var(--text)", marginTop: "4px", fontStyle: "italic" }}>
-                            "{review.review_note}"
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Verification Requirements */}
-              {!isReportVerified(report, mlPrediction) && (
-                <div>
-                  <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px", color: "var(--text)" }}>
-                    Verification Requirements
-                  </div>
-                  <div style={{ fontSize: "11px", color: "var(--muted)" }}>
-                    {getVerificationRequirements(report, mlPrediction)}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
           <div className="card">
             <div className="card-header">
               <div className="card-title">Evidence Attachments</div>
@@ -1388,11 +1264,11 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 <div
                   key={ef.evidence_id}
                   style={{
-                    background: "white",
+                    background: "var(--surface2)",
                     borderRadius: "12px",
-                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
+                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.12)",
                     overflow: "hidden",
-                    border: "1px solid #e8e8e8",
+                    border: "1px solid var(--border2)",
                     transition: "transform 0.3s ease, box-shadow 0.3s ease",
                     cursor: "pointer",
                   }}
@@ -1408,7 +1284,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   }}
                 >
                   {/* Media Container */}
-                  <div style={{ position: "relative", background: "#f8f9fa" }}>
+                    <div style={{ position: "relative", background: "var(--background)" }}>
                     {ef.file_type === "photo" ? (
                       <>
                         <img
@@ -1512,13 +1388,13 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   </div>
 
                   {/* Content Section */}
-                  <div style={{ padding: "16px" }}>
+                    <div style={{ padding: "16px" }}>
                     {/* File Info */}
                     <div style={{ marginBottom: "12px" }}>
                       <div
                         style={{
                           fontSize: "13px",
-                          color: "#666",
+                          color: "var(--muted)",
                           marginBottom: "4px",
                         }}
                       >
@@ -1531,14 +1407,14 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                         <div
                           style={{
                             fontSize: "13px",
-                            color: "#666",
+                            color: "var(--muted)",
                             marginBottom: "4px",
                           }}
                         >
                           Duration: {ef.duration}s
                         </div>
                       )}
-                      <div style={{ fontSize: "12px", color: "#999" }}>
+                      <div style={{ fontSize: "12px", color: "var(--muted)" }}>
                         {formatLocalDateTime(ef.uploaded_at)}
                       </div>
                     </div>
@@ -1803,7 +1679,20 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
         <div className="detail-col">
           <div className="card">
             <div className="card-header">
-              <div className="card-title">Trust Scores</div>
+              <div className="card-title">Verification & Trust</div>
+              <span
+                className={`badge ${isReportVerified(report, mlPrediction) ? "b-green" : "b-orange"}`}
+              >
+                {isReportVerified(report, mlPrediction)
+                  ? "Verified"
+                  : report.verification_status === "pending"
+                    ? "Pending"
+                    : report.verification_status === "under_review"
+                      ? "Under Review"
+                      : report.verification_status === "rejected"
+                        ? "Rejected"
+                        : "Needs verification"}
+              </span>
             </div>
             <div style={{ marginBottom: "12px" }}>
               {/* Report-level ML trust */}
@@ -1900,11 +1789,76 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   <div>
                     Label: <strong>{mlPrediction.prediction_label}</strong> ·
                     Confidence{" "}
-                    {Math.round((mlPrediction.confidence ?? 0) * 100)}%
+                    {Math.round(normalizePercent(mlPrediction.confidence) || 0)}%
                   </div>
                   <div>
                     {mlPrediction.evaluated_at &&
                       formatLocalDateTime(mlPrediction.evaluated_at)}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginTop: 12, padding: "10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
+                <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>Status Summary</div>
+                <div style={{ fontSize: "11px", color: "var(--muted)" }}>
+                  {getVerificationStatus(report, mlPrediction)}
+                </div>
+              </div>
+
+              {report.flag_reason && (
+                <div style={{ marginTop: 10, padding: "10px", borderRadius: 8, background: "rgba(255, 152, 0, 0.12)", border: "1px solid rgba(255, 152, 0, 0.35)" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 700, marginBottom: 4 }}>Flag reason</div>
+                  <div style={{ fontSize: "11px", color: "var(--text)" }}>{friendlyFlagReason(report.flag_reason)}</div>
+                </div>
+              )}
+
+              {report.reviews && report.reviews.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>Review History</div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {report.reviews.slice().reverse().map((review, index) => (
+                      <div
+                        key={review.review_id || index}
+                        style={{
+                          padding: "8px",
+                          borderRadius: 6,
+                          background: "var(--surface2)",
+                          border: "1px solid var(--border2)",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                          <strong>
+                            {review.decision === "confirmed"
+                              ? "Confirmed"
+                              : review.decision === "rejected"
+                                ? "Rejected"
+                                : review.decision}
+                          </strong>
+                          <span style={{ color: "var(--muted)" }}>
+                            {review.reviewed_at ? formatLocalDateTime(review.reviewed_at) : "Unknown time"}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: 2 }}>
+                          By: {review.reviewer_name || "Officer"}
+                        </div>
+                        {review.review_note && (
+                          <div style={{ fontSize: "10px", marginTop: 4 }}>
+                            "{review.review_note}"
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!isReportVerified(report, mlPrediction) && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>
+                    Verification Requirements
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--muted)" }}>
+                    {getVerificationRequirements(report, mlPrediction)}
                   </div>
                 </div>
               )}
