@@ -503,10 +503,26 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
       if (caseSearch) {
         params.append('search', caseSearch);
       }
+      // Only show cases with the same incident type
+      if (report?.incident_type_id) {
+        params.append('incident_type_id', report.incident_type_id);
+      }
       params.append('limit', '50');
       
       const response = await api.get(`/api/v1/cases?${params}`);
-      setAvailableCases(Array.isArray(response) ? response : (response?.items || []));
+      let cases = Array.isArray(response) ? response : (response?.items || []);
+      
+      // Additional client-side filtering to ensure incident type match
+      if (report?.incident_type_id) {
+        cases = cases.filter(case_item => case_item.incident_type_id === report.incident_type_id);
+      }
+      
+      // Exclude the current case if report is already linked (for move functionality)
+      if (report?.case_id) {
+        cases = cases.filter(case_item => case_item.case_id !== report.case_id);
+      }
+      
+      setAvailableCases(cases);
     } catch (e) {
       setError(e?.message || "Failed to load cases");
       setAvailableCases([]);
@@ -553,7 +569,18 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
       setSelectedCase("");
       refreshInBackground();
     } catch (e) {
-      setError(e?.message || "Failed to link report to case");
+      let errorMessage = e?.message || "Failed to link report to case";
+      
+      // Provide more user-friendly error messages
+      if (errorMessage.includes("incident type mismatch")) {
+        errorMessage = "❌ Cannot link to this case: Incident types don't match. Reports can only be linked to cases with the same incident type.";
+      } else if (errorMessage.includes("already linked to another case")) {
+        errorMessage = "❌ This report is already linked to a case. Use the 'Move to different case' option instead.";
+      } else if (errorMessage.includes("Access denied")) {
+        errorMessage = "❌ You don't have permission to link to this case.";
+      }
+      
+      setError(errorMessage);
     } finally {
       setLinkingCase(false);
     }
@@ -2181,6 +2208,23 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 {report.case_id ? "Move Report to Different Case" : "Link Report to Existing Case"}
               </div>
               <div className="modal-close" onClick={() => setShowLinkCaseModal(false)}>✕</div>
+            </div>
+
+            <div style={{ 
+              padding: '12px', 
+              backgroundColor: 'rgba(59, 130, 246, 0.1)', 
+              border: '1px solid rgba(59, 130, 246, 0.3)', 
+              borderRadius: '6px', 
+              marginBottom: '16px',
+              fontSize: '12px',
+              color: 'var(--text)'
+            }}>
+              <strong>📋 Filtering Rules:</strong>
+              <ul style={{ margin: '4px 0 0 0', paddingLeft: '16px' }}>
+                <li>Only showing cases with incident type: <strong>{report.incident_type_name || 'Unknown'}</strong></li>
+                {report.case_id && <li>Current case is excluded from the list</li>}
+                <li>Reports can only be linked to cases with matching incident types</li>
+              </ul>
             </div>
 
             <div className="input-group">

@@ -1037,6 +1037,24 @@ def add_reports_to_case(
             report = db.query(Report).filter(Report.report_id == rid).first()
             if not report:
                 continue
+            
+            # Validate incident type matching
+            if report.incident_type_id != case.incident_type_id:
+                raise HTTPException(
+                    400, 
+                    f"Cannot link report to case: incident type mismatch. "
+                    f"Report incident type ID: {report.incident_type_id}, "
+                    f"Case incident type ID: {case.incident_type_id}"
+                )
+            
+            # Check if report is already assigned to a different case
+            existing_case_report = db.query(CaseReport).filter(CaseReport.report_id == rid).first()
+            if existing_case_report:
+                raise HTTPException(
+                    400,
+                    f"Report is already linked to another case. Use the move functionality instead."
+                )
+            
             if current_user.role == "supervisor":
                 station_id, location_ids = _supervisor_scope(current_user, db)
                 if not _report_in_supervisor_scope(report, station_id, location_ids, db):
