@@ -777,6 +777,211 @@ def delete_case(
     return {}
 
 
+@router.delete("/{case_id}/reports/{report_id}", response_model=CaseResponse)
+def remove_report_from_case(
+    case_id: str,
+    report_id: str,
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Remove a report from a case (unlink but don't delete the report).
+
+    - Admin: any case.
+    - Supervisor: only cases in their location.
+    - Officer: only cases assigned to them.
+    """
+    from uuid import UUID
+
+    try:
+        cid = UUID(case_id)
+    except ValueError:
+        raise HTTPException(404, "Case not found")
+
+    try:
+        rid = UUID(report_id)
+    except ValueError:
+        raise HTTPException(404, "Report not found")
+
+    case = db.query(Case).options(
+        joinedload(Case.case_reports).joinedload(CaseReport.report),
+        joinedload(Case.assigned_to),
+        joinedload(Case.created_by_user),
+        joinedload(Case.location),
+        joinedload(Case.incident_type)
+    ).filter(Case.case_id == cid).first()
+
+    if not case:
+        raise HTTPException(404, "Case not found")
+
+    # Check permissions
+    role = getattr(current_user, "role", None)
+    if role == "admin":
+        pass  # Admin can access any case
+    elif role == "supervisor":
+        supervisor_location_ids = _all_location_ids_for_scope(db, getattr(current_user, "station_id", None))
+        if case.location_id and case.location_id not in supervisor_location_ids:
+            raise HTTPException(403, "Access denied: case outside your jurisdiction")
+    elif role == "officer":
+        if case.assigned_to_id != current_user.police_user_id:
+            raise HTTPException(403, "Access denied: case not assigned to you")
+    else:
+        raise HTTPException(403, "Access denied")
+
+    # Find and remove the case-report link
+    case_report = db.query(CaseReport).filter(
+        CaseReport.case_id == cid,
+        CaseReport.report_id == rid
+    ).first()
+
+    if not case_report:
+        raise HTTPException(404, "Report not found in this case")
+
+    db.delete(case_report)
+    
+    # Update case report count
+    case.report_count = max(0, case.report_count - 1)
+    
+    db.commit()
+
+    # Refresh case data
+    db.refresh(case)
+
+    # Broadcast updates
+    background_tasks.add_task(
+        manager.broadcast,
+        {"type": "refresh_data", "entity": "case", "action": "updated"},
+    )
+    background_tasks.add_task(
+        manager.broadcast,
+        {"type": "refresh_data", "entity": "report", "action": "updated"},
+    )
+
+    return _case_to_response(case)
+
+
+@router.post("/reports/{report_id}/move", response_model=CaseResponse)
+def move_report_to_case(
+    report_id: str,
+    target_case_id: str,
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Move a report from its current case to a different case.
+    
+    - Admin: any case.
+    - Supervisor: only cases in their location.
+    - Officer: only cases assigned to them.
+    """
+    from uuid import UUID
+
+    try:
+        rid = UUID(report_id)
+    except ValueError:
+        raise HTTPException(404, "Report not found")
+
+    try:
+        target_cid = UUID(target_case_id)
+    except ValueError:
+        raise HTTPException(404, "Target case not found")
+
+    # Find the report
+    report = db.query(Report).filter(Report.report_id == rid).first()
+    if not report:
+        raise HTTPException(404, "Report not found")
+
+    # Find current case (if any)
+    current_case_report = db.query(CaseReport).filter(CaseReport.report_id == rid).first()
+    current_case = None
+    if current_case_report:
+        current_case = db.query(Case).options(
+            joinedload(Case.case_reports).joinedload(CaseReport.report),
+            joinedload(Case.assigned_to),
+            joinedload(Case.created_by_user),
+            joinedload(Case.location),
+            joinedload(Case.incident_type)
+        ).filter(Case.case_id == current_case_report.case_id).first()
+
+    # Find target case
+    target_case = db.query(Case).options(
+        joinedload(Case.case_reports).joinedload(CaseReport.report),
+        joinedload(Case.assigned_to),
+        joinedload(Case.created_by_user),
+        joinedload(Case.location),
+        joinedload(Case.incident_type)
+    ).filter(Case.case_id == target_cid).first()
+
+    if not target_case:
+        raise HTTPException(404, "Target case not found")
+
+    # Check permissions for both current and target cases
+    role = getattr(current_user, "role", None)
+    
+    def check_case_access(case, case_name):
+        if role == "admin":
+            return  # Admin can access any case
+        elif role == "supervisor":
+            supervisor_location_ids = _all_location_ids_for_scope(db, getattr(current_user, "station_id", None))
+            if case.location_id and case.location_id not in supervisor_location_ids:
+                raise HTTPException(403, f"Access denied: {case_name} outside your jurisdiction")
+        elif role == "officer":
+            if case.assigned_to_id != current_user.police_user_id:
+                raise HTTPException(403, f"Access denied: {case_name} not assigned to you")
+        else:
+            raise HTTPException(403, "Access denied")
+
+    # Check access to current case (if exists)
+    if current_case:
+        check_case_access(current_case, "current case")
+    
+    # Check access to target case
+    check_case_access(target_case, "target case")
+
+    # Validate incident type matching
+    if report.incident_type_id != target_case.incident_type_id:
+        raise HTTPException(
+            400, 
+            f"Cannot link report to case: incident type mismatch. "
+            f"Report incident type ID: {report.incident_type_id}, "
+            f"Case incident type ID: {target_case.incident_type_id}"
+        )
+
+    # If report is already in target case, do nothing
+    if current_case_report and current_case_report.case_id == target_cid:
+        return _case_to_response(target_case)
+
+    # Remove from current case (if exists)
+    if current_case_report:
+        db.delete(current_case_report)
+        if current_case:
+            current_case.report_count = max(0, current_case.report_count - 1)
+
+    # Add to target case
+    new_case_report = CaseReport(case_id=target_cid, report_id=rid)
+    db.add(new_case_report)
+    target_case.report_count += 1
+
+    db.commit()
+
+    # Refresh target case data
+    db.refresh(target_case)
+
+    # Broadcast updates
+    background_tasks.add_task(
+        manager.broadcast,
+        {"type": "refresh_data", "entity": "case", "action": "updated"},
+    )
+    background_tasks.add_task(
+        manager.broadcast,
+        {"type": "refresh_data", "entity": "report", "action": "updated"},
+    )
+
+    return _case_to_response(target_case)
+
+
 @router.post("/{case_id}/reports", response_model=CaseResponse)
 def add_reports_to_case(
     case_id: str,

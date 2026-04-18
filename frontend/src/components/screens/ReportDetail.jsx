@@ -339,6 +339,12 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
   const [mlLoading, setMlLoading] = useState(false);
   const [relatedReports, setRelatedReports] = useState([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
+  const [showLinkCaseModal, setShowLinkCaseModal] = useState(false);
+  const [availableCases, setAvailableCases] = useState([]);
+  const [casesLoading, setCasesLoading] = useState(false);
+  const [selectedCase, setSelectedCase] = useState("");
+  const [caseSearch, setCaseSearch] = useState("");
+  const [linkingCase, setLinkingCase] = useState(false);
 
   useEffect(() => {
     if (!reportId) {
@@ -459,45 +465,20 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
               police_user_id: me?.police_user_id,
               decision: pendingDecision,
               review_note: reviewReason,
-              reviewed_at: new Date().toISOString(),
-              reviewer_name: me?.full_name || me?.email || "Officer",
+              created_at: new Date().toISOString(),
             };
 
-      const nowIso = new Date().toISOString();
-      const nextStatus = pendingDecision === "confirmed" ? "verified" : "rejected";
-      const nextVerificationStatus =
-        pendingDecision === "confirmed" ? "verified" : "rejected";
-
-      setReport((prev) => {
-        if (!prev) return prev;
-        const prevReviews = prev.reviews || [];
-        const nextReviews = [
-          ...prevReviews.filter((r) => r.review_id !== review.review_id),
-          review,
-        ];
-
-        return {
-          ...prev,
-          status: nextStatus,
-          verification_status: nextVerificationStatus,
-          rule_status: pendingDecision === "confirmed" ? "passed" : prev.rule_status,
-          is_flagged: pendingDecision === "rejected" ? true : false,
-          flag_reason:
-            pendingDecision === "rejected"
-              ? prev.flag_reason || "Rejected by reviewer"
-              : null,
-          verified_at:
-            pendingDecision === "confirmed" || pendingDecision === "rejected"
-              ? nowIso
-              : prev.verified_at,
-          reviews: nextReviews,
-        };
-      });
+      setReport((prev) => ({
+        ...prev,
+        reviews: [...(prev.reviews || []), review],
+        verification_status:
+          pendingDecision === "confirmed" ? "verified" : "flagged",
+      }));
 
       setActionMessage(
         pendingDecision === "confirmed"
-          ? "Report verified successfully."
-          : "Report flagged successfully.",
+          ? "✅ Report verified successfully"
+          : "🚩 Report flagged for review"
       );
 
       // Close modal and reset
@@ -511,6 +492,98 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
       setError(e?.message || "Failed to submit review.");
     } finally {
       setSavingDecision("");
+    }
+  };
+
+  const loadAvailableCases = async () => {
+    setCasesLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams();
+      if (caseSearch) {
+        params.append('search', caseSearch);
+      }
+      params.append('limit', '50');
+      
+      const response = await api.get(`/api/v1/cases?${params}`);
+      setAvailableCases(Array.isArray(response) ? response : (response?.items || []));
+    } catch (e) {
+      setError(e?.message || "Failed to load cases");
+      setAvailableCases([]);
+    } finally {
+      setCasesLoading(false);
+    }
+  };
+
+  const openLinkCaseModal = () => {
+    setShowLinkCaseModal(true);
+    setSelectedCase("");
+    setCaseSearch("");
+    loadAvailableCases();
+  };
+
+  const linkReportToCase = async () => {
+    if (!selectedCase || !reportId) return;
+    
+    setLinkingCase(true);
+    setError("");
+    setActionMessage("");
+    
+    try {
+      // If report is already in a case, move it. Otherwise, add it.
+      if (report.case_id) {
+        await api.post(`/api/v1/cases/reports/${reportId}/move`, {
+          target_case_id: selectedCase
+        });
+        setActionMessage("✅ Report moved to different case successfully");
+      } else {
+        await api.post(`/api/v1/cases/${selectedCase}/reports`, {
+          report_ids: [reportId]
+        });
+        setActionMessage("✅ Report linked to case successfully");
+      }
+
+      // Update report data
+      setReport(prev => ({
+        ...prev,
+        case_id: selectedCase
+      }));
+
+      setShowLinkCaseModal(false);
+      setSelectedCase("");
+      refreshInBackground();
+    } catch (e) {
+      setError(e?.message || "Failed to link report to case");
+    } finally {
+      setLinkingCase(false);
+    }
+  };
+
+  const unlinkReportFromCase = async () => {
+    if (!report.case_id || !reportId) return;
+    
+    if (!window.confirm("Are you sure you want to unlink this report from its case?")) {
+      return;
+    }
+    
+    setLinkingCase(true);
+    setError("");
+    setActionMessage("");
+    
+    try {
+      await api.delete(`/api/v1/cases/${report.case_id}/reports/${reportId}`);
+      
+      setReport(prev => ({
+        ...prev,
+        case_id: null
+      }));
+
+      setActionMessage("✅ Report unlinked from case successfully");
+      refreshInBackground();
+    } catch (e) {
+      setError(e?.message || "Failed to unlink report from case");
+    } finally {
+      setLinkingCase(false);
     }
   };
 
@@ -661,21 +734,36 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   Create case
                 </button>
               ) : (
-                <button
-                  className="btn btn-info btn-sm"
-                  onClick={() => goToScreen("case-detail", report.case_id)}
-                  style={{ display: "flex", alignItems: "center", gap: 4 }}
-                >
-                  View case
-                </button>
+                <>
+                  <button
+                    className="btn btn-info btn-sm"
+                    onClick={() => goToScreen("case-detail", report.case_id)}
+                    style={{ display: "flex", alignItems: "center", gap: 4 }}
+                  >
+                    View case
+                  </button>
+                  
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={unlinkReportFromCase}
+                    disabled={linkingCase}
+                    style={{ display: "flex", alignItems: "center", gap: 4 }}
+                  >
+                    {linkingCase ? "Unlinking..." : "Unlink from case"}
+                  </button>
+                </>
               )}
 
               <button
                 className="btn btn-warn btn-sm"
-                onClick={() => openModal("linkCase")}
+                onClick={openLinkCaseModal}
+                disabled={linkingCase}
                 style={{ display: "flex", alignItems: "center", gap: 4 }}
               >
-                Link to existing case
+                {linkingCase 
+                  ? "Processing..." 
+                  : (report.case_id ? "Move to different case" : "Link to existing case")
+                }
               </button>
             </>
           )}
@@ -2077,6 +2165,121 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 {savingDecision === pendingDecision 
                   ? (pendingDecision === "confirmed" ? "Verifying…" : "Flagging…")
                   : (pendingDecision === "confirmed" ? "Verify" : "Flag")
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Case Linking Modal */}
+      {showLinkCaseModal && (
+        <div className="modal-overlay open" onClick={(e) => e.target === e.currentTarget && setShowLinkCaseModal(false)}>
+          <div className="modal" style={{ maxWidth: '600px', width: '90%' }}>
+            <div className="modal-header">
+              <div className="modal-title">
+                {report.case_id ? "Move Report to Different Case" : "Link Report to Existing Case"}
+              </div>
+              <div className="modal-close" onClick={() => setShowLinkCaseModal(false)}>✕</div>
+            </div>
+
+            <div className="input-group">
+              <div className="input-label">Search Cases</div>
+              <input
+                type="text"
+                placeholder="Search by case number, title, or location..."
+                value={caseSearch}
+                onChange={(e) => {
+                  setCaseSearch(e.target.value);
+                  loadAvailableCases();
+                }}
+                style={{ 
+                  width: '100%', 
+                  padding: '8px', 
+                  border: '1px solid var(--border)', 
+                  borderRadius: '4px',
+                  marginBottom: '12px'
+                }}
+              />
+            </div>
+
+            <div className="input-group">
+              <div className="input-label">Select Case</div>
+              {casesLoading ? (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--muted)' }}>
+                  Loading cases...
+                </div>
+              ) : availableCases.length === 0 ? (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--muted)' }}>
+                  No cases found. Try adjusting your search.
+                </div>
+              ) : (
+                <div style={{ 
+                  maxHeight: '300px', 
+                  overflowY: 'auto', 
+                  border: '1px solid var(--border)', 
+                  borderRadius: '4px'
+                }}>
+                  {availableCases.map((case_item) => (
+                    <div
+                      key={case_item.case_id}
+                      onClick={() => setSelectedCase(case_item.case_id)}
+                      style={{
+                        padding: '12px',
+                        borderBottom: '1px solid var(--border)',
+                        cursor: 'pointer',
+                        backgroundColor: selectedCase === case_item.case_id ? 'var(--primary)' : 'transparent',
+                        color: selectedCase === case_item.case_id ? 'white' : 'var(--text)',
+                      }}
+                    >
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                        {case_item.case_number || case_item.title || 'Unknown Case'}
+                      </div>
+                      <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '2px' }}>
+                        {case_item.title || 'No title'}
+                      </div>
+                      <div style={{ fontSize: '11px', opacity: 0.7 }}>
+                        Status: <span className={`badge ${case_item.status === 'open' ? 'b-green' : 'b-gray'}`}>
+                          {case_item.status}
+                        </span>
+                        {' • '}
+                        Priority: <span className={`badge ${
+                          case_item.priority === 'urgent' ? 'b-red' : 
+                          case_item.priority === 'high' ? 'b-orange' : 
+                          case_item.priority === 'low' ? 'b-blue' : 'b-gray'
+                        }`}>
+                          {case_item.priority}
+                        </span>
+                        {' • '}
+                        {case_item.report_count || 0} reports
+                      </div>
+                      {case_item.location?.location_name && (
+                        <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '2px' }}>
+                          📍 {case_item.location.location_name}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
+              <button 
+                className="btn btn-outline" 
+                onClick={() => setShowLinkCaseModal(false)} 
+                disabled={linkingCase}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={linkReportToCase} 
+                disabled={!selectedCase || linkingCase}
+              >
+                {linkingCase 
+                  ? (report.case_id ? "Moving..." : "Linking...") 
+                  : (report.case_id ? "Move Report" : "Link Report")
                 }
               </button>
             </div>
