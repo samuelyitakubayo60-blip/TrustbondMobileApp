@@ -6,6 +6,13 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [availableCases, setAvailableCases] = useState([]);
+  const [casesLoading, setCasesLoading] = useState(false);
+  const [selectedTargetCase, setSelectedTargetCase] = useState('');
+  const [caseSearch, setCaseSearch] = useState('');
+  const [movingReport, setMovingReport] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !caseItem?.case_id) return;
@@ -99,6 +106,78 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
   const navLat = hasCaseCoords ? caseLat : derivedLat;
   const navLon = hasCaseCoords ? caseLon : derivedLon;
   const hasUnifiedCoords = Number.isFinite(navLat) && Number.isFinite(navLon);
+
+  const loadAvailableCases = async () => {
+    setCasesLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (caseSearch) {
+        params.append('search', caseSearch);
+      }
+      // Only show cases with the same incident type
+      if (selectedReport?.incident_type_id) {
+        params.append('incident_type_id', selectedReport.incident_type_id);
+      }
+      params.append('limit', '50');
+      
+      const response = await api.get(`/api/v1/cases?${params}`);
+      let cases = Array.isArray(response) ? response : (response?.items || []);
+      
+      // Additional client-side filtering to ensure incident type match
+      if (selectedReport?.incident_type_id) {
+        cases = cases.filter(case_item => case_item.incident_type_id === selectedReport.incident_type_id);
+      }
+      
+      // Exclude the current case
+      cases = cases.filter(case_item => case_item.case_id !== caseItem.case_id);
+      
+      setAvailableCases(cases);
+    } catch (e) {
+      console.error("Failed to load cases:", e);
+      setAvailableCases([]);
+    } finally {
+      setCasesLoading(false);
+    }
+  };
+
+  const openMoveModal = (report) => {
+    setSelectedReport(report);
+    setShowMoveModal(true);
+    setSelectedTargetCase('');
+    setCaseSearch('');
+    loadAvailableCases();
+  };
+
+  const moveReportToCase = async () => {
+    if (!selectedTargetCase || !selectedReport?.report_id) return;
+    
+    setMovingReport(true);
+    try {
+      await api.post(`/api/v1/cases/reports/${selectedReport.report_id}/move`, {
+        target_case_id: selectedTargetCase
+      });
+
+      // Remove the report from the current list
+      setReports(prev => prev.filter(r => r.report_id !== selectedReport.report_id));
+      
+      setShowMoveModal(false);
+      setSelectedReport(null);
+      setSelectedTargetCase('');
+      setError('');
+    } catch (e) {
+      let errorMessage = e?.message || "Failed to move report";
+      
+      if (errorMessage.includes("incident type mismatch")) {
+        errorMessage = "Cannot move to this case: Incident types don't match.";
+      } else if (errorMessage.includes("Access denied")) {
+        errorMessage = "You don't have permission to move to this case.";
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setMovingReport(false);
+    }
+  };
 
   return (
     <div className="modal-overlay open" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -221,6 +300,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                     <th>Village</th>
                     <th>Status</th>
                     <th>Date</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -233,11 +313,21 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                       <td>{r.village_name || '-'}</td>
                       <td>{r.rule_status || r.status || '-'}</td>
                       <td style={{ fontSize: 11 }}>{formatLocalDate(r.reported_at)}</td>
+                      <td>
+                        <button
+                          className="btn btn-warn btn-sm"
+                          onClick={() => openMoveModal(r)}
+                          style={{ fontSize: '10px', padding: '2px 6px' }}
+                          title="Move report to different case"
+                        >
+                          🔄 Move
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {!reports.length && (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>
+                      <td colSpan={6} style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>
                         No reports linked to this case.
                       </td>
                     </tr>
@@ -254,6 +344,136 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
             Update Case
           </button>
         </div>
+
+        {/* Move Report Modal */}
+        {showMoveModal && (
+          <div className="modal-overlay open" onClick={(e) => e.target === e.currentTarget && setShowMoveModal(false)}>
+            <div className="modal" style={{ maxWidth: '600px', width: '90%' }}>
+              <div className="modal-header">
+                <div className="modal-title">
+                  🔄 Move Report to Different Case
+                </div>
+                <div className="modal-close" onClick={() => setShowMoveModal(false)}>✕</div>
+              </div>
+
+              <div style={{ 
+                padding: '12px', 
+                backgroundColor: 'rgba(59, 130, 246, 0.1)', 
+                border: '1px solid rgba(59, 130, 246, 0.3)', 
+                borderRadius: '6px', 
+                marginBottom: '16px',
+                fontSize: '12px',
+                color: 'var(--text)'
+              }}>
+                <strong>📋 Moving Report:</strong>
+                <ul style={{ margin: '4px 0 0 0', paddingLeft: '16px' }}>
+                  <li>Report: <strong>{selectedReport?.report_number || String(selectedReport?.report_id || '').slice(0, 8)}</strong></li>
+                  <li>Type: <strong>{selectedReport?.incident_type_name || 'Unknown'}</strong></li>
+                  <li>From Case: <strong>{caseItem.case_number || 'Current Case'}</strong></li>
+                  <li>Only showing cases with matching incident type</li>
+                </ul>
+              </div>
+
+              <div className="input-group">
+                <div className="input-label">Search Target Cases</div>
+                <input
+                  type="text"
+                  placeholder="Search by case number, title, or location..."
+                  value={caseSearch}
+                  onChange={(e) => {
+                    setCaseSearch(e.target.value);
+                    loadAvailableCases();
+                  }}
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px', 
+                    border: '1px solid var(--border)', 
+                    borderRadius: '4px',
+                    marginBottom: '12px'
+                  }}
+                />
+              </div>
+
+              <div className="input-group">
+                <div className="input-label">Select Target Case</div>
+                {casesLoading ? (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--muted)' }}>
+                    Loading cases...
+                  </div>
+                ) : availableCases.length === 0 ? (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--muted)' }}>
+                    No compatible cases found. Try adjusting your search.
+                  </div>
+                ) : (
+                  <div style={{ 
+                    maxHeight: '300px', 
+                    overflowY: 'auto', 
+                    border: '1px solid var(--border)', 
+                    borderRadius: '4px'
+                  }}>
+                    {availableCases.map((case_item) => (
+                      <div
+                        key={case_item.case_id}
+                        onClick={() => setSelectedTargetCase(case_item.case_id)}
+                        style={{
+                          padding: '12px',
+                          borderBottom: '1px solid var(--border)',
+                          cursor: 'pointer',
+                          backgroundColor: selectedTargetCase === case_item.case_id ? 'var(--primary)' : 'transparent',
+                          color: selectedTargetCase === case_item.case_id ? 'white' : 'var(--text)',
+                        }}
+                      >
+                        <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                          {case_item.case_number || case_item.title || 'Unknown Case'}
+                        </div>
+                        <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '2px' }}>
+                          {case_item.title || 'No title'}
+                        </div>
+                        <div style={{ fontSize: '11px', opacity: 0.7 }}>
+                          Status: <span className={`badge ${case_item.status === 'open' ? 'b-green' : 'b-gray'}`}>
+                            {case_item.status}
+                          </span>
+                          {' • '}
+                          Priority: <span className={`badge ${
+                            case_item.priority === 'urgent' ? 'b-red' : 
+                            case_item.priority === 'high' ? 'b-orange' : 
+                            case_item.priority === 'low' ? 'b-blue' : 'b-gray'
+                          }`}>
+                            {case_item.priority}
+                          </span>
+                          {' • '}
+                          {case_item.report_count || 0} reports
+                        </div>
+                        {case_item.location?.location_name && (
+                          <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '2px' }}>
+                            📍 {case_item.location.location_name}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
+                <button 
+                  className="btn btn-outline" 
+                  onClick={() => setShowMoveModal(false)} 
+                  disabled={movingReport}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={moveReportToCase} 
+                  disabled={!selectedTargetCase || movingReport}
+                >
+                  {movingReport ? "Moving..." : "Move Report"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

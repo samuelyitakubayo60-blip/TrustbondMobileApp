@@ -345,6 +345,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
   const [selectedCase, setSelectedCase] = useState("");
   const [caseSearch, setCaseSearch] = useState("");
   const [linkingCase, setLinkingCase] = useState(false);
+  const [reportCase, setReportCase] = useState(null);
+  const [caseLoading, setCaseLoading] = useState(false);
 
   useEffect(() => {
     if (!reportId) {
@@ -402,7 +404,19 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
     return () => {
       cancelled = true;
     };
-  }, [report]);
+  }, [report?.report_id]);
+
+  useEffect(() => {
+    loadReportCase();
+  }, [report?.case_id]);
+
+  if (loading) {
+    return (
+      <div>
+        <div style={{ marginBottom: "4px" }}>Loading...</div>
+      </div>
+    );
+  }
 
   // Load related reports
   useEffect(() => {
@@ -604,6 +618,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
         ...prev,
         case_id: null
       }));
+      
+      setReportCase(null);
 
       setActionMessage("✅ Report unlinked from case successfully");
       refreshInBackground();
@@ -611,6 +627,24 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
       setError(e?.message || "Failed to unlink report from case");
     } finally {
       setLinkingCase(false);
+    }
+  };
+
+  const loadReportCase = async () => {
+    if (!report?.case_id) {
+      setReportCase(null);
+      return;
+    }
+    
+    setCaseLoading(true);
+    try {
+      const caseData = await api.get(`/api/v1/cases/${report.case_id}`);
+      setReportCase(caseData);
+    } catch (e) {
+      console.error("Failed to load case details:", e);
+      setReportCase(null);
+    } finally {
+      setCaseLoading(false);
     }
   };
 
@@ -967,6 +1001,185 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
               </div>
             </div>
           </div>
+
+          {/* Case Information Card */}
+          {reportCase && (
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title">
+                  📋 Case Information
+                  <span className={`badge ${
+                    reportCase.status === 'open' ? 'b-green' : 
+                    reportCase.status === 'closed' ? 'b-red' : 'b-gray'
+                  }`} style={{ marginLeft: '8px', fontSize: '10px' }}>
+                    {reportCase.status}
+                  </span>
+                </div>
+                <button
+                  className="btn btn-info btn-sm"
+                  onClick={() => goToScreen("case-detail", reportCase.case_id)}
+                  style={{ fontSize: '11px' }}
+                >
+                  View Full Case
+                </button>
+              </div>
+              <div style={{ padding: "10px 14px", fontSize: 12 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                    gap: 10,
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "var(--muted)",
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Case Number
+                    </div>
+                    <div style={{ fontWeight: "bold", color: "var(--primary)" }}>
+                      {reportCase.case_number || "N/A"}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "var(--muted)",
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Case Title
+                    </div>
+                    <div style={{ fontWeight: "bold" }}>
+                      {reportCase.title || "Untitled Case"}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "var(--muted)",
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Priority
+                    </div>
+                    <span className={`badge ${
+                      reportCase.priority === 'urgent' ? 'b-red' : 
+                      reportCase.priority === 'high' ? 'b-orange' : 
+                      reportCase.priority === 'low' ? 'b-blue' : 'b-gray'
+                    }`}>
+                      {reportCase.priority}
+                    </span>
+                  </div>
+                  
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "var(--muted)",
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Incident Type
+                    </div>
+                    <div>
+                      {reportCase.incident_type?.type_name || report.incident_type_name || "Unknown"}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "var(--muted)",
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Reports in Case
+                    </div>
+                    <div style={{ fontWeight: "bold" }}>
+                      {reportCase.report_count || 1}
+                    </div>
+                  </div>
+                  
+                  {reportCase.location && (
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 10,
+                          color: "var(--muted)",
+                          fontWeight: 800,
+                          textTransform: "uppercase",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Location
+                      </div>
+                      <div>
+                        📍 {reportCase.location.location_name}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {reportCase.assigned_to && (
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 10,
+                          color: "var(--muted)",
+                          fontWeight: 800,
+                          textTransform: "uppercase",
+                          marginBottom: "4px",
+                        }}
+                      >
+                      Assigned Officer
+                      </div>
+                      <div>
+                        👮 {reportCase.assigned_to.full_name || "Unknown Officer"}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {reportCase.description && (
+                  <div style={{ marginTop: "12px" }}>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "var(--muted)",
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Case Description
+                    </div>
+                    <div style={{ fontSize: "11px", lineHeight: 1.5, fontStyle: "italic" }}>
+                      {reportCase.description}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Enhanced Reporter Context Card */}
           <div className="card">
