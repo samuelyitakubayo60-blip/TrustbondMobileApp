@@ -1,7 +1,7 @@
 from pydantic import BaseModel, model_validator
 from uuid import UUID
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from decimal import Decimal
 
 
@@ -71,6 +71,8 @@ class ReportResponse(BaseModel):
     verification_status: Optional[str] = None  # pending, under_review, verified, rejected
     village_location_id: Optional[int] = None
     village_name: Optional[str] = None  # from locations table (village containing the point)
+    cell_name: Optional[str] = None  # from locations hierarchy (cell containing the village)
+    sector_name: Optional[str] = None  # from locations hierarchy (sector containing the cell)
     incident_type_name: Optional[str] = None  # set when listing/loading with join
     evidence_count: int = 0
     evidence_preview: list["EvidencePreview"] = []
@@ -101,6 +103,9 @@ class ReportResponse(BaseModel):
     device_trust_score: Optional[float] = None
     total_reports: Optional[int] = None
     trusted_reports: Optional[int] = None
+    # Location hierarchy and station assignment data
+    assigned_station: Optional[Dict[str, Any]] = None  # station info from assigned officer
+    assigned_officers: Optional[List[Dict[str, Any]]] = None  # list of assigned officers with their stations
 
     class Config:
         from_attributes = True

@@ -663,8 +663,10 @@ def run_hotspot_auto():
                 try:
                     loop = asyncio.get_running_loop()
                     loop.create_task(manager.broadcast({"type": "refresh_data", "entity": "hotspot", "action": "auto_created"}))
+                    loop.create_task(manager.broadcast({"type": "refresh_data", "entity": "geographic_intelligence", "action": "updated"}))
                 except RuntimeError:
                     asyncio.run(manager.broadcast({"type": "refresh_data", "entity": "hotspot", "action": "auto_created"}))
+                    asyncio.run(manager.broadcast({"type": "refresh_data", "entity": "geographic_intelligence", "action": "updated"}))
             except Exception as e:
                 print(f"Failed to broadcast hotspot update: {e}")
             
@@ -1538,13 +1540,32 @@ def create_report(
     
     background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "report", "action": "created"})
     
+    # Trigger geographic intelligence update
+    background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "geographic_intelligence", "action": "updated"})
+    
     return report
 
 
 def _build_report_response(r: Report, db: Optional[Session] = None, request_device_id: Optional[str] = None) -> ReportResponse:
     village_name = None
+    sector_name = None
+    cell_name = None
+    
+    # Extract location hierarchy from village_location
     if getattr(r, "village_location", None) and r.village_location:
         village_name = r.village_location.location_name
+        
+        # Get cell level (parent of village)
+        if getattr(r.village_location, "parent", None) and r.village_location.parent:
+            cell_name = r.village_location.parent.location_name
+            
+            # Get sector level (parent of cell)
+            if getattr(r.village_location.parent, "parent", None) and r.village_location.parent.parent:
+                sector_name = r.village_location.parent.parent.location_name
+        elif r.village_location.location_type == 'sector':
+            # If village_location is actually a sector
+            sector_name = r.village_location.location_name
+    
     # Fallback: look up village from coordinates (e.g. for older reports or when village_location_id was null)
     if village_name is None and db is not None and r.latitude is not None and r.longitude is not None:
         try:
@@ -1553,6 +1574,33 @@ def _build_report_response(r: Report, db: Optional[Session] = None, request_devi
                 village_name = info.get("village_name")
         except Exception:
             pass
+    
+    # Extract station assignments from police users
+    assigned_station = None
+    assigned_officers = []
+    
+    if getattr(r, "assignments", None) and r.assignments:
+        for assignment in r.assignments:
+            if assignment.police_user:
+                officer_info = {
+                    "police_user_id": assignment.police_user.police_user_id,
+                    "full_name": getattr(assignment.police_user, "full_name", None),
+                    "badge_number": getattr(assignment.police_user, "badge_number", None),
+                    "station": None
+                }
+                
+                if getattr(assignment.police_user, "station", None):
+                    officer_info["station"] = {
+                        "station_id": assignment.police_user.station.station_id,
+                        "station_name": assignment.police_user.station.station_name,
+                        "station_code": assignment.police_user.station.station_code,
+                        "station_type": assignment.police_user.station.station_type
+                    }
+                    # Use the first assigned officer's station
+                    if assigned_station is None:
+                        assigned_station = officer_info["station"]
+                
+                assigned_officers.append(officer_info)
 
     evidence_files = list(getattr(r, "evidence_files", None) or [])
     evidence_files.sort(key=lambda x: (x.uploaded_at is None, x.uploaded_at), reverse=False)
@@ -1654,6 +1702,8 @@ def _build_report_response(r: Report, db: Optional[Session] = None, request_devi
         verification_status=getattr(r, "verification_status", None),
         village_location_id=r.village_location_id,
         village_name=village_name,
+        cell_name=cell_name,
+        sector_name=sector_name,
         incident_type_name=r.incident_type.type_name if r.incident_type else None,
         evidence_count=len(evidence_files),
         evidence_preview=evidence_preview,
@@ -1680,6 +1730,9 @@ def _build_report_response(r: Report, db: Optional[Session] = None, request_devi
         device_trust_score=float(device_trust_score) if device_trust_score is not None else None,
         total_reports=total_reports,
         trusted_reports=trusted_reports,
+        # Add location hierarchy and station assignment data
+        assigned_station=assigned_station,
+        assigned_officers=assigned_officers,
     )
 
 
@@ -1877,9 +1930,12 @@ def list_reports(
             .options(
                 joinedload(Report.device),
                 joinedload(Report.incident_type),
-                joinedload(Report.village_location),
+                joinedload(Report.village_location)
+                .joinedload(Location.parent),  # Load parent location (cell -> sector hierarchy)
                 selectinload(Report.evidence_files),
-                selectinload(Report.assignments),
+                selectinload(Report.assignments)
+                .joinedload(ReportAssignment.police_user)
+                .joinedload(PoliceUser.station),  # Load station through police user assignments
                 selectinload(Report.ml_predictions),
                 selectinload(Report.case_reports),
             )
@@ -1899,10 +1955,13 @@ def list_reports(
     query = db.query(Report).options(
         joinedload(Report.device),
         joinedload(Report.incident_type),
-        joinedload(Report.village_location),
+        joinedload(Report.village_location)
+        .joinedload(Location.parent),  # Load parent location (cell -> sector hierarchy)
         selectinload(Report.evidence_files),
         # selectinload(Report.hotspots),  # Hotspots relationship not available yet
-        selectinload(Report.assignments),
+        selectinload(Report.assignments)
+        .joinedload(ReportAssignment.police_user)
+        .joinedload(PoliceUser.station),  # Load station through police user assignments
         selectinload(Report.ml_predictions),
         selectinload(Report.case_reports),
     )
