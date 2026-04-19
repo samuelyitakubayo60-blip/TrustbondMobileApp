@@ -8,6 +8,7 @@ class StationBase(BaseModel):
   station_name: str
   station_type: str
   location_id: Optional[int] = None
+  sector2_id: Optional[int] = None
   latitude: Optional[float] = None
   longitude: Optional[float] = None
   address_text: Optional[str] = None
@@ -51,6 +52,7 @@ class StationUpdate(BaseModel):
   station_name: Optional[str] = None
   station_type: Optional[str] = None
   location_id: Optional[int] = None
+  sector2_id: Optional[int] = None
   latitude: Optional[float] = None
   longitude: Optional[float] = None
   address_text: Optional[str] = None
@@ -62,6 +64,7 @@ class StationUpdate(BaseModel):
 class StationResponse(StationBase):
   station_id: int
   location_name: Optional[str] = None
+  sector2_name: Optional[str] = None
   created_at: Optional[datetime] = None
   updated_at: Optional[datetime] = None
 

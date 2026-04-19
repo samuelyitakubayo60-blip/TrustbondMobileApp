@@ -10,6 +10,7 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
       station_name: station?.station_name || '',
       station_type: station?.station_type || 'station',
       location_id: station?.location_id || '',
+      sector2_id: station?.sector2_id || '',
       latitude: station?.latitude ?? '',
       longitude: station?.longitude ?? '',
       address_text: station?.address_text || '',
@@ -28,6 +29,7 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
   const [sectorId, setSectorId] = useState(null);
   const [cellId, setCellId] = useState(null);
   const [villageId, setVillageId] = useState(null);
+  const [sector2Id, setSector2Id] = useState(null);
 
   // Load all locations once (sectors, cells, villages)
   useEffect(() => {
@@ -48,33 +50,45 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
     };
   }, []);
 
-  // When opening / station changes, derive sector/cell/village from station.location_id
+  // When opening / station changes, derive sector/cell/village from station.location_id and sector2_id
   useEffect(() => {
     setForm(initial);
     setError('');
     setSaving(false);
 
-    if (!station || !station.location_id || !locations.length) {
+    if (!station || !locations.length) {
       setSectorId(null);
       setCellId(null);
       setVillageId(null);
+      setSector2Id(station?.sector2_id || null);
       return;
     }
 
-    const villages = locations.filter((l) => l.location_type === 'village');
-    const cells = locations.filter((l) => l.location_type === 'cell');
-    const sectors = locations.filter((l) => l.location_type === 'sector');
+    // Handle primary sector
+    if (station.location_id) {
+      const villages = locations.filter((l) => l.location_type === 'village');
+      const cells = locations.filter((l) => l.location_type === 'cell');
+      const sectors = locations.filter((l) => l.location_type === 'sector');
 
-    const v = villages.find((l) => l.location_id === station.location_id);
-    if (!v) return;
-    setVillageId(v.location_id);
+      const v = villages.find((l) => l.location_id === station.location_id);
+      if (v) {
+        setVillageId(v.location_id);
 
-    const c = cells.find((l) => l.location_id === v.parent_location_id);
-    if (c) {
-      setCellId(c.location_id);
-      const s = sectors.find((l) => l.location_id === c.parent_location_id);
-      if (s) setSectorId(s.location_id);
+        const c = cells.find((l) => l.location_id === v.parent_location_id);
+        if (c) {
+          setCellId(c.location_id);
+          const s = sectors.find((l) => l.location_id === c.parent_location_id);
+          if (s) setSectorId(s.location_id);
+        }
+      }
+    } else {
+      setSectorId(null);
+      setCellId(null);
+      setVillageId(null);
     }
+
+    // Handle second sector (direct sector selection)
+    setSector2Id(station?.sector2_id || null);
   }, [initial, isOpen, locations, station]);
 
   const sectors = locations.filter((l) => l.location_type === 'sector');
@@ -149,6 +163,12 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
     }
   };
 
+  const handleSector2Change = (e) => {
+    const id = e.target.value ? Number(e.target.value) : null;
+    setSector2Id(id);
+    setForm((prev) => ({ ...prev, sector2_id: id || '' }));
+  };
+
   const submit = async () => {
     setError('');
     // Basic local validation for Rwandan phone numbers (optional)
@@ -178,6 +198,7 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
       station_name: form.station_name.trim(),
       station_type: form.station_type.trim(),
       location_id: form.location_id || null,
+      sector2_id: form.sector2_id || null,
       latitude: form.latitude ? Number(form.latitude) : null,
       longitude: form.longitude ? Number(form.longitude) : null,
       address_text: form.address_text.trim() || null,
@@ -185,6 +206,11 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
       email: form.email.trim() || null,
       is_active: !!form.is_active,
     };
+    
+    // Debug: Log the payload to see what's being sent
+    console.log('Station payload being sent:', payload);
+    console.log('Form sector2_id value:', form.sector2_id);
+    console.log('Payload sector2_id value:', payload.sector2_id);
     if (!payload.station_name) {
       setError('Name is required.');
       return;
@@ -204,7 +230,10 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
       onSaved?.();
       onClose?.();
     } catch (e) {
-      setError(e?.message || 'Failed to save station.');
+      console.error('Station save error:', e);
+      const errorMessage = e?.response?.data?.detail || e?.message || 'Failed to save station.';
+      setError(errorMessage);
+      // Don't close the form on error - let user see the error and try again
     } finally {
       setSaving(false);
     }
@@ -282,6 +311,25 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="input-group">
+          <div className="input-label">
+            Secondary Sector
+            <span style={{ fontSize: '10px', color: 'var(--muted)', marginLeft: '4px' }}>
+              (optional – maximum 2 sectors per station)
+            </span>
+          </div>
+          <select className="select" value={sector2Id || ''} onChange={handleSector2Change}>
+            <option value="">No secondary sector…</option>
+            {sectors
+              .filter(s => s.location_id !== sectorId) // Don't allow same sector as primary
+              .map((s) => (
+                <option key={s.location_id} value={s.location_id}>
+                  {s.location_name}
+                </option>
+              ))}
+          </select>
         </div>
 
         <div className="form-grid">

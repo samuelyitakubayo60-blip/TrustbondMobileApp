@@ -54,28 +54,37 @@ def _supervisor_scope(current_user: PoliceUser, db: Session) -> tuple[int, set[i
     
     sector_location_ids = set()
     if supervisor_station_id is not None:
-        # Get station to find its sector location
+        # Get station to find its sector location(s)
         from app.models.station import Station
         station = db.query(Station).filter(Station.station_id == supervisor_station_id).first()
         
-        if station and station.location_id:
-            # Get sector location (station should be at sector level)
-            sector_location_id = station.location_id
+        if station:
+            # Handle both primary and secondary sectors
+            sector_location_ids_list = []
             
-            # Find all villages/cells in this sector - same logic as reports API
-            sector_locations_query = db.query(Location.location_id).filter(
-                or_(
-                    Location.location_id == sector_location_id,  # The sector itself
-                    Location.parent_location_id == sector_location_id,  # Direct children (cells)
-                    # Also get villages under cells in this sector
-                    Location.parent_location_id.in_(
-                        db.query(Location.location_id).filter(
-                            Location.parent_location_id == sector_location_id
+            # Primary sector
+            if station.location_id:
+                sector_location_ids_list.append(station.location_id)
+            
+            # Secondary sector (if exists)
+            if station.sector2_id:
+                sector_location_ids_list.append(station.sector2_id)
+            
+            # Find all villages/cells in all sectors
+            for sector_location_id in sector_location_ids_list:
+                sector_locations_query = db.query(Location.location_id).filter(
+                    or_(
+                        Location.location_id == sector_location_id,  # The sector itself
+                        Location.parent_location_id == sector_location_id,  # Direct children (cells)
+                        # Also get villages under cells in this sector
+                        Location.parent_location_id.in_(
+                            db.query(Location.location_id).filter(
+                                Location.parent_location_id == sector_location_id
+                            ).subquery()
                         )
                     )
                 )
-            )
-            sector_location_ids = {loc[0] for loc in sector_locations_query.all()}
+                sector_location_ids.update({loc[0] for loc in sector_locations_query.all()})
     else:
         # Fallback to assigned_location_id if station_id is None
         assigned_location_id = getattr(current_user, "assigned_location_id", None)

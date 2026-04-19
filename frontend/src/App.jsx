@@ -29,6 +29,7 @@ import AddIncidentModal from "./components/Modals/AddIncidentModal";
 import NewCaseModal from "./components/Modals/NewCaseModal";
 import LinkCaseModal from "./components/Modals/LinkCaseModal";
 import StationModal from "./components/Modals/StationModal";
+import StationDetailModal from "./components/Modals/StationDetailModal";
 import api from "./api/client";
 
 function App() {
@@ -678,6 +679,11 @@ function App() {
             setTimeout(() => setCurrentScreen("stations"), 0);
           }
         }}
+      />
+      <StationDetailModal
+        isOpen={modals.viewStation}
+        onClose={() => closeModal("viewStation")}
+        station={selectedStation}
       />
     </>
   );

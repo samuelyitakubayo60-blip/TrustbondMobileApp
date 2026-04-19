@@ -166,7 +166,7 @@ const AddUserModal = ({ isOpen, onClose, onSaved }) => {
                 <option value="">None</option>
                 {stations.map((s) => (
                   <option key={s.station_id} value={s.station_id}>
-                    {s.station_name}
+                    {s.station_name}{s.sector2_name ? ` (${s.location_name} + ${s.sector2_name})` : s.location_name ? ` (${s.location_name})` : ''}
                   </option>
                 ))}
               </select>

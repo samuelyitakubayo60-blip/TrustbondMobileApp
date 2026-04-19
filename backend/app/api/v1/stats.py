@@ -2,7 +2,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func, or_
 
@@ -22,6 +22,173 @@ from app.models.ml_prediction import MLPrediction
 from app.models.case import Case
 
 router = APIRouter(prefix="/stats", tags=["stats"])
+
+
+@router.get("/station/{station_id}")
+def get_station_stats(
+    station_id: int,
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    """Return statistics for a specific station."""
+    # Only admins and supervisors can view station stats
+    current_role = getattr(current_user, "role", None)
+    if current_role not in ["admin", "supervisor"]:
+        raise HTTPException(status_code=403, detail="Only admins and supervisors can view station statistics")
+    
+    since_7d = datetime.now(timezone.utc) - timedelta(days=7)
+    since_30d = datetime.now(timezone.utc) - timedelta(days=30)
+    
+    # Get station information
+    station = db.query(Station).filter(Station.station_id == station_id).first()
+    if not station:
+        raise HTTPException(status_code=404, detail="Station not found")
+    
+    # Build location filter for dual sectors
+    sector_location_ids = []
+    if station.location_id:
+        sector_location_id = station.location_id
+        sector_locations_query = db.query(Location.location_id).filter(
+            or_(
+                Location.location_id == sector_location_id,
+                Location.parent_location_id == sector_location_id,
+                Location.location_id.in_(
+                    db.query(Location.location_id).filter(
+                        Location.parent_location_id.in_(
+                            db.query(Location.location_id).filter(
+                                Location.parent_location_id == sector_location_id
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
+    
+    if station.sector2_id:
+        sector2_location_id = station.sector2_id
+        sector2_locations_query = db.query(Location.location_id).filter(
+            or_(
+                Location.location_id == sector2_location_id,
+                Location.parent_location_id == sector2_location_id,
+                Location.location_id.in_(
+                    db.query(Location.location_id).filter(
+                        Location.parent_location_id.in_(
+                            db.query(Location.location_id).filter(
+                                Location.parent_location_id == sector2_location_id
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
+    
+    sector_location_ids = list(set(sector_location_ids))
+    
+    # Reports for this station
+    station_report_filter = or_(
+        Report.handling_station_id == station_id,
+        Report.assignments.any(
+            ReportAssignment.police_user.has(PoliceUser.station_id == station_id)
+        ),
+        Report.village_location_id.in_(sector_location_ids) if sector_location_ids else False
+    )
+    
+    # Total reports
+    total_reports = db.query(func.count(Report.report_id)).filter(station_report_filter).scalar() or 0
+    
+    # Reports in last 7 days
+    reports_7d = db.query(func.count(Report.report_id)).filter(
+        station_report_filter,
+        Report.reported_at >= since_7d
+    ).scalar() or 0
+    
+    # Verified reports
+    verified_reports = db.query(func.count(Report.report_id)).filter(
+        station_report_filter,
+        Report.verified == True
+    ).scalar() or 0
+    
+    # Pending reports (not verified, not rejected)
+    pending_reports = db.query(func.count(Report.report_id)).filter(
+        station_report_filter,
+        Report.verified == False,
+        or_(Report.status.is_(None), Report.status != 'rejected')
+    ).scalar() or 0
+    
+    # Active cases for this station
+    active_cases = db.query(func.count(Case.case_id)).filter(
+        Case.assigned_to.has(PoliceUser.station_id == station_id),
+        or_(Case.status == 'open', Case.status == 'investigating')
+    ).scalar() or 0
+    
+    # Officers count
+    officers_count = db.query(func.count(PoliceUser.police_user_id)).filter(
+        PoliceUser.station_id == station_id,
+        PoliceUser.is_active == True
+    ).scalar() or 0
+    
+    # Detailed report statistics
+    # Flagged reports (high trust score threshold)
+    flagged_reports = db.query(func.count(Report.report_id)).filter(
+        station_report_filter,
+        Report.verified == True,
+        Report.trust_score >= 80
+    ).scalar() or 0
+    
+    # Auto-confirmed reports (verified without police review)
+    auto_confirmed_reports = db.query(func.count(Report.report_id)).filter(
+        station_report_filter,
+        Report.verified == True,
+        Report.police_review_id.is_(None)
+    ).scalar() or 0
+    
+    # Confirmed by officer (verified with police review)
+    officer_confirmed_reports = db.query(func.count(Report.report_id)).filter(
+        station_report_filter,
+        Report.verified == True,
+        Report.police_review_id.isnot(None)
+    ).scalar() or 0
+    
+    # Rejected reports
+    rejected_reports = db.query(func.count(Report.report_id)).filter(
+        station_report_filter,
+        Report.status == 'rejected'
+    ).scalar() or 0
+    
+    # Auto-rejected reports (rejected without police review)
+    auto_rejected_reports = db.query(func.count(Report.report_id)).filter(
+        station_report_filter,
+        Report.status == 'rejected',
+        Report.police_review_id.is_(None)
+    ).scalar() or 0
+    
+    # Manually rejected reports (rejected with police review)
+    manually_rejected_reports = db.query(func.count(Report.report_id)).filter(
+        station_report_filter,
+        Report.status == 'rejected',
+        Report.police_review_id.isnot(None)
+    ).scalar() or 0
+    
+    return {
+        'total_reports': total_reports,
+        'reports_7d': reports_7d,
+        'verified_reports': verified_reports,
+        'pending_reports': pending_reports,
+        'flagged_reports': flagged_reports,
+        'auto_confirmed_reports': auto_confirmed_reports,
+        'officer_confirmed_reports': officer_confirmed_reports,
+        'rejected_reports': rejected_reports,
+        'auto_rejected_reports': auto_rejected_reports,
+        'manually_rejected_reports': manually_rejected_reports,
+        'active_cases': active_cases,
+        'officers_count': officers_count,
+        'station_name': station.station_name,
+        'station_type': station.station_type,
+        'primary_sector': station.location.location_name if station.location else None,
+        'secondary_sector': station.sector2.location_name if station.sector2 else None,
+    }
 
 
 @router.get("/dashboard")
@@ -45,30 +212,58 @@ def get_dashboard_stats(
         station_id = getattr(current_user, "station_id", None)
         
         if station_id is not None:
-            # Get station to find its sector location
+            # Get station to find its sector location(s)
             station = db.query(Station).filter(Station.station_id == station_id).first()
-            if station and station.location_id:
-                # Get sector location (station should be at sector level)
-                sector_location_id = station.location_id
+            if station:
+                # Handle both primary and secondary sectors
+                sector_location_ids = []
                 
-                # Find all villages/cells in this sector
-                sector_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector_location_id,  # The sector itself
-                        Location.parent_location_id == sector_location_id,  # Direct children (cells)
-                        # Also get villages under cells in this sector
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector_location_id
+                # Primary sector
+                if station.location_id:
+                    sector_location_id = station.location_id
+                    # Find all villages/cells in this sector
+                    sector_locations_query = db.query(Location.location_id).filter(
+                        or_(
+                            Location.location_id == sector_location_id,  # The sector itself
+                            Location.parent_location_id == sector_location_id,  # Direct children (cells)
+                            # Also get villages under cells in this sector
+                            Location.location_id.in_(
+                                db.query(Location.location_id).filter(
+                                    Location.parent_location_id.in_(
+                                        db.query(Location.location_id).filter(
+                                            Location.parent_location_id == sector_location_id
+                                        )
                                     )
                                 )
                             )
                         )
                     )
-                )
-                sector_location_ids = [loc[0] for loc in sector_locations_query.all()]
+                    sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
+                
+                # Secondary sector (if exists)
+                if station.sector2_id:
+                    sector2_location_id = station.sector2_id
+                    # Find all villages/cells in secondary sector
+                    sector2_locations_query = db.query(Location.location_id).filter(
+                        or_(
+                            Location.location_id == sector2_location_id,  # The sector itself
+                            Location.parent_location_id == sector2_location_id,  # Direct children (cells)
+                            # Also get villages under cells in this sector
+                            Location.location_id.in_(
+                                db.query(Location.location_id).filter(
+                                    Location.parent_location_id.in_(
+                                        db.query(Location.location_id).filter(
+                                            Location.parent_location_id == sector2_location_id
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                    sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
+                
+                # Remove duplicates
+                sector_location_ids = list(set(sector_location_ids))
                 
                 # Filter reports by location hierarchy (village_location_id in sector)
                 assigned_qs = (
@@ -114,12 +309,48 @@ def get_dashboard_stats(
     )
     by_status = {str(r[0]) if r[0] is not None else None: int(r[1]) for r in by_status_rows}
 
+    # Debug: Let's see what reports are being filtered
+    print(f"DEBUG: Dashboard user role: {current_role}")
+    print(f"DEBUG: Dashboard user station_id: {getattr(current_user, 'station_id', None)}")
+    
+    # Count total reports for admin
+    total_reports_debug = db.query(func.count(Report.report_id)).scalar() or 0
+    print(f"DEBUG: Total reports in database: {total_reports_debug}")
+    
+    # Show report status breakdown
+    status_breakdown = (
+        db.query(Report.status, func.count(Report.report_id))
+        .group_by(Report.status)
+        .all()
+    )
+    print(f"DEBUG: Report status breakdown: {dict(status_breakdown)}")
+    
+    # Show verification status breakdown
+    verification_breakdown = (
+        db.query(Report.verification_status, func.count(Report.report_id))
+        .group_by(Report.verification_status)
+        .all()
+    )
+    print(f"DEBUG: Verification status breakdown: {dict(verification_breakdown)}")
+    
+    # Count reports that need police review
     pending_review = (
         db.query(func.count(Report.report_id))
         .filter(report_filter, needs_police_review_clause())
         .scalar()
         or 0
     )
+    
+    # Also count simple pending (not verified, not rejected) for comparison
+    simple_pending = (
+        db.query(func.count(Report.report_id))
+        .filter(report_filter, Report.verification_status != 'verified', or_(Report.status.is_(None), Report.status != 'rejected'))
+        .scalar()
+        or 0
+    )
+    
+    print(f"DEBUG: Dashboard pending_review (needs_police_review_clause): {pending_review}")
+    print(f"DEBUG: Dashboard simple_pending (not verified, not rejected): {simple_pending}")
     pending = int(pending_review)
     verified = int(by_status.get("verified", 0))
     flagged = int(by_status.get("flagged", 0) + by_status.get("rejected", 0))

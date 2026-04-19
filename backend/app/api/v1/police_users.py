@@ -174,11 +174,27 @@ def list_police_users(
     current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)] = None,
     skip: int = 0,
     limit: int = Query(50, le=200),
+    station_id: Optional[int] = Query(
+        None,
+        description="Optional station_id to filter officers by assigned station. Admins only.",
+    ),
 ):
     query = db.query(PoliceUser)
 
+    # If station_id is provided, admins can filter any station, supervisors only their own
+    if station_id is not None:
+        if current_user.role == "admin":
+            query = query.filter(PoliceUser.station_id == station_id)
+        elif current_user.role == "supervisor":
+            if current_user.station_id is None:
+                raise HTTPException(status_code=403, detail="Supervisor station is not configured")
+            if station_id != current_user.station_id:
+                raise HTTPException(status_code=403, detail="Supervisors can only view their own station")
+            query = query.filter(PoliceUser.station_id == station_id)
+        else:
+            raise HTTPException(status_code=403, detail="Only admins and supervisors can filter by station_id")
     # Supervisors see only officers in their own station/area.
-    if current_user.role == "supervisor":
+    elif current_user.role == "supervisor":
         if current_user.station_id is None:
             raise HTTPException(status_code=403, detail="Supervisor station is not configured")
         query = query.filter(PoliceUser.station_id == current_user.station_id)

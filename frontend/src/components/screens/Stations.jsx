@@ -164,7 +164,14 @@ const Stations = ({ openModal, wsRefreshKey }) => {
                   <td><span className="badge b-blue">{s.station_code}</span></td>
                   <td><strong>{s.station_name}</strong></td>
                   <td style={{ fontSize: '11px', color: 'var(--muted)' }}>{s.station_type}</td>
-                  <td style={{ fontSize: '11px', color: 'var(--muted)' }}>{s.location_name || '—'}</td>
+                  <td style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                    {s.location_name || '—'}
+                    {s.sector2_name && (
+                      <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>
+                        + {s.sector2_name}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ fontSize: '11px', color: 'var(--muted)' }}>
                     {s.phone_number || '—'}
                     {s.email ? ` · ${s.email}` : ''}
@@ -176,6 +183,12 @@ const Stations = ({ openModal, wsRefreshKey }) => {
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '4px' }}>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => openModal('viewStation', s)}
+                      >
+                        View Details
+                      </button>
                       <button
                         className="btn btn-outline btn-sm"
                         onClick={() => openModal('editStation', s)}

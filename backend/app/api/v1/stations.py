@@ -29,6 +29,8 @@ def _to_response(st: Station) -> StationResponse:
         station_type=st.station_type,
         location_id=st.location_id,
         location_name=st.location.location_name if st.location else None,
+        sector2_id=st.sector2_id,
+        sector2_name=st.sector2.location_name if st.sector2 else None,
         latitude=float(st.latitude) if st.latitude is not None else None,
         longitude=float(st.longitude) if st.longitude is not None else None,
         address_text=st.address_text,
@@ -48,7 +50,7 @@ def list_stations(
     only_active: bool = Query(False),
 ):
     """List police stations (read-only for officers)."""
-    q = db.query(Station).options(joinedload(Station.location))
+    q = db.query(Station).options(joinedload(Station.location), joinedload(Station.sector2))
     if only_active:
         q = q.filter(Station.is_active == True)
     if search:
@@ -70,6 +72,7 @@ def create_station(
     db: Session = Depends(get_db),
 ):
     """Create a new station."""
+    print(f"DEBUG: Create payload received: {payload}")
     # If code provided, enforce uniqueness; otherwise auto-generate.
     code = (payload.station_code or "").strip() or None
     if code:
@@ -84,11 +87,13 @@ def create_station(
                 detail="A station with this code already exists",
             )
 
+    print(f"DEBUG: Creating station with sector2_id: {payload.sector2_id}")
     st = Station(
         station_code=code,
         station_name=payload.station_name.strip(),
         station_type=payload.station_type.strip(),
         location_id=payload.location_id,
+        sector2_id=payload.sector2_id,
         latitude=payload.latitude,
         longitude=payload.longitude,
         address_text=payload.address_text,
@@ -96,6 +101,7 @@ def create_station(
         email=payload.email,
         is_active=payload.is_active,
     )
+    print(f"DEBUG: Station created with sector2_id: {st.sector2_id}")
     db.add(st)
     db.flush()
 
@@ -115,7 +121,7 @@ def create_station(
             asyncio.run(manager.broadcast({"type": "refresh_data", "entity": "station"}))
     background_tasks.add_task(notify)
 
-    st = db.query(Station).options(joinedload(Station.location)).get(st.station_id)
+    st = db.query(Station).options(joinedload(Station.location), joinedload(Station.sector2)).get(st.station_id)
     return _to_response(st)
 
 
@@ -126,7 +132,7 @@ def get_station(
     db: Session = Depends(get_db),
 ):
     """Get one station by id."""
-    st = db.query(Station).options(joinedload(Station.location)).get(station_id)
+    st = db.query(Station).options(joinedload(Station.location), joinedload(Station.sector2)).get(station_id)
     if not st:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
     return _to_response(st)
@@ -141,6 +147,7 @@ def update_station(
     db: Session = Depends(get_db),
 ):
     """Update a station."""
+    print(f"DEBUG: Update payload received: {payload}")
     st = db.query(Station).get(station_id)
     if not st:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
@@ -164,6 +171,11 @@ def update_station(
         st.station_type = payload.station_type.strip()
     if payload.location_id is not None:
         st.location_id = payload.location_id
+    if payload.sector2_id is not None:
+        print(f"DEBUG: Setting sector2_id to {payload.sector2_id}")
+        st.sector2_id = payload.sector2_id
+    else:
+        print(f"DEBUG: sector2_id is None in payload")
     if payload.latitude is not None:
         st.latitude = payload.latitude
     if payload.longitude is not None:
@@ -189,7 +201,7 @@ def update_station(
             asyncio.run(manager.broadcast({"type": "refresh_data", "entity": "station"}))
     background_tasks.add_task(notify)
 
-    st = db.query(Station).options(joinedload(Station.location)).get(st.station_id)
+    st = db.query(Station).options(joinedload(Station.location), joinedload(Station.sector2)).get(st.station_id)
     return _to_response(st)
 
 
