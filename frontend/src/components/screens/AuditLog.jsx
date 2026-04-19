@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '../../api/client';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 10;
 
 const AuditLog = ({ wsRefreshKey }) => {
   const [logs, setLogs] = useState([]);
@@ -51,12 +51,13 @@ const AuditLog = ({ wsRefreshKey }) => {
       const q = searchText.trim().toLowerCase();
       const blob = [
         a.actor_type,
+        a.actor_role || '',
         a.actor_name,
         a.action_type,
         a.entity_type,
         a.entity_id,
-        a.details,
-        a.result,
+        a.details ? JSON.stringify(a.details) : '',
+        a.sensitivity_level || '',
       ].join(' ');
       if (!blob.toLowerCase().includes(q)) {
         return false;
@@ -206,14 +207,10 @@ const AuditLog = ({ wsRefreshKey }) => {
               <tr>
                 <th>#</th>
                 <th>Time</th>
-                <th>Actor</th>
-                <th>Action</th>
-                <th>Entity</th>
-                <th>Entity ID</th>
-                <th>Details</th>
-                <th>Result</th>
+                <th>Who</th>
+                <th>Role</th>
+                <th>What They Did</th>
                 <th>IP Address</th>
-                <th>User Agent</th>
               </tr>
             </thead>
             <tbody>
@@ -222,41 +219,76 @@ const AuditLog = ({ wsRefreshKey }) => {
                   <td style={{ fontSize: "12px", color: "var(--muted)", textAlign: "center" }}>
                     {offset + index + 1}
                   </td>
-                    <td style={{ fontSize: '10px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                      {a.created_at ? new Date(a.created_at).toLocaleString() : '—'}
-                    </td>
-                    <td>
-                      <span className="badge b-blue" style={{ fontSize: '9px' }}>
-                        {a.actor_badge || a.actor_type || 'SYSTEM'}
+                  <td style={{ fontSize: '10px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                    {a.created_at ? new Date(a.created_at).toLocaleString() : '—'}
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {a.actor_type === 'police_user' ? (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span className="badge b-blue" style={{ fontSize: '9px' }}>
+                              {a.actor_badge || 'BADGE'}
+                            </span>
+                            <span style={{ fontSize: '11px', fontWeight: '500' }}>
+                              {a.actor_name || 'Unknown Officer'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '9px', color: 'var(--muted)' }}>
+                            Police User
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span className="badge b-gray" style={{ fontSize: '9px' }}>
+                            {a.actor_type || 'SYSTEM'}
+                          </span>
+                          <span style={{ fontSize: '10px', color: 'var(--muted)' }}>
+                            {a.actor_name || 'System'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    {a.actor_role && (
+                      <span className={`badge ${
+                        a.actor_role === 'admin' ? 'b-purple' : 
+                        a.actor_role === 'supervisor' ? 'b-orange' : 
+                        'b-blue'
+                      }`} style={{ fontSize: '8px' }}>
+                        {a.actor_role}
                       </span>
-                    </td>
-                    <td><span className="badge b-green" style={{ fontSize: '9px' }}>{a.action_type}</span></td>
-                    <td style={{ fontSize: '11px' }}>{a.entity_type || '—'}</td>
-                    <td style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--muted)' }}>{a.entity_id || '—'}</td>
-                    <td style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                      {a.action_details ? JSON.stringify(a.action_details) : '—'}
-                    </td>
-                    <td>
-                      <span className={`badge ${a.success ? 'b-green' : 'b-red'}`} style={{ fontSize: '9px' }}>
-                        {a.success ? 'Success' : 'Failed'}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--muted)' }}>{a.ip_address || '—'}</td>
-                    <td style={{ fontSize: '9px', color: 'var(--muted)', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {a.user_agent || '—'}
-                    </td>
-                  </tr>
-                ))}
+                    )}
+                  </td>
+                  <td style={{ fontSize: '11px' }}>
+                    <div>
+                      <span className="badge b-green" style={{ fontSize: '9px', marginRight: '6px' }}>{a.action_type}</span>
+                      {a.entity_type && (
+                        <span style={{ fontSize: '10px', color: 'var(--muted)' }}>
+                          {a.entity_type}{a.entity_id ? ` (${a.entity_id})` : ''}
+                        </span>
+                      )}
+                      {a.details && (
+                        <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {typeof a.details === 'string' ? a.details : JSON.stringify(a.details)}
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--muted)' }}>{a.ip_address || '—'}</td>
+                </tr>
+              ))}
               {(!paginatedLogs.length && !loading) && (
                 <tr>
-                  <td colSpan={10} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
+                  <td colSpan={6} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
                     No audit entries.
                   </td>
                 </tr>
               )}
               {loading && (
                 <tr>
-                  <td colSpan={10} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
+                  <td colSpan={6} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
                     Loading...
                   </td>
                 </tr>

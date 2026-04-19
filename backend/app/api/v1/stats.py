@@ -133,21 +133,21 @@ def get_station_stats(
     # Flagged reports (high trust score threshold)
     flagged_reports = db.query(func.count(Report.report_id)).filter(
         station_report_filter,
-        Report.verified == True,
+        Report.verification_status == 'verified',
         Report.trust_score >= 80
     ).scalar() or 0
     
     # Auto-confirmed reports (verified without police review)
     auto_confirmed_reports = db.query(func.count(Report.report_id)).filter(
         station_report_filter,
-        Report.verified == True,
+        Report.verification_status == 'verified',
         Report.police_review_id.is_(None)
     ).scalar() or 0
     
     # Confirmed by officer (verified with police review)
     officer_confirmed_reports = db.query(func.count(Report.report_id)).filter(
         station_report_filter,
-        Report.verified == True,
+        Report.verification_status == 'verified',
         Report.police_review_id.isnot(None)
     ).scalar() or 0
     
@@ -336,7 +336,7 @@ def get_dashboard_stats(
     # Count reports that need police review
     pending_review = (
         db.query(func.count(Report.report_id))
-        .filter(report_filter, needs_police_review_clause())
+        .filter(report_filter, Report.verification_status == 'verified')
         .scalar()
         or 0
     )

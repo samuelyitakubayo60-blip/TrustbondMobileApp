@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '../../api/client';
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 const ActiveSessions = ({ wsRefreshKey }) => {
   const [sessions, setSessions] = useState([]);
