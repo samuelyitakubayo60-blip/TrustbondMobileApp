@@ -198,8 +198,8 @@ class MobileVerificationService {
         DateTime now = DateTime.now();
         Duration timeDiff = now.difference(fileCreated);
         
-        // If file was created more than 24 hours ago, it might be old content
-        if (timeDiff.inHours > 24) {
+        // If file was created more than 12 hours ago, it might be old content
+        if (timeDiff.inHours > 12) {
           fileResult['old_file'] = true;
           fileResult['valid'] = false;
           result['all_valid'] = false;

@@ -89,7 +89,7 @@ const isReportVerified = (report, mlPrediction) => {
       mlPrediction.trust_score !== undefined
     ) {
       const mlConfidence = parseFloat(mlPrediction.trust_score) || 0;
-      return mlConfidence >= 80; // Auto-verified if ML confidence >= 80
+      return mlConfidence >= 70; // Auto-verified if ML confidence >= 70 (optimized threshold)
     }
   }
 
@@ -133,7 +133,7 @@ const getVerificationStatus = (report, mlPrediction) => {
     ) {
       const mlConfidence = parseFloat(mlPrediction.trust_score) || 0;
 
-      if (mlConfidence >= 80) {
+      if (mlConfidence >= 70) {
         return (
           <div
             style={{
@@ -144,7 +144,7 @@ const getVerificationStatus = (report, mlPrediction) => {
             }}
           >
             <span style={{ color: "#4caf50", fontWeight: 600 }}>
-              Auto-verified
+              AI-verified
             </span>
             <span style={{ color: "#666" }}>
               — ML confidence: {mlConfidence.toFixed(1)}%
@@ -165,7 +165,7 @@ const getVerificationStatus = (report, mlPrediction) => {
               Low ML Confidence
             </span>
             <span style={{ color: "#666" }}>
-              - Current: {mlConfidence.toFixed(1)}% (needs ≥80%)
+              - Current: {mlConfidence.toFixed(1)}% (needs ≥70%)
             </span>
           </div>
         );
@@ -260,20 +260,25 @@ const getVerificationRequirements = (report, mlPrediction) => {
     ) {
       const mlConfidence = parseFloat(mlPrediction.trust_score) || 0;
 
-      if (mlConfidence < 80) {
+      if (mlConfidence < 70) {
         return (
           <div>
             <div style={{ marginBottom: "4px" }}>
-              ML confidence too low ({mlConfidence.toFixed(1)}% &lt; 80%)
+              ML confidence too low ({mlConfidence.toFixed(1)}% &lt; 70%)
             </div>
             <div style={{ marginBottom: "4px" }}>
               <strong>Option 1:</strong> Assign to officer for confirmation
             </div>
+            <div style={{ marginBottom: "4px" }}>
+              <strong>Option 2:</strong> Wait for more reports from this device
+            </div>
             <div>
-              <strong>Option 2:</strong> Wait for higher ML confidence (≥80%)
+              <strong>Option 3:</strong> Flag if suspicious patterns detected
             </div>
           </div>
         );
+      } else {
+        return null; // ML confidence is sufficient for AI verification
       }
     } else {
       return (
@@ -347,6 +352,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
   const [linkingCase, setLinkingCase] = useState(false);
   const [reportCase, setReportCase] = useState(null);
   const [caseLoading, setCaseLoading] = useState(false);
+  const [locationHistory, setLocationHistory] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   useEffect(() => {
     if (!reportId) {
@@ -394,8 +401,9 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
         if (cancelled) return;
         setMlPrediction(res);
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
+        console.log("ML prediction not available for this report:", error.message);
         setMlPrediction(null);
       })
       .finally(() => {
@@ -406,17 +414,46 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
     };
   }, [report?.report_id]);
 
+  const loadReportCase = async () => {
+    if (!report?.case_id) {
+      setReportCase(null);
+      return;
+    }
+    
+    setCaseLoading(true);
+    try {
+      const caseData = await api.get(`/api/v1/cases/${report.case_id}`);
+      setReportCase(caseData);
+    } catch (e) {
+      console.error("Failed to load case details:", e);
+      setReportCase(null);
+    } finally {
+      setCaseLoading(false);
+    }
+  };
+
+  const loadLocationHistory = async () => {
+    if (!report?.report_id) return;
+    
+    setLocationLoading(true);
+    try {
+      const response = await api.get(`/api/v1/reports/${report.report_id}/location-history`);
+      setLocationHistory(response);
+    } catch (e) {
+      console.error("Failed to load location history:", e);
+      setLocationHistory(null);
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadReportCase();
   }, [report?.case_id]);
 
-  if (loading) {
-    return (
-      <div>
-        <div style={{ marginBottom: "4px" }}>Loading...</div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    loadLocationHistory();
+  }, [report?.report_id]);
 
   // Load related reports
   useEffect(() => {
@@ -440,6 +477,14 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
       cancelled = true;
     };
   }, [report]);
+
+  if (loading) {
+    return (
+      <div>
+        <div style={{ marginBottom: "4px" }}>Loading...</div>
+      </div>
+    );
+  }
 
   const refreshInBackground = async () => {
     if (!reportId) return;
@@ -630,32 +675,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
     }
   };
 
-  const loadReportCase = async () => {
-    if (!report?.case_id) {
-      setReportCase(null);
-      return;
-    }
-    
-    setCaseLoading(true);
-    try {
-      const caseData = await api.get(`/api/v1/cases/${report.case_id}`);
-      setReportCase(caseData);
-    } catch (e) {
-      console.error("Failed to load case details:", e);
-      setReportCase(null);
-    } finally {
-      setCaseLoading(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>
-        Loading report…
-      </div>
-    );
-  }
-
   if (error || !report) {
     return (
       <div style={{ padding: 16 }}>
@@ -695,15 +714,15 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
     const configs = {
       pending: { color: "b-yellow", text: "Pending Review" },
       under_review: { color: "b-yellow", text: "Pending Review" },
-      passed: { color: "b-green", text: "Verified" },
+      passed: { color: "b-green", text: "AI Verified" }, // AI-verified reports
       verified: { color: "b-green", text: "Verified" },
-      flagged: { color: "b-red", text: "Flagged" },
+      flagged: { color: "b-orange", text: "Needs Review" }, // Medium confidence
       rejected: { color: "b-red", text: "Rejected" },
     };
     return configs[status] || { color: "b-gray", text: "Unknown" };
   };
 
-  const statusConfig = getStatusConfig(report.status || report.rule_status);
+  const statusConfig = getStatusConfig(report.status || report.rule_status || "pending");
 
   return (
     <>
@@ -964,15 +983,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 <div className="dfl">Submitted At</div>
                 <div className="dfv" style={{ fontSize: "12px" }}>
                   {createdAt}
-                </div>
-              </div>
-              <div className="detail-field">
-                <div className="dfl">Device</div>
-                <div
-                  className="dfv"
-                  style={{ fontSize: "11px", fontFamily: "monospace" }}
-                >
-                  {deviceShort}
                 </div>
               </div>
             </div>
@@ -1253,81 +1263,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   </div>
                 </div>
 
-                {/* Location History & Movement */}
-                <div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: "var(--muted)",
-                      fontWeight: 800,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Location History
-                  </div>
-                  <div style={{ marginTop: 6, color: "var(--text)" }}>
-                    {report.metadata_json?.location_history ? (
-                      <>
-                        <div style={{ fontSize: 11 }}>
-                          Last {report.metadata_json.location_history.length} locations
-                        </div>
-                        <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
-                          {(() => {
-                            const history = report.metadata_json.location_history;
-                            if (history.length === 0) return "No history";
-                            
-                            const latest = history[history.length - 1];
-                            const earliest = history[0];
-                            
-                            // Calculate time span
-                            const timeSpan = latest.timestamp && earliest.timestamp
-                              ? Math.round((new Date(latest.timestamp) - new Date(earliest.timestamp)) / (1000 * 60 * 60 * 24))
-                              : 0;
-                            
-                            // Calculate movement radius if we have coordinates
-                            let maxDistance = 0;
-                            if (history.length > 1 && latest.latitude && latest.longitude && earliest.latitude && earliest.longitude) {
-                              // Simple distance calculation (haversine approximation)
-                              const R = 6371; // Earth's radius in km
-                              const dLat = (latest.latitude - earliest.latitude) * Math.PI / 180;
-                              const dLon = (latest.longitude - earliest.longitude) * Math.PI / 180;
-                              const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                                        Math.cos(earliest.latitude * Math.PI / 180) * Math.cos(latest.latitude * Math.PI / 180) *
-                                        Math.sin(dLon/2) * Math.sin(dLon/2);
-                              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                              maxDistance = R * c;
-                            }
-                            
-                            return (
-                              <>
-                                Over {timeSpan} {timeSpan === 1 ? 'day' : 'days'}
-                                {maxDistance > 0 && (
-                                  <span> · {maxDistance.toFixed(1)}km radius</span>
-                                )}
-                                {history.length > 5 && (
-                                  <span> · Active reporter</span>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
-                        {report.metadata_json.location_history.length > 1 && (
-                          <div style={{ marginTop: 4, fontSize: 10 }}>
-                            <span style={{ 
-                              color: report.metadata_json.location_history.length > 10 ? 'var(--success)' : 'var(--muted)' 
-                            }}>
-                              ● {report.metadata_json.location_history.length > 10 ? 'Highly active' : 
-                                 report.metadata_json.location_history.length > 5 ? 'Moderately active' : 'Low activity'}
-                            </span>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <span style={{ color: "var(--muted)" }}>No location history</span>
-                    )}
-                  </div>
-                </div>
-
                 {/* Location Consistency */}
                 <div>
                   <div
@@ -1462,47 +1397,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   </div>
                 </div>
 
-                {/* ML Insights */}
-                <div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: "var(--muted)",
-                      fontWeight: 800,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    AI Assessment
-                  </div>
-                  <div style={{ marginTop: 6, color: "var(--text)" }}>
-                    {mlPrediction ? (
-                      <>
-                        <div style={{ fontSize: 11 }}>
-                          Confidence:{" "}
-                          <span
-                            style={{
-                              fontWeight: 600,
-                              color:
-                                (normalizePercent(mlPrediction.confidence) || 0) >= 80
-                                  ? "var(--success)"
-                                  : (normalizePercent(mlPrediction.confidence) || 0) >= 60
-                                  ? "var(--warning)"
-                                  : "var(--danger)",
-                            }}
-                          >
-                            {Math.round(normalizePercent(mlPrediction.confidence) || 0)}%
-                          </span>
-                        </div>
-                        <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
-                          Result: {friendlyPredictionLabel(mlPrediction.prediction_label)}
-                        </div>
-                      </>
-                    ) : (
-                      <span style={{ color: "var(--muted)" }}>No AI assessment yet</span>
-                    )}
-                  </div>
-                </div>
-
                 {/* Context tags */}
                 <div>
                   <div
@@ -1567,6 +1461,120 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                           : "No"}
                     </div>
                   </div>
+                </div>
+
+                {/* Location History */}
+                <div style={{ gridColumn: "1 / -1", marginTop: "10px" }}>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: "var(--muted)",
+                      fontWeight: 800,
+                      textTransform: "uppercase",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    📍 Location History
+                  </div>
+                  {locationLoading ? (
+                    <div style={{ padding: "10px", textAlign: "center", color: "var(--muted)" }}>
+                      Loading location history...
+                    </div>
+                  ) : locationHistory ? (
+                    <div>
+                      <div style={{ 
+                        fontSize: "11px", 
+                        marginBottom: "8px",
+                        padding: "8px",
+                        backgroundColor: "var(--surface2)",
+                        borderRadius: "6px",
+                        border: "1px solid var(--border)"
+                      }}>
+                        <strong>Current Location:</strong> {locationHistory.current_location?.sector || 'Unknown'} {'>'} {locationHistory.current_location?.cell || 'Unknown'} {'>'} {locationHistory.current_location?.village || 'Unknown'}
+                        <div style={{ marginTop: "4px", color: "var(--muted)" }}>
+                          Total Reports: {locationHistory.total_reports} • Location Changes: {locationHistory.location_changes}
+                        </div>
+                      </div>
+                      
+                      {locationHistory.history.length > 1 && (
+                        <div style={{ 
+                          maxHeight: "200px", 
+                          overflowY: "auto",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
+                          backgroundColor: "var(--surface)"
+                        }}>
+                          {locationHistory.history.slice(0, 10).map((entry, index) => (
+                            <div
+                              key={entry.report_id}
+                              style={{
+                                padding: "8px 10px",
+                                borderBottom: index < locationHistory.history.slice(0, 10).length - 1 ? "1px solid var(--border)" : "none",
+                                fontSize: "10px",
+                                backgroundColor: entry.location_changed ? "rgba(255, 152, 0, 0.1)" : "transparent",
+                                borderLeft: entry.location_changed ? "3px solid var(--warning)" : "3px solid transparent"
+                              }}
+                            >
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                  <span style={{ fontWeight: "bold", color: "var(--primary)" }}>
+                                    {entry.report_number || entry.report_id.slice(0, 8)}
+                                  </span>
+                                  {entry.location_changed && (
+                                    <span style={{ 
+                                      marginLeft: "6px", 
+                                      padding: "2px 6px", 
+                                      backgroundColor: "var(--warning)", 
+                                      color: "white", 
+                                      borderRadius: "3px", 
+                                      fontSize: "9px",
+                                      fontWeight: "bold"
+                                    }}>
+                                      📍 MOVED
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ color: "var(--muted)" }}>
+                                  {new Date(entry.timestamp).toLocaleString()}
+                                </div>
+                              </div>
+                              <div style={{ marginTop: "4px", color: "var(--text)" }}>
+                                {entry.sector || 'Unknown'} {'>'} {entry.cell || 'Unknown'} {'>'} {entry.village || 'Unknown'}
+                              </div>
+                              {entry.latitude && entry.longitude && (
+                                <div style={{ marginTop: "2px", color: "var(--muted)", fontSize: "9px" }}>
+                                  📍 {entry.latitude.toFixed(6)}, {entry.longitude.toFixed(6)}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {locationHistory.history.length > 10 && (
+                        <div style={{ 
+                          marginTop: "6px", 
+                          textAlign: "center", 
+                          fontSize: "10px", 
+                          color: "var(--muted)" 
+                        }}>
+                          Showing 10 of {locationHistory.history.length} location entries
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      padding: "10px", 
+                      textAlign: "center", 
+                      color: "var(--muted)",
+                      fontSize: "11px",
+                      backgroundColor: "var(--surface2)",
+                      borderRadius: "6px",
+                      border: "1px solid var(--border)"
+                    }}>
+                      No location history available
+                    </div>
+                  )}
                 </div>
 
                               </div>

@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
-import 'package:record/record.dart';
+// import 'package:record/record.dart'; // Temporarily disabled
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
@@ -42,7 +42,7 @@ class ReportStep3Screen extends StatefulWidget {
 
 class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   final _picker = ImagePicker();
-  final _record = Record();
+  // final _record = Record(); // Temporarily disabled due to Windows compatibility issues
   final _statusService = DeviceStatusService();
   final _queueService = OfflineReportQueueService();
 
@@ -97,44 +97,15 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   }
 
   Future<void> _pickAudio() async {
-    try {
-      if (await _record.hasPermission()) {
-        setState(() => _isRecording = true);
-        
-        final directory = await getTemporaryDirectory();
-        final path = '${directory.path}/tb_audio_${DateTime.now().microsecondsSinceEpoch}.m4a';
-        
-        await _record.start(
-          path: path,
-          encoder: AudioEncoder.aacLc,
-          bitRate: 128000,
-          samplingRate: 44100,
-        );
-        
-        // Record for maximum 60 seconds
-        await Future.delayed(const Duration(seconds: 60));
-        
-        await _record.stop();
-        setState(() => _isRecording = false);
-        
-        setState(() => _files
-            .add(_EvidenceFile(path: path, type: 'audio', isLive: true)));
-      }
-    } catch (e) {
-      setState(() => _isRecording = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Audio recording failed: ${e.toString()}')),
-      );
-    }
+    // Audio recording temporarily disabled due to Windows compatibility issues
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Audio recording temporarily disabled on Windows')),
+    );
   }
 
   Future<void> _stopRecording() async {
-    try {
-      await _record.stop();
-      setState(() => _isRecording = false);
-    } catch (e) {
-      setState(() => _isRecording = false);
-    }
+    // Audio recording temporarily disabled
+    setState(() => _isRecording = false);
   }
 
   void _removeFile(int index) {
@@ -375,7 +346,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
                               height: 44,
                               color: AppColors.surface3,
                               child: const Icon(Icons.mic,
-                                  color: AppColors.accent3, size: 22),
+                                  color: AppColors.accent, size: 22),
                             ),
                 ),
                 const SizedBox(width: 10),
