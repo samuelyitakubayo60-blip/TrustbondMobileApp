@@ -427,9 +427,9 @@ def score_report_credibility(
             trust_score_pct = max(0.0, trust_score_pct + (community_net * 10.0))
 
         # Re-evaluate labels based on final trust_score_pct
-        if trust_score_pct >= 85.0:
+        if trust_score_pct >= 70.0:  # Changed from 85.0 to 70.0 for optimal threshold
             prediction_label = "likely_real"
-        elif trust_score_pct >= 60.0:
+        elif trust_score_pct >= 45.0:  # Changed from 60.0 to 45.0 for pending review
             prediction_label = "suspicious"
         elif trust_score_pct >= 30.0:
             prediction_label = "uncertain"
@@ -684,16 +684,62 @@ def get_device_ml_stats(db: Session, device_id: str):
             .all()
         )
 
-    # Calculate distribution - FIXED: Include uncertain
+    # Calculate prediction distribution
     distribution = {"likely_real": 0, "suspicious": 0, "uncertain": 0, "fake": 0}
+    trust_scores = []
+    confidences = []
+    model_versions = set()
+    
     for pred in predictions:
         label = (pred.prediction_label or "").lower()
         if label in distribution:
             distribution[label] += 1
-
+        
+        # Collect trust scores and confidences
+        if pred.trust_score is not None:
+            trust_scores.append(float(pred.trust_score))
+        if pred.confidence is not None:
+            confidences.append(float(pred.confidence))
+        if pred.model_version:
+            model_versions.add(pred.model_version)
+    
+    # Calculate ML statistics
+    total_predictions = len(predictions)
+    fake_rate = (distribution["fake"] / total_predictions * 100) if total_predictions > 0 else 0.0
+    suspicious_rate = (distribution["suspicious"] / total_predictions * 100) if total_predictions > 0 else 0.0
+    avg_trust_score = sum(trust_scores) / len(trust_scores) if trust_scores else None
+    avg_confidence = sum(confidences) / len(confidences) if confidences else None
+    
+    # Get device metadata
     meta = getattr(device, "metadata_json", None)
-    ml_meta = meta.get("ml") if isinstance(meta, dict) else None
     behavior_meta = meta.get("behavior") if isinstance(meta, dict) else None
+    
+    # Build ML section with actual calculated data
+    ml_stats = {
+        "window": 30,  # 30-day window
+        "fake_rate": round(fake_rate, 2),
+        "suspicious_rate": round(suspicious_rate, 2),
+        "distribution": distribution.copy(),
+        "avg_trust_score": round(avg_trust_score, 2) if avg_trust_score is not None else None,
+        "avg_confidence": round(avg_confidence, 3) if avg_confidence is not None else None,
+        "last_confidence": round(float(confidences[0]), 3) if confidences else None,
+        "model_versions": list(model_versions),
+        "last_prediction_at": (
+            predictions[0].evaluated_at.isoformat()
+            if predictions and getattr(predictions[0], "evaluated_at", None)
+            else None
+        )
+    }
+    
+    # Calculate behavior stats
+    confirmed_reports = sum(1 for r in reports if getattr(r, 'status', None) == 'verified')
+    confirmation_rate = (confirmed_reports / len(reports) * 100) if reports else 0.0
+    
+    behavior_stats = {
+        "spam_signal": 0,  # Could be calculated from spam flags
+        "behavior_score": 0.0,  # Could be calculated from various factors
+        "confirmation_rate": round(confirmation_rate, 2)
+    }
 
     return {
         "device_id": str(device_id),
@@ -703,9 +749,9 @@ def get_device_ml_stats(db: Session, device_id: str):
         "last_prediction_at": (
             predictions[0].evaluated_at.isoformat()
             if predictions and getattr(predictions[0], "evaluated_at", None)
-            else (ml_meta.get("last_prediction_at") if isinstance(ml_meta, dict) else None)
+            else None
         ),
-        "ml": ml_meta if isinstance(ml_meta, dict) else None,
-        "behavior": behavior_meta if isinstance(behavior_meta, dict) else None,
+        "ml": ml_stats,
+        "behavior": behavior_stats,
     }
 

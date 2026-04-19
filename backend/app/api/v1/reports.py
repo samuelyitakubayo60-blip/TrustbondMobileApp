@@ -43,7 +43,15 @@ from app.core.security import verify_password
 from app.core.websocket import manager
 from app.api.v1.auth import get_optional_user, get_current_user, get_current_admin_or_supervisor
 from app.api.v1.notifications import create_notification
-from app.core.report_rules import apply_rule_based_status, is_likely_screenshot_or_screen_recording
+from app.core.report_rules import (
+    apply_rule_based_status, 
+    is_likely_screenshot_or_screen_recording,
+    enhanced_screenshot_detection,
+    analyze_file_timing,
+    validate_evidence_source,
+    enhanced_screen_recording_detection,
+    validate_location_consistency
+)
 from app.core.report_review import (
     needs_police_review_clause,
     resolve_ml_prediction_for_report,
@@ -1091,11 +1099,96 @@ def create_report(
         db.rollback()
         raise HTTPException(status_code=409, detail="Report already exists")
 
-    # Add evidence files
+    # Enhanced evidence verification
+    evidence_metadata_list = []
+    verification_issues = []
+    
+    # Add evidence files with enhanced verification
     for evidence_data in report_data.evidence_files:
         normalized_url = _normalize_evidence_file_url(getattr(evidence_data, "file_url", None))
         if not normalized_url:
             continue
+        
+        # Enhanced verification for each evidence file
+        evidence_verification = {
+            "file_url": normalized_url,
+            "file_type": evidence_data.file_type,
+            "issues": []
+        }
+        
+        # 1. Enhanced screenshot detection
+        try:
+            # For now, we'll use filename-based detection
+            # In production, you'd download and analyze the actual file bytes
+            screenshot_result = enhanced_screenshot_detection(
+                filename=normalized_url.split('/')[-1],
+                file_path=normalized_url
+            )
+            if screenshot_result["is_screenshot"]:
+                evidence_verification["issues"].append({
+                    "type": "screenshot_detected",
+                    "methods": screenshot_result["detection_methods"],
+                    "details": screenshot_result["details"]
+                })
+                verification_issues.append(f"Screenshot detected: {screenshot_result['details']}")
+        except Exception as e:
+            print(f"Screenshot detection failed: {e}")
+        
+        # 2. File timing analysis
+        try:
+            timing_result = analyze_file_timing(
+                file_path=normalized_url,
+                file_created_at=evidence_data.captured_at
+            )
+            if timing_result["is_suspicious"]:
+                evidence_verification["issues"].append({
+                    "type": "suspicious_timing",
+                    "reasons": timing_result["suspicious_reasons"],
+                    "details": timing_result["details"]
+                })
+                verification_issues.append(f"Suspicious file timing: {timing_result['suspicious_reasons']}")
+        except Exception as e:
+            print(f"Timing analysis failed: {e}")
+        
+        # 3. Evidence source validation
+        try:
+            source_result = validate_evidence_source(
+                filename=normalized_url.split('/')[-1],
+                file_path=normalized_url
+            )
+            if not source_result["is_valid"]:
+                evidence_verification["issues"].append({
+                    "type": "invalid_source",
+                    "indicators": source_result["suspicious_indicators"],
+                    "details": source_result["details"]
+                })
+                verification_issues.append(f"Invalid evidence source: {source_result['suspicious_indicators']}")
+        except Exception as e:
+            print(f"Source validation failed: {e}")
+        
+        # 4. Screen recording detection for videos
+        if evidence_data.file_type and evidence_data.file_type.lower().startswith('video'):
+            try:
+                screen_recording_result = enhanced_screen_recording_detection(
+                    filename=normalized_url.split('/')[-1]
+                )
+                if screen_recording_result["is_screen_recording"]:
+                    evidence_verification["issues"].append({
+                        "type": "screen_recording_detected",
+                        "methods": screen_recording_result["detection_methods"],
+                        "details": screen_recording_result["details"]
+                    })
+                    verification_issues.append(f"Screen recording detected: {screen_recording_result['details']}")
+            except Exception as e:
+                print(f"Screen recording detection failed: {e}")
+        
+        evidence_metadata_list.append({
+            "media_latitude": evidence_data.media_latitude,
+            "media_longitude": evidence_data.media_longitude,
+            "captured_at": evidence_data.captured_at,
+            "verification": evidence_verification
+        })
+        
         evidence = EvidenceFile(
             evidence_id=uuid4(),
             report_id=report.report_id,
@@ -1107,6 +1200,23 @@ def create_report(
             is_live_capture=evidence_data.is_live_capture,
         )
         db.add(evidence)
+
+    # 5. Location consistency validation
+    try:
+        location_result = validate_location_consistency(
+            report_latitude=float(report.latitude),
+            report_longitude=float(report.longitude),
+            evidence_metadata=evidence_metadata_list
+        )
+        if not location_result["is_consistent"]:
+            verification_issues.append(f"Location inconsistency detected: {location_result['details']}")
+        
+        # Store location validation results in report metadata
+        fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+        fv["location_validation"] = location_result
+        report.feature_vector = _json_safe(fv)
+    except Exception as e:
+        print(f"Location consistency validation failed: {e}")
 
     if out_of_boundary:
         report.rule_status = "rejected"
@@ -1228,40 +1338,93 @@ def create_report(
     if ml_prediction:
         print(f"Using ML prediction for AI verification: {ml_prediction.prediction_label}, trust_score: {ml_prediction.trust_score}")  # Debug log
     
-    # Simple AI verification based on ML prediction
+    # AI-primary verification - automatic verification for high-confidence reports
     ai_status = "pending"
     is_flagged = False
     flag_reason = None
     
+    # Start with ML prediction for automatic verification
     if ml_prediction:
         if ml_prediction.prediction_label == "likely_real" and (ml_prediction.trust_score or 0) >= 70:
-            ai_status = "passed"
-        elif ml_prediction.prediction_label in ["fake", "suspicious"] or (ml_prediction.trust_score or 0) < 30:
+            ai_status = "passed"  # Auto-verified
+            print(f"AI-primary verification: AUTO-VERIFIED (confidence: {ml_prediction.trust_score}%)")
+        elif ml_prediction.prediction_label in ["fake", "suspicious"] or (ml_prediction.trust_score or 0) < 40:
             ai_status = "rejected"
+            print(f"AI-primary verification: REJECTED (confidence: {ml_prediction.trust_score}%)")
         else:
-            ai_status = "flagged"
-            is_flagged = True
-            flag_reason = f"AI uncertainty: {ml_prediction.prediction_label} (score: {ml_prediction.trust_score})"
+            ai_status = "pending"  # Medium confidence - needs review
+            flag_reason = f"AI medium confidence: {ml_prediction.prediction_label} (score: {ml_prediction.trust_score})"
+            print(f"AI-primary verification: PENDING REVIEW (confidence: {ml_prediction.trust_score}%)")
     else:
-        # No ML prediction - flag for review
-        ai_status = "flagged"
-        is_flagged = True
+        # No ML prediction - pending for review
+        ai_status = "pending"
         flag_reason = "No ML prediction available"
+        print("AI-primary verification: PENDING REVIEW (no ML prediction)")
+    
+    # Apply enhanced verification results
+    if verification_issues:
+        # If we have verification issues, downgrade the status
+        if ai_status == "passed":
+            ai_status = "pending"  # Downgrade from auto-verified
+            is_flagged = True
+            flag_reason = f"Enhanced verification issues: {'; '.join(verification_issues[:3])}"
+            print(f"AI-primary verification: DOWNGRADED TO PENDING due to verification issues")
+        elif ai_status == "pending":
+            is_flagged = True
+            flag_reason = f"Multiple verification issues: {'; '.join(verification_issues[:3])}"
+        
+        # Store verification issues in report metadata
+        fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+        fv["enhanced_verification_issues"] = verification_issues
+        fv["evidence_verification_count"] = len(evidence_metadata_list)
+        report.feature_vector = _json_safe(fv)
+        
+        print(f"Enhanced verification found {len(verification_issues)} issues: {verification_issues[:2]}")
+    
+    # Final status override for critical issues
+    critical_issues = [issue for issue in verification_issues if any(keyword in issue.lower() for keyword in ['screenshot', 'screen_recording', 'future_timestamp'])]
+    if critical_issues:
+        ai_status = "rejected"
+        is_flagged = True
+        flag_reason = f"Critical verification issues: {'; '.join(critical_issues[:2])}"
+        print(f"Critical issues detected, rejecting report: {critical_issues}")
+    
+    print(f"AI-primary verification result - status: {ai_status}, flagged: {is_flagged}")
     
     print(f"AI verification result - status: {ai_status}, flagged: {is_flagged}")  # Debug log
     
     # Apply AI results to report
     report.rule_status = ai_status  # Keep field for compatibility
     report.is_flagged = is_flagged
-    if is_flagged and flag_reason:
+    if flag_reason:
         report.flag_reason = flag_reason
-    if ai_status == "rejected":
+    
+    # Set verification status for AI-primary verification
+    if ai_status == "passed":
+        report.status = "verified"
+        report.verification_status = "verified"
+        report.verified_at = datetime.now(timezone.utc)
+        print("AI-primary verification: Report automatically verified")
+    elif ai_status == "rejected":
         report.status = "rejected"
         report.verification_status = "rejected"
+        print("AI-primary verification: Report automatically rejected")
+    else:  # pending
+        report.status = "pending"
+        report.verification_status = "pending"
+        print("AI-primary verification: Report requires manual review")
     
     # Set ai_ready = true to indicate AI processing complete
     report.ai_ready = True
     report.features_extracted_at = datetime.now(timezone.utc)
+    
+    # Automatic incident consolidation for verified reports
+    if ai_status == "passed":
+        try:
+            _automatic_incident_consolidation(db, report)
+        except Exception as e:
+            print(f"Automatic incident consolidation failed: {e}")
+            # Don't fail the report creation if consolidation fails
     
     # Two-stage verification: Mobile Rules + Backend AI
     mobile_rules_passed = (
@@ -2698,6 +2861,110 @@ def get_reviews(
             )
     
     return review_list
+
+
+@router.get("/{report_id}/location-history")
+def get_reporter_location_history(
+    report_id: UUID,
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """
+    Get location history for the reporter of a specific report.
+    Returns chronological list of location changes with timestamps.
+    """
+    try:
+        # Get the target report
+        report = db.query(Report).filter(Report.report_id == report_id).first()
+        if not report:
+            raise HTTPException(status_code=404, detail="Report not found")
+        
+        # Get all reports from the same device (reporter)
+        device_reports = (
+            db.query(Report)
+            .filter(Report.device_id == report.device_id)
+            .filter(Report.report_id != report_id)  # Exclude current report
+            .order_by(Report.reported_at.desc())
+            .limit(limit)
+            .all()
+        )
+        
+        # Helper function to get location name from location relationship
+        def get_location_name(location):
+            if not location:
+                return "Unknown"
+            return location.location_name or "Unknown"
+        
+        # Build location history timeline
+        location_history = []
+        current_location = {
+            "sector": get_location_name(report.location),
+            "cell": get_location_name(report.village_location),
+            "village": get_location_name(report.village_location),
+        }
+        
+        # Add current report location first
+        location_history.append({
+            "report_id": str(report.report_id),
+            "report_number": report.report_number,
+            "timestamp": report.reported_at.isoformat(),
+            "sector": current_location["sector"],
+            "cell": current_location["cell"],
+            "village": current_location["village"],
+            "location_changed": False,  # This is the reference point
+            "latitude": float(report.latitude) if report.latitude else None,
+            "longitude": float(report.longitude) if report.longitude else None,
+        })
+        
+        # Process historical reports to detect location changes
+        for hist_report in device_reports:
+            hist_location = {
+                "sector": get_location_name(hist_report.location),
+                "cell": get_location_name(hist_report.village_location),
+                "village": get_location_name(hist_report.village_location),
+            }
+            
+            # Check if location changed from previous
+            location_changed = (
+                hist_location["sector"] != current_location["sector"] or
+                hist_location["cell"] != current_location["cell"] or
+                hist_location["village"] != current_location["village"]
+            )
+            
+            location_entry = {
+                "report_id": str(hist_report.report_id),
+                "report_number": hist_report.report_number,
+                "timestamp": hist_report.reported_at.isoformat(),
+                "sector": hist_location["sector"],
+                "cell": hist_location["cell"],
+                "village": hist_location["village"],
+                "location_changed": location_changed,
+                "latitude": float(hist_report.latitude) if hist_report.latitude else None,
+                "longitude": float(hist_report.longitude) if hist_report.longitude else None,
+            }
+            
+            location_history.append(location_entry)
+            
+            # Update current location for next comparison
+            if location_changed:
+                current_location = hist_location.copy()
+        
+        # Sort by timestamp (newest first)
+        location_history.sort(key=lambda x: x["timestamp"], reverse=True)
+        
+        return {
+                "device_id": str(report.device_id),
+                "current_location": current_location,
+                "total_reports": len(location_history),
+                "location_changes": len([loc for loc in location_history if loc["location_changed"]]),
+                "history": location_history,
+            }
+    except Exception as e:
+        # Log the error for debugging
+        import logging
+        logging.error(f"Error in location history endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.post("/{report_id}/assign", response_model=AssignmentResponse, status_code=201)
@@ -4289,5 +4556,31 @@ def _create_auto_cases(db: Session) -> Dict[str, int]:
         logger.error(f"Auto-case creation error: {e}")
         return stats
         db.commit()
+
+
+def _automatic_incident_consolidation(db: Session, report: Report):
+    """
+    Automatic incident consolidation for verified reports.
+    Uses existing case creation system for same-incident grouping.
+    """
+    print(f"Starting automatic incident consolidation for verified report {report.report_id}")
     
-    return {"message": "Vote recorded", "vote": body.vote.lower()}
+    # Use the existing auto-case creation system that was already working
+    # This will handle same-incident grouping and case creation
+    try:
+        # Call the existing auto-case creation function
+        from app.core.report_priority import auto_create_cases_from_verified_reports
+        
+        # Create a list with just this report to trigger the existing logic
+        result = auto_create_cases_from_verified_reports(db, [report])
+        
+        if result and result.get('cases_created', 0) > 0:
+            print(f"Auto-created {result['cases_created']} cases for report {report.report_id}")
+        else:
+            print(f"No case created for report {report.report_id} - will be grouped later")
+            
+    except Exception as e:
+        print(f"Auto-case creation failed for report {report.report_id}: {e}")
+        # Don't fail the report creation if case creation fails
+
+

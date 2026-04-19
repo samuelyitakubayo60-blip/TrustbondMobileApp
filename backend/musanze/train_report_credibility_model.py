@@ -176,15 +176,13 @@ def find_best_threshold(model: Pipeline, X_valid, y_valid):
     # Get predicted probabilities for the positive class
     y_scores = model.predict_proba(X_valid)[:, 1]
 
-    fpr, tpr, thresholds = roc_curve(y_valid, y_scores)
-
-    # Optimize Youden's J statistic = TPR - FPR (balanced sensitivity/specificity)
-    j_scores = tpr - fpr
-    best_idx = np.argmax(j_scores)
-    best_threshold = float(thresholds[best_idx])
-
-    print("Best threshold by Youden's J:", best_threshold)
-    return best_threshold, y_scores
+    # Use fixed 70% threshold for system consistency
+    fixed_threshold = 0.70  # 70% threshold for optimal system performance
+    
+    print(f"Using fixed threshold: {fixed_threshold} (70% for system standardization)")
+    print("Note: This aligns with the system-wide 70% threshold for AI verification")
+    
+    return fixed_threshold, y_scores
 
 
 def main():

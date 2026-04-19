@@ -1,4 +1,5 @@
 from typing import Annotated, Optional, List
+import math
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy import func
@@ -25,6 +26,23 @@ from app.core.credibility_model import (
 from app.core.village_lookup import get_village_location_info
 
 router = APIRouter(prefix="/devices", tags=["devices"])
+
+
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate distance between two points in kilometers"""
+    R = 6371.0
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+    
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    
+    a = math.sin(dlat / 2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    
+    return R * c
 
 
 def _report_is_trusted(report: Report) -> bool:
@@ -568,6 +586,96 @@ async def get_home_insights_endpoint(
     """Get ML-powered insights for the home dashboard"""
     # credibility_model.get_home_insights returns a summary dict, not a list of cards
     return get_home_insights(db)
+
+@router.get("/{device_id}/location-history")
+def get_device_location_history(
+    device_id: str,
+    db: Session = Depends(get_db),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """
+    Get device location history from device metadata.
+    Returns the device's location history with analysis of movement patterns.
+    """
+    device = db.query(Device).filter(Device.device_id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    
+    # Get location history from device metadata
+    metadata = device.metadata_json or {}
+    location_history = metadata.get('location_history', [])
+    
+    if not location_history:
+        return {
+            "device_id": device_id,
+            "total_locations": 0,
+            "days_active": 0,
+            "radius_km": 0.0,
+            "activity_level": "No history",
+            "locations": [],
+            "current_location": None
+        }
+    
+    # Sort by timestamp (newest first)
+    location_history.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+    
+    # Calculate time span
+    if len(location_history) >= 2:
+        oldest_time = location_history[-1].get('timestamp')
+        newest_time = location_history[0].get('timestamp')
+        
+        if oldest_time and newest_time:
+            try:
+                oldest_date = datetime.fromisoformat(oldest_time.replace('Z', '+00:00'))
+                newest_date = datetime.fromisoformat(newest_time.replace('Z', '+00:00'))
+                days_active = (newest_date - oldest_date).days
+            except:
+                days_active = 0
+        else:
+            days_active = 0
+    else:
+        days_active = 0
+    
+    # Calculate movement radius (distance from first to last location)
+    radius_km = 0.0
+    if len(location_history) >= 2:
+        first_loc = location_history[-1]
+        last_loc = location_history[0]
+        
+        if (first_loc.get('latitude') and first_loc.get('longitude') and 
+            last_loc.get('latitude') and last_loc.get('longitude')):
+            radius_km = haversine_distance(
+                first_loc['latitude'], first_loc['longitude'],
+                last_loc['latitude'], last_loc['longitude']
+            )
+    
+    # Determine activity level
+    total_locations = len(location_history)
+    if days_active > 0:
+        locations_per_day = total_locations / max(days_active, 1)
+        if locations_per_day >= 3:
+            activity_level = "Highly active"
+        elif locations_per_day >= 1:
+            activity_level = "Moderately active"
+        else:
+            activity_level = "Low activity"
+    else:
+        activity_level = "Limited data"
+    
+    # Get current location (most recent)
+    current_location = location_history[0] if location_history else None
+    
+    return {
+        "device_id": device_id,
+        "total_locations": total_locations,
+        "days_active": days_active,
+        "radius_km": round(radius_km, 1),
+        "activity_level": activity_level,
+        "locations": location_history[:limit],  # Return limited results
+        "current_location": current_location,
+        "device_status": "Active reporter" if days_active < 30 else "Inactive reporter"
+    }
+
 
 @router.get("/{device_id}/ml-stats", response_model=DeviceMLStatsResponse)
 async def get_device_ml_stats_endpoint(
