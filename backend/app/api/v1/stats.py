@@ -333,27 +333,27 @@ def get_dashboard_stats(
     )
     print(f"DEBUG: Verification status breakdown: {dict(verification_breakdown)}")
     
-    # Count reports that need police review
+    # Count reports that need police review (pending + under_review)
     pending_review = (
         db.query(func.count(Report.report_id))
-        .filter(report_filter, Report.verification_status == 'verified')
+        .filter(report_filter, Report.verification_status.in_(['pending', 'under_review']))
         .scalar()
         or 0
     )
     
-    # Also count simple pending (not verified, not rejected) for comparison
-    simple_pending = (
+    # Count flagged reports using is_flagged field
+    flagged_reports = (
         db.query(func.count(Report.report_id))
-        .filter(report_filter, Report.verification_status != 'verified', or_(Report.status.is_(None), Report.status != 'rejected'))
+        .filter(report_filter, Report.is_flagged == True)
         .scalar()
         or 0
     )
     
-    print(f"DEBUG: Dashboard pending_review (needs_police_review_clause): {pending_review}")
-    print(f"DEBUG: Dashboard simple_pending (not verified, not rejected): {simple_pending}")
+    print(f"DEBUG: Dashboard pending_review (pending + under_review): {pending_review}")
+    print(f"DEBUG: Dashboard flagged_reports (is_flagged=True): {flagged_reports}")
     pending = int(pending_review)
     verified = int(by_status.get("verified", 0))
-    flagged = int(by_status.get("flagged", 0) + by_status.get("rejected", 0))
+    flagged = int(flagged_reports)
     recent_7d_count = db.query(func.count(Report.report_id)).filter(
         report_filter, Report.reported_at >= since_7d
     ).scalar() or 0
