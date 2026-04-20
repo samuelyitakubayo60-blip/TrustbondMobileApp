@@ -285,10 +285,10 @@ def _create_village_based_hotspots(
     min_incidents: int, 
     time_window_hours: int
 ) -> int:
-    """Create hotspots based on village clustering (most accurate)"""
+    """Create hotspots based on village clustering with strict 24-hour time constraint"""
     created = 0
     
-    # Group reports by village and incident type
+    # Group reports by village and incident type (ensuring same place and type)
     village_groups = {}
     for report in reports:
         village_key = f"{report['village_location_id']}_{report['incident_type_id']}"
@@ -296,12 +296,20 @@ def _create_village_based_hotspots(
             village_groups[village_key] = []
         village_groups[village_key].append(report)
     
-    # Create hotspots for village groups with enough incidents
+    # Create hotspots for village groups with enough incidents and within time window
     for village_key, village_reports in village_groups.items():
         if len(village_reports) < min_incidents:
             continue
         
         village_id, incident_type_id = village_key.split('_')
+        
+        # Strict time filtering: ensure all reports are within 24 hours
+        village_reports.sort(key=lambda r: r["reported_at"])
+        time_span = (village_reports[-1]["reported_at"] - village_reports[0]["reported_at"]).total_seconds() / 3600
+        
+        if time_span > time_window_hours:
+            print(f"Skipped village hotspot for village {village_id}, type {incident_type_id} - time span {time_span:.1f}h exceeds {time_window_hours}h limit")
+            continue
         
         # Calculate center and statistics
         incident_count = len(village_reports)
@@ -387,7 +395,7 @@ def _create_geographic_hotspots(
     min_incidents: int, 
     time_window_hours: int
 ) -> int:
-    """Create hotspots using geographic DBSCAN clustering (fallback)"""
+    """Create hotspots using geographic DBSCAN clustering with strict time constraint"""
     # Convert reports to points format for DBSCAN
     points = reports  # Already in correct format
     
@@ -405,15 +413,30 @@ def _create_geographic_hotspots(
         if incident_count < int(min_incidents):
             continue
 
+        # Strict time filtering: ensure all reports in cluster are within 24 hours
+        cluster_points.sort(key=lambda p: p["reported_at"])
+        time_span = (cluster_points[-1]["reported_at"] - cluster_points[0]["reported_at"]).total_seconds() / 3600
+        
+        if time_span > time_window_hours:
+            print(f"Skipped geographic cluster - time span {time_span:.1f}h exceeds {time_window_hours}h limit")
+            continue
+
         center_lat = sum(p["lat"] for p in cluster_points) / incident_count
         center_long = sum(p["lon"] for p in cluster_points) / incident_count
         avg_trust = sum(p["trust"] for p in cluster_points) / incident_count
 
+        # Ensure all reports in cluster are of the same incident type
         type_counts: Dict[int, int] = {}
         for p in cluster_points:
             tid = int(p["incident_type_id"])
             type_counts[tid] = type_counts.get(tid, 0) + 1
-        dominant_incident_type_id = max(type_counts.items(), key=lambda x: x[1])[0]
+        
+        # Only create hotspot if all reports are of the same type
+        if len(type_counts) != 1:
+            print(f"Skipped geographic cluster - contains multiple incident types: {list(type_counts.keys())}")
+            continue
+            
+        dominant_incident_type_id = list(type_counts.keys())[0]
 
         area_sqkm = max(0.001, 3.14159 * (float(radius_meters) / 1000.0) ** 2)
         cluster_density = incident_count / area_sqkm

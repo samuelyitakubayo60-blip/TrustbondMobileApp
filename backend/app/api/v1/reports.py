@@ -3786,11 +3786,11 @@ def _check_and_create_auto_case(report_id: str):
         ).first()
         
         # Use configured values or defaults
-        cluster_radius_meters = 200  # Default 200m from system config
+        cluster_radius_meters = 500  # Default 500m for better incident grouping
         min_reports_threshold = 3   # Default from system config
         
         if dbscan_config:
-            cluster_radius_meters = dbscan_config.config_value.get('value', 200)
+            cluster_radius_meters = dbscan_config.config_value.get('value', 500)
         if min_samples_config:
             min_reports_threshold = min_samples_config.config_value.get('value', 3)
 
@@ -4392,17 +4392,25 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
         case_number = f"CASE-{datetime.now().year}-{case_count + 1:04d}"
         
         high_priority_count = sum(1 for r in reports if r.priority == 'high')
-        priority = 'high' if high_priority_count >= 2 else 'medium'
+        priority = 'high' if high_priority_count >= 1 else 'medium'  # Single high priority report makes case high priority
         
         case_lat = sum(r.latitude for r in reports) / len(reports)
         case_lon = sum(r.longitude for r in reports) / len(reports)
         officer_id = _assign_officer_to_case_based_on_location(db, float(case_lat), float(case_lon))
         
+        # Adjust title and description based on number of reports
+        if len(reports) == 1:
+            title = f"Incident Type {report.incident_type_id} case - Single Report"
+            description = f"Auto-generated case from 1 verified report"
+        else:
+            title = f"Incident Type {report.incident_type_id} case - Multiple Reports"
+            description = f"Auto-generated case from {len(reports)} verified reports"
+        
         case = Case(
             case_id=uuid4(),
             case_number=case_number,
-            title=f"Incident Type {report.incident_type_id} case - Multiple Reports",
-            description=f"Auto-generated case from {len(reports)} verified reports",
+            title=title,
+            description=description,
             incident_type_id=report.incident_type_id,
             priority=priority,
             status='open',
@@ -4490,13 +4498,18 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
 
 
 def _create_auto_cases(db: Session) -> Dict[str, int]:
-    """Automatically create cases from verified reports using proper location-based clustering"""
+    """Automatically create cases from verified reports using 12-hour time constraint and proper location-based clustering"""
     
     stats = {'cases_created': 0}
     
     try:
         from app.models.case import Case, CaseReport
+        from datetime import datetime, timedelta, timezone
         case_reports_table = CaseReport.__table__
+        
+        # Time constraint: only reports within last 12 hours
+        time_window_hours = 12
+        since = datetime.now(timezone.utc) - timedelta(hours=time_window_hours)
         
         # Get clustering parameters from system config
         from app.models.system_config import SystemConfig
@@ -4508,22 +4521,23 @@ def _create_auto_cases(db: Session) -> Dict[str, int]:
         ).first()
         
         # Use configured values or defaults
-        cluster_radius_meters = 200  # Default 200m from system config
-        min_reports_threshold = 3   # Default from system config
+        cluster_radius_meters = 500  # Default 500m for better incident grouping
+        min_reports_threshold = 1   # Allow single reports to create cases
         
         if dbscan_config:
-            cluster_radius_meters = dbscan_config.config_value.get('value', 200)
+            cluster_radius_meters = dbscan_config.config_value.get('value', 500)
         if min_samples_config:
-            min_reports_threshold = min_samples_config.config_value.get('value', 3)
+            min_reports_threshold = min_samples_config.config_value.get('value', 2)
         
         # Convert radius to kilometers for distance calculation
         cluster_radius_km = cluster_radius_meters / 1000.0
         
-        # Strategy 1: Cluster by village/location (preferred)
+        # Strategy 1: Cluster by village/location with time constraint (preferred)
         village_clusters = {}
         verified_reports = db.query(Report).filter(
             Report.verification_status == 'verified',
             Report.status == 'verified',
+            Report.reported_at >= since,  # 12-hour time constraint
             ~Report.report_id.in_(
                 db.query(case_reports_table.c.report_id).distinct()
             )
@@ -4531,7 +4545,7 @@ def _create_auto_cases(db: Session) -> Dict[str, int]:
         
         logger.info(f"Found {len(verified_reports)} verified reports available for case creation")
         
-        # Group by village and incident type
+        # Group by village and incident type with time constraint
         for report in verified_reports:
             if report.village_location_id:
                 village_key = f"{report.village_location_id}_{report.incident_type_id}"
@@ -4539,16 +4553,20 @@ def _create_auto_cases(db: Session) -> Dict[str, int]:
                     village_clusters[village_key] = []
                 village_clusters[village_key].append(report)
         
-        # Create cases for village-based clusters
+        # Create cases for village-based clusters with time filtering
         for village_key, reports in village_clusters.items():
             if len(reports) >= min_reports_threshold:
-                case_stats = _create_case_from_reports(db, reports)
-                stats['cases_created'] += case_stats['cases_created']
-                village_id, incident_type_id = village_key.split('_')
-                logger.info(f"Created village-based case for village {village_id}, incident type {incident_type_id}")
-                case_stats = _create_auto_cases(db)
-                logger.info(f"Created {case_stats['cases_created']} new cases automatically")
-                _balance_workload_and_reassign(db)
+                # Additional time filtering: ensure all reports in cluster are within 12 hours
+                reports.sort(key=lambda r: r.reported_at)
+                time_span = (reports[-1].reported_at - reports[0].reported_at).total_seconds() / 3600
+                
+                if time_span <= time_window_hours:  # Only create case if within 12-hour window
+                    case_stats = _create_case_from_reports(db, reports)
+                    stats['cases_created'] += case_stats['cases_created']
+                    village_id, incident_type_id = village_key.split('_')
+                    logger.info(f"Created ONE village-based case for {len(reports)} reports in village {village_id}, incident type {incident_type_id} (time span: {time_span:.1f}h)")
+                else:
+                    logger.info(f"Skipped village cluster for village {village_id}, incident type {incident_type_id} - time span {time_span:.1f}h exceeds {time_window_hours}h limit")
         
         # Strategy 2: Geographic clustering for reports without village assignment
         unassigned_reports = [r for r in verified_reports if not r.village_location_id]
@@ -4598,11 +4616,18 @@ def _create_auto_cases(db: Session) -> Dict[str, int]:
                             cluster.append(other_report)
                             processed.add(other_report.report_id)
                     
-                    # Create case if cluster has enough reports
+                    # Create case if cluster has enough reports and within time window
                     if len(cluster) >= min_reports_threshold:
-                        case_stats = _create_case_from_reports(db, cluster)
-                        stats['cases_created'] += case_stats['cases_created']
-                        logger.info(f"Created geo-clustered case for incident type {incident_type_id} within {cluster_radius_meters}m")
+                        # Additional time filtering for geographic clusters
+                        cluster.sort(key=lambda r: r.reported_at)
+                        time_span = (cluster[-1].reported_at - cluster[0].reported_at).total_seconds() / 3600
+                        
+                        if time_span <= time_window_hours:  # Only create case if within 12-hour window
+                            case_stats = _create_case_from_reports(db, cluster)
+                            stats['cases_created'] += case_stats['cases_created']
+                            logger.info(f"Created ONE geo-clustered case for {len(cluster)} reports of incident type {incident_type_id} within {cluster_radius_meters}m (time span: {time_span:.1f}h)")
+                        else:
+                            logger.info(f"Skipped geo cluster for incident type {incident_type_id} - time span {time_span:.1f}h exceeds {time_window_hours}h limit")
         
         if stats['cases_created'] > 0:
             db.commit()
