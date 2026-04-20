@@ -116,6 +116,10 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   const [hotspots, setHotspots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState("all"); // 'all' | incident_type_name
+  const [timePeriod, setTimePeriod] = useState(""); // '', 'day', 'week', 'month', 'quarter', 'year'
+  const [customHours, setCustomHours] = useState(""); // Custom hours input
+  const [historicalHotspots, setHistoricalHotspots] = useState([]);
+  const [historicalLoading, setHistoricalLoading] = useState(false);
   const [polygons, setPolygons] = useState([]);
   const [incidentTypes, setIncidentTypes] = useState([]);
   const [selectedHotspotId, setSelectedHotspotId] = useState(null);
@@ -130,8 +134,10 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
 
   const loadHotspots = () => {
     setLoading(true);
+    
+    // Real-time map always shows only 1-hour hotspots
     api
-      .get("/api/v1/hotspots")
+      .get("/api/v1/hotspots?hours_back=1")
       .then((res) => {
         setHotspots(res || []);
         setLoading(false);
@@ -139,9 +145,36 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       .catch(() => setLoading(false));
   };
 
+  const loadHistoricalHotspots = () => {
+    setHistoricalLoading(true);
+    
+    // Build query parameters for time-based filtering
+    const params = new URLSearchParams();
+    if (timePeriod && timePeriod !== "") {
+      params.append('time_period', timePeriod);
+    }
+    if (customHours && customHours !== "") {
+      params.append('hours_back', customHours);
+    }
+    
+    const url = params.toString() ? `/api/v1/hotspots?${params.toString()}` : "/api/v1/hotspots";
+    
+    api
+      .get(url)
+      .then((res) => {
+        setHistoricalHotspots(res || []);
+        setHistoricalLoading(false);
+      })
+      .catch(() => setHistoricalLoading(false));
+  };
+
   useEffect(() => {
     loadHotspots();
   }, [wsRefreshKey]);
+
+  useEffect(() => {
+    loadHistoricalHotspots();
+  }, [timePeriod, customHours]);
 
   useEffect(() => {
     api
@@ -419,8 +452,9 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       <div className="page-header smx-page-header">
         <h2>Community Safety Map</h2>
         <p>
-          Live anonymized crime cluster visualization - Musanze District. This
-          is also the public-facing view available to citizens.
+          Real-time crime cluster visualization (last 1 hour) with historical analysis tools - Musanze District. 
+          Map shows live incidents, while side panel provides time-based pattern analysis. 
+          This is also the public-facing view available to citizens.
         </p>
       </div>
 
@@ -460,6 +494,9 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             </button>
           );
         })}
+        <span style={{ marginLeft: "20px", fontSize: "12px", color: "var(--muted)" }}>
+          🕐 Real-time view: Last 1 hour only
+        </span>
       </div>
 
       <div className="map-container">
@@ -636,9 +673,102 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
         <div className="map-side">
           <div className="card smx-side-card">
             <div className="card-header">
-              <div className="card-title">Detected Hotspots</div>
+              <div className="card-title">Detected Hotspot Clusters</div>
             </div>
-            {topForSide.map((h, idx) => (
+            
+            {/* Time Period Filters for Historical Analysis */}
+            <div style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ fontSize: "12px", fontWeight: "600", marginBottom: "8px", color: "var(--text)" }}>
+                Time Period:
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "8px" }}>
+                <button
+                  className={`btn btn-xs ${timePeriod === "" ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => {
+                    setTimePeriod("");
+                    setCustomHours("");
+                  }}
+                  style={{ fontSize: "10px", padding: "2px 6px" }}
+                >
+                  All Time
+                </button>
+                <button
+                  className={`btn btn-xs ${timePeriod === "day" ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => {
+                    setTimePeriod("day");
+                    setCustomHours("");
+                  }}
+                  style={{ fontSize: "10px", padding: "2px 6px" }}
+                >
+                  Last 24h
+                </button>
+                <button
+                  className={`btn btn-xs ${timePeriod === "week" ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => {
+                    setTimePeriod("week");
+                    setCustomHours("");
+                  }}
+                  style={{ fontSize: "10px", padding: "2px 6px" }}
+                >
+                  Last Week
+                </button>
+                <button
+                  className={`btn btn-xs ${timePeriod === "month" ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => {
+                    setTimePeriod("month");
+                    setCustomHours("");
+                  }}
+                  style={{ fontSize: "10px", padding: "2px 6px" }}
+                >
+                  Last Month
+                </button>
+                <button
+                  className={`btn btn-xs ${timePeriod === "quarter" ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => {
+                    setTimePeriod("quarter");
+                    setCustomHours("");
+                  }}
+                  style={{ fontSize: "10px", padding: "2px 6px" }}
+                >
+                  Last Quarter
+                </button>
+                <button
+                  className={`btn btn-xs ${timePeriod === "year" ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => {
+                    setTimePeriod("year");
+                    setCustomHours("");
+                  }}
+                  style={{ fontSize: "10px", padding: "2px 6px" }}
+                >
+                  Last Year
+                </button>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "11px", color: "var(--muted)" }}>Custom:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="8760"
+                  placeholder="Hours"
+                  value={customHours}
+                  onChange={(e) => {
+                    setCustomHours(e.target.value);
+                    setTimePeriod("");
+                  }}
+                  className="form-control form-control-sm"
+                  style={{ width: "60px", fontSize: "11px" }}
+                />
+                <span style={{ fontSize: "10px", color: "var(--muted)" }}>hours</span>
+              </div>
+            </div>
+
+            {/* Historical Hotspots List */}
+            {historicalLoading ? (
+              <div style={{ fontSize: "12px", color: "var(--muted)", padding: "10px 14px" }}>
+                Loading historical data...
+              </div>
+            ) : (
+              historicalHotspots.slice(0, 5).map((h, idx) => (
               <button
                 type="button"
                 className="hs-item smx-hotspot-item"
@@ -675,19 +805,9 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                   {(h.risk_level || "ok").toUpperCase().slice(0, 4)}
                 </span>
               </button>
-            ))}
-            {!topForSide.length && !loading && (
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "var(--muted)",
-                  padding: "10px 14px",
-                }}
-              >
-                No active clusters.
-              </div>
+            ))
             )}
-            {loading && (
+            {!historicalLoading && !historicalHotspots.length && (
               <div
                 style={{
                   fontSize: "12px",
@@ -695,7 +815,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                   padding: "10px 14px",
                 }}
               >
-                Loading...
+                No clusters found for selected time period.
               </div>
             )}
           </div>
@@ -924,6 +1044,79 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                 No active advisories.
               </div>
             )}
+
+            {/* Emergency Detection */}
+            <div
+              style={{
+                borderTop: "1px solid var(--border)",
+                paddingTop: "12px",
+                marginTop: "12px",
+              }}
+            >
+              <div style={{ marginBottom: "12px" }}>
+                <div
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    marginBottom: "8px",
+                    color: "var(--text)",
+                  }}
+                >
+                  Emergency Detection
+                </div>
+                <button
+                  className="btn btn-outline btn-sm"
+                  style={{ width: "100%", marginBottom: "8px" }}
+                  onClick={() => {
+                    // Load emergency hotspots for last 24 hours
+                    api.get("/api/v1/hotspots/emergencies?days_back=1&min_incidents=3")
+                      .then((res) => {
+                        if (res && res.length > 0) {
+                          alert(`🚨 ${res.length} emergency hotspot(s) detected!\n\nCheck the map for critical incidents requiring immediate attention.`);
+                          // Focus on first emergency hotspot
+                          if (res[0]?.hotspot_id) {
+                            focusHotspot(res[0].hotspot_id);
+                          }
+                        } else {
+                          alert("✅ No emergency hotspots detected in the last 24 hours.");
+                        }
+                      })
+                      .catch(() => {
+                        alert("Failed to load emergency data.");
+                      });
+                  }}
+                >
+                  🚨 Check 24h Emergencies
+                </button>
+                <button
+                  className="btn btn-outline btn-sm"
+                  style={{ width: "100%", marginBottom: "4px" }}
+                  onClick={() => {
+                    // Load emergency hotspots for last 7 days
+                    api.get("/api/v1/hotspots/emergencies?days_back=7&min_incidents=5")
+                      .then((res) => {
+                        if (res && res.length > 0) {
+                          alert(`⚠️ ${res.length} high-priority hotspot(s) detected in the last week!\n\nThese areas may require increased patrol presence.`);
+                          // Focus on first emergency hotspot
+                          if (res[0]?.hotspot_id) {
+                            focusHotspot(res[0].hotspot_id);
+                          }
+                        } else {
+                          alert("✅ No high-priority hotspots detected in the last week.");
+                        }
+                      })
+                      .catch(() => {
+                        alert("Failed to load emergency data.");
+                      });
+                  }}
+                >
+                  📊 Check Week Trends
+                </button>
+                <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "4px" }}>
+                  Emergency detection finds critical clusters with multiple incidents requiring immediate attention.
+                </div>
+              </div>
+            </div>
 
             {/* DBSCAN Controls */}
             <div

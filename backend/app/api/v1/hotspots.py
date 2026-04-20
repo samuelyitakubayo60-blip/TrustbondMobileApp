@@ -175,6 +175,12 @@ def list_hotspots(
     risk_level: Optional[str] = Query(
         None, description="Filter by risk_level (low, medium, high, critical)."
     ),
+    time_period: Optional[str] = Query(
+        None, description="Filter by time period: 'day', 'week', 'month', 'quarter', 'year'"
+    ),
+    hours_back: Optional[int] = Query(
+        None, description="Custom time filter: show hotspots from last N hours"
+    ),
     limit: int = Query(50, ge=1, le=200),
 ):
     """List hotspots.
@@ -193,6 +199,31 @@ def list_hotspots(
 
     role = getattr(current_user, "role", None)
     assigned_loc = getattr(current_user, "assigned_location_id", None)
+
+    # Apply time-based filtering
+    from datetime import timedelta
+    if time_period or hours_back:
+        time_filter_hours = None
+        if hours_back:
+            time_filter_hours = hours_back
+        elif time_period:
+            time_mapping = {
+                'day': 24,
+                'week': 24 * 7,
+                'month': 24 * 30,
+                'quarter': 24 * 90,
+                'year': 24 * 365
+            }
+            time_filter_hours = time_mapping.get(time_period.lower())
+            if time_filter_hours is None:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Invalid time_period. Use: {', '.join(time_mapping.keys())}"
+                )
+        
+        if time_filter_hours:
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=time_filter_hours)
+            query = query.filter(Hotspot.detected_at >= cutoff_time)
 
     # Scope for supervisors/officers by station sector
     if role == "officer":
@@ -519,6 +550,239 @@ def list_hotspots(
             incident_points=incident_points,
         ))
         
+    return responses
+
+
+@router.get("/emergencies", response_model=List[HotspotResponse])
+def get_daily_emergencies(
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    days_back: int = Query(1, ge=1, le=30, description="Number of days to look back for emergencies"),
+    min_incidents: int = Query(3, ge=1, description="Minimum incidents to qualify as emergency"),
+):
+    """Get emergency hotspots detected within the specified time period.
+    
+    This endpoint focuses on detecting critical incidents that may require immediate attention.
+    Defaults to showing emergencies from the last 24 hours.
+    """
+    from datetime import timedelta
+    
+    # Calculate time cutoff
+    cutoff_time = datetime.now(timezone.utc) - timedelta(days=days_back)
+    
+    # Query for critical hotspots within the time period
+    query = db.query(Hotspot).options(
+        joinedload(Hotspot.incident_type),
+        selectinload(Hotspot.reports).selectinload(Report.ml_predictions),
+        selectinload(Hotspot.reports).joinedload(Report.village_location),
+        selectinload(Hotspot.reports).joinedload(Report.incident_type),
+        selectinload(Hotspot.reports).selectinload(Report.evidence_files),
+    ).filter(
+        Hotspot.detected_at >= cutoff_time,
+        Hotspot.risk_level.in_(["critical", "active"])
+    )
+    
+    # Apply role-based filtering (same logic as main endpoint)
+    role = getattr(current_user, "role", None)
+    if role == "officer":
+        officer_station_id = getattr(current_user, "station_id", None)
+        if officer_station_id is None:
+            raise HTTPException(status_code=403, detail="Officer station is not configured")
+        
+        from app.models.station import Station
+        from app.models.location import Location
+        from sqlalchemy import or_
+        
+        station = db.query(Station).filter(Station.station_id == officer_station_id).first()
+        if station:
+            sector_location_ids = []
+            
+            # Primary sector
+            if station.location_id:
+                sector_location_id = station.location_id
+                sector_locations_query = db.query(Location.location_id).filter(
+                    or_(
+                        Location.location_id == sector_location_id,
+                        Location.parent_location_id == sector_location_id,
+                        Location.location_id.in_(
+                            db.query(Location.location_id).filter(
+                                Location.parent_location_id.in_(
+                                    db.query(Location.location_id).filter(
+                                        Location.parent_location_id == sector_location_id
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+                sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
+            
+            # Secondary sector
+            if station.sector2_id:
+                sector2_location_id = station.sector2_id
+                sector2_locations_query = db.query(Location.location_id).filter(
+                    or_(
+                        Location.location_id == sector2_location_id,
+                        Location.parent_location_id == sector2_location_id,
+                        Location.location_id.in_(
+                            db.query(Location.location_id).filter(
+                                Location.parent_location_id.in_(
+                                    db.query(Location.location_id).filter(
+                                        Location.parent_location_id == sector2_location_id
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+                sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
+            
+            sector_location_ids = list(set(sector_location_ids))
+            query = (
+                query.join(Hotspot.reports)
+                .filter(Report.village_location_id.in_(sector_location_ids))
+                .distinct()
+            )
+    elif role == "supervisor":
+        supervisor_station_id = getattr(current_user, "station_id", None)
+        if supervisor_station_id is None:
+            raise HTTPException(status_code=403, detail="Supervisor station is not configured")
+        
+        from app.models.station import Station
+        from app.models.location import Location
+        from sqlalchemy import or_
+        
+        station = db.query(Station).filter(Station.station_id == supervisor_station_id).first()
+        if station:
+            sector_location_ids = []
+            
+            if station.location_id:
+                sector_location_id = station.location_id
+                sector_locations_query = db.query(Location.location_id).filter(
+                    or_(
+                        Location.location_id == sector_location_id,
+                        Location.parent_location_id == sector_location_id,
+                        Location.location_id.in_(
+                            db.query(Location.location_id).filter(
+                                Location.parent_location_id.in_(
+                                    db.query(Location.location_id).filter(
+                                        Location.parent_location_id == sector_location_id
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+                sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
+            
+            if station.sector2_id:
+                sector2_location_id = station.sector2_id
+                sector2_locations_query = db.query(Location.location_id).filter(
+                    or_(
+                        Location.location_id == sector2_location_id,
+                        Location.parent_location_id == sector2_location_id,
+                        Location.location_id.in_(
+                            db.query(Location.location_id).filter(
+                                Location.parent_location_id.in_(
+                                    db.query(Location.location_id).filter(
+                                        Location.parent_location_id == sector2_location_id
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+                sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
+            
+            sector_location_ids = list(set(sector_location_ids))
+            query = (
+                query.join(Hotspot.reports)
+                .filter(Report.village_location_id.in_(sector_location_ids))
+                .distinct()
+            )
+    
+    # Filter by minimum incident count for emergencies
+    emergency_hotspots = []
+    for h in query.all():
+        reports_in_cluster = [r for r in h.reports if r.reported_at >= cutoff_time]
+        if len(reports_in_cluster) >= min_incidents:
+            emergency_hotspots.append(h)
+    
+    # Build response (reuse existing logic from main endpoint)
+    responses = []
+    for h in emergency_hotspots:
+        reports_in_cluster = [r for r in h.reports if r.reported_at >= cutoff_time]
+        if not reports_in_cluster:
+            continue
+
+        # Calculate hotspot metrics (simplified for emergencies)
+        incident_count = len(reports_in_cluster)
+        radius_m = float(getattr(h, "radius_meters", 500) or 500)
+        
+        # Use existing classification logic
+        hotspot_score = min(95, 60 + (incident_count * 5))  # Emergency scoring
+        classification = "critical" if hotspot_score >= 80 else "active"
+        
+        responses.append(HotspotResponse(
+            hotspot_id=h.hotspot_id,
+            latitude=float(h.latitude) if h.latitude else None,
+            longitude=float(h.longitude) if h.longitude else None,
+            radius_meters=radius_m,
+            incident_count=incident_count,
+            time_window_hours=24,  # Emergency detection uses 24-hour window
+            risk_level=h.risk_level,
+            incident_type_id=h.incident_type_id,
+            incident_type=h.incident_type,
+            detected_at=h.detected_at,
+            updated_at=h.updated_at,
+            evidence_files=[
+                {
+                    "evidence_id": str(e.evidence_id),
+                    "file_type": e.file_type,
+                    "file_url": e.file_url,
+                    "uploaded_at": e.uploaded_at.isoformat() if e.uploaded_at else None,
+                }
+                for r in h.reports
+                for e in (r.evidence_files or [])
+            ],
+            lifecycle_state=classification,
+            hotspot_score=hotspot_score,
+            classification=classification,
+            classification_confidence=0.9,
+            classification_source="emergency_detection",
+            avg_trust_score=75.0,  # Default for emergencies
+            dominant_crime_type=h.incident_type.type_name if h.incident_type else "Emergency",
+            cluster_kind="emergency",
+            area_label="Emergency Zone",
+            incident_mix={r.incident_type.type_name if r.incident_type else "Unknown": 1 for r in reports_in_cluster},
+            prediction={"emergency": True, "severity": "high"},
+            boundary_points=[(float(r.latitude), float(r.longitude)) for r in reports_in_cluster],
+            incident_points=[
+                {
+                    "report_id": str(r.report_id),
+                    "incident_type_name": r.incident_type.type_name if r.incident_type else "Unknown",
+                    "description": r.description,
+                    "latitude": float(r.latitude),
+                    "longitude": float(r.longitude),
+                    "reported_at": r.reported_at.isoformat() if r.reported_at else None,
+                    "trust_score": 75.0,
+                    "village_name": r.village_location.location_name if r.village_location else None,
+                    "cell_name": None,
+                    "sector_name": None,
+                    "evidence_files": [
+                        {
+                            "evidence_id": str(e.evidence_id),
+                            "file_type": e.file_type,
+                            "file_url": e.file_url,
+                            "uploaded_at": e.uploaded_at.isoformat() if e.uploaded_at else None,
+                        }
+                        for e in (r.evidence_files or [])
+                    ],
+                }
+                for r in reports_in_cluster
+            ],
+        ))
+    
     return responses
 
 

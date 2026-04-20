@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
+import time
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func
 import json
@@ -83,7 +84,25 @@ def locations_geojson(
             .order_by(Location.location_name)
             .limit(limit)
         )
-        rows = query.all()
+        
+        # Add retry logic for database connection issues
+        max_retries = 3
+        rows = None
+        for attempt in range(max_retries):
+            try:
+                rows = query.all()
+                break
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    print(f"Failed to fetch locations after {max_retries} attempts: {e}")
+                    raise HTTPException(status_code=500, detail="Database connection error")
+                print(f"Database error in locations query attempt {attempt + 1}, retrying...")
+                db.rollback()
+                time.sleep(0.5)
+        
+        if rows is None:
+            raise HTTPException(status_code=500, detail="Failed to fetch locations")
+        
         features: List[Dict[str, Any]] = []
         for loc, cell_name, sector_name, geojson_text in rows:
             if not geojson_text:

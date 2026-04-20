@@ -1,5 +1,6 @@
 from uuid import uuid4, UUID
 from typing import Annotated, Optional, List, Any
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -543,12 +544,37 @@ def get_case_stats(
         base_q = base_q.filter(Case.assigned_to_id == current_user.police_user_id)
 
     def _count(q_filter):
-        return base_q.filter(q_filter).with_entities(func.count(Case.case_id)).scalar() or 0
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                return base_q.filter(q_filter).with_entities(func.count(Case.case_id)).scalar() or 0
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    print(f"Failed to count cases after {max_retries} attempts: {e}")
+                    return 0
+                print(f"Database error in count attempt {attempt + 1}, retrying...")
+                db.rollback()
+                time.sleep(0.5)
 
     open_c = _count(Case.status == "open")
     in_progress = _count(Case.status == "investigating")
     closed = _count(Case.status == "closed")
-    total_reports = base_q.with_entities(func.sum(Case.report_count)).scalar() or 0
+    
+    # Get total reports with retry
+    total_reports = 0
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            total_reports = base_q.with_entities(func.sum(Case.report_count)).scalar() or 0
+            break
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"Failed to get total reports after {max_retries} attempts: {e}")
+                total_reports = 0
+            else:
+                print(f"Database error in total reports attempt {attempt + 1}, retrying...")
+                db.rollback()
+                time.sleep(0.5)
     return {
         "open": open_c,
         "in_progress": in_progress,

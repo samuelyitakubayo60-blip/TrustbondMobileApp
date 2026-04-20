@@ -182,21 +182,14 @@ def _dbscan(points: List[Dict[str, Any]], eps_meters: float, min_pts: int) -> Li
 
 
 def cleanup_expired_hotspots(db: Session):
-    """Remove/decay hotspots that have expired.
-
-    Note: the DB enum for `hotspots.risk_level` does not include `archived`,
-    so we must not write that value.
+    """Deprecated: Hotspots should persist for historical analysis.
+    
+    This function is disabled to allow clusters to remain for long-term
+    pattern analysis over weeks, months, and years.
     """
-    now = datetime.now(timezone.utc)
-    expired = db.query(Hotspot).filter(Hotspot.detected_at < now - timedelta(hours=24)).all()
-
-    # Conservative approach: delete expired hotspots instead of writing a
-    # potentially invalid enum value (like "archived").
-    for h in expired:
-        db.delete(h)
-
-    db.commit()
-    return len(expired)
+    # Hotspots now persist indefinitely for historical analysis
+    # Time-based filtering will be handled at the API level
+    return 0
 
 
 def create_hotspots_from_reports(
