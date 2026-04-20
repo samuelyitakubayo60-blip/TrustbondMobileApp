@@ -2493,8 +2493,9 @@ textarea:focus {
   display: grid;
   grid-template-columns: 1fr 320px;
   gap: 14px;
-  height: calc(100vh - 140px);
-  min-height: 560px;
+  height: calc(100vh - 200px);
+  min-height: 500px;
+  max-height: 700px;
 }
 
 .smx-controls {
@@ -2647,6 +2648,7 @@ textarea:focus {
   border-radius: var(--r);
   position: relative;
   overflow: hidden;
+  z-index: 1;
 }
 
 .cluster {
@@ -3514,47 +3516,231 @@ body.light-mode .incident-intel-trust.med {
   #hamburger {
     display: flex;
   }
-  .g31,
-  .g13 {
-    grid-template-columns: 1fr;
-  }
-  .detail-layout {
-    grid-template-columns: 1fr;
-  }
+  
+  /* Organize mobile layout with better spacing and structure */
   .map-container {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
     height: auto;
+    min-height: 500px;
+    max-height: none;
+    z-index: 1;
+    position: relative;
+    padding: 0 4px;
   }
-
-  .smx-controls input[type="range"] {
-    width: 110px;
-  }
-
-  .smx-group {
-    width: 100%;
-  }
-
-  .smx-controls .btn {
-    width: 100%;
-  }
-
-  .smx-label-gap {
-    margin-left: 0;
-  }
-
+  
   .map-box {
-    height: 380px;
+    height: 400px;
+    min-height: 400px;
+    z-index: 1;
+    order: 1;
+    border-radius: 12px;
+    overflow: hidden;
+    display: block !important;
+    visibility: visible !important;
   }
-
-  .cluster-formation-strip {
-    grid-template-columns: 1fr;
+  
+  /* Ensure map renders properly on mobile */
+  .map-box .leaflet-container {
+    height: 100% !important;
+    width: 100% !important;
+    display: block !important;
+    visibility: visible !important;
   }
-
-  .hotspot-map-preview {
-    height: 320px;
+  
+  /* Organize side cards with proper spacing and prevent overlay */
+  .map-side {
+    order: 2;
+    display: block;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+    margin-top: 20px;
+    padding-bottom: 30px;
+    width: 100%;
+    overflow: visible;
   }
-  .tb-chip {
-    display: none;
+  
+  .map-side .card {
+    margin-bottom: 80px !important;
+    position: relative !important;
+    z-index: 1 !important;
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+    width: 100% !important;
+    clear: both !important;
+    float: none !important;
+    display: block !important;
+    overflow: visible !important;
+    min-height: auto !important;
+    max-height: none !important;
+    transform: translateZ(0) !important;
+    backface-visibility: hidden !important;
+  }
+  
+  /* Specific z-index hierarchy for hotspot cards */
+  .map-side .card:nth-child(1) {
+    z-index: 100 !important;
+    margin-bottom: 80px !important;
+  }
+  
+  .map-side .card:nth-child(2) {
+    z-index: 90 !important;
+    margin-bottom: 80px !important;
+  }
+  
+  .map-side .card:nth-child(3) {
+    z-index: 80 !important;
+    margin-bottom: 80px !important;
+  }
+  
+  .map-side .card:nth-child(4) {
+    z-index: 70 !important;
+    margin-bottom: 80px !important;
+  }
+  
+  .map-side .card:last-child {
+    margin-bottom: 0 !important;
+  }
+  
+  /* Enhanced content visibility for all cards */
+  .map-side .card .card-body {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 100px !important;
+  }
+  
+  .map-side .hs-list {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+  
+  .map-side .hs-item {
+    display: flex !important;
+    align-items: center !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+  
+  .map-side .card:last-child {
+    margin-bottom: 0 !important;
+  }
+  
+    
+  .map-side .card-header {
+    padding: 12px 16px 8px;
+    position: relative;
+    z-index: 4;
+  }
+  
+  .map-side .card-body {
+    padding: 0 16px 12px;
+    position: relative;
+    z-index: 4;
+  }
+  
+  /* Fix hotspot items layout on mobile */
+  .map-side .hs-item {
+    padding: 8px 4px;
+    gap: 8px;
+    min-height: 36px;
+    align-items: center;
+  }
+  
+  .map-side .hs-rank {
+    font-size: 13px;
+    min-width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .map-side .hs-info {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+  
+  .map-side .hs-name {
+    font-size: 11px;
+    line-height: 1.2;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .map-side .hs-meta {
+    font-size: 9px;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .map-side .risk-pill {
+    font-size: 8px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+  
+  /* Fix cluster table overlay issue on mobile */
+  .map-side .smx-cluster-table-wrap {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 300px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  
+  .map-side .smx-cluster-table {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 600px;
+    border-collapse: collapse;
+  }
+  
+  .map-side .smx-cluster-table th,
+  .map-side .smx-cluster-table td {
+    padding: 8px 6px;
+    text-align: left;
+    vertical-align: middle;
+    border-right: 1px solid var(--border2);
+    overflow: hidden;
+    position: relative;
+  }
+  
+  .map-side .smx-cluster-table th:last-child,
+  .map-side .smx-cluster-table td:last-child {
+    border-right: none;
+  }
+  
+  .map-side .smx-cluster-table .smx-cell-center {
+    text-align: center;
+  }
+  
+  .map-side .smx-cluster-table a {
+    display: block;
+    text-align: center;
+    white-space: nowrap;
+    text-decoration: none;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 10px;
+    margin: 0 2px;
+  }
+  
+  .map-side .smx-cluster-table a:hover {
+    background: var(--accent);
+    color: white;
   }
 }
 
@@ -3569,6 +3755,162 @@ body.light-mode .incident-intel-trust.med {
   .g2,
   .g2-fixed {
     grid-template-columns: 1fr;
+  }
+  
+  /* Maintain organized layout on small mobile */
+  .map-container {
+    gap: 12px;
+    padding: 0 2px;
+    min-height: 400px;
+  }
+  
+  .map-box {
+    height: 300px;
+    min-height: 300px;
+    width: 100%;
+    display: block !important;
+    visibility: visible !important;
+  }
+  
+  .map-side {
+    display: block;
+    position: relative;
+    z-index: 1;
+    margin-top: 16px;
+    padding-bottom: 24px;
+    width: 100%;
+    overflow: visible;
+  }
+  
+  .map-side .card {
+    margin-bottom: 70px !important;
+    position: relative !important;
+    z-index: 1 !important;
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    width: 100% !important;
+    clear: both !important;
+    float: none !important;
+    display: block !important;
+    overflow: visible !important;
+    transform: translateZ(0) !important;
+    backface-visibility: hidden !important;
+  }
+  
+  /* Specific z-index hierarchy for hotspot cards on small mobile */
+  .map-side .card:nth-child(1) {
+    z-index: 100 !important;
+    margin-bottom: 70px !important;
+  }
+  
+  .map-side .card:nth-child(2) {
+    z-index: 90 !important;
+    margin-bottom: 70px !important;
+  }
+  
+  .map-side .card:nth-child(3) {
+    z-index: 80 !important;
+    margin-bottom: 70px !important;
+  }
+  
+  .map-side .card:nth-child(4) {
+    z-index: 70 !important;
+    margin-bottom: 70px !important;
+  }
+  
+  .map-side .card:last-child {
+    margin-bottom: 0 !important;
+  }
+  
+  /* Enhanced content visibility for all cards on small mobile */
+  .map-side .card .card-body {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 80px !important;
+  }
+  
+  .map-side .hs-list {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+  
+  .map-side .hs-item {
+    display: flex !important;
+    align-items: center !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+  
+  .map-side .card:last-child {
+    margin-bottom: 0 !important;
+  }
+  
+  .map-side .card-header {
+    padding: 10px 12px 6px;
+    position: relative;
+    z-index: 2;
+  }
+  
+  .map-side .card-body {
+    padding: 0 12px 10px;
+    position: relative;
+    z-index: 2;
+  }
+  
+  /* Fix hotspot items on very small mobile */
+  .map-side .hs-item {
+    padding: 6px 2px;
+    gap: 6px;
+    min-height: 32px;
+  }
+  
+  .map-side .hs-rank {
+    font-size: 12px;
+    min-width: 18px;
+    height: 18px;
+  }
+  
+  .map-side .hs-name {
+    font-size: 10px;
+  }
+  
+  .map-side .hs-meta {
+    font-size: 8px;
+  }
+  
+  .map-side .risk-pill {
+    font-size: 7px;
+    padding: 1px 4px;
+  }
+  
+  /* Fix cluster table on very small mobile */
+  .map-side .smx-cluster-table-wrap {
+    max-height: 250px;
+  }
+  
+  .map-side .smx-cluster-table {
+    min-width: 500px;
+  }
+  
+  .map-side .smx-cluster-table th,
+  .map-side .smx-cluster-table td {
+    padding: 6px 4px;
+    font-size: 9px;
+  }
+  
+  .map-side .smx-cluster-table a {
+    font-size: 9px;
+    padding: 3px 4px;
+    margin: 0 1px;
+  }
+  
+  /* Ensure map is visible on very small screens */
+  .leaflet-container {
+    height: 100% !important;
+    width: 100% !important;
+    display: block !important;
   }
   #page-title {
     font-size: 14px;

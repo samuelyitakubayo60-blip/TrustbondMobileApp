@@ -10,6 +10,7 @@ import {
   Polygon,
   useMap,
 } from "react-leaflet";
+import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import api from "../../api/client";
 
@@ -36,6 +37,60 @@ const MapFocusController = ({ target, trigger }) => {
 
   return null;
 };
+
+const RelocatorControl = () => {
+  const map = useMap();
+
+  const handleRelocate = () => {
+    map.flyTo(RWANDA_CENTER, 11, { duration: 1.5 });
+  };
+
+  useEffect(() => {
+    // Create custom control
+    const relocateControl = L.control({ position: 'topleft' });
+    
+    relocateControl.onAdd = function() {
+      const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+      div.innerHTML = `
+        <button 
+          style="
+            background: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          "
+          title="Reset to Musanze view"
+        >
+          🏠
+        </button>
+      `;
+      
+      div.querySelector('button').addEventListener('click', handleRelocate);
+      return div;
+    };
+    
+    relocateControl.addTo(map);
+    
+    return () => {
+      map.removeControl(relocateControl);
+    };
+  }, [map]);
+
+  return null;
+};
+
+// Musanze area bounds - restrict to northern Rwanda region
+const MUSANZE_BOUNDS = [
+  [-1.8, 29.0],  // Southwest corner
+  [-1.2, 30.2]   // Northeast corner
+];
 
 const getFormationStage = (hotspot) => {
   const cls = hotspot?.classification || hotspot?.lifecycle_state || "";
@@ -423,6 +478,8 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
               zoom={11}
               minZoom={9}
               maxZoom={18}
+              maxBounds={MUSANZE_BOUNDS}
+              maxBoundsViscosity={1.0}
               scrollWheelZoom
               style={{ width: "100%", height: "100%" }}
               zoomControl={false}
@@ -432,6 +489,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
               <ZoomControl position="topright" />
+              <RelocatorControl />
               <MapFocusController
                 target={selectedHotspot}
                 trigger={focusNonce}
