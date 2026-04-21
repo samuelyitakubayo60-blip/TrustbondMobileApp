@@ -2,7 +2,7 @@ from typing import Annotated, List, Optional, Dict, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session, joinedload, selectinload
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 
 from app.core.cluster_classifier import predict_cluster_classification
@@ -77,6 +77,29 @@ class RecomputeHotspotsPayload(BaseModel):
     radius_meters: Optional[float] = None
     trust_min: Optional[float] = None
     incident_type_id: Optional[int] = None
+    from_date: Optional[datetime] = None
+    to_date: Optional[datetime] = None
+
+
+def _coalesce_param(body_value, query_value, default_value):
+    if body_value is not None:
+        return body_value
+    if query_value is not None:
+        return query_value
+    return default_value
+
+
+def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _hours_between(start: datetime, end: datetime) -> int:
+    seconds = max(1.0, (end - start).total_seconds())
+    return max(1, int((seconds + 3599) // 3600))
 
 
 def _prediction_for_hotspot(
@@ -181,6 +204,12 @@ def list_hotspots(
     hours_back: Optional[int] = Query(
         None, description="Custom time filter: show hotspots from last N hours"
     ),
+    time_window_hours: Optional[int] = Query(
+        None,
+        ge=1,
+        le=8760,
+        description="Only return clusters generated for this DBSCAN time window.",
+    ),
     limit: int = Query(50, ge=1, le=200),
 ):
     """List hotspots.
@@ -201,7 +230,6 @@ def list_hotspots(
     assigned_loc = getattr(current_user, "assigned_location_id", None)
 
     # Apply time-based filtering
-    from datetime import timedelta
     if time_period or hours_back:
         time_filter_hours = None
         if hours_back:
@@ -366,6 +394,8 @@ def list_hotspots(
     query = query.order_by(Hotspot.detected_at.desc())
     if risk_level:
         query = query.filter(Hotspot.risk_level == risk_level)
+    if time_window_hours is not None:
+        query = query.filter(Hotspot.time_window_hours == int(time_window_hours))
     hotspots = query.limit(limit).all()
     
     responses = []
@@ -817,6 +847,8 @@ def recompute_hotspots(
     radius_meters: Optional[float] = Query(None),
     trust_min: Optional[float] = Query(None),
     incident_type_id: Optional[int] = Query(None),
+    from_date: Optional[datetime] = Query(None),
+    to_date: Optional[datetime] = Query(None),
 ):
     """
     Recompute hotspots from recent reports using supplied parameters.
@@ -825,11 +857,6 @@ def recompute_hotspots(
     before running the auto-creation job, so the map reflects the new
     clustering configuration.
     """
-    # Clear existing hotspots + link table
-    db.execute(hotspot_reports_table.delete())
-    db.query(Hotspot).delete()
-    db.commit()
-
     cfg_tw, cfg_min, cfg_rad = get_hotspot_params_from_db(
         db,
         time_window_hours=DEFAULT_TIME_WINDOW_HOURS,
@@ -838,34 +865,46 @@ def recompute_hotspots(
     )
     cfg_trust = get_hotspot_trust_min_from_db(db, DEFAULT_TRUST_MIN)
 
-    # Force 24-hour time window for Safety Map consistency
-    eff_tw = 24  # Always use 24 hours regardless of config or payload
-    eff_min = (
-        payload.min_incidents
-        if payload and payload.min_incidents is not None
-        else min_incidents
-        if min_incidents is not None
-        else cfg_min
+    payload_tw = payload.time_window_hours if payload else None
+    payload_min = payload.min_incidents if payload else None
+    payload_rad = payload.radius_meters if payload else None
+    payload_trust = payload.trust_min if payload else None
+    payload_incident_type_id = payload.incident_type_id if payload else None
+    payload_from = payload.from_date if payload else None
+    payload_to = payload.to_date if payload else None
+
+    eff_tw = int(_coalesce_param(payload_tw, time_window_hours, cfg_tw))
+    eff_min = int(_coalesce_param(payload_min, min_incidents, cfg_min))
+    eff_rad = float(_coalesce_param(payload_rad, radius_meters, cfg_rad))
+    eff_trust = float(_coalesce_param(payload_trust, trust_min, cfg_trust))
+    eff_incident_type_id = _coalesce_param(
+        payload_incident_type_id,
+        incident_type_id,
+        None,
     )
-    eff_rad = (
-        payload.radius_meters
-        if payload and payload.radius_meters is not None
-        else radius_meters
-        if radius_meters is not None
-        else cfg_rad
-    )
-    eff_trust = (
-        payload.trust_min
-        if payload and payload.trust_min is not None
-        else trust_min
-        if trust_min is not None
-        else cfg_trust
-    )
-    eff_incident_type_id = (
-        payload.incident_type_id
-        if payload and payload.incident_type_id is not None
-        else incident_type_id
-    )
+
+    window_end = _as_utc(_coalesce_param(payload_to, to_date, None)) or datetime.now(timezone.utc)
+    window_start = _as_utc(_coalesce_param(payload_from, from_date, None))
+    if window_start is not None:
+        if window_start >= window_end:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="from_date must be before to_date",
+            )
+        eff_tw = _hours_between(window_start, window_end)
+
+    eff_tw = max(1, min(8760, eff_tw))
+    eff_min = max(1, min(100, eff_min))
+    eff_rad = max(50.0, min(10000.0, eff_rad))
+    eff_trust = max(0.0, min(100.0, eff_trust))
+
+    if window_start is None:
+        window_start = window_end - timedelta(hours=eff_tw)
+
+    # Clear existing hotspots + link table after parameters have been validated.
+    db.execute(hotspot_reports_table.delete())
+    db.query(Hotspot).delete()
+    db.commit()
 
     created = create_hotspots_from_reports(
         db,
@@ -874,8 +913,11 @@ def recompute_hotspots(
         radius_meters=eff_rad,
         trust_min=eff_trust,
         incident_type_id=eff_incident_type_id,
-        analyze_all_reports=False,  # Use time-filtered reports for 24-hour consistency
+        analyze_all_reports=False,
+        start_time=window_start,
+        end_time=window_end,
     )
+    db.commit()
     
     # Broadcast hotspot update to all connected clients for real-time Safety Map updates
     background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "hotspot", "action": "recomputed"})
@@ -888,6 +930,8 @@ def recompute_hotspots(
             "radius_meters": float(eff_rad),
             "trust_min": float(eff_trust),
             "incident_type_id": eff_incident_type_id,
+            "from_date": window_start.isoformat(),
+            "to_date": window_end.isoformat(),
         },
     }
 

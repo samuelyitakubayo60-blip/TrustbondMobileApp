@@ -53,6 +53,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   List<Hotspot> _hotspots = [];
   List<Map<String, dynamic>> _publicAlerts = [];
   bool _loadingAlerts = false;
+  int _hotspotTimeWindowHours = 24;
 
   Timer? _hotspotRefreshTimer;
 
@@ -233,7 +234,9 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     if (_loadingHotspots) return;
     setState(() => _loadingHotspots = true);
     try {
-      final hotspots = await _hotspotService.getAllHotspots();
+      final hotspots = await _hotspotService.getAllHotspots(
+        timeWindowHours: _hotspotTimeWindowHours,
+      );
       final mapData = _mapData;
       final filtered = mapData == null
           ? hotspots
@@ -459,6 +462,15 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     }
   }
 
+  String _formatHotspotWindow(int hours) {
+    String unit(int amount, String name) =>
+        '$amount $name${amount == 1 ? '' : 's'}';
+    if (hours >= 8760) return unit((hours / 8760).round(), 'year');
+    if (hours >= 720) return unit((hours / 720).round(), 'month');
+    if (hours >= 24) return unit((hours / 24).round(), 'day');
+    return unit(hours, 'hour');
+  }
+
   void _showHotspotDetails(Hotspot hotspot) {
     showDialog(
       context: context,
@@ -504,6 +516,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
           children: [
             _buildHeader(),
             _buildSectorFilters(),
+            _buildHotspotPeriodFilters(),
             Expanded(
               flex: 3,
               child: _buildMap(),
@@ -603,7 +616,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                   _loadingHotspots
                       ? 'Loading hotspots...'
                       : _mapData != null
-                      ? '${_mapData!.features.length} villages · ${_hotspots.length} hotspots · ${_publicAlerts.length} alerts'
+                      ? '${_mapData!.features.length} villages · ${_hotspots.length} hotspots · ${_formatHotspotWindow(_hotspotTimeWindowHours)}'
                           : 'Loading...',
                   style: const TextStyle(
                       fontSize: 10,
@@ -694,6 +707,51 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                   fontSize: 12,
                   fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
                   color: sel ? color : AppColors.muted,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildHotspotPeriodFilters() {
+    const periods = <int>[24, 168, 720, 2160, 8760];
+    return Container(
+      height: 34,
+      margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: periods.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final hours = periods[i];
+          final selected = hours == _hotspotTimeWindowHours;
+          return GestureDetector(
+            onTap: () {
+              if (selected) return;
+              setState(() => _hotspotTimeWindowHours = hours);
+              _loadHotspots();
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: selected
+                    ? AppColors.accent.withValues(alpha: 0.15)
+                    : AppColors.surface2,
+                border: Border.all(
+                  color: selected ? AppColors.accent : AppColors.border,
+                ),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                _formatHotspotWindow(hours),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                  color: selected ? AppColors.accent : AppColors.muted,
                 ),
               ),
             ),

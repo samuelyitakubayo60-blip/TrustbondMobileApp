@@ -14,7 +14,16 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import api from "../../api/client";
 
+const MUSANZE_CENTER = [-1.5042, 29.638]; // Musanze district center
+const MUSANZE_ZOOM = 12;
 const RWANDA_CENTER = [-1.5, 29.6]; // near Musanze
+const HOTSPOT_PERIOD_OPTIONS = [
+  { label: "1 day", hours: 24 },
+  { label: "7 days", hours: 168 },
+  { label: "1 month", hours: 720 },
+  { label: "3 months", hours: 2160 },
+  { label: "1 year", hours: 8760 },
+];
 
 const riskWeight = { critical: -1, high: 0, medium: 1, low: 2 };
 const incidentTone = {
@@ -47,10 +56,10 @@ const RelocatorControl = () => {
 
   useEffect(() => {
     // Create custom control
-    const relocateControl = L.control({ position: 'topleft' });
-    
-    relocateControl.onAdd = function() {
-      const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+    const relocateControl = L.control({ position: "topleft" });
+
+    relocateControl.onAdd = function () {
+      const div = L.DomUtil.create("div", "leaflet-bar leaflet-control");
       div.innerHTML = `
         <button 
           style="
@@ -71,13 +80,13 @@ const RelocatorControl = () => {
           🏠
         </button>
       `;
-      
-      div.querySelector('button').addEventListener('click', handleRelocate);
+
+      div.querySelector("button").addEventListener("click", handleRelocate);
       return div;
     };
-    
+
     relocateControl.addTo(map);
-    
+
     return () => {
       map.removeControl(relocateControl);
     };
@@ -88,8 +97,8 @@ const RelocatorControl = () => {
 
 // Musanze area bounds - restrict to northern Rwanda region
 const MUSANZE_BOUNDS = [
-  [-1.8, 29.0],  // Southwest corner
-  [-1.2, 30.2]   // Northeast corner
+  [-1.8, 29.0], // Southwest corner
+  [-1.2, 30.2], // Northeast corner
 ];
 
 const getFormationStage = (hotspot) => {
@@ -112,6 +121,17 @@ const getFormationStage = (hotspot) => {
 const stageLabel = (stage) =>
   stage === "intense" ? "Intense" : stage === "active" ? "Active" : "Emerging";
 
+const formatTimeWindow = (hours) => {
+  const value = Number(hours || 24);
+  if (value <= 0) return "0 hours";
+  const withUnit = (amount, unit) =>
+    `${amount} ${unit}${amount === 1 ? "" : "s"}`;
+  if (value >= 8760) return withUnit(Math.round(value / 8760), "year");
+  if (value >= 720) return withUnit(Math.round(value / 720), "month");
+  if (value >= 24) return withUnit(Math.round(value / 24), "day");
+  return withUnit(value, "hour");
+};
+
 const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   const [hotspots, setHotspots] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -132,12 +152,14 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     trust_min: 50,
   });
 
-  const loadHotspots = () => {
+  const loadHotspots = (params = dbscanParams) => {
     setLoading(true);
-    
-    // Real-time map always shows only 1-hour hotspots
+    const query = new URLSearchParams();
+    if (params?.time_window_hours) {
+      query.set("time_window_hours", String(params.time_window_hours));
+    }
     api
-      .get("/api/v1/hotspots?hours_back=1")
+      .get(`/api/v1/hotspots${query.toString() ? `?${query}` : ""}`)
       .then((res) => {
         setHotspots(res || []);
         setLoading(false);
@@ -147,18 +169,20 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
 
   const loadHistoricalHotspots = () => {
     setHistoricalLoading(true);
-    
+
     // Build query parameters for time-based filtering
     const params = new URLSearchParams();
     if (timePeriod && timePeriod !== "") {
-      params.append('time_period', timePeriod);
+      params.append("time_period", timePeriod);
     }
     if (customHours && customHours !== "") {
-      params.append('hours_back', customHours);
+      params.append("hours_back", customHours);
     }
-    
-    const url = params.toString() ? `/api/v1/hotspots?${params.toString()}` : "/api/v1/hotspots";
-    
+
+    const url = params.toString()
+      ? `/api/v1/hotspots?${params.toString()}`
+      : "/api/v1/hotspots";
+
     api
       .get(url)
       .then((res) => {
@@ -170,6 +194,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
 
   useEffect(() => {
     loadHotspots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsRefreshKey]);
 
   useEffect(() => {
@@ -181,9 +206,12 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       .get("/api/v1/hotspots/params")
       .then((res) => {
         if (!res) return;
-        setDbscanParams((prev) => ({ ...prev, ...res }));
+        const nextParams = { ...dbscanParams, ...res };
+        setDbscanParams(nextParams);
+        loadHotspots(nextParams);
       })
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load incident types from backend so filters match DB
@@ -271,6 +299,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
           ...h,
           lat: Number(h.center_lat),
           lng: Number(h.center_long),
+          boundary_points: h.boundary_points || [],
           incident_points: Array.isArray(h.incident_points)
             ? h.incident_points
                 .map((p) => ({
@@ -452,9 +481,10 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       <div className="page-header smx-page-header">
         <h2>Community Safety Map</h2>
         <p>
-          Real-time crime cluster visualization (last 1 hour) with historical analysis tools - Musanze District. 
-          Map shows live incidents, while side panel provides time-based pattern analysis. 
-          This is also the public-facing view available to citizens.
+          Real-time crime cluster visualization (last 1 hour) with historical
+          analysis tools - Musanze District. Map shows live incidents, while
+          side panel provides time-based pattern analysis. This is also the
+          public-facing view available to citizens.
         </p>
       </div>
 
@@ -494,7 +524,13 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             </button>
           );
         })}
-        <span style={{ marginLeft: "20px", fontSize: "12px", color: "var(--muted)" }}>
+        <span
+          style={{
+            marginLeft: "20px",
+            fontSize: "12px",
+            color: "var(--muted)",
+          }}
+        >
           🕐 Real-time view: Last 1 hour only
         </span>
       </div>
@@ -511,8 +547,8 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             }}
           >
             <MapContainer
-              center={RWANDA_CENTER}
-              zoom={11}
+              center={MUSANZE_CENTER}
+              zoom={MUSANZE_ZOOM}
               minZoom={9}
               maxZoom={18}
               maxBounds={MUSANZE_BOUNDS}
@@ -623,6 +659,31 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                         }}
                       />
                     )}
+                    {/* Render cluster boundary polygon from DBSCAN */}
+                    {h.boundary_points && h.boundary_points.length > 0 && (
+                      <Polygon
+                        positions={h.boundary_points.map((p) => [p[0], p[1]])}
+                        pathOptions={{
+                          color: color,
+                          weight: 2,
+                          fillColor: color,
+                          fillOpacity: 0.08,
+                          dashArray: "3 6",
+                        }}
+                      >
+                        <Tooltip
+                          direction="top"
+                          offset={[0, -4]}
+                          opacity={0.92}
+                        >
+                          <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
+                            <strong>Cluster Boundary</strong>
+                            <br />
+                            {h.boundary_points.length} points
+                          </div>
+                        </Tooltip>
+                      </Polygon>
+                    )}
                     <CircleMarker
                       center={pos}
                       radius={radius / 3}
@@ -675,13 +736,33 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             <div className="card-header">
               <div className="card-title">Detected Hotspot Clusters</div>
             </div>
-            
+
             {/* Time Period Filters for Historical Analysis */}
-            <div style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: "1px solid var(--border)" }}>
-              <div style={{ fontSize: "12px", fontWeight: "600", marginBottom: "8px", color: "var(--text)" }}>
+            <div
+              style={{
+                marginBottom: "12px",
+                paddingBottom: "12px",
+                borderBottom: "1px solid var(--border)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  marginBottom: "8px",
+                  color: "var(--text)",
+                }}
+              >
                 Time Period:
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "8px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "4px",
+                  marginBottom: "8px",
+                }}
+              >
                 <button
                   className={`btn btn-xs ${timePeriod === "" ? "btn-primary" : "btn-outline"}`}
                   onClick={() => {
@@ -743,8 +824,12 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                   Last Year
                 </button>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ fontSize: "11px", color: "var(--muted)" }}>Custom:</span>
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "6px" }}
+              >
+                <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                  Custom:
+                </span>
                 <input
                   type="number"
                   min="1"
@@ -758,54 +843,62 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                   className="form-control form-control-sm"
                   style={{ width: "60px", fontSize: "11px" }}
                 />
-                <span style={{ fontSize: "10px", color: "var(--muted)" }}>hours</span>
+                <span style={{ fontSize: "10px", color: "var(--muted)" }}>
+                  hours
+                </span>
               </div>
             </div>
 
             {/* Historical Hotspots List */}
             {historicalLoading ? (
-              <div style={{ fontSize: "12px", color: "var(--muted)", padding: "10px 14px" }}>
+              <div
+                style={{
+                  fontSize: "12px",
+                  color: "var(--muted)",
+                  padding: "10px 14px",
+                }}
+              >
                 Loading historical data...
               </div>
             ) : (
               historicalHotspots.slice(0, 5).map((h, idx) => (
-              <button
-                type="button"
-                className="hs-item smx-hotspot-item"
-                key={h.hotspot_id}
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  background: "transparent",
-                  border: "none",
-                  cursor: "pointer",
-                }}
-                onClick={() => focusHotspot(h.hotspot_id)}
-              >
-                <div className="hs-rank">
-                  {String(idx + 1).padStart(2, "0")}
-                </div>
-                <div className="hs-info">
-                  <div className="hs-name">
-                    {h.incident_type_name || "Cluster"} #{h.hotspot_id}
-                  </div>
-                  <div className="hs-meta">
-                    {h.incident_count} reports · {stageLabel(h.stage)}
-                  </div>
-                </div>
-                <span
-                  className={`risk-pill ${
-                    h.risk_level === "high" || h.risk_level === "critical"
-                      ? "r-critical"
-                      : h.risk_level === "medium"
-                        ? "r-warning"
-                        : "r-normal"
-                  }`}
+                <button
+                  type="button"
+                  className="hs-item smx-hotspot-item"
+                  key={h.hotspot_id}
+                  style={{
+                    width: "100%",
+                    textAlign: "left",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => focusHotspot(h.hotspot_id)}
                 >
-                  {(h.risk_level || "ok").toUpperCase().slice(0, 4)}
-                </span>
-              </button>
-            ))
+                  <div className="hs-rank">
+                    {String(idx + 1).padStart(2, "0")}
+                  </div>
+                  <div className="hs-info">
+                    <div className="hs-name">
+                      {h.incident_type_name || "Cluster"} #{h.hotspot_id}
+                    </div>
+                    <div className="hs-meta">
+                      {h.incident_count} reports · {stageLabel(h.stage)}
+                    </div>
+                  </div>
+                  <span
+                    className={`risk-pill ${
+                      h.risk_level === "high" || h.risk_level === "critical"
+                        ? "r-critical"
+                        : h.risk_level === "medium"
+                          ? "r-warning"
+                          : "r-normal"
+                    }`}
+                  >
+                    {(h.risk_level || "ok").toUpperCase().slice(0, 4)}
+                  </span>
+                </button>
+              ))
             )}
             {!historicalLoading && !historicalHotspots.length && (
               <div
@@ -831,6 +924,12 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             <div className="status-row">
               <span>View mode</span>
               <strong>DBSCAN clusters only</strong>
+            </div>
+            <div className="status-row">
+              <span>Time period</span>
+              <strong>
+                Last {formatTimeWindow(dbscanParams.time_window_hours)}
+              </strong>
             </div>
             <div className="status-row">
               <span>Reports in clusters</span>
@@ -1069,16 +1168,23 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                   style={{ width: "100%", marginBottom: "8px" }}
                   onClick={() => {
                     // Load emergency hotspots for last 24 hours
-                    api.get("/api/v1/hotspots/emergencies?days_back=1&min_incidents=3")
+                    api
+                      .get(
+                        "/api/v1/hotspots/emergencies?days_back=1&min_incidents=3",
+                      )
                       .then((res) => {
                         if (res && res.length > 0) {
-                          alert(`🚨 ${res.length} emergency hotspot(s) detected!\n\nCheck the map for critical incidents requiring immediate attention.`);
+                          alert(
+                            `🚨 ${res.length} emergency hotspot(s) detected!\n\nCheck the map for critical incidents requiring immediate attention.`,
+                          );
                           // Focus on first emergency hotspot
                           if (res[0]?.hotspot_id) {
                             focusHotspot(res[0].hotspot_id);
                           }
                         } else {
-                          alert("✅ No emergency hotspots detected in the last 24 hours.");
+                          alert(
+                            "✅ No emergency hotspots detected in the last 24 hours.",
+                          );
                         }
                       })
                       .catch(() => {
@@ -1093,16 +1199,23 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                   style={{ width: "100%", marginBottom: "4px" }}
                   onClick={() => {
                     // Load emergency hotspots for last 7 days
-                    api.get("/api/v1/hotspots/emergencies?days_back=7&min_incidents=5")
+                    api
+                      .get(
+                        "/api/v1/hotspots/emergencies?days_back=7&min_incidents=5",
+                      )
                       .then((res) => {
                         if (res && res.length > 0) {
-                          alert(`⚠️ ${res.length} high-priority hotspot(s) detected in the last week!\n\nThese areas may require increased patrol presence.`);
+                          alert(
+                            `⚠️ ${res.length} high-priority hotspot(s) detected in the last week!\n\nThese areas may require increased patrol presence.`,
+                          );
                           // Focus on first emergency hotspot
                           if (res[0]?.hotspot_id) {
                             focusHotspot(res[0].hotspot_id);
                           }
                         } else {
-                          alert("✅ No high-priority hotspots detected in the last week.");
+                          alert(
+                            "✅ No high-priority hotspots detected in the last week.",
+                          );
                         }
                       })
                       .catch(() => {
@@ -1112,8 +1225,15 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                 >
                   📊 Check Week Trends
                 </button>
-                <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "4px" }}>
-                  Emergency detection finds critical clusters with multiple incidents requiring immediate attention.
+                <div
+                  style={{
+                    fontSize: "10px",
+                    color: "var(--muted)",
+                    marginTop: "4px",
+                  }}
+                >
+                  Emergency detection finds critical clusters with multiple
+                  incidents requiring immediate attention.
                 </div>
               </div>
             </div>
@@ -1136,6 +1256,40 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                   }}
                 >
                   DBSCAN Parameters
+                </div>
+
+                <div style={{ marginBottom: "8px" }}>
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: "var(--muted)",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    Time Period:{" "}
+                    <strong>
+                      Last {formatTimeWindow(dbscanParams.time_window_hours)}
+                    </strong>
+                  </div>
+                  <select
+                    className="select"
+                    value={Number(dbscanParams.time_window_hours || 24)}
+                    onChange={(e) => {
+                      const nextParams = {
+                        ...dbscanParams,
+                        time_window_hours: Number(e.target.value),
+                      };
+                      setDbscanParams(nextParams);
+                      loadHotspots(nextParams);
+                    }}
+                    style={{ width: "100%", fontSize: "12px" }}
+                  >
+                    {HOTSPOT_PERIOD_OPTIONS.map((option) => (
+                      <option key={option.hours} value={option.hours}>
+                        Last {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div style={{ marginBottom: "8px" }}>
@@ -1201,7 +1355,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                       marginBottom: "4px",
                     }}
                   >
-                    Trust ≥: <strong>{dbscanParams.trust_min}</strong>
+                    Trust &gt;=: <strong>{dbscanParams.trust_min}</strong>
                   </div>
                   <input
                     type="range"
@@ -1234,7 +1388,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                       ),
                       trust_min: Number(dbscanParams.trust_min || 0),
                     });
-                    loadHotspots();
+                    loadHotspots(dbscanParams);
                   } catch {
                     // non-fatal
                   } finally {
@@ -1243,7 +1397,11 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                 }}
                 style={{ width: "100%", fontSize: "12px", padding: "8px" }}
               >
-                {recomputing ? "Recomputing..." : "Run DBSCAN"}
+                {recomputing
+                  ? "Recomputing..."
+                  : `Run DBSCAN for last ${formatTimeWindow(
+                      dbscanParams.time_window_hours,
+                    )}`}
               </button>
             </div>
           </div>
@@ -1347,8 +1505,8 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                       </span>
                     </td>
                     <td className="smx-cell-center smx-cell-muted">
-                      {dbscanParams.time_window_hours
-                        ? `${dbscanParams.time_window_hours}h`
+                      {h.time_window_hours
+                        ? formatTimeWindow(h.time_window_hours)
                         : "-"}
                     </td>
                     <td className="smx-cell-muted smx-cell-compact">

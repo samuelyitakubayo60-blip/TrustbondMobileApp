@@ -13,10 +13,24 @@ from app.core.village_lookup import get_village_location_info
 router = APIRouter(prefix="/public/hotspots", tags=["public"])
 
 
+def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 @router.get("/", response_model=List[HotspotResponse])
 def list_public_hotspots(
     limit: int = Query(30, ge=1, le=200),
     risk_level: Optional[str] = Query(None),
+    time_window_hours: Optional[int] = Query(
+        None,
+        ge=1,
+        le=8760,
+        description="Only return clusters generated for this DBSCAN time window.",
+    ),
     db: Session = Depends(get_db),
 ):
     """
@@ -25,15 +39,18 @@ def list_public_hotspots(
     Returns recent hotspots with center coordinates, radius, incident count,
     risk level, and incident_type_name for labeling.
     """
-    # Filter to hotspots detected in the last 24 hours
-    twenty_four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=24)
-    
+    # Show clusters from recent DBSCAN runs; each hotspot still carries the
+    # report window it was generated from in time_window_hours.
+    recent_run_cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+
     query = db.query(Hotspot).options(joinedload(Hotspot.incident_type))
-    query = query.filter(Hotspot.detected_at >= twenty_four_hours_ago)
+    query = query.filter(Hotspot.detected_at >= recent_run_cutoff)
     query = query.order_by(Hotspot.detected_at.desc())
     
     if risk_level:
         query = query.filter(Hotspot.risk_level == risk_level)
+    if time_window_hours is not None:
+        query = query.filter(Hotspot.time_window_hours == int(time_window_hours))
     hotspots = query.limit(limit).all()
     return [
         HotspotResponse(
@@ -96,12 +113,15 @@ def get_hotspot_details(
             EvidenceFile.report_id.in_(report_ids)
         ).all()
         
-        # Create incident points with location data (only from last 24 hours)
-        twenty_four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=24)
+        # Create incident points with location data for the same report period
+        # used when this DBSCAN hotspot was generated.
+        time_window_hours = int(hotspot.time_window_hours or 24)
+        window_end = _as_utc(hotspot.detected_at) or datetime.now(timezone.utc)
+        period_start = window_end - timedelta(hours=time_window_hours)
         
         for r in hotspot.reports:
-            # Only include reports from the last 24 hours
-            if r.reported_at and r.reported_at >= twenty_four_hours_ago:
+            reported_at = _as_utc(r.reported_at)
+            if reported_at and period_start <= reported_at <= window_end:
                 # Get location hierarchy using the village lookup utility
                 location_info = get_village_location_info(db, float(r.latitude), float(r.longitude))
                 

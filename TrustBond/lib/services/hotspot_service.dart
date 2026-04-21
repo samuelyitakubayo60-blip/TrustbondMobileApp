@@ -70,10 +70,16 @@ class HotspotService {
   final String _baseUrl = ApiConfig.baseUrl;
   final http.Client _client = http.Client();
 
-  Future<List<Hotspot>> getAllHotspots() async {
+  Future<List<Hotspot>> getAllHotspots({int? timeWindowHours}) async {
     try {
+      final uri = Uri.parse('$_baseUrl/public/hotspots').replace(
+        queryParameters: {
+          if (timeWindowHours != null)
+            'time_window_hours': timeWindowHours.toString(),
+        },
+      );
       final response = await _client.get(
-        Uri.parse('$_baseUrl/public/hotspots'),
+        uri,
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 30));
 

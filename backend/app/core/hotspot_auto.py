@@ -137,24 +137,35 @@ def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> flo
     return r * 2 * atan2(sqrt(a), sqrt(1 - a))
 
 
+def _trust_weight(point: Dict[str, Any]) -> float:
+    """Return a normalized DBSCAN density weight from a report trust score."""
+    try:
+        trust = float(point.get("trust", 100.0))
+    except (TypeError, ValueError):
+        trust = 50.0
+    return max(0.05, min(1.0, trust / 100.0))
+
+
 def _dbscan(points: List[Dict[str, Any]], eps_meters: float, min_pts: int) -> List[int]:
     n = len(points)
     labels = [-2] * n  # -2 unvisited, -1 noise, >=0 cluster id
     cluster_id = 0
+    min_density_weight = max(1.0, float(min_pts) * 0.5)
 
-    def neighbors(i: int) -> List[int]:
+    def neighbors(i: int) -> Tuple[List[int], float]:
         p = points[i]
         out: List[int] = []
         for j, q in enumerate(points):
             if _haversine_meters(p["lat"], p["lon"], q["lat"], q["lon"]) <= eps_meters:
                 out.append(j)
-        return out
+        density_weight = sum(_trust_weight(points[j]) for j in out)
+        return out, density_weight
 
     for i in range(n):
         if labels[i] != -2:
             continue
-        nbs = neighbors(i)
-        if len(nbs) < min_pts:
+        nbs, density_weight = neighbors(i)
+        if len(nbs) < min_pts or density_weight < min_density_weight:
             labels[i] = -1
             continue
 
@@ -169,8 +180,8 @@ def _dbscan(points: List[Dict[str, Any]], eps_meters: float, min_pts: int) -> Li
                 qi += 1
                 continue
             labels[j] = cluster_id
-            jn = neighbors(j)
-            if len(jn) >= min_pts:
+            jn, j_density_weight = neighbors(j)
+            if len(jn) >= min_pts and j_density_weight >= min_density_weight:
                 for cand in jn:
                     if cand not in queue:
                         queue.append(cand)
@@ -200,13 +211,17 @@ def create_hotspots_from_reports(
     trust_min: float = DEFAULT_TRUST_MIN,
     incident_type_id: Optional[int] = None,
     analyze_all_reports: bool = False,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
 ) -> int:
     """
     Enhanced Pipeline:
-    Reports -> trust filtering -> village-based clustering -> geographic DBSCAN -> hotspots with risk levels.
+    Reports in the chosen time period -> trust-weighted geographic DBSCAN -> hotspots with risk levels.
     """
     effective_time_window_hours = max(1, int(time_window_hours or DEFAULT_TIME_WINDOW_HOURS))
-    since = datetime.now(timezone.utc) - timedelta(hours=effective_time_window_hours)
+    now = datetime.now(timezone.utc)
+    window_end = end_time or now
+    window_start = start_time or (window_end - timedelta(hours=effective_time_window_hours))
 
     reports_query = (
         db.query(Report)
@@ -222,7 +237,10 @@ def create_hotspots_from_reports(
         )
     )
     if not analyze_all_reports:
-        reports_query = reports_query.filter(Report.reported_at >= since)
+        reports_query = reports_query.filter(
+            Report.reported_at >= window_start,
+            Report.reported_at <= window_end,
+        )
     reports = reports_query.all()
 
     # Filter eligible reports
@@ -256,20 +274,15 @@ def create_hotspots_from_reports(
     if len(eligible_reports) < max(1, int(min_incidents)):
         return 0
 
-    # Strategy 1: Village-based clustering (preferred)
-    village_hotspots_created = _create_village_based_hotspots(
-        db, eligible_reports, min_incidents, effective_time_window_hours
-    )
-
-    # Strategy 2: Geographic clustering for remaining reports
-    geographic_hotspots_created = _create_geographic_hotspots(
+    created = _create_geographic_hotspots(
         db, eligible_reports, radius_meters, min_incidents, effective_time_window_hours
     )
-
-    total_created = village_hotspots_created + geographic_hotspots_created
-    print(f"Created {total_created} hotspots: {village_hotspots_created} village-based, {geographic_hotspots_created} geographic")
+    print(
+        f"Created {created} DBSCAN hotspots "
+        f"from {len(eligible_reports)} eligible reports in {effective_time_window_hours}h"
+    )
     
-    return total_created
+    return created
 
 
 def _create_village_based_hotspots(

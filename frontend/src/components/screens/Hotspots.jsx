@@ -3,6 +3,7 @@ import {
   Circle,
   CircleMarker,
   MapContainer,
+  Polygon,
   Polyline,
   TileLayer,
   Tooltip,
@@ -12,6 +13,13 @@ import "leaflet/dist/leaflet.css";
 import api from "../../api/client";
 
 const MUSANZE_CENTER = [-1.499, 29.635];
+const HOTSPOT_PERIOD_OPTIONS = [
+  { label: "1 day", hours: 24 },
+  { label: "7 days", hours: 168 },
+  { label: "1 month", hours: 720 },
+  { label: "3 months", hours: 2160 },
+  { label: "1 year", hours: 8760 },
+];
 
 /**
  * TrustBond DBSCAN formation stage.
@@ -40,6 +48,17 @@ const getFormationStage = (hotspot) => {
 const stageLabel = (stage) =>
   stage === "intense" ? "Intense" : stage === "active" ? "Active" : "Emerging";
 
+const formatTimeWindow = (hours) => {
+  const value = Number(hours || 24);
+  if (value <= 0) return "0 hours";
+  const withUnit = (amount, unit) =>
+    `${amount} ${unit}${amount === 1 ? "" : "s"}`;
+  if (value >= 8760) return withUnit(Math.round(value / 8760), "year");
+  if (value >= 720) return withUnit(Math.round(value / 720), "month");
+  if (value >= 24) return withUnit(Math.round(value / 24), "day");
+  return withUnit(value, "hour");
+};
+
 const riskColor = (riskLevel) => {
   if (riskLevel === "high") return "#f87171";
   if (riskLevel === "medium") return "#fb923c";
@@ -58,18 +77,23 @@ const Hotspots = ({ wsRefreshKey }) => {
   });
   const [recomputing, setRecomputing] = useState(false);
 
-  const loadHotspots = () => {
+  const loadHotspots = (activeParams = params) => {
     setLoading(true);
-    const path =
-      riskFilter === "all"
-        ? "/api/v1/public/hotspots"
-        : `/api/v1/public/hotspots?risk_level=${encodeURIComponent(
-            riskFilter === "critical"
-              ? "high"
-              : riskFilter === "warning"
-                ? "medium"
-                : "low",
-          )}`;
+    const query = new URLSearchParams();
+    if (riskFilter !== "all") {
+      query.set(
+        "risk_level",
+        riskFilter === "critical"
+          ? "high"
+          : riskFilter === "warning"
+            ? "medium"
+            : "low",
+      );
+    }
+    if (activeParams?.time_window_hours) {
+      query.set("time_window_hours", String(activeParams.time_window_hours));
+    }
+    const path = `/api/v1/public/hotspots${query.toString() ? `?${query}` : ""}`;
     api
       .get(path)
       .then((res) => {
@@ -145,12 +169,15 @@ const Hotspots = ({ wsRefreshKey }) => {
       .get("/api/v1/hotspots/params")
       .then((res) => {
         if (!res) return;
-        setParams((prev) => ({
-          ...prev,
+        const nextParams = {
+          ...params,
           ...res,
-        }));
+        };
+        setParams(nextParams);
+        loadHotspots(nextParams);
       })
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Aggregate type breakdown from current hotspots
@@ -302,6 +329,27 @@ const Hotspots = ({ wsRefreshKey }) => {
                       </div>
                     </Tooltip>
                   </Circle>
+                  {/* Render cluster boundary polygon from DBSCAN */}
+                  {h.boundary_points && h.boundary_points.length > 0 && (
+                    <Polygon
+                      positions={h.boundary_points.map((p) => [p[0], p[1]])}
+                      pathOptions={{
+                        color,
+                        weight: 2,
+                        fillColor: color,
+                        fillOpacity: 0.06,
+                        dashArray: "3 6",
+                      }}
+                    >
+                      <Tooltip direction="top" opacity={0.95}>
+                        <div style={{ fontSize: "11px", lineHeight: 1.45 }}>
+                          <strong>Cluster Boundary</strong>
+                          <br />
+                          {h.boundary_points.length} boundary points
+                        </div>
+                      </Tooltip>
+                    </Polygon>
+                  )}
 
                   <CircleMarker
                     center={[h.lat, h.lng]}
@@ -432,7 +480,9 @@ const Hotspots = ({ wsRefreshKey }) => {
                         minWidth: "80px",
                       }}
                     >
-                      {h.time_window_hours ? `${h.time_window_hours}h` : "—"}
+                      {h.time_window_hours
+                        ? formatTimeWindow(h.time_window_hours)
+                        : "-"}
                     </td>
                     <td
                       style={{
@@ -443,7 +493,7 @@ const Hotspots = ({ wsRefreshKey }) => {
                     >
                       {h.detected_at
                         ? new Date(h.detected_at).toLocaleString()
-                        : "—"}
+                        : "-"}
                     </td>
                     <td style={{ minWidth: "80px" }}>
                       <button
@@ -555,25 +605,25 @@ const Hotspots = ({ wsRefreshKey }) => {
                 }}
               >
                 <span>Time Window</span>
-                <span>
-                  {params.time_window_hours >= 24
-                    ? `${Math.round(params.time_window_hours / 24)} days`
-                    : `${params.time_window_hours} hours`}
-                </span>
+                <span>Last {formatTimeWindow(params.time_window_hours)}</span>
               </div>
               <select
                 className="select"
                 value={params.time_window_hours}
-                onChange={(e) =>
-                  setParams((p) => ({
-                    ...p,
+                onChange={(e) => {
+                  const nextParams = {
+                    ...params,
                     time_window_hours: Number(e.target.value),
-                  }))
-                }
+                  };
+                  setParams(nextParams);
+                  loadHotspots(nextParams);
+                }}
               >
-                <option value={24}>Last 24 hours</option>
-                <option value={72}>Last 3 days</option>
-                <option value={168}>Last 7 days</option>
+                {HOTSPOT_PERIOD_OPTIONS.map((option) => (
+                  <option key={option.hours} value={option.hours}>
+                    Last {option.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div style={{ marginBottom: "10px" }}>
@@ -610,7 +660,7 @@ const Hotspots = ({ wsRefreshKey }) => {
                 setRecomputing(true);
                 try {
                   await api.post("/api/v1/hotspots/recompute", params);
-                  loadHotspots();
+                  loadHotspots(params);
                 } catch {
                   // ignore
                 } finally {

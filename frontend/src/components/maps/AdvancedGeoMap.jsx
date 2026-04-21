@@ -1,13 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import React, { useEffect, useRef, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 // Fix for default markers in Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+  iconRetinaUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+  iconUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
 });
 
 const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
@@ -25,11 +28,14 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
 
     // Initialize map if it doesn't exist
     if (!mapInstance.current) {
-      mapInstance.current = L.map(mapRef.current).setView([-1.5042, 29.6380], 12);
+      mapInstance.current = L.map(mapRef.current).setView(
+        [-1.5042, 29.638],
+        12,
+      );
 
       // Add tile layer with better styling
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
         maxZoom: 19,
       }).addTo(mapInstance.current);
 
@@ -38,7 +44,9 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
     }
 
     // Clear existing markers and layers
-    markersRef.current.forEach(marker => mapInstance.current.removeLayer(marker));
+    markersRef.current.forEach((marker) =>
+      mapInstance.current.removeLayer(marker),
+    );
     markersRef.current = [];
     if (heatmapLayerRef.current) {
       mapInstance.current.removeLayer(heatmapLayerRef.current);
@@ -46,19 +54,19 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
 
     // Add data based on map type
     switch (mapType) {
-      case 'heatmap':
+      case "heatmap":
         createHeatMap();
         break;
-      case 'clusters':
+      case "clusters":
         createClusterMap();
         break;
-      case 'flows':
+      case "flows":
         createFlowMap();
         break;
-      case 'sectors':
+      case "sectors":
         createSectorMap();
         break;
-      case 'devices':
+      case "devices":
         createDeviceMap();
         break;
       default:
@@ -75,10 +83,10 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
   const createHeatMap = () => {
     if (!data?.heatMapData) return;
 
-    const heatData = data.heatMapData.map(point => [
+    const heatData = data.heatMapData.map((point) => [
       point.latitude,
       point.longitude,
-      point.intensity || point.report_count || 1
+      point.intensity || point.report_count || 1,
     ]);
 
     // Create gradient circles for heat effect
@@ -87,10 +95,10 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
       const opacity = Math.min(intensity / 10, 0.8); // Scale opacity by intensity
 
       const circle = L.circle([lat, lng], {
-        color: 'red',
-        fillColor: '#f03',
+        color: "red",
+        fillColor: "#f03",
         fillOpacity: opacity,
-        radius: radius
+        radius: radius,
       }).addTo(mapInstance.current);
 
       circle.bindPopup(`
@@ -112,17 +120,24 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
   const createClusterMap = () => {
     if (!data?.clusters) return;
 
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD'];
+    const colors = [
+      "#FF6B6B",
+      "#4ECDC4",
+      "#45B7D1",
+      "#96CEB4",
+      "#FFEAA7",
+      "#DDA0DD",
+    ];
 
     data.clusters.forEach((cluster, index) => {
       const color = colors[index % colors.length];
-      
+
       // Create cluster circle
       const circle = L.circle([cluster.center_lat, cluster.center_lng], {
         color: color,
         fillColor: color,
         fillOpacity: 0.3,
-        radius: cluster.radius || 1000
+        radius: cluster.radius || 1000,
       }).addTo(mapInstance.current);
 
       circle.bindPopup(`
@@ -132,14 +147,34 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
         Center: ${cluster.center_lat.toFixed(4)}, ${cluster.center_lng.toFixed(4)}
       `);
 
+      // Add boundary polygon if available (from DBSCAN)
+      if (cluster.boundary_points && cluster.boundary_points.length > 0) {
+        const boundaryCoords = cluster.boundary_points.map((p) => [p[0], p[1]]);
+        const boundaryPolygon = L.polygon(boundaryCoords, {
+          color: color,
+          weight: 2,
+          fillColor: color,
+          fillOpacity: 0.08,
+          dashArray: "3 6",
+        }).addTo(mapInstance.current);
+
+        boundaryPolygon.bindPopup(`
+          <strong>Cluster ${index + 1} Boundary</strong><br>
+          ${cluster.boundary_points.length} boundary points<br>
+          Device Density Area
+        `);
+
+        markersRef.current.push(boundaryPolygon);
+      }
+
       // Add center marker
       const marker = L.marker([cluster.center_lat, cluster.center_lng], {
         icon: L.divIcon({
-          className: 'custom-div-icon',
+          className: "custom-div-icon",
           html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
           iconSize: [20, 20],
-          iconAnchor: [10, 10]
-        })
+          iconAnchor: [10, 10],
+        }),
       }).addTo(mapInstance.current);
 
       marker.bindPopup(`
@@ -156,8 +191,9 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
     if (!data?.flowData) return;
 
     // Create curved lines for flows
-    data.flowData.forEach(flow => {
-      if (!flow.from_lat || !flow.from_lng || !flow.to_lat || !flow.to_lng) return;
+    data.flowData.forEach((flow) => {
+      if (!flow.from_lat || !flow.from_lng || !flow.to_lat || !flow.to_lng)
+        return;
 
       const weight = Math.max(2, Math.min(10, flow.flow_strength / 2));
       const opacity = Math.min(0.8, flow.flow_strength / 10);
@@ -165,20 +201,20 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
       // Create curved path
       const latlngs = [
         [flow.from_lat, flow.from_lng],
-        [flow.to_lat, flow.to_lng]
+        [flow.to_lat, flow.to_lng],
       ];
 
       const polyline = L.polyline(latlngs, {
-        color: '#FF6B6B',
+        color: "#FF6B6B",
         weight: weight,
         opacity: opacity,
-        smoothFactor: 1
+        smoothFactor: 1,
       }).addTo(mapInstance.current);
 
       polyline.bindPopup(`
         <strong>Movement Flow</strong><br>
-        From: ${flow.from_sector || 'Unknown'}<br>
-        To: ${flow.to_sector || 'Unknown'}<br>
+        From: ${flow.from_sector || "Unknown"}<br>
+        To: ${flow.to_sector || "Unknown"}<br>
         Strength: ${flow.flow_strength}<br>
         Devices: ${flow.device_count || 0}
       `);
@@ -186,11 +222,11 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
       // Add arrow marker at the end
       const arrowMarker = L.marker([flow.to_lat, flow.to_lng], {
         icon: L.divIcon({
-          className: 'flow-arrow',
+          className: "flow-arrow",
           html: `<div style="color: #FF6B6B; font-size: 16px; transform: rotate(${flow.angle || 0}deg);">➤</div>`,
           iconSize: [20, 20],
-          iconAnchor: [10, 10]
-        })
+          iconAnchor: [10, 10],
+        }),
       }).addTo(mapInstance.current);
 
       markersRef.current.push(polyline, arrowMarker);
@@ -198,16 +234,16 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
 
     // Add sector markers
     if (data.sectors) {
-      data.sectors.forEach(sector => {
+      data.sectors.forEach((sector) => {
         if (!sector.latitude || !sector.longitude) return;
 
         const marker = L.marker([sector.latitude, sector.longitude], {
           icon: L.divIcon({
-            className: 'sector-marker',
+            className: "sector-marker",
             html: `<div style="background-color: #4ECDC4; color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px; font-weight: bold; white-space: nowrap;">${sector.sector_name}</div>`,
             iconSize: [100, 30],
-            iconAnchor: [50, 15]
-          })
+            iconAnchor: [50, 15],
+          }),
         }).addTo(mapInstance.current);
 
         marker.bindPopup(`
@@ -224,19 +260,22 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
   const createSectorMap = () => {
     if (!data?.sectors) return;
 
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7'];
+    const colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"];
 
     data.sectors.forEach((sector, index) => {
       const color = colors[index % colors.length];
-      
+
       // Create sector circle (approximate)
       const radius = Math.sqrt(sector.report_count || 1) * 200;
-      const circle = L.circle([sector.latitude || -1.5042, sector.longitude || 29.6380], {
-        color: color,
-        fillColor: color,
-        fillOpacity: 0.4,
-        radius: radius
-      }).addTo(mapInstance.current);
+      const circle = L.circle(
+        [sector.latitude || -1.5042, sector.longitude || 29.638],
+        {
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.4,
+          radius: radius,
+        },
+      ).addTo(mapInstance.current);
 
       circle.bindPopup(`
         <strong>${sector.sector_name}</strong><br>
@@ -247,14 +286,17 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
       `);
 
       // Add sector label
-      const label = L.marker([sector.latitude || -1.5042, sector.longitude || 29.6380], {
-        icon: L.divIcon({
-          className: 'sector-label',
-          html: `<div style="background-color: ${color}; color: white; padding: 8px 12px; border-radius: 20px; font-size: 14px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3); white-space: nowrap;">${sector.sector_name}</div>`,
-          iconSize: [120, 35],
-          iconAnchor: [60, 17]
-        })
-      }).addTo(mapInstance.current);
+      const label = L.marker(
+        [sector.latitude || -1.5042, sector.longitude || 29.638],
+        {
+          icon: L.divIcon({
+            className: "sector-label",
+            html: `<div style="background-color: ${color}; color: white; padding: 8px 12px; border-radius: 20px; font-size: 14px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3); white-space: nowrap;">${sector.sector_name}</div>`,
+            iconSize: [120, 35],
+            iconAnchor: [60, 17],
+          }),
+        },
+      ).addTo(mapInstance.current);
 
       markersRef.current.push(circle, label);
     });
@@ -265,29 +307,34 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
 
     // Device status colors
     const getStatusColor = (device) => {
-      if (device.suspicious_score > 50) return '#FF6B6B'; // Red for suspicious
-      if (device.automation_score > 80) return '#FFA500'; // Orange for automated
-      if (device.avg_speed > 50) return '#FFD700'; // Yellow for high speed
-      return '#4ECDC4'; // Green for normal
+      if (device.suspicious_score > 50) return "#FF6B6B"; // Red for suspicious
+      if (device.automation_score > 80) return "#FFA500"; // Orange for automated
+      if (device.avg_speed > 50) return "#FFD700"; // Yellow for high speed
+      return "#4ECDC4"; // Green for normal
     };
 
-    data.devices.forEach(device => {
+    data.devices.forEach((device) => {
       if (!device.last_latitude || !device.last_longitude) return;
 
       const color = getStatusColor(device);
-      
+
       const marker = L.marker([device.last_latitude, device.last_longitude], {
         icon: L.divIcon({
-          className: 'device-marker',
+          className: "device-marker",
           html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
           iconSize: [12, 12],
-          iconAnchor: [6, 6]
-        })
+          iconAnchor: [6, 6],
+        }),
       }).addTo(mapInstance.current);
 
-      const statusText = device.suspicious_score > 50 ? 'Suspicious' : 
-                        device.automation_score > 80 ? 'Automated' : 
-                        device.avg_speed > 50 ? 'High Speed' : 'Normal';
+      const statusText =
+        device.suspicious_score > 50
+          ? "Suspicious"
+          : device.automation_score > 80
+            ? "Automated"
+            : device.avg_speed > 50
+              ? "High Speed"
+              : "Normal";
 
       marker.bindPopup(`
         <strong>Device ${device.device_hash}</strong><br>
@@ -299,7 +346,7 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
         Night Activity: ${((device.night_activity_ratio || 0) * 100).toFixed(1)}%
       `);
 
-      marker.on('click', () => {
+      marker.on("click", () => {
         setSelectedMarker(device);
         if (onMarkerClick) onMarkerClick(device);
       });
@@ -310,58 +357,77 @@ const AdvancedGeoMap = ({ data, mapType, onMarkerClick, onAreaClick }) => {
 
   if (isLoading) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '500px',
-        backgroundColor: '#f8f9fa',
-        borderRadius: '8px',
-        border: '1px solid #dee2e6'
-      }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "500px",
+          backgroundColor: "#f8f9fa",
+          borderRadius: "8px",
+          border: "1px solid #dee2e6",
+        }}
+      >
         <div>
-          <i className="fa fa-spinner fa-spin fa-2x" style={{ color: '#007bff' }}></i>
-          <p style={{ marginTop: '10px', color: '#6c757d' }}>Loading advanced map...</p>
+          <i
+            className="fa fa-spinner fa-spin fa-2x"
+            style={{ color: "#007bff" }}
+          ></i>
+          <p style={{ marginTop: "10px", color: "#6c757d" }}>
+            Loading advanced map...
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: "relative" }}>
       {/* Map Controls */}
-      <div style={{
-        position: 'absolute',
-        top: '10px',
-        right: '10px',
-        zIndex: 1000,
-        backgroundColor: 'white',
-        padding: '10px',
-        borderRadius: '8px',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-        fontSize: '12px'
-      }}>
-        <div style={{ marginBottom: '5px' }}>
+      <div
+        style={{
+          position: "absolute",
+          top: "10px",
+          right: "10px",
+          zIndex: 1000,
+          backgroundColor: "white",
+          padding: "10px",
+          borderRadius: "8px",
+          boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+          fontSize: "12px",
+        }}
+      >
+        <div style={{ marginBottom: "5px" }}>
           <strong>Map Type:</strong> {mapType}
         </div>
         {selectedMarker && (
-          <div style={{ marginTop: '10px', padding: '5px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
-            <strong>Selected:</strong><br/>
-            Device: {selectedMarker.device_hash}<br/>
-            Status: {selectedMarker.suspicious_score > 50 ? 'Suspicious' : 'Normal'}
+          <div
+            style={{
+              marginTop: "10px",
+              padding: "5px",
+              backgroundColor: "#f8f9fa",
+              borderRadius: "4px",
+            }}
+          >
+            <strong>Selected:</strong>
+            <br />
+            Device: {selectedMarker.device_hash}
+            <br />
+            Status:{" "}
+            {selectedMarker.suspicious_score > 50 ? "Suspicious" : "Normal"}
           </div>
         )}
       </div>
 
       {/* Map Container */}
-      <div 
-        ref={mapRef} 
-        style={{ 
-          height: '500px', 
-          width: '100%',
-          borderRadius: '8px',
-          overflow: 'hidden',
-          border: '1px solid #dee2e6'
+      <div
+        ref={mapRef}
+        style={{
+          height: "500px",
+          width: "100%",
+          borderRadius: "8px",
+          overflow: "hidden",
+          border: "1px solid #dee2e6",
         }}
       />
     </div>
