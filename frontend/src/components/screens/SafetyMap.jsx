@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -16,7 +16,7 @@ import api from "../../api/client";
 
 const MUSANZE_CENTER = [-1.5042, 29.638]; // Musanze district center
 const MUSANZE_ZOOM = 12;
-const RWANDA_CENTER = [-1.5, 29.6]; // near Musanze
+const MUSANZE_BUFFER_KM = 0.5;
 const HOTSPOT_PERIOD_OPTIONS = [
   { label: "1 day", hours: 24 },
   { label: "7 days", hours: 168 },
@@ -47,11 +47,18 @@ const MapFocusController = ({ target, trigger }) => {
   return null;
 };
 
-const RelocatorControl = () => {
+const RelocatorControl = ({ maxBounds }) => {
   const map = useMap();
 
   const handleRelocate = () => {
-    map.flyTo(RWANDA_CENTER, 11, { duration: 1.5 });
+    if (maxBounds) {
+      map.fitBounds(maxBounds, {
+        padding: [12, 12],
+        animate: true,
+      });
+      return;
+    }
+    map.flyTo(MUSANZE_CENTER, MUSANZE_ZOOM, { duration: 1.5 });
   };
 
   useEffect(() => {
@@ -90,16 +97,72 @@ const RelocatorControl = () => {
     return () => {
       map.removeControl(relocateControl);
     };
-  }, [map]);
+  }, [map, maxBounds]);
 
   return null;
 };
 
-// Musanze area bounds - restrict to northern Rwanda region
-const MUSANZE_BOUNDS = [
+// Fallback Musanze district envelope when polygon data has not loaded yet.
+const DEFAULT_MUSANZE_BOUNDS = [
   [-1.8, 29.0], // Southwest corner
   [-1.2, 30.2], // Northeast corner
 ];
+
+const collectCoordinates = (positions, out = []) => {
+  if (!Array.isArray(positions) || positions.length === 0) return out;
+
+  const first = positions[0];
+  if (typeof first === "number" && positions.length >= 2) {
+    const lat = Number(positions[0]);
+    const lng = Number(positions[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) out.push([lat, lng]);
+    return out;
+  }
+
+  positions.forEach((child) => collectCoordinates(child, out));
+  return out;
+};
+
+const expandBoundsByKm = (bounds, km = 1) => {
+  const south = Number(bounds[0][0]);
+  const west = Number(bounds[0][1]);
+  const north = Number(bounds[1][0]);
+  const east = Number(bounds[1][1]);
+
+  const centerLat = (south + north) / 2;
+  const latPadding = km / 111;
+  const lonPadding =
+    km / (111 * Math.max(Math.cos((centerLat * Math.PI) / 180), 0.2));
+
+  return [
+    [south - latPadding, west - lonPadding],
+    [north + latPadding, east + lonPadding],
+  ];
+};
+
+const MapBoundsController = ({ maxBounds }) => {
+  const map = useMap();
+  const didInitialFitRef = useRef(false);
+
+  useEffect(() => {
+    if (!maxBounds) return;
+
+    const bounds = L.latLngBounds(maxBounds);
+    map.setMaxBounds(bounds);
+
+    const minZoomForBounds = map.getBoundsZoom(bounds, false, [8, 8]);
+    map.setMinZoom(Math.max(1, minZoomForBounds));
+
+    if (!didInitialFitRef.current) {
+      map.fitBounds(bounds, { padding: [12, 12], animate: false });
+      didInitialFitRef.current = true;
+    } else if (!bounds.contains(map.getCenter())) {
+      map.panInsideBounds(bounds, { animate: false });
+    }
+  }, [map, maxBounds]);
+
+  return null;
+};
 
 const getFormationStage = (hotspot) => {
   const cls = hotspot?.classification || hotspot?.lifecycle_state || "";
@@ -476,6 +539,24 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     });
   };
 
+  const musanzeBounds = useMemo(() => {
+    const points = [];
+    polygons.forEach((p) => collectCoordinates(p.positions, points));
+
+    if (!points.length) {
+      return expandBoundsByKm(DEFAULT_MUSANZE_BOUNDS, MUSANZE_BUFFER_KM);
+    }
+
+    const lats = points.map((p) => p[0]);
+    const lngs = points.map((p) => p[1]);
+    const computed = [
+      [Math.min(...lats), Math.min(...lngs)],
+      [Math.max(...lats), Math.max(...lngs)],
+    ];
+
+    return expandBoundsByKm(computed, MUSANZE_BUFFER_KM);
+  }, [polygons]);
+
   return (
     <>
       <div className="page-header smx-page-header">
@@ -549,20 +630,28 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             <MapContainer
               center={MUSANZE_CENTER}
               zoom={MUSANZE_ZOOM}
-              minZoom={9}
+              minZoom={11}
               maxZoom={18}
-              maxBounds={MUSANZE_BOUNDS}
+              maxBounds={musanzeBounds}
               maxBoundsViscosity={1.0}
-              scrollWheelZoom
+              scrollWheelZoom="center"
+              wheelDebounceTime={80}
+              wheelPxPerZoomLevel={100}
+              zoomSnap={0.25}
+              zoomDelta={0.5}
+              inertia
+              inertiaDeceleration={2500}
+              tapTolerance={20}
               style={{ width: "100%", height: "100%" }}
               zoomControl={false}
             >
+              <MapBoundsController maxBounds={musanzeBounds} />
               <TileLayer
                 attribution="&copy; OpenStreetMap contributors"
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
               <ZoomControl position="topright" />
-              <RelocatorControl />
+              <RelocatorControl maxBounds={musanzeBounds} />
               <MapFocusController
                 target={selectedHotspot}
                 trigger={focusNonce}
@@ -728,6 +817,25 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                 );
               })}
             </MapContainer>
+            <div
+              style={{
+                position: "absolute",
+                left: "10px",
+                bottom: "10px",
+                zIndex: 500,
+                background: "rgba(255, 255, 255, 0.92)",
+                border: "1px solid var(--border)",
+                borderRadius: "10px",
+                padding: "7px 10px",
+                fontSize: "11px",
+                color: "var(--muted)",
+                pointerEvents: "none",
+                backdropFilter: "blur(2px)",
+              }}
+            >
+              View is locked to Musanze district (+0.5 km buffer). Use home
+              button to recenter.
+            </div>
           </div>
         </div>
 
