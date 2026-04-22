@@ -15,7 +15,7 @@ from app.models.report import Report
 from app.models.ml_prediction import MLPrediction
 from app.models.location import Location
 from app.schemas.device import DeviceCreate, DeviceResponse
-from app.api.v1.auth import get_current_admin_or_supervisor
+from app.api.v1.auth import get_current_admin_or_supervisor, get_current_admin_supervisor_or_officer
 from app.models.police_user import PoliceUser
 from app.schemas.ml import MLPredictionResponse, MLInsightResponse, DeviceMLStatsResponse
 from app.core.credibility_model import (
@@ -217,7 +217,7 @@ def get_device_profile(device_hash: str, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=dict)
 def list_devices(
-    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)],
+    current_user: Annotated[PoliceUser, Depends(get_current_admin_supervisor_or_officer)],
     db: Session = Depends(get_db),
     trust_level: Optional[str] = Query(
         None, description="high (>=70), medium (40-69), low (<40)"
@@ -229,7 +229,7 @@ def list_devices(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
-    """List devices with trust stats for police dashboard. Admin/supervisor only."""
+    """List devices with trust stats for police dashboard. Admin/supervisor/officer access."""
     query = db.query(Device)
     if hasattr(Device, "is_banned") and not include_banned:
         query = query.filter(Device.is_banned == False)
@@ -590,6 +590,7 @@ async def get_home_insights_endpoint(
 @router.get("/{device_id}/location-history")
 def get_device_location_history(
     device_id: str,
+    current_user: Annotated[PoliceUser, Depends(get_current_admin_supervisor_or_officer)],
     db: Session = Depends(get_db),
     limit: int = Query(50, ge=1, le=200),
 ):
@@ -680,6 +681,7 @@ def get_device_location_history(
 @router.get("/{device_id}/ml-stats", response_model=DeviceMLStatsResponse)
 async def get_device_ml_stats_endpoint(
     device_id: str,
+    current_user: Annotated[PoliceUser, Depends(get_current_admin_supervisor_or_officer)],
     db: Session = Depends(get_db)
 ):
     """Get ML statistics for a specific device"""

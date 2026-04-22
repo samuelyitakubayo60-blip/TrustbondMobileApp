@@ -124,6 +124,17 @@ async def get_current_admin_or_supervisor(
     return current_user
 
 
+async def get_current_admin_supervisor_or_officer(
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+) -> PoliceUser:
+    if current_user.role not in ("admin", "supervisor", "officer"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin, supervisor, or officer access required",
+        )
+    return current_user
+
+
 @router.post("/login", response_model=Token)
 def login(data: LoginRequest, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db)):
     user = _authenticate_user(db, data.email, data.password)

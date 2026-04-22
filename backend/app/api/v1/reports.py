@@ -4169,23 +4169,30 @@ def _balance_workload_and_reassign(db: Session):
         for officer_id, count in case_counts:
             workload[str(officer_id)] = count
         
-        # Find overloaded and underloaded officers
+        # Find overloaded and underloaded officers (aggressive balancing for equal distribution)
         avg_cases = sum(workload.values()) / len(workload)
-        overloaded = [oid for oid, count in workload.items() if count > avg_cases + 2]
-        underloaded = [oid for oid, count in workload.items() if count < avg_cases - 1]
+        max_cases = max(workload.values()) if workload else 0
+        min_cases = min(workload.values()) if workload else 0
+        
+        # Trigger balancing if there's any imbalance (difference of 1 or more)
+        if max_cases - min_cases <= 0:
+            return  # Already perfectly balanced
+        
+        overloaded = [oid for oid, count in workload.items() if count > min_cases]
+        underloaded = [oid for oid, count in workload.items() if count < max_cases]
         
         if not overloaded or not underloaded:
-            return  # Workload is already balanced
+            return  # No imbalance to fix
         
         # Reassign cases from overloaded to underloaded officers
         reassigned = 0
         for overloaded_officer in overloaded:
-            # Get newest cases from overloaded officer
+            # Get cases from overloaded officer (aggressive rebalancing)
             cases_to_reassign = db.query(Case).filter(
                 Case.assigned_to_id == overloaded_officer,
-                Case.status == 'assigned',  # Only reassign assigned cases, not in-progress
-                Case.created_at >= datetime.now(timezone.utc) - timedelta(days=1)  # Only recent cases
-            ).order_by(Case.created_at.desc()).limit(2).all()
+                Case.status.in_(['assigned', 'open', 'in_progress']),  # Include more statuses
+                Case.created_at >= datetime.now(timezone.utc) - timedelta(days=7)  # Include last 7 days
+            ).order_by(Case.created_at.desc()).limit(5).all()  # Reassign up to 5 cases
             
             for case in cases_to_reassign:
                 if underloaded:
@@ -4339,6 +4346,7 @@ def _assign_officer_to_case_based_on_location(db: Session, case_lat: float, case
         from app.models.case import Case
         from math import radians, cos, sin, asin, sqrt
         from sqlalchemy import func
+        import random
 
         def calculate_distance(lat1, lon1, lat2, lon2):
             if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
@@ -4371,7 +4379,27 @@ def _assign_officer_to_case_based_on_location(db: Session, case_lat: float, case
                 ).group_by(Case.assigned_to_id).all()
                 
                 count_dict = dict(case_counts)
-                selected_officer = min(officers, key=lambda o: count_dict.get(o.police_user_id, 0))
+                
+                # Get current case counts for all officers
+                officer_workloads = []
+                for officer in officers:
+                    count = count_dict.get(officer.police_user_id, 0)
+                    officer_workloads.append((officer, count))
+                
+                # Sort by workload (ascending) - officers with fewer cases first
+                officer_workloads.sort(key=lambda x: x[1])
+                
+                # Get minimum workload
+                min_workload = officer_workloads[0][1] if officer_workloads else 0
+                
+                # Filter officers with minimum workload (for fair distribution)
+                least_loaded_officers = [off for off, count in officer_workloads if count == min_workload]
+                
+                # Randomly select from least loaded officers to ensure rotation
+                selected_officer = random.choice(least_loaded_officers)
+                
+                print(f"🎯 Assigned case to officer {selected_officer.police_user_id} (workload: {min_workload}) from {len(least_loaded_officers)} eligible officers")
+                
                 return selected_officer.police_user_id
         
         return None
@@ -4443,6 +4471,12 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
         db.commit()
         stats['cases_created'] += 1
         stats['case_number'] = case_number
+        
+        # Trigger workload balancing after case creation to ensure fair distribution
+        try:
+            _continuous_workload_balancing(db)
+        except Exception as e:
+            print(f"Warning: Could not trigger continuous workload balancing: {e}")
         print(f"Created auto-case {case.case_number} with {len(reports)} reports")
         
         # Broadcast case creation to all connected clients for real-time updates
