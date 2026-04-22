@@ -2,9 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
-  CircleMarker,
-  Circle,
-  Polyline,
   Tooltip,
   ZoomControl,
   Polygon,
@@ -34,17 +31,6 @@ const incidentTone = {
   traffic: "info",
   drug: "success",
   "drug activity": "success",
-};
-
-const MapFocusController = ({ target, trigger }) => {
-  const map = useMap();
-
-  useEffect(() => {
-    if (!target) return;
-    map.flyTo([target.lat, target.lng], 14, { duration: 0.9 });
-  }, [map, target, trigger]);
-
-  return null;
 };
 
 const RelocatorControl = ({ maxBounds }) => {
@@ -408,7 +394,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     [filteredHotspots],
   );
 
-  // Filter historical hotspots for table display
+// Filter historical hotspots for table display
   const filteredHistoricalHotspots = useMemo(() => {
     return typeFilter === "all"
       ? historicalHotspots
@@ -452,7 +438,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
         .map((h) => [h.lat, h.lng]),
     [plottedHotspots],
   );
-
   const avgClusterTrust = useMemo(() => {
     const withTrust = historicalHotspots
       .map((h) =>
@@ -567,11 +552,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       0,
     );
     return palette[hash % palette.length];
-  };
-
-  const focusHotspot = (hotspotId) => {
-    setSelectedHotspotId(hotspotId);
-    setFocusNonce((n) => n + 1);
   };
 
   const formatClusterTimestamp = (value) => {
@@ -699,16 +679,11 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
               />
               <ZoomControl position="topright" />
               <RelocatorControl maxBounds={musanzeBounds} />
-              <MapFocusController
-                target={selectedHotspot}
-                trigger={focusNonce}
-              />
 
               {polygons.map((p) => {
                 const color = getSectorColor(p.sector);
                 return (
                   <Polygon
-                    // positions can be Polygon or MultiPolygon-style arrays
                     key={p.id}
                     positions={p.positions}
                     pathOptions={{
@@ -719,10 +694,10 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                     }}
                   >
                     <Tooltip
-                      sticky
                       direction="top"
                       offset={[0, -2]}
                       opacity={0.95}
+                      interactive={false}
                     >
                       <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
                         <strong>
@@ -740,129 +715,45 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                 );
               })}
 
-              {formationPath.length > 1 && (
-                <Polyline
-                  positions={formationPath}
-                  pathOptions={{
-                    color: "#4a90d9",
-                    weight: 2,
-                    opacity: 0.8,
-                    dashArray: "4 8",
-                  }}
-                />
-              )}
-
-              {plottedHotspots.map((h) => {
-                const pos = [h.lat, h.lng];
-                const count = h.incident_count || 0;
-                const radius = 14 + Math.min(count, 24); // visual radius
-                const color = getCircleColor(h.risk_level);
-                const isSelected = selectedHotspotId === h.hotspot_id;
-                const radiusMeters = Math.max(
-                  140,
-                  Number(h.radius_meters || 0),
-                );
-                return (
-                  <React.Fragment key={h.hotspot_id}>
-                    <Circle
-                      center={pos}
-                      radius={radiusMeters}
+              {plottedHotspots
+                .filter(
+                  (h) =>
+                    Array.isArray(h.boundary_points) &&
+                    h.boundary_points.length > 2,
+                )
+                .map((h) => {
+                  const color = getCircleColor(h.risk_level);
+                  return (
+                    <Polygon
+                      key={`cluster-boundary-${h.hotspot_id}`}
+                      positions={h.boundary_points.map((p) => [p[0], p[1]])}
                       pathOptions={{
                         color,
+                        weight: 2,
                         fillColor: color,
-                        fillOpacity: isSelected ? 0.16 : 0.09,
-                        weight: isSelected ? 2.5 : 1.5,
-                        opacity: 0.65,
-                      }}
-                      eventHandlers={{
-                        click: () => focusHotspot(h.hotspot_id),
-                        dblclick: () =>
-                          goToScreen("hotspot-details", 0, {
-                            hotspotId: h.hotspot_id,
-                          }),
-                      }}
-                    />
-                    {isSelected && (
-                      <Circle
-                        center={pos}
-                        radius={Math.round(radiusMeters * 1.35)}
-                        pathOptions={{
-                          color,
-                          fillOpacity: 0,
-                          weight: 1,
-                          opacity: 0.5,
-                          dashArray: "5 7",
-                        }}
-                      />
-                    )}
-                    {/* Render cluster boundary polygon from DBSCAN */}
-                    {h.boundary_points && h.boundary_points.length > 0 && (
-                      <Polygon
-                        positions={h.boundary_points.map((p) => [p[0], p[1]])}
-                        pathOptions={{
-                          color: color,
-                          weight: 2,
-                          fillColor: color,
-                          fillOpacity: 0.08,
-                          dashArray: "3 6",
-                        }}
-                      >
-                        <Tooltip
-                          direction="top"
-                          offset={[0, -4]}
-                          opacity={0.92}
-                        >
-                          <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
-                            <strong>Cluster Boundary</strong>
-                            <br />
-                            {h.boundary_points.length} points
-                          </div>
-                        </Tooltip>
-                      </Polygon>
-                    )}
-                    <CircleMarker
-                      center={pos}
-                      radius={radius / 3}
-                      pathOptions={{
-                        color,
-                        fillColor: color,
-                        fillOpacity: 0.86,
-                        weight: isSelected ? 3 : 2,
-                      }}
-                      eventHandlers={{
-                        click: () => focusHotspot(h.hotspot_id),
+                        fillOpacity: 0.1,
+                        dashArray: "3 6",
                       }}
                     >
                       <Tooltip
-                        permanent
-                        direction="center"
-                        className="cluster-count-label"
+                        direction="top"
+                        offset={[0, -4]}
+                        opacity={0.92}
+                        interactive={false}
                       >
-                        <span>{count}</span>
-                      </Tooltip>
-                      <Tooltip direction="top" offset={[0, -4]} opacity={0.92}>
                         <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
-                          <strong>
-                            {h.incident_type_name || "Cluster"} #{h.hotspot_id}
-                          </strong>
+                          <strong>Cluster #{h.hotspot_id}</strong>
                           <br />
-                          Reports: {count}
+                          Type: {h.incident_type_name || "Mixed"}
                           <br />
-                          Risk: {h.risk_level || "low"}
+                          Reports: {h.incident_count || 0}
                           <br />
-                          Formation: {stageLabel(h.stage)}
-                          <br />
-                          <em
-                            style={{ fontSize: "10px", color: "var(--muted)" }}
-                          >
-                            Double-click for details
-                          </em>
+                          Risk: {String(h.risk_level || "low").toUpperCase()}
                         </div>
                       </Tooltip>
-                    </CircleMarker>
-                  </React.Fragment>
-                );
-              })}
+                    </Polygon>
+                  );
+                })}
             </MapContainer>
             <div
               style={{
@@ -887,7 +778,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
         </div>
 
         <div className="map-side">
-
           <div className="card smx-side-card">
             <div className="card-header">
               <div className="card-title">DBSCAN Results</div>
@@ -1345,10 +1235,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                           alert(
                             `🚨 ${res.length} emergency hotspot(s) detected!\n\nCheck the map for critical incidents requiring immediate attention.`,
                           );
-                          // Focus on first emergency hotspot
-                          if (res[0]?.hotspot_id) {
-                            focusHotspot(res[0].hotspot_id);
-                          }
                         } else {
                           alert(
                             "✅ No emergency hotspots detected in the last 24 hours.",
@@ -1376,10 +1262,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                           alert(
                             `⚠️ ${res.length} high-priority hotspot(s) detected in the last week!\n\nThese areas may require increased patrol presence.`,
                           );
-                          // Focus on first emergency hotspot
-                          if (res[0]?.hotspot_id) {
-                            focusHotspot(res[0].hotspot_id);
-                          }
                         } else {
                           alert(
                             "✅ No high-priority hotspots detected in the last week.",
@@ -1794,12 +1676,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                     </td>
                     <td>
                       <div className="smx-actions-cell">
-                        <button
-                          className="btn btn-outline btn-sm"
-                          onClick={() => focusHotspot(h.hotspot_id)}
-                        >
-                          Map
-                        </button>
                         <button
                           className="btn btn-primary btn-sm"
                           onClick={() =>
