@@ -1,9 +1,12 @@
 from typing import Annotated, List, Optional, Dict, Any
+import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session, joinedload, selectinload
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 from app.core.cluster_classifier import predict_cluster_classification
 from app.database import get_db
@@ -989,6 +992,121 @@ def get_hotspot_incidents(
     )
     if not hotspot:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hotspot not found")
+@router.get("/stats")
+async def get_hotspot_stats(
+    time_period: Optional[str] = None,
+    hours_back: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get hotspot statistics for the sidebar cards
+    """
+    try:
+        # Calculate time cutoff based on parameters
+        cutoff_time = datetime.utcnow()
+        
+        if time_period:
+            if time_period == "day":
+                cutoff_time -= timedelta(days=1)
+            elif time_period == "week":
+                cutoff_time -= timedelta(weeks=1)
+            elif time_period == "month":
+                cutoff_time -= timedelta(days=30)
+            elif time_period == "quarter":
+                cutoff_time -= timedelta(days=90)
+            elif time_period == "year":
+                cutoff_time -= timedelta(days=365)
+        elif hours_back:
+            cutoff_time -= timedelta(hours=hours_back)
+        else:
+            # Default to last 30 days if no time period specified
+            cutoff_time -= timedelta(days=30)
+        
+        # Query hotspots within the time period
+        query = db.query(Hotspot).filter(Hotspot.detected_at >= cutoff_time)
+        
+        # Note: Hotspots don't have station_id, so no role-based filtering needed
+        # All users can see all hotspots
+        hotspots = query.all()
+        
+        # Calculate statistics
+        total_clusters = len(hotspots)
+        reports_in_clusters = sum(h.incident_count or 0 for h in hotspots)
+        
+        # Calculate risk level counts
+        crit_count = sum(1 for h in hotspots if h.risk_level in ["high", "critical"])
+        warn_count = sum(1 for h in hotspots if h.risk_level == "medium")
+        normal_count = sum(1 for h in hotspots if h.risk_level == "low")
+        
+        # Calculate formation stage counts
+        stage_counts = {"emerging": 0, "active": 0, "intense": 0}
+        for h in hotspots:
+            # Determine formation stage based on risk level and incident count
+            risk = h.risk_level or ""
+            count = h.incident_count or 0
+            
+            if risk == "critical" or count >= 8:
+                stage_counts["intense"] += 1
+            elif risk == "high" or count >= 4:
+                stage_counts["active"] += 1
+            elif risk == "medium" or count >= 2:
+                stage_counts["emerging"] += 1
+            else:
+                stage_counts["emerging"] += 1
+        
+        # Calculate average cluster trust (simplified calculation)
+        avg_trust = 75  # Default trust score
+        if hotspots:
+            trust_scores = []
+            for h in hotspots:
+                # Base trust depends on incident count and risk level
+                base_trust = 70
+                if h.incident_count and h.incident_count > 10:
+                    base_trust += 10
+                elif h.incident_count and h.incident_count > 5:
+                    base_trust += 5
+                
+                # Risk level adjustment
+                if h.risk_level == "critical":
+                    base_trust += 10
+                elif h.risk_level == "high":
+                    base_trust += 5
+                elif h.risk_level == "medium":
+                    base_trust += 2
+                
+                trust_scores.append(min(100, base_trust))  # Cap at 100
+            
+            if trust_scores:
+                avg_trust = round(sum(trust_scores) / len(trust_scores))
+        
+        # Get latest cluster run time
+        latest_run = "Never"
+        if hotspots:
+            latest_detection = max(h.detected_at for h in hotspots if h.detected_at)
+            if latest_detection:
+                latest_run = latest_detection.strftime("%Y-%m-%d %H:%M:%S")
+        
+        return {
+            "total_clusters": total_clusters,
+            "reports_in_clusters": reports_in_clusters,
+            "risk_counts": {
+                "critical": crit_count,
+                "warning": warn_count,
+                "normal": normal_count
+            },
+            "stage_counts": stage_counts,
+            "avg_cluster_trust": avg_trust,
+            "latest_cluster_run": latest_run,
+            "time_period": time_period or "month",
+            "cutoff_time": cutoff_time.isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting hotspot stats: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get hotspot statistics")
+
+
 
     incidents: List[HotspotIncidentResponse] = []
     for r in hotspot.reports or []:
