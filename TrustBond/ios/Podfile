@@ -1,0 +1,39 @@
+# Uncomment this line to define a global platform for your project
+platform :ios, '12.0'
+
+# CocoaPods analytics sends network requests to Google Analytics about your usage of CocoaPods.
+# To disable this, uncomment the following line.
+# ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+# Prepare for Flutter integration
+require_relative '../Flutter/flutter_helper_ios.rb'
+
+# Load 'flutter_helper_ios.rb' which defines install_all_flutter_pods
+install_all_flutter_pods(file_path: File.expand_path(File.dirname(__FILE__)))
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  # Firebase Pods
+  pod 'Firebase/Core'
+  pod 'Firebase/Messaging'
+  
+  # Add any additional pods you need here
+end
+
+# Post-install script to configure Firebase
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
+      config.build_settings['ENABLE_BITCODE'] = 'NO'
+      
+      # Fix for Firebase iOS SDK
+      if target.name.start_with?('Firebase')
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'GPB_USE_PROTOBUF_FRAMEWORK_IMPORTS=1'
+      end
+    end
+  end
+end

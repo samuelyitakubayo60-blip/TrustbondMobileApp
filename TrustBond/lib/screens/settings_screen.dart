@@ -193,7 +193,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _onPushNotificationsChanged(bool value) async {
     try {
       if (value) {
-        await _notificationService.requestPermissions();
+        await _notificationService.initialize();
         await _notificationService.enableNotifications();
         _showSuccess('Push notifications enabled');
       } else {
@@ -208,15 +208,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _onHotspotAlertsChanged(bool value) async {
-    setState(() => _hotspotAlerts = value);
-    await _saveSetting('hotspot_alerts', value);
-    _showSuccess(value ? 'Hotspot alerts enabled' : 'Hotspot alerts disabled');
+    try {
+      if (value) {
+        await _notificationService.subscribeToTopic(NotificationTopics.hotspotAlerts);
+        _showSuccess('Hotspot alerts enabled');
+      } else {
+        await _notificationService.unsubscribeFromTopic(NotificationTopics.hotspotAlerts);
+        _showSuccess('Hotspot alerts disabled');
+      }
+      setState(() => _hotspotAlerts = value);
+      await _saveSetting('hotspot_alerts', value);
+    } catch (e) {
+      _showError('Failed to update hotspot alerts');
+    }
   }
 
   Future<void> _onReportUpdatesChanged(bool value) async {
-    setState(() => _reportUpdates = value);
-    await _saveSetting('report_updates', value);
-    _showSuccess(value ? 'Report updates enabled' : 'Report updates disabled');
+    try {
+      if (value) {
+        await _notificationService.subscribeToTopic(NotificationTopics.reportUpdates);
+        _showSuccess('Report updates enabled');
+      } else {
+        await _notificationService.unsubscribeFromTopic(NotificationTopics.reportUpdates);
+        _showSuccess('Report updates disabled');
+      }
+      setState(() => _reportUpdates = value);
+      await _saveSetting('report_updates', value);
+    } catch (e) {
+      _showError('Failed to update report updates');
+    }
   }
 
   Future<bool> _showConfirmationDialog(String title, String message) async {

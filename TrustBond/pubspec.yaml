@@ -53,6 +53,11 @@ dependencies:
   # audioplayers: ^5.2.1
   # Audio packages temporarily disabled due to Windows compatibility issues
   permission_handler: ^11.3.1
+  
+  # Firebase for push notifications
+  firebase_core: ^2.24.2
+  firebase_messaging: ^14.7.10
+  flutter_local_notifications: ^16.3.0
 
 dev_dependencies:
   flutter_test:
