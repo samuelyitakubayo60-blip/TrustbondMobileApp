@@ -19,7 +19,7 @@ const AuditLog = ({ wsRefreshKey }) => {
     setLoading(true);
     
     const params = new URLSearchParams();
-    params.set("limit", String(pageSize));
+    params.set("limit", String(500)); // Get all data for client-side pagination
     
     if (entityFilter.trim()) {
       params.set("entity_type", entityFilter.trim());
@@ -32,20 +32,19 @@ const AuditLog = ({ wsRefreshKey }) => {
       .then((res) => { 
         if (mounted) { 
           setLogs(res || []); 
-          // Backend doesn't return total count, so we'll estimate
           setTotal(res?.length || 0);
           setLoading(false); 
         } 
       })
       .catch(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
-  }, [pageSize, entityFilter, actionFilter]);
+  }, [entityFilter, actionFilter]); // Remove pageSize and offset dependencies
 
   useEffect(() => {
     loadLogs();
   }, [loadLogs, wsRefreshKey]);
 
-  // Client-side filtering for search and result filter
+  // Client-side filtering
   const filteredLogs = logs.filter((a) => {
     if (searchText.trim()) {
       const q = searchText.trim().toLowerCase();
@@ -73,7 +72,7 @@ const AuditLog = ({ wsRefreshKey }) => {
   });
 
   // Client-side pagination
-  const paginatedLogs = filteredLogs.slice(offset, offset + pageSize);
+  const displayLogs = filteredLogs.slice(offset, offset + pageSize);
 
   return (
     <>
@@ -210,14 +209,13 @@ const AuditLog = ({ wsRefreshKey }) => {
                 <th>Who</th>
                 <th>Role</th>
                 <th>What They Did</th>
-                <th>IP Address</th>
               </tr>
             </thead>
             <tbody>
-              {paginatedLogs.map((a, index) => (
+              {displayLogs.map((a, index) => (
                 <tr key={a.log_id}>
                   <td style={{ fontSize: "12px", color: "var(--muted)", textAlign: "center" }}>
-                    {offset + index + 1}
+                    {index + 1}
                   </td>
                   <td style={{ fontSize: '10px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                     {a.created_at ? new Date(a.created_at).toLocaleString() : '—'}
@@ -276,19 +274,18 @@ const AuditLog = ({ wsRefreshKey }) => {
                       )}
                     </div>
                   </td>
-                  <td style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--muted)' }}>{a.ip_address || '—'}</td>
                 </tr>
               ))}
-              {(!paginatedLogs.length && !loading) && (
+              {(!displayLogs.length && !loading) && (
                 <tr>
-                  <td colSpan={6} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
+                  <td colSpan={5} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
                     No audit entries.
                   </td>
                 </tr>
               )}
               {loading && (
                 <tr>
-                  <td colSpan={6} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
+                  <td colSpan={5} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
                     Loading...
                   </td>
                 </tr>
@@ -300,6 +297,11 @@ const AuditLog = ({ wsRefreshKey }) => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '14px', flexWrap: 'wrap', gap: '8px' }}>
           <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
             Showing {Math.min(offset + 1, filteredLogs.length)}-{Math.min(offset + pageSize, filteredLogs.length)} of {filteredLogs.length} entries
+            {filteredLogs.length > 0 && (
+              <span style={{ marginLeft: '10px', color: 'var(--accent)' }}>
+                (Page {Math.floor(offset / pageSize) + 1} of {Math.ceil(filteredLogs.length / pageSize)})
+              </span>
+            )}
           </div>
           <div className="pagination">
             <button 
@@ -309,20 +311,82 @@ const AuditLog = ({ wsRefreshKey }) => {
             >
               ‹
             </button>
-            {Array.from({ length: Math.min(5, Math.ceil(filteredLogs.length / pageSize)) }, (_, i) => {
-              const pageNum = i + 1;
-              const pageOffset = (pageNum - 1) * pageSize;
-              const isCurrent = Math.floor(offset / pageSize) === pageNum - 1;
-              return (
-                <button
-                  key={pageNum}
-                  className={`page-btn ${isCurrent ? 'current' : ''}`}
-                  onClick={() => setOffset(pageOffset)}
-                >
-                  {pageNum}
-                </button>
-              );
-            })}
+            {(() => {
+              const totalPages = Math.ceil(filteredLogs.length / pageSize);
+              const currentPage = Math.floor(offset / pageSize) + 1;
+              
+              // Show all page numbers if total pages <= 10, otherwise show smart pagination
+              if (totalPages <= 10) {
+                return Array.from({ length: totalPages }, (_, i) => {
+                  const pageNum = i + 1;
+                  const pageOffset = (pageNum - 1) * pageSize;
+                  const isCurrent = pageNum === currentPage;
+                  return (
+                    <button
+                      key={pageNum}
+                      className={`page-btn ${isCurrent ? 'current' : ''}`}
+                      onClick={() => setOffset(pageOffset)}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                });
+              }
+              
+              // Smart pagination for many pages
+              const pages = [];
+              const startPage = Math.max(1, currentPage - 2);
+              const endPage = Math.min(totalPages, currentPage + 2);
+              
+              // Always show first page
+              if (startPage > 1) {
+                pages.push(
+                  <button
+                    key={1}
+                    className="page-btn"
+                    onClick={() => setOffset(0)}
+                  >
+                    1
+                  </button>
+                );
+                if (startPage > 2) {
+                  pages.push(<span key="start-ellipsis" style={{ padding: '0 8px' }}>...</span>);
+                }
+              }
+              
+              // Show pages around current page
+              for (let i = startPage; i <= endPage; i++) {
+                const pageOffset = (i - 1) * pageSize;
+                const isCurrent = i === currentPage;
+                pages.push(
+                  <button
+                    key={i}
+                    className={`page-btn ${isCurrent ? 'current' : ''}`}
+                    onClick={() => setOffset(pageOffset)}
+                  >
+                    {i}
+                  </button>
+                );
+              }
+              
+              // Always show last page
+              if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                  pages.push(<span key="end-ellipsis" style={{ padding: '0 8px' }}>...</span>);
+                }
+                pages.push(
+                  <button
+                    key={totalPages}
+                    className="page-btn"
+                    onClick={() => setOffset((totalPages - 1) * pageSize)}
+                  >
+                    {totalPages}
+                  </button>
+                );
+              }
+              
+              return pages;
+            })()}
             <button 
               className="page-btn" 
               onClick={() => setOffset(Math.min(filteredLogs.length - pageSize, offset + pageSize))}
