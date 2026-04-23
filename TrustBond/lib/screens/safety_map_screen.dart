@@ -234,9 +234,12 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     if (_loadingHotspots) return;
     setState(() => _loadingHotspots = true);
     try {
+      debugPrint('Loading hotspots with time window: $_hotspotTimeWindowHours hours');
       final hotspots = await _hotspotService.getAllHotspots(
         timeWindowHours: _hotspotTimeWindowHours,
       );
+      debugPrint('Received ${hotspots.length} hotspots from service');
+      
       final mapData = _mapData;
       final filtered = mapData == null
           ? hotspots
@@ -244,12 +247,16 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
               final village = mapData.findVillage(h.centerLat, h.centerLong);
               return village != null;
             }).toList();
+      
+      debugPrint('Filtered to ${filtered.length} hotspots within map bounds');
+      
       if (!mounted) return;
       setState(() {
         _hotspots = filtered;
         _loadingHotspots = false;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Error loading hotspots: $e');
       if (!mounted) return;
       setState(() => _loadingHotspots = false);
     }
@@ -316,10 +323,10 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
         final points = ring.map((pt) => LatLng(pt.dy, pt.dx)).toList();
         polygons.add(Polygon(
           points: points,
-          color: baseColor.withValues(alpha: 0.22),
-          // Hide village/cell boundary outlines in the citizen map.
-          borderColor: Colors.transparent,
-          borderStrokeWidth: 0,
+          color: baseColor.withValues(alpha: 0.1),
+          // Match home screen stroke exactly
+          borderColor: baseColor.withValues(alpha: 0.3),
+          borderStrokeWidth: 0.4,
         ));
       }
     }
@@ -797,6 +804,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
           return GestureDetector(
             onTap: () {
               if (selected) return;
+              debugPrint('Filter tapped: ${_formatHotspotWindow(hours)} ($hours hours)');
               setState(() => _hotspotTimeWindowHours = hours);
               _loadHotspots();
             },
@@ -901,13 +909,13 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                 userAgentPackageName: 'com.trustbond.mobile',
                 maxZoom: 18,
               ),
-              // Semi-transparent dark overlay for readability
+              // Village polygon overlays (before dark overlay to show colors)
+              PolygonLayer(polygons: _buildPolygons()),
+              // Semi-transparent dark overlay for readability (reduced opacity)
               ColoredBox(
-                color: AppColors.bg.withValues(alpha: 0.3),
+                color: AppColors.bg.withValues(alpha: 0.15),
                 child: const SizedBox.expand(),
               ),
-              // Village polygon overlays
-              PolygonLayer(polygons: _buildPolygons()),
               // Labels (sector/cell/village)
               MarkerLayer(markers: _buildRegionLabels()),
               // Hotspot pins
@@ -939,7 +947,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
               ],
             ),
           ),
-          // Current location banner
+                    // Current location banner
           if (_userVillage != null)
             Positioned(
               top: 8,

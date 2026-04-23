@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 
@@ -78,20 +79,34 @@ class HotspotService {
             'time_window_hours': timeWindowHours.toString(),
         },
       );
+      
+      debugPrint('Loading hotspots from: $uri');
+      
       final response = await _client.get(
         uri,
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 30));
 
-      if (response.statusCode != 200 || response.body.isEmpty) {
-        throw Exception('Failed to load hotspots: ${response.statusCode}');
+      debugPrint('Hotspots response status: ${response.statusCode}');
+      debugPrint('Hotspots response body: ${response.body}');
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load hotspots: ${response.statusCode} - ${response.body}');
+      }
+
+      if (response.body.isEmpty) {
+        debugPrint('Empty response body for hotspots');
+        return <Hotspot>[];
       }
 
       final List<dynamic> data = json.decode(response.body);
+      debugPrint('Parsed ${data.length} hotspots');
+      
       return data
           .map((json) => Hotspot.fromJson(json as Map<String, dynamic>))
           .toList();
     } catch (e) {
+      debugPrint('Error loading hotspots: $e');
       return <Hotspot>[];
     }
   }
