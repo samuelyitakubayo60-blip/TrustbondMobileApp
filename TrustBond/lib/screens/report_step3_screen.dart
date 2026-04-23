@@ -53,14 +53,37 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
 
   Future<String> _sanitizePhotoPath(String sourcePath) async {
     try {
-      final sourceBytes = await File(sourcePath).readAsBytes();
+      // Skip processing for small files to improve performance
+      final sourceFile = File(sourcePath);
+      final fileSize = await sourceFile.length();
+      
+      // If file is already reasonably sized, skip processing
+      if (fileSize < 2 * 1024 * 1024) { // Less than 2MB
+        return sourcePath;
+      }
+
+      final sourceBytes = await sourceFile.readAsBytes();
       final decoded = img.decodeImage(sourceBytes);
       if (decoded == null) return sourcePath;
 
+      // Only resize if image is too large
+      if (decoded.width > 1920 || decoded.height > 1080) {
+        // Resize to reasonable dimensions
+        final resized = img.copyResize(decoded, width: 1920, height: 1080, maintainAspect: true);
+        
+        final dir = await getTemporaryDirectory();
+        final sanitizedPath =
+            '${dir.path}/tb_${DateTime.now().microsecondsSinceEpoch}.jpg';
+        final sanitized = img.encodeJpg(resized, quality: 85);
+        await File(sanitizedPath).writeAsBytes(sanitized, flush: true);
+        return sanitizedPath;
+      }
+
+      // Just compress without resizing
       final dir = await getTemporaryDirectory();
       final sanitizedPath =
           '${dir.path}/tb_${DateTime.now().microsecondsSinceEpoch}.jpg';
-      final sanitized = img.encodeJpg(decoded, quality: 88);
+      final sanitized = img.encodeJpg(decoded, quality: 90);
       await File(sanitizedPath).writeAsBytes(sanitized, flush: true);
       return sanitizedPath;
     } catch (_) {
@@ -90,9 +113,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   Future<void> _pickGallery() async {
     final img = await _picker.pickImage(source: ImageSource.gallery);
     if (img != null) {
-      final sanitizedPath = await _sanitizePhotoPath(img.path);
-      setState(() => _files
-          .add(_EvidenceFile(path: sanitizedPath, type: 'photo', isLive: false)));
+      await _validateAndAddEvidence(img.path, 'photo', false);
     }
   }
 
@@ -106,6 +127,102 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   Future<void> _stopRecording() async {
     // Audio recording temporarily disabled
     setState(() => _isRecording = false);
+  }
+
+  Future<void> _validateAndAddEvidence(String filePath, String fileType, bool isLiveCapture) async {
+    final file = File(filePath);
+    final fileName = file.path.split('/').last.toLowerCase();
+    
+    // Check for suspicious file patterns
+    final suspiciousPatterns = [
+      'screenshot', 'screen_shot', 'capture', 'download', 'whatsapp', 
+      'telegram', 'instagram', 'facebook', 'twitter', 'saved', 
+      'copy', 'duplicate', 'forward', 'received', 'export'
+    ];
+    
+    final hasSuspiciousName = suspiciousPatterns.any((pattern) => fileName.contains(pattern));
+    
+    // Check file metadata for creation time vs modification time
+    final stat = await file.stat();
+    final now = DateTime.now();
+    final timeDiff = now.difference(stat.modified);
+    
+    // If file was modified recently but created long ago, likely downloaded/copied
+    final isRecentlyModified = timeDiff.inMinutes < 5;
+    final creationTimeDiff = now.difference(stat.accessed);
+    final isOldFile = creationTimeDiff.inHours > 24;
+    
+    // Check file size for typical screenshots
+    final fileSize = await file.length();
+    final isScreenshotSize = fileSize > 500 * 1024 && fileSize < 5 * 1024 * 1024; // 500KB - 5MB
+    
+    String warningMessage = '';
+    bool shouldBlock = false;
+    
+    if (hasSuspiciousName) {
+      warningMessage = '⚠️ This file appears to be from another app or was downloaded. For evidence integrity, please use original photos/videos taken with your camera.';
+      shouldBlock = true;
+    } else if (isOldFile && isRecentlyModified) {
+      warningMessage = '⚠️ This file was created a while ago but recently modified. This may indicate it was copied from another source. Please use original evidence.';
+      shouldBlock = true;
+    } else if (isScreenshotSize && !isLiveCapture) {
+      warningMessage = '⚠️ This appears to be a screenshot. Screenshots can be edited. Please use original photos or videos for better evidence quality.';
+      shouldBlock = false; // Warning but allow
+    } else if (!isLiveCapture) {
+      warningMessage = 'ℹ️ For best evidence quality, original camera captures are preferred. Gallery items may have reduced authenticity.';
+      shouldBlock = false; // Just a gentle warning
+    }
+    
+    if (warningMessage.isNotEmpty) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text(shouldBlock ? '⚠️ Evidence Validation Alert' : 'ℹ️ Evidence Quality Notice'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(warningMessage),
+                const SizedBox(height: 12),
+                if (!shouldBlock) ...[
+                  const Text('You can still submit this evidence, but original captures provide stronger verification.', 
+                       style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                ],
+              ],
+            ),
+            actions: [
+              if (!shouldBlock) ...[
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _addEvidenceFile(filePath, fileType, isLiveCapture);
+                  },
+                  child: const Text('Use Anyway'),
+                ),
+              ] else ...[
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('I Understand'),
+                ),
+              ],
+            ],
+          );
+        },
+      );
+    } else {
+      _addEvidenceFile(filePath, fileType, isLiveCapture);
+    }
+  }
+
+  void _addEvidenceFile(String filePath, String fileType, bool isLiveCapture) async {
+    final sanitizedPath = await _sanitizePhotoPath(filePath);
+    setState(() => _files
+        .add(_EvidenceFile(path: sanitizedPath, type: fileType, isLive: isLiveCapture)));
   }
 
   void _removeFile(int index) {
@@ -271,7 +388,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
           const Text('Upload Evidence',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
-          const Text('Take a photo, record video, record audio, or choose from gallery',
+          const Text('Take photos, record videos, or choose from gallery (smart validation enabled)',
               style: TextStyle(fontSize: 11, color: AppColors.muted),
               textAlign: TextAlign.center),
           const SizedBox(height: 14),

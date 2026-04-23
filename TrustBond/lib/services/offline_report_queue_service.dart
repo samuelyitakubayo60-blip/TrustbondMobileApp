@@ -253,12 +253,13 @@ class OfflineReportQueueService {
     }
 
     try {
-      for (final media in item.mediaItems) {
+      // Upload evidence files in parallel for better performance
+      final uploadFutures = item.mediaItems.map((media) async {
         final mediaFile = File(media.localPath);
         if (!await mediaFile.exists()) {
-          throw Exception('Queued media file is missing.');
+          throw Exception('Queued media file is missing: ${media.localPath}');
         }
-        await _api.uploadEvidence(
+        return _api.uploadEvidence(
           item.localReportId,
           resolvedDeviceId,
           media.localPath,
@@ -267,7 +268,10 @@ class OfflineReportQueueService {
           capturedAt: DateTime.tryParse(media.capturedAt),
           isLiveCapture: media.isLiveCapture,
         );
-      }
+      });
+      
+      // Wait for all uploads to complete (parallel execution)
+      await Future.wait(uploadFutures);
     } catch (e) {
       if (createdThisAttempt) {
         try {

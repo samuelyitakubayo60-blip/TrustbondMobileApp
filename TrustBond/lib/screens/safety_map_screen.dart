@@ -416,15 +416,29 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     if (_hotspots.isEmpty) return [];
     return _hotspots.map((hotspot) {
       final color = _getHotspotColor(hotspot.riskLevel);
+      final isSecurityCluster = hotspot.incidentCount >= 3; // Security clusters have 3+ incidents
+      
       return Marker(
         point: LatLng(hotspot.centerLat, hotspot.centerLong),
-        width: 38,
-        height: 38,
+        width: isSecurityCluster ? 45 : 38,
+        height: isSecurityCluster ? 45 : 38,
         child: GestureDetector(
           onTap: () => _showHotspotDetails(hotspot),
           child: Stack(
             alignment: Alignment.center,
             children: [
+              // Outer glow for security clusters
+              if (isSecurityCluster)
+                Container(
+                  width: 35,
+                  height: 35,
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.4), width: 1),
+                  ),
+                ),
+              // Main hotspot circle
               Container(
                 width: 28,
                 height: 28,
@@ -433,15 +447,36 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                   shape: BoxShape.circle,
                 ),
               ),
+              // Inner circle
               Container(
                 width: 16,
                 height: 16,
                 decoration: BoxDecoration(
-                  color: color,
+                  color: isSecurityCluster ? Colors.red : color,
                   shape: BoxShape.circle,
                   border: Border.all(color: AppColors.bg, width: 1.8),
                 ),
               ),
+              // Security cluster indicator
+              if (isSecurityCluster)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.bg, width: 1.5),
+                    ),
+                    child: const Icon(
+                      Icons.warning,
+                      size: 8,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -472,24 +507,55 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   }
 
   void _showHotspotDetails(Hotspot hotspot) {
+    final isSecurityCluster = hotspot.incidentCount >= 3;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: Row(
           children: [
-            Text(hotspot.riskEmoji),
-            const SizedBox(width: 8),
-            Text(hotspot.riskText),
+            if (isSecurityCluster) ...[
+              const Icon(Icons.warning, color: Colors.red, size: 20),
+              const SizedBox(width: 4),
+              const Text('Security Cluster', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            ] else ...[
+              Text(hotspot.riskEmoji),
+              const SizedBox(width: 8),
+              Text(hotspot.riskText),
+            ],
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Incidents: ${hotspot.incidentCount}'),
-            if (hotspot.incidentTypeName != null) Text('Type: ${hotspot.incidentTypeName}'),
+            if (isSecurityCluster) ...[
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                ),
+                child: const Text(
+                  '⚠️ High-priority security area\nMultiple recent incidents detected',
+                  style: TextStyle(fontSize: 12, color: Colors.red),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            Text('Incidents: ${hotspot.incidentCount}', 
+                 style: TextStyle(fontWeight: isSecurityCluster ? FontWeight.bold : FontWeight.normal)),
+            if (hotspot.incidentTypeName != null) 
+              Text('Type: ${hotspot.incidentTypeName}'),
             Text('Time window: ${hotspot.timeWindowHours}h'),
             Text('Radius: ${hotspot.radiusMeters.toStringAsFixed(0)}m'),
+            if (isSecurityCluster) ...[
+              const SizedBox(height: 8),
+              const Text(
+                '📍 Stay alert in this area\n📱 Report any suspicious activity',
+                style: TextStyle(fontSize: 11, color: AppColors.muted),
+              ),
+            ],
           ],
         ),
         actions: [

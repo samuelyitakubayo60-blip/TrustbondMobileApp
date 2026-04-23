@@ -87,15 +87,35 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       
-      // Load device profile to get actual trust score
-      final deviceProfile = await _apiService.getDeviceProfile(deviceHash);
-      final deviceTrustScore = JsonHelpers.doubleFromJson(deviceProfile, 'device_trust_score');
+      // Try to load online data first
+      List<ReportListItem> reports = [];
+      double deviceTrustScore = 0;
+      bool onlineSuccess = false;
       
-      // Load reports
-      final list = await _apiService.getMyReports(deviceId);
-      final reports = list
-          .map((e) => ReportListItem.fromJson(e as Map<String, dynamic>))
-          .toList();
+      try {
+        // Load device profile to get actual trust score
+        final deviceProfile = await _apiService.getDeviceProfile(deviceHash);
+        deviceTrustScore = JsonHelpers.doubleFromJson(deviceProfile, 'device_trust_score');
+        
+        // Load reports
+        final list = await _apiService.getMyReports(deviceId);
+        reports = list
+            .map((e) => ReportListItem.fromJson(e as Map<String, dynamic>))
+            .toList();
+        onlineSuccess = true;
+      } catch (e) {
+        debugPrint('Online data loading failed, trying offline cache: $e');
+        // Fall back to cached data
+        try {
+          final list = await _apiService.getMyReports(deviceId); // This will use cache
+          reports = list
+              .map((e) => ReportListItem.fromJson(e as Map<String, dynamic>))
+              .toList();
+        } catch (cacheError) {
+          debugPrint('Cache also failed: $cacheError');
+        }
+      }
+      
       final verified = reports
           .where((r) =>
               r.verifiedAt != null)  // Only police-confirmed reports have verifiedAt
@@ -109,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _loading = false;
       });
       
-      // Load hotspots for map display
+      // Load hotspots for map display (works offline with cached data)
       _loadHotspots();
     } catch (e) {
       debugPrint('Failed to load reports on home: $e');

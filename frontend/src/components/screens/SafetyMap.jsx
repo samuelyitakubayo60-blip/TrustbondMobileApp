@@ -1722,8 +1722,211 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             </table>
           </div>
         </div>
+
+        {/* Security Recommendations Card */}
+        <div className="card" style={{ marginTop: "16px" }}>
+          <div className="card-header">
+            <div className="card-title">🛡️ Security Recommendations</div>
+          </div>
+          <div style={{ padding: "16px" }}>
+            {historicalLoading ? (
+              <div style={{ textAlign: "center", padding: "20px" }}>
+                <div style={{ fontSize: "12px", color: "var(--muted)" }}>
+                  Analyzing security recommendations...
+                </div>
+              </div>
+            ) : (
+              <SecurityRecommendations hotspots={filteredHistoricalHotspots} />
+            )}
+          </div>
+        </div>
       </div>
     </>
+  );
+};
+
+// Security Recommendations Component
+const SecurityRecommendations = ({ hotspots }) => {
+  const recommendations = useMemo(() => {
+    if (!hotspots || hotspots.length === 0) {
+      return [
+        {
+          priority: "low",
+          title: "No Active Security Concerns",
+          description: "Current hotspot analysis shows no immediate security threats in the area.",
+          action: "Continue routine monitoring and community engagement."
+        }
+      ];
+    }
+
+    const recs = [];
+    
+    // High-priority recommendations for critical hotspots
+    const criticalHotspots = hotspots.filter(h => 
+      h.risk_level === "critical" || h.incident_count >= 5
+    );
+    
+    if (criticalHotspots.length > 0) {
+      recs.push({
+        priority: "critical",
+        title: `🚨 ${criticalHotspots.length} Critical Security Cluster${criticalHotspots.length > 1 ? 's' : ''} Detected`,
+        description: `Multiple high-incidence areas requiring immediate attention. ${criticalHotspots.reduce((sum, h) => sum + h.incident_count, 0)} total incidents reported.`,
+        action: "Deploy additional patrols, increase community alerts, and consider temporary safety measures in these areas."
+      });
+    }
+
+    // Medium-priority for high-risk areas
+    const highRiskHotspots = hotspots.filter(h => 
+      h.risk_level === "high" && h.incident_count >= 3
+    );
+    
+    if (highRiskHotspots.length > 0) {
+      recs.push({
+        priority: "high",
+        title: `⚠️ ${highRiskHotspots.length} High-Risk Area${highRiskHotspots.length > 1 ? 's' : ''} Identified`,
+        description: `Areas with elevated incident rates requiring enhanced monitoring and community engagement.`,
+        action: "Increase patrol frequency, conduct community safety meetings, and enhance visibility in these locations."
+      });
+    }
+
+    // Type-specific recommendations
+    const theftHotspots = hotspots.filter(h => 
+      h.incident_type_name?.toLowerCase().includes('theft') && h.incident_count >= 2
+    );
+    
+    if (theftHotspots.length > 0) {
+      recs.push({
+        priority: "medium",
+        title: `🔒 Theft Prevention Focus Areas`,
+        description: `${theftHotspots.length} area${theftHotspots.length > 1 ? 's' : ''} with recurring theft incidents.`,
+        action: "Implement targeted theft prevention measures, increase neighborhood watch presence, and provide community safety education."
+      });
+    }
+
+    // Emerging pattern recommendations
+    const emergingHotspots = hotspots.filter(h => {
+      const stage = getFormationStage(h);
+      return stage === "emerging" && h.incident_count >= 2;
+    });
+    
+    if (emergingHotspots.length > 0) {
+      recs.push({
+        priority: "medium",
+        title: `📍 ${emergingHotspots.length} Emerging Pattern${emergingHotspots.length > 1 ? 's' : ''}`,
+        description: "New incident patterns forming that may require early intervention.",
+        action: "Monitor these areas closely, engage with community leaders, and consider preventive measures before patterns escalate."
+      });
+    }
+
+    // If no specific recommendations, provide general guidance
+    if (recs.length === 0) {
+      recs.push({
+        priority: "low",
+        title: "✅ Stable Security Environment",
+        description: "Current incident patterns are within normal parameters.",
+        action: "Maintain regular patrol schedules and continue community engagement efforts."
+      });
+    }
+
+    return recs.slice(0, 4); // Limit to top 4 recommendations
+  }, [hotspots]);
+
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case "critical": return "var(--danger)";
+      case "high": return "#ff6b35";
+      case "medium": return "#ffa726";
+      case "low": return "var(--success)";
+      default: return "var(--muted)";
+    }
+  };
+
+  const getPriorityBg = (priority) => {
+    switch (priority) {
+      case "critical": return "rgba(220, 53, 69, 0.1)";
+      case "high": return "rgba(255, 107, 53, 0.1)";
+      case "medium": return "rgba(255, 167, 38, 0.1)";
+      case "low": return "rgba(40, 167, 69, 0.1)";
+      default: return "var(--surface)";
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      {recommendations.map((rec, index) => (
+        <div
+          key={index}
+          style={{
+            padding: "12px",
+            borderRadius: "8px",
+            border: `1px solid ${getPriorityColor(rec.priority)}33`,
+            backgroundColor: getPriorityBg(rec.priority),
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+            <div
+              style={{
+                width: "4px",
+                height: "100%",
+                backgroundColor: getPriorityColor(rec.priority),
+                borderRadius: "2px",
+                marginTop: "2px",
+                minHeight: "40px",
+              }}
+            />
+            <div style={{ flex: 1 }}>
+              <div
+                style={{
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  color: getPriorityColor(rec.priority),
+                  marginBottom: "4px",
+                }}
+              >
+                {rec.title}
+              </div>
+              <div
+                style={{
+                  fontSize: "12px",
+                  color: "var(--text)",
+                  marginBottom: "8px",
+                  lineHeight: "1.4",
+                }}
+              >
+                {rec.description}
+              </div>
+              <div
+                style={{
+                  fontSize: "11px",
+                  color: "var(--muted)",
+                  fontStyle: "italic",
+                }}
+              >
+                <strong>Recommended Action:</strong> {rec.action}
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+      
+      {recommendations.length > 0 && (
+        <div style={{
+          padding: "8px 12px",
+          backgroundColor: "var(--surface)",
+          borderRadius: "6px",
+          border: "1px solid var(--border)",
+        }}>
+          <div style={{
+            fontSize: "11px",
+            color: "var(--muted)",
+            textAlign: "center",
+          }}>
+            💡 Recommendations based on {hotspots.length} hotspot{hotspots.length !== 1 ? 's' : ''} analyzed
+            {hotspots.length > 0 && ` with ${hotspots.reduce((sum, h) => sum + h.incident_count, 0)} total incidents`}
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
