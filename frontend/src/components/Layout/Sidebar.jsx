@@ -245,11 +245,11 @@ const Sidebar = ({
 
   const allNavItems = getNavigationItems(role, reportsBadge, casesBadge);
 
-  // Filter out sections that should be hidden from officers
+  // Filter out sections that should be hidden from officers and supervisors
   const navItems = allNavItems.filter(section => {
-    if (role === "officer") {
-      // Hide Management section from officers, but show Intelligence section
-      return section.section !== "Management";
+    if (role === "officer" || role === "supervisor") {
+      // Hide Management and Intelligence sections from officers and supervisors
+      return section.section !== "Management" && section.section !== "Intelligence";
     }
     return true;
   });
@@ -264,7 +264,7 @@ const Sidebar = ({
       : "Operations";
 
   const [openSection, setOpenSection] = useState(
-    role === "admin" || role === "supervisor" ? ["Operations", "Intelligence"] : [defaultOpenSection]
+    role === "admin" ? ["Operations", "Intelligence"] : [defaultOpenSection]
   );
 
   useEffect(() => {
