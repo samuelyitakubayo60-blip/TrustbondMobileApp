@@ -105,7 +105,17 @@ class _HomeScreenState extends State<HomeScreen> {
         onlineSuccess = true;
       } catch (e) {
         debugPrint('Online data loading failed, trying offline cache: $e');
-        // Fall back to cached data
+        // Fall back to cached data - try to load cached device profile first
+        try {
+          final cachedDeviceProfile = await _apiService.getDeviceProfile(deviceHash);
+          deviceTrustScore = JsonHelpers.doubleFromJson(cachedDeviceProfile, 'device_trust_score');
+        } catch (profileError) {
+          debugPrint('Cached device profile also failed: $profileError');
+          // Use default trust score if no cached data available
+          deviceTrustScore = 50.0; // Default trust score
+        }
+        
+        // Try to load cached reports
         try {
           final list = await _apiService.getMyReports(deviceId); // This will use cache
           reports = list

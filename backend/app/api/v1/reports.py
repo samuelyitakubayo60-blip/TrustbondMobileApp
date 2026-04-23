@@ -72,6 +72,111 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 logger = logging.getLogger(__name__)
 
+def _process_report_background(
+    report_id: str,
+    device_id: str,
+    evidence_count: int,
+    evidence_metadata_list: List[dict]
+):
+    """Background task to process heavy verification without blocking response."""
+    db = SessionLocal()
+    try:
+        report = db.query(Report).filter(Report.report_id == report_id).first()
+        device = db.query(Device).filter(Device.device_id == device_id).first()
+        
+        if not report or not device:
+            logger.error(f"Background processing failed: report {report_id} or device {device_id} not found")
+            return
+        
+        # 1. Enhanced evidence verification
+        verification_issues = []
+        for evidence_meta in evidence_metadata_list:
+            try:
+                # Screenshot detection
+                screenshot_result = enhanced_screenshot_detection(
+                    filename=evidence_meta["file_url"].split('/')[-1],
+                    file_path=evidence_meta["file_url"]
+                )
+                if screenshot_result["is_screenshot"]:
+                    verification_issues.append(f"Screenshot detected: {screenshot_result['details']}")
+            except Exception as e:
+                logger.warning(f"Screenshot detection failed: {e}")
+            
+            try:
+                # File timing analysis
+                timing_result = analyze_file_timing(
+                    file_path=evidence_meta["file_url"],
+                    file_created_at=evidence_meta.get("captured_at")
+                )
+                if timing_result["is_suspicious"]:
+                    verification_issues.append(f"Suspicious file timing: {timing_result['suspicious_reasons']}")
+            except Exception as e:
+                logger.warning(f"Timing analysis failed: {e}")
+            
+            try:
+                # Evidence source validation
+                source_result = validate_evidence_source(
+                    filename=evidence_meta["file_url"].split('/')[-1],
+                    file_path=evidence_meta["file_url"]
+                )
+                if not source_result["is_valid"]:
+                    verification_issues.append(f"Invalid evidence source: {source_result['suspicious_indicators']}")
+            except Exception as e:
+                logger.warning(f"Source validation failed: {e}")
+        
+        # 2. Location consistency validation
+        try:
+            location_result = validate_location_consistency(
+                report_latitude=float(report.latitude),
+                report_longitude=float(report.longitude),
+                evidence_metadata=evidence_metadata_list
+            )
+            if not location_result["is_consistent"]:
+                verification_issues.append(f"Location inconsistency detected: {location_result['details']}")
+            
+            # Store location validation results in report metadata
+            fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+            fv["location_validation"] = location_result
+            report.feature_vector = _json_safe(fv)
+        except Exception as e:
+            logger.warning(f"Location consistency validation failed: {e}")
+        
+        # 3. ML-based credibility scoring
+        try:
+            score_report_credibility(db, report, device, evidence_count)
+            _ensure_fallback_ml_prediction_if_missing(db, report)
+            update_device_ml_aggregates(db, device, window=30)
+        except Exception as e:
+            logger.error(f"ML scoring failed for report {report_id}: {e}")
+        
+        # 4. Apply rule-based verification
+        try:
+            apply_rule_based_status(db, report, device, verification_issues)
+        except Exception as e:
+            logger.error(f"Rule-based verification failed for report {report_id}: {e}")
+        
+        # 5. Update hotspot clustering
+        try:
+            if report.status not in ["rejected", "flagged"]:
+                create_hotspots_from_reports(db, [report])
+        except Exception as e:
+            logger.error(f"Hotspot creation failed for report {report_id}: {e}")
+        
+        db.commit()
+        logger.info(f"Background processing completed for report {report_id}")
+        
+        # Broadcast update to dashboard
+        try:
+            manager.broadcast({"type": "refresh_data", "entity": "report", "action": "processed"})
+        except Exception as e:
+            logger.warning(f"Failed to broadcast update for report {report_id}: {e}")
+            
+    except Exception as e:
+        logger.error(f"Background processing error for report {report_id}: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
 
 def _normalize_evidence_file_url(raw: str | None) -> str | None:
     """
@@ -1099,94 +1204,19 @@ def create_report(
         db.rollback()
         raise HTTPException(status_code=409, detail="Report already exists")
 
-    # Enhanced evidence verification
+    # Basic evidence processing - store files without heavy verification
     evidence_metadata_list = []
-    verification_issues = []
-    
-    # Add evidence files with enhanced verification
     for evidence_data in report_data.evidence_files:
         normalized_url = _normalize_evidence_file_url(getattr(evidence_data, "file_url", None))
         if not normalized_url:
             continue
         
-        # Enhanced verification for each evidence file
-        evidence_verification = {
-            "file_url": normalized_url,
-            "file_type": evidence_data.file_type,
-            "issues": []
-        }
-        
-        # 1. Enhanced screenshot detection
-        try:
-            # For now, we'll use filename-based detection
-            # In production, you'd download and analyze the actual file bytes
-            screenshot_result = enhanced_screenshot_detection(
-                filename=normalized_url.split('/')[-1],
-                file_path=normalized_url
-            )
-            if screenshot_result["is_screenshot"]:
-                evidence_verification["issues"].append({
-                    "type": "screenshot_detected",
-                    "methods": screenshot_result["detection_methods"],
-                    "details": screenshot_result["details"]
-                })
-                verification_issues.append(f"Screenshot detected: {screenshot_result['details']}")
-        except Exception as e:
-            print(f"Screenshot detection failed: {e}")
-        
-        # 2. File timing analysis
-        try:
-            timing_result = analyze_file_timing(
-                file_path=normalized_url,
-                file_created_at=evidence_data.captured_at
-            )
-            if timing_result["is_suspicious"]:
-                evidence_verification["issues"].append({
-                    "type": "suspicious_timing",
-                    "reasons": timing_result["suspicious_reasons"],
-                    "details": timing_result["details"]
-                })
-                verification_issues.append(f"Suspicious file timing: {timing_result['suspicious_reasons']}")
-        except Exception as e:
-            print(f"Timing analysis failed: {e}")
-        
-        # 3. Evidence source validation
-        try:
-            source_result = validate_evidence_source(
-                filename=normalized_url.split('/')[-1],
-                file_path=normalized_url
-            )
-            if not source_result["is_valid"]:
-                evidence_verification["issues"].append({
-                    "type": "invalid_source",
-                    "indicators": source_result["suspicious_indicators"],
-                    "details": source_result["details"]
-                })
-                verification_issues.append(f"Invalid evidence source: {source_result['suspicious_indicators']}")
-        except Exception as e:
-            print(f"Source validation failed: {e}")
-        
-        # 4. Screen recording detection for videos
-        if evidence_data.file_type and evidence_data.file_type.lower().startswith('video'):
-            try:
-                screen_recording_result = enhanced_screen_recording_detection(
-                    filename=normalized_url.split('/')[-1]
-                )
-                if screen_recording_result["is_screen_recording"]:
-                    evidence_verification["issues"].append({
-                        "type": "screen_recording_detected",
-                        "methods": screen_recording_result["detection_methods"],
-                        "details": screen_recording_result["details"]
-                    })
-                    verification_issues.append(f"Screen recording detected: {screen_recording_result['details']}")
-            except Exception as e:
-                print(f"Screen recording detection failed: {e}")
-        
         evidence_metadata_list.append({
             "media_latitude": evidence_data.media_latitude,
             "media_longitude": evidence_data.media_longitude,
             "captured_at": evidence_data.captured_at,
-            "verification": evidence_verification
+            "file_url": normalized_url,
+            "file_type": evidence_data.file_type,
         })
         
         evidence = EvidenceFile(
@@ -1200,23 +1230,6 @@ def create_report(
             is_live_capture=evidence_data.is_live_capture,
         )
         db.add(evidence)
-
-    # 5. Location consistency validation
-    try:
-        location_result = validate_location_consistency(
-            report_latitude=float(report.latitude),
-            report_longitude=float(report.longitude),
-            evidence_metadata=evidence_metadata_list
-        )
-        if not location_result["is_consistent"]:
-            verification_issues.append(f"Location inconsistency detected: {location_result['details']}")
-        
-        # Store location validation results in report metadata
-        fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
-        fv["location_validation"] = location_result
-        report.feature_vector = _json_safe(fv)
-    except Exception as e:
-        print(f"Location consistency validation failed: {e}")
 
     if out_of_boundary:
         report.rule_status = "rejected"
@@ -1313,23 +1326,23 @@ def create_report(
         )
         return report
 
-    # AI-enhanced rule-based verification
-    evidence_count = len(report_data.evidence_files)
-    
-    # ML-based credibility scoring (best-effort; failures are ignored)
-    print("Running ML credibility scoring...")  # Debug log
-    score_report_credibility(db, report, device, evidence_count)
-    _ensure_fallback_ml_prediction_if_missing(db, report)
-    # Update device aggregates derived from recent ML predictions + behavior
-    update_device_ml_aggregates(db, device, window=30)
-    print("ML scoring completed")  # Debug log
-    
-    # FIXED: Commit ML prediction to ensure it's available for verification
+    # Quick initial commit to get report ID back to user fast
     try:
         db.commit()
+        db.refresh(report)
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Report already exists")
+
+    # Move heavy processing to background tasks for faster response
+    evidence_count = len(report_data.evidence_files)
+    background_tasks.add_task(
+        _process_report_background,
+        str(report.report_id),
+        str(device.device_id),
+        evidence_count,
+        evidence_metadata_list
+    )
     db.refresh(report)  # Ensure we have the latest data including ML predictions
 
     # Get ML prediction for AI verification

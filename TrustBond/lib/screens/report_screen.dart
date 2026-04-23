@@ -713,6 +713,42 @@ class _ReportScreenState extends State<ReportScreen> {
       print('Evidence source valid: ${mobileVerification.evidenceSourceValid}');
       print('Tampering detected: ${mobileVerification.evidenceTamperingDetected}');
 
+      // Block submission if verification fails due to non-original evidence
+      if (mobileVerification.status == "failed") {
+        String errorMessage = "Cannot submit report: ";
+        
+        if (!mobileVerification.evidenceSourceValid) {
+          errorMessage += "Evidence appears to be downloaded or not original. Please use original photos/videos taken at the scene.";
+        } else if (mobileVerification.evidenceTamperingDetected) {
+          errorMessage += "Evidence appears to be a screenshot or screen recording. Please use original photos/videos taken at the scene.";
+        } else if (!mobileVerification.locationConsistencyCheck) {
+          errorMessage += "Evidence location does not match report location. Please ensure evidence was taken at the reported location.";
+        } else {
+          errorMessage += "Evidence verification failed. Please use original photos/videos taken at the scene.";
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        setState(() => _isSubmitting = false);
+        return;
+      }
+
+      // Show warning if verification has warnings but allow submission
+      if (mobileVerification.status == "warning") {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Warning: Some evidence may not be original. Report will be submitted but may be flagged for review."),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
       final report = ReportModel(
 
         deviceId: _deviceId!,

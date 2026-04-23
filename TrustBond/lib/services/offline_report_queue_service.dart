@@ -252,6 +252,9 @@ class OfflineReportQueueService {
       return _handleSyncFailure(item, 'Could not resolve device ID for upload.');
     }
 
+    // At this point, resolvedDeviceId is guaranteed to be non-null
+    final deviceId = resolvedDeviceId!;
+
     try {
       // Upload evidence files in parallel for better performance
       final uploadFutures = item.mediaItems.map((media) async {
@@ -261,7 +264,7 @@ class OfflineReportQueueService {
         }
         return _api.uploadEvidence(
           item.localReportId,
-          resolvedDeviceId,
+          deviceId,
           media.localPath,
           mediaLatitude: item.latitude,
           mediaLongitude: item.longitude,
@@ -275,7 +278,7 @@ class OfflineReportQueueService {
     } catch (e) {
       if (createdThisAttempt) {
         try {
-          await _api.deleteReport(item.localReportId, resolvedDeviceId);
+          await _api.deleteReport(item.localReportId, deviceId);
         } catch (_) {}
       }
       return _handleSyncFailure(item, e.toString());
