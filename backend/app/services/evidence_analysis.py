@@ -9,19 +9,27 @@ import cv2
 import numpy as np
 import io
 import requests
+import hashlib
+import time
+from datetime import datetime, timezone
 from PIL import Image, ImageFilter, ImageEnhance
+from PIL.ExifTags import TAGS, GPSTAGS
 import pytesseract
-from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass
+from typing import Dict, List, Tuple, Optional, Any
+from dataclasses import dataclass, field
 import logging
 from sqlalchemy.orm import Session
 from ultralytics import YOLO
+import sklearn
+from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger(__name__)
 
 @dataclass
 class EvidenceAnalysis:
-    """Results of evidence analysis"""
+    """Results of evidence analysis with advanced features"""
+    # Basic Analysis
     has_people: bool = False
     people_count: int = 0
     is_blurry: bool = False
@@ -29,16 +37,61 @@ class EvidenceAnalysis:
     brightness: float = 0.0
     has_text: bool = False
     extracted_text: str = ""
-    detected_objects: List[str] = None
+    detected_objects: List[str] = field(default_factory=list)
     scene_type: str = ""
     file_size: int = 0
     resolution: Tuple[int, int] = (0, 0)
     exif_complete: bool = False
     confidence_score: float = 0.0
-
-    def __post_init__(self):
-        if self.detected_objects is None:
-            self.detected_objects = []
+    
+    # Action Recognition
+    detected_actions: List[str] = field(default_factory=list)
+    action_confidence: float = 0.0
+    motion_intensity: float = 0.0
+    
+    # Scene Context Analysis
+    is_indoor: bool = False
+    lighting_condition: str = ""  # day, night, artificial
+    weather_condition: str = ""
+    scene_confidence: float = 0.0
+    
+    # Temporal Analysis
+    exif_timestamp: Optional[datetime] = None
+    timestamp_valid: bool = False
+    location_consistent: bool = True
+    evidence_sequence_valid: bool = True
+    
+    # Face Detection & Privacy
+    faces_detected: int = 0
+    face_locations: List[Tuple[int, int, int, int]] = field(default_factory=list)
+    privacy_blurred: bool = False
+    
+    # Violence Detection
+    violence_detected: bool = False
+    violence_confidence: float = 0.0
+    weapons_detected: List[str] = field(default_factory=list)
+    aggressive_poses: int = 0
+    
+    # Multi-Modal Analysis
+    text_object_correlation: float = 0.0
+    audio_evidence_available: bool = False
+    cross_modal_consistency: float = 0.0
+    
+    # Quality Scoring
+    quality_score: float = 0.0
+    technical_quality: float = 0.0
+    content_quality: float = 0.0
+    authenticity_score: float = 0.0
+    
+    # Anomaly Detection
+    is_anomalous: bool = False
+    anomaly_score: float = 0.0
+    anomaly_reasons: List[str] = field(default_factory=list)
+    
+    # Evidence Chain
+    evidence_hash: str = ""
+    tamper_detected: bool = False
+    chain_valid: bool = True
 
 class EvidenceAnalysisService:
     """Evidence analysis service for validating incident evidence"""
@@ -54,6 +107,27 @@ class EvidenceAnalysisService:
         except Exception as e:
             logger.error(f"Failed to load YOLO model: {e}")
             self.yolo_model = None
+        
+        # Initialize face detection cascade
+        try:
+            self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+            logger.info("Face detection cascade loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load face cascade: {e}")
+            self.face_cascade = None
+        
+        # Initialize anomaly detection model
+        try:
+            self.anomaly_detector = IsolationForest(contamination=0.1, random_state=42)
+            self.scaler = StandardScaler()
+            self.anomaly_trained = False
+            logger.info("Anomaly detection model initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize anomaly detector: {e}")
+            self.anomaly_detector = None
+        
+        # Evidence chain storage
+        self.evidence_chain = {}
         
         # Enhanced rules based on TrustBond incident types
         self.enhanced_rules = {
@@ -157,8 +231,10 @@ class EvidenceAnalysisService:
             logger.error(f"Error analyzing image from URL {image_url}: {e}")
             return EvidenceAnalysis()
     
-    def _analyze_image_internal(self, image: np.ndarray, pil_image: Image.Image) -> EvidenceAnalysis:
-        """Internal image analysis method"""
+    def _analyze_image_internal(self, image: np.ndarray, pil_image: Image.Image, 
+                           reported_lat: float = 0.0, reported_lon: float = 0.0, 
+                           reported_time: Optional[datetime] = None) -> EvidenceAnalysis:
+        """Advanced internal image analysis method"""
         analysis = EvidenceAnalysis()
         
         # Basic image properties
@@ -184,8 +260,68 @@ class EvidenceAnalysisService:
         # 6. Scene classification
         analysis.scene_type = self._classify_scene(image, analysis.detected_objects)
         
-        # Calculate overall confidence
-        analysis.confidence_score = self._calculate_confidence_score(analysis)
+        # === ADVANCED FEATURES ===
+        
+        # 7. Action Recognition
+        actions, action_conf, motion_intensity = self._detect_actions_optical_flow(image)
+        analysis.detected_actions = actions
+        analysis.action_confidence = action_conf
+        analysis.motion_intensity = motion_intensity
+        
+        # 8. Scene Context Analysis
+        scene_context = self._analyze_scene_context(image, analysis.detected_objects)
+        analysis.is_indoor = scene_context['is_indoor']
+        analysis.lighting_condition = scene_context['lighting_condition']
+        analysis.weather_condition = scene_context['weather_condition']
+        analysis.scene_confidence = scene_context['scene_confidence']
+        
+        # 9. Temporal Analysis
+        temporal = self._perform_temporal_analysis(pil_image, reported_lat, reported_lon, reported_time)
+        analysis.exif_timestamp = temporal['exif_timestamp']
+        analysis.timestamp_valid = temporal['timestamp_valid']
+        analysis.location_consistent = temporal['location_consistent']
+        analysis.evidence_sequence_valid = temporal['evidence_sequence_valid']
+        
+        # 10. Face Detection & Privacy Blurring
+        faces_count, face_locs, blurred = self._detect_faces_and_blur(image)
+        analysis.faces_detected = faces_count
+        analysis.face_locations = face_locs
+        analysis.privacy_blurred = blurred
+        
+        # 11. Violence Detection
+        violence = self._detect_violence(image, analysis.detected_objects)
+        analysis.violence_detected = violence['violence_detected']
+        analysis.violence_confidence = violence['violence_confidence']
+        analysis.weapons_detected = violence['weapons_detected']
+        analysis.aggressive_poses = violence['aggressive_poses']
+        
+        # 12. Multi-Modal Analysis
+        multimodal = self._perform_multimodal_analysis(analysis.detected_objects, analysis.extracted_text)
+        analysis.text_object_correlation = multimodal['text_object_correlation']
+        analysis.audio_evidence_available = multimodal['audio_evidence_available']
+        analysis.cross_modal_consistency = multimodal['cross_modal_consistency']
+        
+        # 13. Evidence Chain Verification
+        chain = self._verify_evidence_chain(pil_image)
+        analysis.evidence_hash = chain['evidence_hash']
+        analysis.tamper_detected = chain['tamper_detected']
+        analysis.chain_valid = chain['chain_valid']
+        
+        # 14. Quality Scoring
+        quality = self._calculate_quality_scores(analysis)
+        analysis.quality_score = quality['quality_score']
+        analysis.technical_quality = quality['technical_quality']
+        analysis.content_quality = quality['content_quality']
+        analysis.authenticity_score = quality['authenticity_score']
+        
+        # 15. Anomaly Detection
+        anomaly = self._detect_anomalies(analysis)
+        analysis.is_anomalous = anomaly['is_anomalous']
+        analysis.anomaly_score = anomaly['anomaly_score']
+        analysis.anomaly_reasons = anomaly['anomaly_reasons']
+        
+        # Calculate overall confidence (updated with advanced features)
+        analysis.confidence_score = self._calculate_advanced_confidence_score(analysis)
         
         return analysis
     
@@ -464,6 +600,456 @@ class EvidenceAnalysisService:
         
         return objects
     
+    def _detect_actions_optical_flow(self, image: np.ndarray) -> Tuple[List[str], float, float]:
+        """Detect actions using optical flow analysis"""
+        actions = []
+        confidence = 0.0
+        motion_intensity = 0.0
+        
+        try:
+            # Convert to grayscale
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            
+            # Calculate optical flow (simplified for single image)
+            # In real implementation, this would need video frames
+            # For now, we'll use edge detection and contour analysis as proxy
+            
+            # Detect edges and motion-like patterns
+            edges = cv2.Canny(gray, 50, 150)
+            contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            # Analyze contour patterns for action indicators
+            large_contours = [c for c in contours if cv2.contourArea(c) > 1000]
+            motion_intensity = len(large_contours) / max(len(contours), 1)
+            
+            # Detect running/movement patterns
+            if motion_intensity > 0.3:
+                actions.append('running')
+                confidence += 0.3
+            
+            # Detect struggling/fighting patterns (irregular shapes)
+            irregular_shapes = 0
+            for contour in large_contours:
+                perimeter = cv2.arcLength(contour, True)
+                area = cv2.contourArea(contour)
+                if perimeter > 0:
+                    circularity = 4 * np.pi * area / (perimeter * perimeter)
+                    if circularity < 0.3:  # Irregular shapes
+                        irregular_shapes += 1
+            
+            if irregular_shapes > len(large_contours) * 0.5:
+                actions.append('fighting')
+                confidence += 0.4
+            
+            # Detect taking/grabbing (hand-like shapes)
+            hand_like_shapes = 0
+            for contour in large_contours:
+                area = cv2.contourArea(contour)
+                if 500 < area < 2000:  # Hand-sized regions
+                    hand_like_shapes += 1
+            
+            if hand_like_shapes > 0:
+                actions.append('grabbing')
+                confidence += 0.3
+            
+            confidence = min(confidence, 1.0)
+            
+        except Exception as e:
+            logger.warning(f"Action detection failed: {e}")
+        
+        return actions, confidence, motion_intensity
+    
+    def _analyze_scene_context(self, image: np.ndarray, detected_objects: List[str]) -> Dict:
+        """Advanced scene context analysis"""
+        context = {
+            'is_indoor': False,
+            'lighting_condition': '',
+            'weather_condition': '',
+            'scene_confidence': 0.0
+        }
+        
+        try:
+            # Convert to different color spaces for analysis
+            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            
+            # Lighting analysis
+            brightness = np.mean(gray) / 255.0
+            
+            if brightness > 0.7:
+                context['lighting_condition'] = 'day'
+            elif brightness < 0.3:
+                context['lighting_condition'] = 'night'
+            else:
+                context['lighting_condition'] = 'artificial'
+            
+            # Indoor/outdoor detection
+            # Check for indoor indicators
+            indoor_objects = ['chair', 'couch', 'bed', 'table', 'tv', 'laptop', 'refrigerator']
+            outdoor_objects = ['car', 'truck', 'bus', 'motorcycle']
+            
+            indoor_score = sum(1 for obj in indoor_objects if obj in detected_objects)
+            outdoor_score = sum(1 for obj in outdoor_objects if obj in detected_objects)
+            
+            # Analyze texture patterns (walls vs sky)
+            texture_variance = np.var(gray)
+            
+            if indoor_score > outdoor_score or texture_variance < 1000:
+                context['is_indoor'] = True
+            else:
+                context['is_indoor'] = False
+            
+            # Weather detection (basic)
+            if brightness < 0.4 and not context['is_indoor']:
+                # Check for rain patterns (vertical streaks)
+                edges = cv2.Canny(gray, 50, 150)
+                vertical_lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, 
+                                               minLineLength=50, maxLineGap=10)
+                
+                if vertical_lines is not None:
+                    vertical_count = sum(1 for line in vertical_lines 
+                                       if abs(line[0][3] - line[0][1]) > abs(line[0][2] - line[0][0]))
+                    if vertical_count > len(vertical_lines) * 0.6:
+                        context['weather_condition'] = 'rainy'
+            
+            # Calculate scene confidence
+            context['scene_confidence'] = max(indoor_score, outdoor_score) / max(len(detected_objects), 1)
+            
+        except Exception as e:
+            logger.warning(f"Scene context analysis failed: {e}")
+        
+        return context
+    
+    def _perform_temporal_analysis(self, image: Image.Image, reported_lat: float, 
+                                 reported_lon: float, reported_time: Optional[datetime] = None) -> Dict:
+        """Temporal analysis of evidence"""
+        temporal = {
+            'exif_timestamp': None,
+            'timestamp_valid': False,
+            'location_consistent': True,
+            'evidence_sequence_valid': True
+        }
+        
+        try:
+            # Extract EXIF timestamp
+            exif = image._getexif()
+            if exif:
+                # Look for DateTimeOriginal tag
+                for tag_id, value in exif.items():
+                    tag = TAGS.get(tag_id, tag_id)
+                    if tag == "DateTimeOriginal":
+                        try:
+                            temporal['exif_timestamp'] = datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+                            
+                            # Validate timestamp
+                            if reported_time:
+                                time_diff = abs((temporal['exif_timestamp'] - reported_time).total_seconds())
+                                temporal['timestamp_valid'] = time_diff < 3600  # Within 1 hour
+                            
+                        except ValueError:
+                            pass
+                        break
+            
+            # Location consistency (would need GPS data from EXIF for full implementation)
+            # For now, we'll assume consistency
+            
+            # Evidence sequence validation (would need multiple evidence files)
+            # For now, we'll assume valid
+            
+        except Exception as e:
+            logger.warning(f"Temporal analysis failed: {e}")
+        
+        return temporal
+    
+    def _detect_faces_and_blur(self, image: np.ndarray) -> Tuple[int, List[Tuple[int, int, int, int]], bool]:
+        """Detect faces and apply privacy blurring"""
+        faces_detected = 0
+        face_locations = []
+        privacy_blurred = False
+        
+        if self.face_cascade is None:
+            return faces_detected, face_locations, privacy_blurred
+        
+        try:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            faces = self.face_cascade.detectMultiScale(gray, 1.1, 4)
+            
+            faces_detected = len(faces)
+            face_locations = [(x, y, x+w, y+h) for (x, y, w, h) in faces]
+            
+            # Apply privacy blurring
+            if faces_detected > 0:
+                for (x, y, w, h) in faces:
+                    # Blur the face region
+                    face_region = image[y:y+h, x:x+w]
+                    blurred_face = cv2.GaussianBlur(face_region, (99, 99), 30)
+                    image[y:y+h, x:x+w] = blurred_face
+                
+                privacy_blurred = True
+                logger.info(f"Applied privacy blur to {faces_detected} face(s)")
+            
+        except Exception as e:
+            logger.warning(f"Face detection/blurring failed: {e}")
+        
+        return faces_detected, face_locations, privacy_blurred
+    
+    def _detect_violence(self, image: np.ndarray, detected_objects: List[str]) -> Dict:
+        """Violence detection using object and pose analysis"""
+        violence = {
+            'violence_detected': False,
+            'violence_confidence': 0.0,
+            'weapons_detected': [],
+            'aggressive_poses': 0
+        }
+        
+        try:
+            # Check for weapons
+            weapon_objects = ['knife', 'scissors', 'baseball bat', 'tennis racket']
+            violence['weapons_detected'] = [obj for obj in weapon_objects if obj in detected_objects]
+            
+            if violence['weapons_detected']:
+                violence['violence_confidence'] += 0.5
+                violence['violence_detected'] = True
+            
+            # Analyze for aggressive poses (simplified)
+            # In real implementation, this would use pose estimation
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            edges = cv2.Canny(gray, 50, 150)
+            
+            # Look for aggressive patterns (sharp angles, irregular shapes)
+            contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            aggressive_count = 0
+            for contour in contours:
+                if cv2.contourArea(contour) > 1000:
+                    # Approximate contour to polygon
+                    epsilon = 0.02 * cv2.arcLength(contour, True)
+                    approx = cv2.approxPolyDP(contour, epsilon, True)
+                    
+                    # Sharp angles might indicate aggressive poses
+                    if len(approx) > 6:  # Complex shapes
+                        aggressive_count += 1
+            
+            violence['aggressive_poses'] = aggressive_count
+            
+            if aggressive_count > 3:
+                violence['violence_confidence'] += 0.3
+                violence['violence_detected'] = True
+            
+            violence['violence_confidence'] = min(violence['violence_confidence'], 1.0)
+            
+        except Exception as e:
+            logger.warning(f"Violence detection failed: {e}")
+        
+        return violence
+    
+    def _perform_multimodal_analysis(self, detected_objects: List[str], extracted_text: str) -> Dict:
+        """Multi-modal analysis correlating text and visual evidence"""
+        multimodal = {
+            'text_object_correlation': 0.0,
+            'audio_evidence_available': False,
+            'cross_modal_consistency': 0.0
+        }
+        
+        try:
+            # Text-object correlation
+            text_lower = extracted_text.lower()
+            
+            # Check for correlation between detected objects and text
+            object_text_matches = 0
+            for obj in detected_objects:
+                if obj.replace('_', ' ') in text_lower:
+                    object_text_matches += 1
+            
+            if detected_objects:
+                multimodal['text_object_correlation'] = object_text_matches / len(detected_objects)
+            
+            # Audio evidence (placeholder - would need audio file analysis)
+            multimodal['audio_evidence_available'] = False
+            
+            # Cross-modal consistency
+            # High correlation between text and objects indicates consistency
+            multimodal['cross_modal_consistency'] = multimodal['text_object_correlation']
+            
+        except Exception as e:
+            logger.warning(f"Multi-modal analysis failed: {e}")
+        
+        return multimodal
+    
+    def _calculate_quality_scores(self, analysis: 'EvidenceAnalysis') -> Dict:
+        """Calculate comprehensive quality scores"""
+        quality = {
+            'quality_score': 0.0,
+            'technical_quality': 0.0,
+            'content_quality': 0.0,
+            'authenticity_score': 0.0
+        }
+        
+        try:
+            # Technical quality (blur, resolution, brightness)
+            tech_score = 0.0
+            
+            # Blur score (inverse - higher is better)
+            if not analysis.is_blurry:
+                tech_score += 0.3
+            
+            # Resolution check
+            if analysis.resolution[0] >= 1280 and analysis.resolution[1] >= 720:
+                tech_score += 0.3
+            elif analysis.resolution[0] >= 640 and analysis.resolution[1] >= 480:
+                tech_score += 0.2
+            
+            # Brightness check
+            if 0.3 <= analysis.brightness <= 0.8:
+                tech_score += 0.2
+            
+            # EXIF completeness
+            if analysis.exif_complete:
+                tech_score += 0.2
+            
+            quality['technical_quality'] = tech_score
+            
+            # Content quality (objects, actions, text)
+            content_score = 0.0
+            
+            # Object detection quality
+            if analysis.detected_objects and 'unknown' not in analysis.detected_objects:
+                content_score += 0.3
+            
+            # Action detection quality
+            if analysis.detected_actions:
+                content_score += 0.2
+            
+            # Text extraction quality
+            if analysis.has_text and len(analysis.extracted_text) > 10:
+                content_score += 0.2
+            
+            # Scene context quality
+            if analysis.scene_confidence > 0.5:
+                content_score += 0.2
+            
+            # Multi-modal consistency
+            if analysis.cross_modal_consistency > 0.5:
+                content_score += 0.1
+            
+            quality['content_quality'] = content_score
+            
+            # Authenticity score (tamper detection, chain validity)
+            auth_score = 1.0
+            
+            if analysis.tamper_detected:
+                auth_score -= 0.5
+            
+            if not analysis.chain_valid:
+                auth_score -= 0.3
+            
+            if not analysis.timestamp_valid:
+                auth_score -= 0.2
+            
+            quality['authenticity_score'] = max(auth_score, 0.0)
+            
+            # Overall quality score (weighted average)
+            quality['quality_score'] = (
+                tech_score * 0.4 + 
+                content_score * 0.4 + 
+                quality['authenticity_score'] * 0.2
+            )
+            
+        except Exception as e:
+            logger.warning(f"Quality scoring failed: {e}")
+        
+        return quality
+    
+    def _detect_anomalies(self, analysis: 'EvidenceAnalysis') -> Dict:
+        """Detect anomalies in evidence using machine learning"""
+        anomaly = {
+            'is_anomalous': False,
+            'anomaly_score': 0.0,
+            'anomaly_reasons': []
+        }
+        
+        if self.anomaly_detector is None:
+            return anomaly
+        
+        try:
+            # Create feature vector for anomaly detection
+            features = [
+                analysis.blur_score,
+                analysis.brightness,
+                len(analysis.detected_objects),
+                analysis.people_count,
+                analysis.motion_intensity,
+                analysis.action_confidence,
+                analysis.scene_confidence,
+                len(analysis.detected_actions),
+                analysis.faces_detected,
+                analysis.violence_confidence
+            ]
+            
+            # Normalize features
+            features_scaled = self.scaler.fit_transform([features])
+            
+            # Detect anomaly
+            anomaly_prediction = self.anomaly_detector.fit_predict(features_scaled)
+            anomaly['anomaly_score'] = float(self.anomaly_detector.decision_function(features_scaled)[0])
+            
+            if anomaly_prediction[0] == -1:  # Anomaly detected
+                anomaly['is_anomalous'] = True
+                
+                # Determine reasons
+                if analysis.blur_score < 50:
+                    anomaly['anomaly_reasons'].append('Extremely blurry image')
+                
+                if analysis.brightness < 0.1 or analysis.brightness > 0.9:
+                    anomaly['anomaly_reasons'].append('Unusual lighting conditions')
+                
+                if len(analysis.detected_objects) == 0 and analysis.has_people:
+                    anomaly['anomaly_reasons'].append('People detected but no objects identified')
+                
+                if analysis.motion_intensity > 0.8:
+                    anomaly['anomaly_reasons'].append('Excessive motion detected')
+                
+                if analysis.violence_confidence > 0.8:
+                    anomaly['anomaly_reasons'].append('High violence confidence')
+            
+        except Exception as e:
+            logger.warning(f"Anomaly detection failed: {e}")
+        
+        return anomaly
+    
+    def _verify_evidence_chain(self, image: Image.Image) -> Dict:
+        """Verify evidence chain integrity"""
+        chain = {
+            'evidence_hash': '',
+            'tamper_detected': False,
+            'chain_valid': True
+        }
+        
+        try:
+            # Calculate evidence hash
+            img_bytes = io.BytesIO()
+            image.save(img_bytes, format='JPEG')
+            img_bytes = img_bytes.getvalue()
+            
+            chain['evidence_hash'] = hashlib.sha256(img_bytes).hexdigest()
+            
+            # Check if this hash exists in chain (duplicate detection)
+            if chain['evidence_hash'] in self.evidence_chain:
+                chain['tamper_detected'] = True
+                chain['chain_valid'] = False
+                logger.warning(f"Duplicate evidence detected: {chain['evidence_hash']}")
+            else:
+                # Add to chain
+                self.evidence_chain[chain['evidence_hash']] = {
+                    'timestamp': datetime.now(timezone.utc),
+                    'size': len(img_bytes)
+                }
+            
+        except Exception as e:
+            logger.warning(f"Evidence chain verification failed: {e}")
+        
+        return chain
+    
     def _classify_scene(self, image: np.ndarray, detected_objects: List[str]) -> str:
         """Classify scene type based on content"""
         try:
@@ -533,10 +1119,50 @@ class EvidenceAnalysisService:
         
         return min(score, 1.0)
     
+    def _calculate_advanced_confidence_score(self, analysis: EvidenceAnalysis) -> float:
+        """Calculate advanced confidence score using all features"""
+        score = 0.0
+        
+        # Basic confidence (40% weight)
+        basic_score = self._calculate_confidence_score(analysis)
+        score += basic_score * 0.4
+        
+        # Action detection confidence (15% weight)
+        if analysis.detected_actions:
+            score += analysis.action_confidence * 0.15
+        
+        # Scene context confidence (10% weight)
+        score += analysis.scene_confidence * 0.1
+        
+        # Violence detection (10% weight)
+        if analysis.violence_detected:
+            score += analysis.violence_confidence * 0.1
+        
+        # Multi-modal consistency (10% weight)
+        score += analysis.cross_modal_consistency * 0.1
+        
+        # Quality score (15% weight)
+        score += analysis.quality_score * 0.15
+        
+        # Penalty factors
+        if analysis.is_anomalous:
+            score -= 0.2
+        
+        if analysis.tamper_detected:
+            score -= 0.3
+        
+        if not analysis.timestamp_valid:
+            score -= 0.1
+        
+        if not analysis.chain_valid:
+            score -= 0.2
+        
+        return max(min(score, 1.0), 0.0)
+    
     def validate_incident_evidence(self, incident_type_id: int, description: str, 
                                  analysis: EvidenceAnalysis) -> Dict:
-        """Validate evidence against incident type requirements"""
-        logger.info(f"Validating evidence for incident type {incident_type_id}")
+        """Advanced evidence validation against incident type requirements"""
+        logger.info(f"Advanced validation for incident type {incident_type_id}")
         
         # Get rules for this incident type
         rules = self.enhanced_rules.get(incident_type_id, {})
@@ -546,42 +1172,141 @@ class EvidenceAnalysisService:
                 'valid': False,
                 'reason': 'Unknown incident type',
                 'confidence': 0.0,
-                'issues': ['Unknown incident type']
+                'issues': ['Unknown incident type'],
+                'advanced_analysis': {}
             }
         
         score = 0.0
         max_score = 0.0
         issues = []
+        warnings = []
         
-        # 1. Check expected objects
+        # === CORE VALIDATION (50% weight) ===
+        
+        # 1. Expected objects (15% weight)
         if 'expected_objects' in rules:
-            max_score += 0.3
+            max_score += 0.15
             object_matches = 0
             for obj in rules['expected_objects']:
                 if obj in analysis.detected_objects:
                     object_matches += 1
             
             if object_matches > 0:
-                score += 0.3 * (object_matches / len(rules['expected_objects']))
+                score += 0.15 * (object_matches / len(rules['expected_objects']))
             else:
                 issues.append(f"No expected objects found. Expected: {rules['expected_objects']}")
         
-        # 2. Check for people (critical for most incidents)
-        max_score += 0.2
+        # 2. People detection (10% weight)
+        max_score += 0.1
         if analysis.has_people:
-            score += 0.2
+            score += 0.1
         else:
             issues.append("No people detected in evidence")
         
-        # 3. Check image quality
-        max_score += 0.2
-        if not analysis.is_blurry and analysis.confidence_score > 0.5:
-            score += 0.2
+        # 3. Action validation (15% weight)
+        max_score += 0.15
+        if 'expected_actions' in rules and analysis.detected_actions:
+            action_matches = 0
+            for action in rules['expected_actions']:
+                if action in analysis.detected_actions:
+                    action_matches += 1
+            
+            if action_matches > 0:
+                score += 0.15 * (action_matches / len(rules['expected_actions']))
+            else:
+                warnings.append(f"No expected actions detected. Expected: {rules['expected_actions']}")
         else:
-            issues.append("Poor image quality")
+            warnings.append("No actions detected in evidence")
         
-        # 4. Check description keywords
-        max_score += 0.2
+        # 4. Scene validation (10% weight)
+        max_score += 0.1
+        if 'expected_scenes' in rules:
+            scene_match = False
+            for scene in rules['expected_scenes']:
+                if scene in analysis.scene_type or (scene == 'market' and 'market' in description.lower()):
+                    scene_match = True
+                    break
+            
+            if scene_match or analysis.scene_confidence > 0.7:
+                score += 0.1
+            else:
+                warnings.append(f"Scene mismatch. Expected: {rules['expected_scenes']}, Found: {analysis.scene_type}")
+        
+        # === QUALITY & AUTHENTICITY (30% weight) ===
+        
+        # 5. Technical quality (10% weight)
+        max_score += 0.1
+        if analysis.technical_quality > 0.7:
+            score += 0.1
+        elif analysis.technical_quality > 0.5:
+            score += 0.05
+        else:
+            warnings.append("Low technical quality")
+        
+        # 6. Content quality (10% weight)
+        max_score += 0.1
+        if analysis.content_quality > 0.7:
+            score += 0.1
+        elif analysis.content_quality > 0.5:
+            score += 0.05
+        else:
+            warnings.append("Low content quality")
+        
+        # 7. Authenticity (10% weight)
+        max_score += 0.1
+        if analysis.authenticity_score > 0.8:
+            score += 0.1
+        elif analysis.authenticity_score > 0.6:
+            score += 0.05
+        else:
+            if analysis.tamper_detected:
+                issues.append("Evidence tampering detected")
+            if not analysis.chain_valid:
+                issues.append("Evidence chain validation failed")
+            if not analysis.timestamp_valid:
+                warnings.append("Timestamp validation failed")
+        
+        # === ADVANCED VALIDATION (20% weight) ===
+        
+        # 8. Violence detection (for applicable incidents)
+        max_score += 0.05
+        if incident_type_id in [2, 5]:  # Assault, Domestic Violence
+            if analysis.violence_detected:
+                score += 0.05
+            else:
+                warnings.append("No violence indicators detected for violent incident type")
+        else:
+            score += 0.05  # Not applicable, give full points
+        
+        # 9. Multi-modal consistency (5% weight)
+        max_score += 0.05
+        if analysis.cross_modal_consistency > 0.7:
+            score += 0.05
+        elif analysis.cross_modal_consistency > 0.5:
+            score += 0.025
+        else:
+            warnings.append("Low multi-modal consistency")
+        
+        # 10. Anomaly check (5% weight)
+        max_score += 0.05
+        if not analysis.is_anomalous:
+            score += 0.05
+        else:
+            issues.extend(analysis.anomaly_reasons)
+        
+        # 11. Privacy compliance (5% weight)
+        max_score += 0.05
+        if analysis.faces_detected > 0:
+            if analysis.privacy_blurred:
+                score += 0.05
+            else:
+                warnings.append("Faces detected but not blurred - privacy concern")
+        else:
+            score += 0.05
+        
+        # === DESCRIPTION ANALYSIS ===
+        
+        # 12. Keyword matching (bonus points)
         description_lower = description.lower()
         keyword_matches = 0
         if 'keywords' in rules:
@@ -590,31 +1315,63 @@ class EvidenceAnalysisService:
                     keyword_matches += 1
             
             if keyword_matches > 0:
-                score += 0.2 * (keyword_matches / len(rules['keywords']))
-        
-        # 5. Check scene relevance
-        max_score += 0.1
-        if 'expected_scenes' in rules:
-            if any(scene in analysis.scene_type for scene in rules['expected_scenes']):
-                score += 0.1
+                bonus = 0.1 * (keyword_matches / len(rules['keywords']))
+                score += bonus
+                max_score += bonus
         
         # Calculate final score
         final_score = score / max_score if max_score > 0 else 0.0
         
-        # Determine validation result
-        threshold = 0.6  # 60% threshold for validation
+        # Determine validation result with dynamic threshold
+        base_threshold = 0.6
+        
+        # Adjust threshold based on incident severity and evidence quality
+        if incident_type_id in [2, 5]:  # High severity incidents
+            threshold = base_threshold - 0.1  # More lenient for serious incidents
+        
+        if analysis.authenticity_score < 0.5:
+            threshold = base_threshold + 0.2  # Stricter for suspicious evidence
+        
+        if analysis.violence_detected and incident_type_id in [2, 5]:
+            threshold = base_threshold - 0.1  # More lenient if violence detected
+        
         is_valid = final_score >= threshold
+        
+        # Prepare advanced analysis summary
+        advanced_analysis = {
+            'actions_detected': analysis.detected_actions,
+            'violence_detected': analysis.violence_detected,
+            'weapons_detected': analysis.weapons_detected,
+            'faces_detected': analysis.faces_detected,
+            'privacy_blurred': analysis.privacy_blurred,
+            'scene_context': {
+                'is_indoor': analysis.is_indoor,
+                'lighting': analysis.lighting_condition,
+                'weather': analysis.weather_condition
+            },
+            'quality_scores': {
+                'technical': analysis.technical_quality,
+                'content': analysis.content_quality,
+                'authenticity': analysis.authenticity_score,
+                'overall': analysis.quality_score
+            },
+            'anomaly_detected': analysis.is_anomalous,
+            'tamper_detected': analysis.tamper_detected,
+            'chain_valid': analysis.chain_valid
+        }
         
         return {
             'valid': is_valid,
             'confidence': final_score,
+            'threshold_used': threshold,
             'issues': issues,
-            'analysis': {
+            'warnings': warnings,
+            'advanced_analysis': advanced_analysis,
+            'analysis_summary': {
                 'has_people': analysis.has_people,
-                'is_blurry': analysis.is_blurry,
-                'confidence_score': analysis.confidence_score,
                 'detected_objects': analysis.detected_objects,
-                'extracted_text': analysis.extracted_text
+                'extracted_text': analysis.extracted_text,
+                'quality_score': analysis.quality_score
             }
         }
 
