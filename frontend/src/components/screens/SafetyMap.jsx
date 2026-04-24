@@ -1822,7 +1822,7 @@ const SecurityRecommendations = ({ hotspots }) => {
     if (recs.length === 0) {
       recs.push({
         priority: "low",
-        title: "✅ Stable Security Environment",
+        title: "Security Recommendations",
         description: "Current incident patterns are within normal parameters.",
         action: "Maintain regular patrol schedules and continue community engagement efforts."
       });
