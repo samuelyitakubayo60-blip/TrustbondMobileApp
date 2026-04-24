@@ -1933,6 +1933,8 @@ const SecurityRecommendations = ({ hotspots }) => {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      {/* Security Recommendations Section - Hidden */}
+      {/* 
       {recommendations.map((rec, index) => (
         <div
           key={index}
@@ -2006,6 +2008,20 @@ const SecurityRecommendations = ({ hotspots }) => {
           </div>
         </div>
       )}
+      */}
+      
+      {/* Empty placeholder when recommendations are hidden */}
+      <div style={{
+        padding: "20px",
+        backgroundColor: "var(--surface)",
+        borderRadius: "8px",
+        border: "1px solid var(--border)",
+        textAlign: "center",
+        color: "var(--muted)",
+        fontSize: "12px"
+      }}>
+        Security recommendations are currently hidden
+      </div>
     </div>
   );
 };
