@@ -13,6 +13,8 @@ class AppColors {
   static const Color warn = Color(0xFFFF6B35);
   static const Color danger = Color(0xFFFF3B5C);
   static const Color ok = Color(0xFF00E5B4);
+  static const Color success = Color(0xFF00E5B4);
+  static const Color error = Color(0xFFFF3B5C);
   static const Color text = Color(0xFFEAF0FF);
   static const Color muted = Color(0xFF7A8AAA);
   static const Color border = Color(0xFF1E2D4A);

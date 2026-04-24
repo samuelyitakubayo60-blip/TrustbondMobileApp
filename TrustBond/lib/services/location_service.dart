@@ -27,6 +27,29 @@ class LocationService {
   static const Duration _gpsSlowTimeout = Duration(seconds: 25);
   // ───────────────────────────────────────────────────────
 
+  /// Disable location tracking (mock implementation for settings)
+  Future<void> disableLocationTracking() async {
+    print('LocationService: Location tracking disabled (mock implementation)');
+  }
+
+  /// Request location permission (mock implementation for settings)
+  Future<bool> requestLocationPermission() async {
+    try {
+      // Try to request actual permission on mobile platforms
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        final result = await Geolocator.requestPermission();
+        return result == LocationPermission.whileInUse ||
+               result == LocationPermission.always;
+      }
+      return permission == LocationPermission.whileInUse ||
+             permission == LocationPermission.always;
+    } catch (e) {
+      print('LocationService: Permission request failed: $e');
+      return false;
+    }
+  }
+
   /// Loads the GeoJSON data (cached after first load).
   Future<MusanzeMapData> _ensureMapData() async {
     _mapData ??= await MusanzeMapData.load();

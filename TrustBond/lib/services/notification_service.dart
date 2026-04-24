@@ -25,6 +25,12 @@ class NotificationService {
   Future<void> initialize() async {
     if (_isInitialized) return;
 
+    // Skip Firebase initialization on Windows
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      print('Firebase notifications not supported on Windows');
+      return;
+    }
+
     try {
       // Request permission for iOS
       await _firebaseMessaging.requestPermission(

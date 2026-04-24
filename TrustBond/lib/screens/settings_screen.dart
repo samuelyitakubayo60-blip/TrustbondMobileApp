@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import '../services/location_service.dart';
-import '../services/notification_service.dart';
 import '../services/storage_service.dart';
+import '../services/platform_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -16,17 +16,16 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _locationSharing = true;
   bool _dataEncryption = true;
+  bool _biometricAuth = false;
+  bool _secureStorage = true;
+  bool _autoBackup = false;
   bool _pushNotif = true;
   bool _hotspotAlerts = true;
   bool _reportUpdates = true;
-  bool _biometricAuth = false;
-  bool _autoBackup = true;
-  bool _secureStorage = true;
-  
-  final _locationService = LocationService();
-  final _notificationService = NotificationService();
-  final _storageService = StorageService();
   bool _loading = true;
+
+  final LocationService _locationService = LocationService();
+  final StorageService _storageService = StorageService();
 
   @override
   void initState() {
@@ -192,12 +191,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _onPushNotificationsChanged(bool value) async {
     try {
+      if (!PlatformService.supportsPushNotifications) {
+        _showError('Push notifications not supported on this platform');
+        return;
+      }
+      
       if (value) {
-        await _notificationService.initialize();
-        await _notificationService.enableNotifications();
+        await MockNotificationService.enableNotifications();
         _showSuccess('Push notifications enabled');
       } else {
-        await _notificationService.disableNotifications();
+        await MockNotificationService.disableNotifications();
         _showSuccess('Push notifications disabled');
       }
       setState(() => _pushNotif = value);
@@ -209,11 +212,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _onHotspotAlertsChanged(bool value) async {
     try {
+      if (!PlatformService.supportsPushNotifications) {
+        _showError('Hotspot alerts not supported on this platform');
+        return;
+      }
+      
       if (value) {
-        await _notificationService.subscribeToTopic(NotificationTopics.hotspotAlerts);
+        await MockNotificationService.subscribeToTopic('hotspot_alerts');
         _showSuccess('Hotspot alerts enabled');
       } else {
-        await _notificationService.unsubscribeFromTopic(NotificationTopics.hotspotAlerts);
+        await MockNotificationService.unsubscribeFromTopic('hotspot_alerts');
         _showSuccess('Hotspot alerts disabled');
       }
       setState(() => _hotspotAlerts = value);
@@ -225,11 +233,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _onReportUpdatesChanged(bool value) async {
     try {
+      if (!PlatformService.supportsPushNotifications) {
+        _showError('Report updates not supported on this platform');
+        return;
+      }
+      
       if (value) {
-        await _notificationService.subscribeToTopic(NotificationTopics.reportUpdates);
+        await MockNotificationService.subscribeToTopic('report_updates');
         _showSuccess('Report updates enabled');
       } else {
-        await _notificationService.unsubscribeFromTopic(NotificationTopics.reportUpdates);
+        await MockNotificationService.unsubscribeFromTopic('report_updates');
         _showSuccess('Report updates disabled');
       }
       setState(() => _reportUpdates = value);
@@ -265,48 +278,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return PopScope(
       canPop: false,
       child: Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildAppBar(),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-                  : ListView(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      children: [
-                  _section('Privacy & Security'),
-                  _toggle('Location Sharing', 'Share GPS when submitting reports',
-                      _locationSharing, _onLocationSharingChanged),
-                  _toggle('Data Encryption', 'End-to-end encrypt report data',
-                      _dataEncryption, _onDataEncryptionChanged),
-                  _toggle('Biometric Authentication', 'Use fingerprint or face ID to unlock',
-                      _biometricAuth, _onBiometricAuthChanged),
-                  _toggle('Secure Storage', 'Store sensitive data in encrypted local storage',
-                      _secureStorage, _onSecureStorageChanged),
-                  _toggle('Auto Backup', 'Automatically backup encrypted reports to secure cloud',
-                      _autoBackup, _onAutoBackupChanged),
-                  _section('Notifications'),
-                  _toggle('Push Notifications', 'Report status updates',
-                      _pushNotif, _onPushNotificationsChanged),
-                  _toggle('Hotspot Alerts', 'New danger zone notifications',
-                      _hotspotAlerts, _onHotspotAlertsChanged),
-                  _toggle('Report Updates', 'When your report status changes',
-                      _reportUpdates, _onReportUpdatesChanged),
-                  _section('About'),
-                  _infoRow('Version', '2.1.0'),
-                  _infoRow('Build', '2024.12.01'),
-                  _infoRow('AI Model', 'TrustNet v3.2'),
-                  const SizedBox(height: 24),
-                  _buildDangerActions(),
-                  const SizedBox(height: 32),
-                ],
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildAppBar(),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+                    : ListView(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        children: [
+                          _section('Privacy & Security'),
+                          _toggle('Location Sharing', 'Share GPS when submitting reports',
+                              _locationSharing, _onLocationSharingChanged),
+                          _toggle('Data Encryption', 'End-to-end encrypt report data',
+                              _dataEncryption, _onDataEncryptionChanged),
+                          _toggle('Biometric Authentication', 'Use fingerprint or face ID to unlock',
+                              _biometricAuth, _onBiometricAuthChanged),
+                          _toggle('Secure Storage', 'Store sensitive data in encrypted local storage',
+                              _secureStorage, _onSecureStorageChanged),
+                          _toggle('Auto Backup', 'Automatically backup encrypted reports to secure cloud',
+                              _autoBackup, _onAutoBackupChanged),
+                          _section('Notifications'),
+                          _toggle('Push Notifications', 'Report status updates',
+                              _pushNotif, _onPushNotificationsChanged),
+                          _toggle('Hotspot Alerts', 'New danger zone notifications',
+                              _hotspotAlerts, _onHotspotAlertsChanged),
+                          _toggle('Report Updates', 'When your report status changes',
+                              _reportUpdates, _onReportUpdatesChanged),
+                          _section('About'),
+                          _infoRow('Version', '2.1.0'),
+                          _infoRow('Build', '2024.12.01'),
+                          _infoRow('AI Model', 'TrustNet v3.2'),
+                          const SizedBox(height: 24),
+                          _buildDangerActions(),
+                          const SizedBox(height: 32),
+                        ],
+                      ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
+    );
   }
 
   Widget _buildAppBar() {
