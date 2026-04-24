@@ -1767,11 +1767,25 @@ const SecurityRecommendations = ({ hotspots }) => {
     );
     
     if (criticalHotspots.length > 0) {
+      const incidentTypes = [...new Set(criticalHotspots.map(h => h.incident_type_name).filter(Boolean))];
+      const totalIncidents = criticalHotspots.reduce((sum, h) => sum + h.incident_count, 0);
+      
+      let specificAction = "";
+      if (incidentTypes.some(type => type?.toLowerCase().includes('assault'))) {
+        specificAction = "Deploy rapid response units, establish safe zones, and provide victim support services in affected areas.";
+      } else if (incidentTypes.some(type => type?.toLowerCase().includes('theft'))) {
+        specificAction = "Set up temporary security checkpoints, increase plain-clothed officers, and secure high-value target areas.";
+      } else if (incidentTypes.some(type => type?.toLowerCase().includes('vandalism'))) {
+        specificAction = "Increase surveillance, engage community watch groups, and implement protective measures for public infrastructure.";
+      } else {
+        specificAction = "Deploy additional patrols, increase community alerts, and consider temporary safety measures in these areas.";
+      }
+      
       recs.push({
         priority: "critical",
         title: `🚨 ${criticalHotspots.length} Critical Security Cluster${criticalHotspots.length > 1 ? 's' : ''} Detected`,
-        description: `Multiple high-incidence areas requiring immediate attention. ${criticalHotspots.reduce((sum, h) => sum + h.incident_count, 0)} total incidents reported.`,
-        action: "Deploy additional patrols, increase community alerts, and consider temporary safety measures in these areas."
+        description: `Multiple high-incidence areas requiring immediate attention. ${totalIncidents} total incidents reported including: ${incidentTypes.join(', ') || 'mixed incidents'}.`,
+        action: specificAction
       });
     }
 
@@ -1781,25 +1795,89 @@ const SecurityRecommendations = ({ hotspots }) => {
     );
     
     if (highRiskHotspots.length > 0) {
+      const incidentTypes = [...new Set(highRiskHotspots.map(h => h.incident_type_name).filter(Boolean))];
+      
+      let specificAction = "";
+      if (incidentTypes.some(type => type?.toLowerCase().includes('suspicious'))) {
+        specificAction = "Conduct community outreach, increase information gathering, and establish neighborhood communication channels.";
+      } else if (incidentTypes.some(type => type?.toLowerCase().includes('drug'))) {
+        specificAction = "Coordinate with community leaders, increase surveillance of known problem areas, and provide youth engagement programs.";
+      } else if (incidentTypes.some(type => type?.toLowerCase().includes('traffic'))) {
+        specificAction = "Deploy traffic enforcement units, conduct road safety education, and improve traffic flow management.";
+      } else {
+        specificAction = "Increase patrol frequency, conduct community safety meetings, and enhance visibility in these locations.";
+      }
+      
       recs.push({
         priority: "high",
         title: `⚠️ ${highRiskHotspots.length} High-Risk Area${highRiskHotspots.length > 1 ? 's' : ''} Identified`,
-        description: `Areas with elevated incident rates requiring enhanced monitoring and community engagement.`,
-        action: "Increase patrol frequency, conduct community safety meetings, and enhance visibility in these locations."
+        description: `Areas with elevated incident rates requiring enhanced monitoring. Primary concerns: ${incidentTypes.join(', ') || 'various incidents'}.`,
+        action: specificAction
       });
     }
 
-    // Type-specific recommendations
+    // Type-specific recommendations based on actual incident patterns
     const theftHotspots = hotspots.filter(h => 
       h.incident_type_name?.toLowerCase().includes('theft') && h.incident_count >= 2
     );
     
     if (theftHotspots.length > 0) {
+      const avgIncidents = Math.round(theftHotspots.reduce((sum, h) => sum + h.incident_count, 0) / theftHotspots.length);
+      
+      let specificAction = "";
+      if (avgIncidents >= 4) {
+        specificAction = "Establish temporary security posts, implement bag check protocols, and coordinate with local businesses for theft prevention.";
+      } else {
+        specificAction = "Increase neighborhood watch presence, provide community safety education, and enhance lighting in affected areas.";
+      }
+      
       recs.push({
         priority: "medium",
         title: `🔒 Theft Prevention Focus Areas`,
-        description: `${theftHotspots.length} area${theftHotspots.length > 1 ? 's' : ''} with recurring theft incidents.`,
-        action: "Implement targeted theft prevention measures, increase neighborhood watch presence, and provide community safety education."
+        description: `${theftHotspots.length} area${theftHotspots.length > 1 ? 's' : ''} with recurring theft incidents (${avgIncidents} average incidents per area).`,
+        action: specificAction
+      });
+    }
+
+    // Assault-specific recommendations
+    const assaultHotspots = hotspots.filter(h => 
+      h.incident_type_name?.toLowerCase().includes('assault') && h.incident_count >= 2
+    );
+    
+    if (assaultHotspots.length > 0) {
+      recs.push({
+        priority: "high",
+        title: `🛡️ Assault Prevention Required`,
+        description: `${assaultHotspots.length} location${assaultHotspots.length > 1 ? 's' : ''} with reported assault incidents requiring immediate intervention.`,
+        action: "Establish safe corridors, increase police presence during peak hours, and provide community conflict resolution resources."
+      });
+    }
+
+    // Drug activity recommendations
+    const drugHotspots = hotspots.filter(h => 
+      (h.incident_type_name?.toLowerCase().includes('drug') || h.incident_type_name?.toLowerCase().includes('narcotic')) && h.incident_count >= 2
+    );
+    
+    if (drugHotspots.length > 0) {
+      recs.push({
+        priority: "medium",
+        title: `🚬 Drug Activity Monitoring`,
+        description: `${drugHotspots.length} area${drugHotspots.length > 1 ? 's' : ''} with reported drug-related incidents.`,
+        action: "Coordinate with community leaders, increase surveillance, and provide youth engagement and rehabilitation programs."
+      });
+    }
+
+    // Traffic-related recommendations
+    const trafficHotspots = hotspots.filter(h => 
+      h.incident_type_name?.toLowerCase().includes('traffic') && h.incident_count >= 2
+    );
+    
+    if (trafficHotspots.length > 0) {
+      recs.push({
+        priority: "low",
+        title: `🚦 Traffic Safety Concerns`,
+        description: `${trafficHotspots.length} location${trafficHotspots.length > 1 ? 's' : ''} with traffic-related incidents.`,
+        action: "Deploy traffic enforcement, conduct road safety audits, and implement traffic calming measures where needed."
       });
     }
 
@@ -1810,11 +1888,13 @@ const SecurityRecommendations = ({ hotspots }) => {
     });
     
     if (emergingHotspots.length > 0) {
+      const emergingTypes = [...new Set(emergingHotspots.map(h => h.incident_type_name).filter(Boolean))];
+      
       recs.push({
         priority: "medium",
         title: `📍 ${emergingHotspots.length} Emerging Pattern${emergingHotspots.length > 1 ? 's' : ''}`,
-        description: "New incident patterns forming that may require early intervention.",
-        action: "Monitor these areas closely, engage with community leaders, and consider preventive measures before patterns escalate."
+        description: `New incident patterns forming: ${emergingTypes.join(', ') || 'various incidents'}. Early intervention recommended.`,
+        action: "Monitor these areas closely, engage with community leaders, and implement preventive measures before patterns escalate."
       });
     }
 
