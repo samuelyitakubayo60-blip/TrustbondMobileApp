@@ -1,0 +1,312 @@
+{
+  "1": {
+    "incident_name": "Theft",
+    "rule": {
+      "expected_objects": [
+        "person",
+        "people",
+        "bag",
+        "money",
+        "wallet",
+        "phone"
+      ],
+      "expected_actions": [
+        "running",
+        "struggling",
+        "taking",
+        "grabbing"
+      ],
+      "expected_scenes": [
+        "market",
+        "street",
+        "shop",
+        "crowd"
+      ],
+      "keywords": [
+        "stole",
+        "stolen",
+        "thief",
+        "theft",
+        "took",
+        "robbed"
+      ]
+    },
+    "severity": 1.2,
+    "keywords_from_db": [
+      "robbery",
+      "smart",
+      "phone",
+      "near",
+      "ubworoherane"
+    ]
+  },
+  "2": {
+    "incident_name": "Assault",
+    "rule": {
+      "expected_objects": [
+        "person",
+        "people",
+        "weapon",
+        "blood"
+      ],
+      "expected_actions": [
+        "fighting",
+        "hitting",
+        "struggling",
+        "running"
+      ],
+      "expected_scenes": [
+        "street",
+        "bar",
+        "nightclub",
+        "public"
+      ],
+      "keywords": [
+        "fight",
+        "assault",
+        "attack",
+        "beat",
+        "violent"
+      ]
+    },
+    "severity": 1.6,
+    "keywords_from_db": [
+      "with",
+      "they",
+      "someone",
+      "panga",
+      "attacked",
+      "girl",
+      "snatch",
+      "from",
+      "young",
+      "women's"
+    ]
+  },
+  "3": {
+    "incident_name": "Vandalism",
+    "rule": {
+      "expected_objects": [
+        "broken",
+        "graffiti",
+        "damaged",
+        "property"
+      ],
+      "expected_actions": [
+        "breaking",
+        "destroying",
+        "painting"
+      ],
+      "expected_scenes": [
+        "wall",
+        "building",
+        "vehicle",
+        "property"
+      ],
+      "keywords": [
+        "vandalism",
+        "broken",
+        "damaged",
+        "graffiti",
+        "destroyed"
+      ]
+    },
+    "severity": 1.1,
+    "keywords_from_db": [
+      "vandalism"
+    ]
+  },
+  "4": {
+    "incident_name": "Suspicious Activity",
+    "rule": {
+      "expected_objects": [
+        "person",
+        "people",
+        "vehicle"
+      ],
+      "expected_actions": [
+        "lurking",
+        "watching",
+        "hiding",
+        "following"
+      ],
+      "expected_scenes": [
+        "street",
+        "building",
+        "park",
+        "night"
+      ],
+      "keywords": [
+        "suspicious",
+        "strange",
+        "weird",
+        "unusual",
+        "lurking"
+      ]
+    },
+    "severity": 1.0,
+    "keywords_from_db": [
+      "un-usual",
+      "movements",
+      "hood",
+      "usuals",
+      "group",
+      "people",
+      "crossing",
+      "region",
+      "with",
+      "traditional"
+    ]
+  },
+  "5": {
+    "incident_name": "Domestic Violence",
+    "rule": {
+      "expected_objects": [
+        "person",
+        "people"
+      ],
+      "expected_actions": [
+        "standing",
+        "walking"
+      ],
+      "expected_scenes": [
+        "outdoor",
+        "public"
+      ],
+      "keywords": [
+        "incident",
+        "happening",
+        "saw"
+      ]
+    },
+    "severity": 1.7,
+    "keywords_from_db": [
+      "child",
+      "abuse",
+      "gikwege",
+      "gfsfhhnn",
+      "hhhh",
+      "bgfh",
+      "wife",
+      "husband"
+    ]
+  },
+  "6": {
+    "incident_name": "Drug Activity",
+    "rule": {
+      "expected_objects": [
+        "person",
+        "people"
+      ],
+      "expected_actions": [
+        "standing",
+        "walking"
+      ],
+      "expected_scenes": [
+        "outdoor",
+        "public"
+      ],
+      "keywords": [
+        "incident",
+        "happening",
+        "saw"
+      ]
+    },
+    "severity": 1.4,
+    "keywords_from_db": [
+      "drugs",
+      "spreading",
+      "youths",
+      "people",
+      "using",
+      "meet",
+      "group",
+      "boys",
+      "near",
+      "street"
+    ]
+  },
+  "7": {
+    "incident_name": "Fraud/Scam",
+    "rule": {
+      "expected_objects": [
+        "person",
+        "people"
+      ],
+      "expected_actions": [
+        "standing",
+        "walking"
+      ],
+      "expected_scenes": [
+        "outdoor",
+        "public"
+      ],
+      "keywords": [
+        "incident",
+        "happening",
+        "saw"
+      ]
+    },
+    "severity": 1.3,
+    "keywords_from_db": []
+  },
+  "8": {
+    "incident_name": "Harassment",
+    "rule": {
+      "expected_objects": [
+        "person",
+        "people"
+      ],
+      "expected_actions": [
+        "standing",
+        "walking"
+      ],
+      "expected_scenes": [
+        "outdoor",
+        "public"
+      ],
+      "keywords": [
+        "incident",
+        "happening",
+        "saw"
+      ]
+    },
+    "severity": 1.2,
+    "keywords_from_db": [
+      "threatening",
+      "person",
+      "telling",
+      "words",
+      "group",
+      "young",
+      "boys",
+      "girl",
+      "that",
+      "happens"
+    ]
+  },
+  "9": {
+    "incident_name": "Traffic Incident",
+    "rule": {
+      "expected_objects": [
+        "person",
+        "people"
+      ],
+      "expected_actions": [
+        "standing",
+        "walking"
+      ],
+      "expected_scenes": [
+        "outdoor",
+        "public"
+      ],
+      "keywords": [
+        "incident",
+        "happening",
+        "saw"
+      ]
+    },
+    "severity": 1.0,
+    "keywords_from_db": []
+  }
+}

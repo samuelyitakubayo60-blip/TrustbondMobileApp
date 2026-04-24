@@ -19,3 +19,8 @@ joblib
 pandas
 websockets
 geopy
+opencv-python
+pytesseract
+numpy
+python-dotenv
+ultralytics

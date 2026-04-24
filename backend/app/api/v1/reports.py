@@ -15,6 +15,8 @@ import cloudinary.uploader
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
 
+from app.services.evidence_analysis import evidence_analysis_service
+
 from app.config import settings
 from app.database import get_db, SessionLocal
 from app.models.report import Report
@@ -1204,8 +1206,10 @@ def create_report(
         db.rollback()
         raise HTTPException(status_code=409, detail="Report already exists")
 
-    # Basic evidence processing - store files without heavy verification
+    # Evidence processing with content analysis
     evidence_metadata_list = []
+    evidence_validations = []
+    
     for evidence_data in report_data.evidence_files:
         normalized_url = _normalize_evidence_file_url(getattr(evidence_data, "file_url", None))
         if not normalized_url:
@@ -1219,6 +1223,55 @@ def create_report(
             "file_type": evidence_data.file_type,
         })
         
+        # Analyze evidence content for image files
+        blur_score = None
+        tamper_score = None
+        quality_label = None
+        validation_result = None
+        
+        if evidence_data.file_type and evidence_data.file_type.lower() in ['photo', 'image/jpeg', 'image/png', 'image/jpg']:
+            try:
+                # Perform evidence analysis
+                analysis = evidence_analysis_service.analyze_image_from_url(normalized_url)
+                
+                # Validate evidence against incident type
+                validation_result = evidence_analysis_service.validate_incident_evidence(
+                    incident_type_id=report_data.incident_type_id,
+                    description=report_data.description or "",
+                    analysis=analysis
+                )
+                
+                # Extract quality metrics
+                blur_score = float(analysis.blur_score) if analysis.blur_score else None
+                tamper_score = float(1.0 - analysis.confidence_score) if analysis.confidence_score else None
+                
+                # Determine quality label based on analysis
+                if analysis.confidence_score >= 0.8:
+                    quality_label = "good"
+                elif analysis.confidence_score >= 0.5:
+                    quality_label = "fair"
+                else:
+                    quality_label = "poor"
+                
+                # Log validation results
+                logger.info(f"Evidence validation for report {report.report_id}: "
+                           f"valid={validation_result['valid']}, "
+                           f"confidence={validation_result['confidence']:.2f}, "
+                           f"issues={validation_result['issues']}")
+                
+                # Store validation for later processing
+                evidence_validations.append({
+                    'evidence_url': normalized_url,
+                    'validation': validation_result
+                })
+                
+            except Exception as e:
+                logger.error(f"Error analyzing evidence {normalized_url}: {e}")
+                # Set default values if analysis fails
+                quality_label = "poor"
+                blur_score = 0.0
+                tamper_score = 1.0
+        
         evidence = EvidenceFile(
             evidence_id=uuid4(),
             report_id=report.report_id,
@@ -1228,6 +1281,9 @@ def create_report(
             media_longitude=evidence_data.media_longitude,
             captured_at=evidence_data.captured_at,
             is_live_capture=evidence_data.is_live_capture,
+            blur_score=blur_score,
+            tamper_score=tamper_score,
+            quality_label=quality_label,
         )
         db.add(evidence)
 
@@ -1242,6 +1298,70 @@ def create_report(
         fv["boundary_status"] = "out_of_musanze"
         fv["excluded_from_clustering"] = True
         fv["boundary_reason"] = report.flag_reason
+        report.feature_vector = _json_safe(fv)
+    
+    # Evidence validation - flag reports with poor or irrelevant evidence
+    elif evidence_validations:
+        # Check if all evidence validations failed
+        invalid_evidence_count = sum(1 for ev in evidence_validations if not ev['validation']['valid'])
+        total_evidence_count = len(evidence_validations)
+        
+        # If most evidence is invalid or confidence is very low, flag the report
+        if total_evidence_count > 0:
+            invalid_ratio = invalid_evidence_count / total_evidence_count
+            avg_confidence = sum(ev['validation']['confidence'] for ev in evidence_validations) / total_evidence_count
+            
+            # Flag if more than 50% evidence is invalid OR average confidence < 30%
+            if invalid_ratio > 0.5 or avg_confidence < 0.3:
+                report.rule_status = "flagged"
+                report.is_flagged = True
+                report.flag_reason = f"Poor evidence validation: {invalid_evidence_count}/{total_evidence_count} evidence items invalid, avg confidence: {avg_confidence:.2f}"
+                
+                # Add evidence validation info to feature vector
+                fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+                fv["evidence_validation"] = {
+                    "invalid_ratio": invalid_ratio,
+                    "avg_confidence": avg_confidence,
+                    "invalid_count": invalid_evidence_count,
+                    "total_count": total_evidence_count,
+                    "issues": [issue for ev in evidence_validations for issue in ev['validation']['issues']]
+                }
+                report.feature_vector = _json_safe(fv)
+                
+                logger.warning(f"Report {report.report_id} flagged due to poor evidence validation: {report.flag_reason}")
+                
+                # Auto-assign evidence-flagged report to officer for review
+                try:
+                    assigned_officer_id = _assign_officer_to_report_based_on_location(db, float(report.latitude), float(report.longitude))
+                    if assigned_officer_id:
+                        report.verified_by = assigned_officer_id
+                        report.handling_station_id = db.query(PoliceUser.station_id).filter(PoliceUser.police_user_id == assigned_officer_id).scalar()
+                        logger.info(f"Auto-assigned evidence-flagged report {report.report_id} to officer {assigned_officer_id}")
+                except Exception as e:
+                    logger.error(f"Failed to auto-assign evidence-flagged report {report.report_id}: {e}")
+                
+                # Send notification for evidence flagging
+                try:
+                    from app.api.v1.notifications import create_role_notifications
+                    create_role_notifications(
+                        db=db,
+                        title=f"Report Flagged - Poor Evidence: {report.report_id[:8]}...",
+                        message=f"Report flagged due to poor evidence validation. {report.flag_reason}",
+                        notif_type="report",
+                        related_entity_type="report",
+                        related_entity_id=str(report.report_id),
+                        target_roles=["supervisor", "admin"],
+                        send_email=True
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send evidence flagging notification: {e}")
+        
+        # Store evidence validation results in feature vector for analysis
+        fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+        fv["evidence_analysis"] = {
+            "validations": evidence_validations,
+            "analysis_timestamp": datetime.now(timezone.utc).isoformat()
+        }
         report.feature_vector = _json_safe(fv)
 
         now_utc = datetime.now(timezone.utc)
