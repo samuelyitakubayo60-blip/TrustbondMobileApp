@@ -170,6 +170,39 @@ const getVerificationStatus = (report, mlPrediction) => {
           </div>
         );
       }
+    } else if (
+      report.ml_predictions && 
+      report.ml_predictions.length > 0 &&
+      !mlPrediction?.prediction_label
+    ) {
+      // Text analysis case
+      const latestPrediction = report.ml_predictions.reduce((latest, pred) => {
+        return (!latest || new Date(pred.evaluated_at) > new Date(latest.evaluated_at)) ? pred : latest;
+      }, null);
+      const textConfidence = latestPrediction ? parseFloat(latestPrediction.trust_score) : 0;
+      
+      return (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: "11px",
+          }}
+        >
+          <span 
+            style={{ 
+              color: textConfidence >= 70 ? "#4caf50" : textConfidence >= 40 ? "#ff9800" : "#f44336", 
+              fontWeight: 600 
+            }}
+          >
+            Text Analysis
+          </span>
+          <span style={{ color: "#666" }}>
+            — Confidence: {textConfidence.toFixed(1)}%
+          </span>
+        </div>
+      );
     } else {
       return (
         <div
@@ -280,6 +313,29 @@ const getVerificationRequirements = (report, mlPrediction) => {
       } else {
         return null; // ML confidence is sufficient for AI verification
       }
+    } else if (
+      report.ml_predictions && 
+      report.ml_predictions.length > 0 &&
+      !mlPrediction?.prediction_label
+    ) {
+      // Text analysis case
+      const latestPrediction = report.ml_predictions.reduce((latest, pred) => {
+        return (!latest || new Date(pred.evaluated_at) > new Date(latest.evaluated_at)) ? pred : latest;
+      }, null);
+      const textConfidence = latestPrediction ? parseFloat(latestPrediction.trust_score) : 0;
+      
+      return (
+        <div>
+          <div style={{ marginBottom: "4px" }}>
+            Text analysis available ({textConfidence.toFixed(1)}% confidence)
+          </div>
+          {textConfidence < 70 && (
+            <div>
+              <strong>Recommended:</strong> Assign to officer for manual verification due to low confidence
+            </div>
+          )}
+        </div>
+      );
     } else {
       return (
         <div>
@@ -1204,65 +1260,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   gap: 10,
                 }}
               >
-                {/* Device Trust Score */}
-                <div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: "var(--muted)",
-                      fontWeight: 800,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Device Trust Score
-                  </div>
-                  <div style={{ marginTop: 6 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div
-                        style={{
-                          width: 60,
-                          height: 8,
-                          background: "var(--border)",
-                          borderRadius: 4,
-                          overflow: "hidden",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: `${Math.min(100, Math.max(0, report.device_trust_score || 0))}%`,
-                            height: "100%",
-                            background:
-                              (report.device_trust_score || 0) >= 70
-                                ? "var(--success)"
-                                : (report.device_trust_score || 0) >= 40
-                                ? "var(--warning)"
-                                : "var(--danger)",
-                            transition: "width 0.3s ease",
-                          }}
-                        />
-                      </div>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 600,
-                          color:
-                            (report.device_trust_score || 0) >= 70
-                              ? "var(--success)"
-                              : (report.device_trust_score || 0) >= 40
-                              ? "var(--warning)"
-                              : "var(--danger)",
-                        }}
-                      >
-                        {Math.round(report.device_trust_score || 0)}
-                      </span>
-                    </div>
-                    <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
-                      {report.total_reports || 0} total reports ·{" "}
-                      {(report.trusted_reports || 0)} trusted
-                    </div>
-                  </div>
-                </div>
-
+                
                 {/* Location Consistency */}
                 <div>
                   <div
@@ -1394,6 +1392,42 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                         </>
                       );
                     })()}
+                  </div>
+                </div>
+
+                {/* Device Trust Score */}
+                <div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: "var(--muted)",
+                      fontWeight: 800,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Device Trust Score
+                  </div>
+                  <div style={{ marginTop: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 60, height: 8, background: "var(--border)", borderRadius: 4, overflow: "hidden" }}>
+                        <div style={{
+                          width: `${Math.min(100, Math.max(0, report.device_trust_score || 0))}%`,
+                          height: "100%",
+                          background: (report.device_trust_score || 0) >= 70 ? "var(--success)" : (report.device_trust_score || 0) >= 40 ? "var(--warning)" : "var(--danger)",
+                          transition: "width 0.3s ease",
+                        }} />
+                      </div>
+                      <span style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: (report.device_trust_score || 0) >= 70 ? "var(--success)" : (report.device_trust_score || 0) >= 40 ? "var(--warning)" : "var(--danger)",
+                      }}>
+                        {Math.round(report.device_trust_score || 0)}
+                      </span>
+                    </div>
+                    <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
+                      {report.total_reports || 0} total reports · {(report.trusted_reports || 0)} trusted
+                    </div>
                   </div>
                 </div>
 
@@ -2072,38 +2106,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 ></div>
               </div>
 
-              {/* Device trust (from DB) */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginBottom: "4px",
-                }}
-              >
-                <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                  Device Trust Score
-                </span>
-                <span
-                  style={{
-                    fontFamily: '"Syne", sans-serif',
-                    fontWeight: 800,
-                    fontSize: "17px",
-                    color: "var(--success)",
-                  }}
-                >
-                  {Math.round(trustScore)}
-                </span>
-              </div>
-              <div className="prog-bar">
-                <div
-                  className="prog-fill"
-                  style={{
-                    width: `${Math.max(0, Math.min(100, trustScore))}%`,
-                    background: "var(--success)",
-                  }}
-                ></div>
-              </div>
-              {mlLoading && (
+                            {mlLoading && (
                 <div
                   style={{
                     fontSize: "10px",

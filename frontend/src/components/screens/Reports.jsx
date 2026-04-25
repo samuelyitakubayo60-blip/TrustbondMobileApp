@@ -399,7 +399,16 @@ const Reports = ({
             </thead>
             <tbody>
               {items.map((r, index) => {
-                const score = r.trust_score ?? 0;
+                const score = (() => {
+                  if (r.ml_predictions && r.ml_predictions.length > 0) {
+                    // Get the latest ML prediction
+                    const latestPrediction = r.ml_predictions.reduce((latest, pred) => {
+                      return (!latest || new Date(pred.evaluated_at) > new Date(latest.evaluated_at)) ? pred : latest;
+                    }, null);
+                    return latestPrediction ? parseFloat(latestPrediction.trust_score) : 0;
+                  }
+                  return 0;
+                })();
                 const width = Math.max(0, Math.min(100, Number(score)));
                 const status = r.status;
                 const assignmentPriority = (
@@ -469,6 +478,59 @@ const Reports = ({
                                   ? "Low Credibility"
                                   : "Unknown"}
                         </span>
+                      ) : r.ml_predictions && r.ml_predictions.length > 0 ? (
+                        (() => {
+                          // Get the latest ML prediction
+                          const latestPrediction = r.ml_predictions.reduce((latest, pred) => {
+                            return (!latest || new Date(pred.evaluated_at) > new Date(latest.evaluated_at)) ? pred : latest;
+                          }, null);
+                          
+                          const trustScore = latestPrediction ? parseFloat(latestPrediction.trust_score) : 0;
+                          const hasLabel = latestPrediction && latestPrediction.prediction_label;
+                          
+                          if (hasLabel) {
+                            // Show traditional ML prediction label
+                            return (
+                              <span
+                                className={`badge ${
+                                  latestPrediction.prediction_label === "likely_real"
+                                    ? "b-green"
+                                    : latestPrediction.prediction_label === "suspicious" ||
+                                        latestPrediction.prediction_label === "uncertain"
+                                      ? "b-orange"
+                                      : latestPrediction.prediction_label === "fake"
+                                        ? "b-red"
+                                        : "b-gray"
+                                }`}
+                              >
+                                {latestPrediction.prediction_label === "likely_real"
+                                  ? "Likely real"
+                                  : latestPrediction.prediction_label === "suspicious"
+                                    ? "Suspicious"
+                                    : latestPrediction.prediction_label === "uncertain"
+                                      ? "Needs Review"
+                                      : latestPrediction.prediction_label === "fake"
+                                        ? "Low Credibility"
+                                        : "Unknown"}
+                              </span>
+                            );
+                          } else {
+                            // Show text analysis
+                            return (
+                              <span
+                                className={`badge ${
+                                  trustScore >= 70
+                                    ? "b-green"
+                                    : trustScore >= 40
+                                      ? "b-orange"
+                                      : "b-red"
+                                }`}
+                              >
+                                Text Analysis
+                              </span>
+                            );
+                          }
+                        })()
                       ) : (
                         <span className="badge b-gray">No ML</span>
                       )}

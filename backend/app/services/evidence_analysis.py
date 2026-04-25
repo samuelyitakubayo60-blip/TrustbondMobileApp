@@ -1915,5 +1915,156 @@ class EvidenceAnalysisService:
             }
         }
 
+def analyze_text_only_report(description: str, incident_type_name: str, incident_type_id: int) -> Dict:
+    """
+    Analyze text-only reports using NLP and rule-based validation
+    """
+    if not description or not description.strip():
+        return {
+            'valid': False,
+            'confidence': 0.0,
+            'threshold_used': 0.6,
+            'issues': ['No description provided'],
+            'warnings': ['Text-only report requires detailed description'],
+            'advanced_analysis': {
+                'text_analysis': True,
+                'description_quality': 'poor',
+                'incident_type_match': False
+            },
+            'analysis_summary': {
+                'text_length': 0,
+                'word_count': 0,
+                'credibility_indicators': []
+            }
+        }
+    
+    # Text quality metrics
+    text_length = len(description.strip())
+    word_count = len(description.split())
+    
+    # Initialize analysis variables
+    score = 0.0
+    max_score = 1.0
+    issues = []
+    warnings = []
+    credibility_indicators = []
+    
+    # 1. Description length analysis (0.3 points)
+    if text_length >= 50:
+        score += 0.3
+        credibility_indicators.append('adequate_length')
+    elif text_length >= 20:
+        score += 0.15
+        warnings.append('Description could be more detailed')
+    else:
+        issues.append('Description too short for meaningful analysis')
+    
+    # 2. Word count analysis (0.2 points)
+    if word_count >= 10:
+        score += 0.2
+        credibility_indicators.append('detailed_narrative')
+    elif word_count >= 5:
+        score += 0.1
+    else:
+        warnings.append('Very brief description')
+    
+    # 3. Incident type specific keywords (0.3 points)
+    incident_keywords = {
+        'theft': ['stole', 'theft', 'stolen', 'took', 'robbed', 'pickpocket', 'burglary', 'shoplifting'],
+        'assault': ['hit', 'attacked', 'assaulted', 'fight', 'violence', 'beating', 'punched', 'threatened'],
+        'vandalism': ['damaged', 'broke', 'vandalized', 'destroyed', 'graffiti', 'smashed', 'property damage'],
+        'suspicious': ['suspicious', 'strange', 'unusual', 'loitering', 'watching', 'following', 'weird'],
+        'harassment': ['harassed', 'threatened', 'bullied', 'intimidated', 'unwanted', 'inappropriate', 'stalking'],
+        'traffic': ['accident', 'crash', 'collision', 'speeding', 'reckless', 'drunk driving', 'traffic violation']
+    }
+    
+    description_lower = description.lower()
+    keyword_matches = 0
+    
+    if incident_type_name.lower() in incident_keywords:
+        keywords = incident_keywords[incident_type_name.lower()]
+        for keyword in keywords:
+            if keyword in description_lower:
+                keyword_matches += 1
+        
+        if keyword_matches >= 2:
+            score += 0.3
+            credibility_indicators.append('relevant_keywords')
+        elif keyword_matches >= 1:
+            score += 0.15
+        else:
+            warnings.append('Description lacks incident-specific details')
+    
+    # 4. Credibility indicators (0.2 points)
+    credibility_phrases = [
+        'i saw', 'i witnessed', 'i heard', 'happened in front of me', 'clearly visible',
+        'immediately', 'called police', 'reported to', 'emergency services'
+    ]
+    
+    phrase_matches = sum(1 for phrase in credibility_phrases if phrase in description_lower)
+    if phrase_matches >= 2:
+        score += 0.2
+        credibility_indicators.append('first_hand_account')
+    elif phrase_matches >= 1:
+        score += 0.1
+    
+    # 5. Red flags (negative scoring)
+    red_flags = ['fake', 'joke', 'prank', 'testing', 'just kidding', 'not real', 'fabricated']
+    red_flag_count = sum(1 for flag in red_flags if flag in description_lower)
+    
+    if red_flag_count > 0:
+        score -= 0.3 * red_flag_count
+        issues.append(f'Suspicious language detected: {red_flag_count} red flags')
+    
+    # 6. Time and location indicators (bonus 0.1)
+    time_location_indicators = ['today', 'yesterday', 'morning', 'evening', 'night', 'at', 'near', 'location']
+    tl_matches = sum(1 for indicator in time_location_indicators if indicator in description_lower)
+    if tl_matches >= 2:
+        score += 0.1
+        credibility_indicators.append('temporal_spatial_context')
+    
+    # Calculate final score
+    final_score = max(0.0, min(1.0, score))
+    
+    # Determine validation result
+    base_threshold = 0.5  # Lower threshold for text-only reports
+    
+    # Adjust threshold based on incident severity
+    if incident_type_id in [2, 5]:  # High severity incidents
+        base_threshold = 0.4  # More lenient for serious incidents
+    
+    is_valid = final_score >= base_threshold
+    
+    # Determine description quality
+    if final_score >= 0.8:
+        quality = 'excellent'
+    elif final_score >= 0.6:
+        quality = 'good'
+    elif final_score >= 0.4:
+        quality = 'fair'
+    else:
+        quality = 'poor'
+    
+    return {
+        'valid': is_valid,
+        'confidence': final_score,
+        'threshold_used': base_threshold,
+        'issues': issues,
+        'warnings': warnings,
+        'advanced_analysis': {
+            'text_analysis': True,
+            'description_quality': quality,
+            'incident_type_match': keyword_matches >= 1,
+            'credibility_indicators': credibility_indicators,
+            'red_flags_detected': red_flag_count
+        },
+        'analysis_summary': {
+            'text_length': text_length,
+            'word_count': word_count,
+            'keyword_matches': keyword_matches,
+            'credibility_indicators': credibility_indicators
+        }
+    }
+
 # Global service instance
 evidence_analysis_service = EvidenceAnalysisService()

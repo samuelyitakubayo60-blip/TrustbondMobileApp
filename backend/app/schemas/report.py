@@ -79,6 +79,7 @@ class ReportResponse(BaseModel):
     trust_score: Optional[Decimal] = None  # from device or ML prediction
     trust_factors: Optional[Dict[str, Any]] = None  # explainable factor breakdown
     ml_prediction_label: Optional[str] = None  # likely_real, suspicious, fake, uncertain
+    ml_predictions: Optional[List[Dict[str, Any]]] = []  # array of ML predictions for frontend
     hotspot_id: Optional[int] = None
     hotspot_risk_level: Optional[str] = None  # low | medium | high
     hotspot_incident_count: Optional[int] = None

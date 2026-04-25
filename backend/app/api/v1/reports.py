@@ -1300,1319 +1300,67 @@ def create_report(
         fv["boundary_reason"] = report.flag_reason
         report.feature_vector = _json_safe(fv)
     
-    # Evidence validation - flag reports with poor or irrelevant evidence
-    elif evidence_validations:
-        # Check if all evidence validations failed
-        invalid_evidence_count = sum(1 for ev in evidence_validations if not ev['validation']['valid'])
-        total_evidence_count = len(evidence_validations)
-        
-        # If most evidence is invalid or confidence is very low, flag the report
-        if total_evidence_count > 0:
-            invalid_ratio = invalid_evidence_count / total_evidence_count
-            avg_confidence = sum(ev['validation']['confidence'] for ev in evidence_validations) / total_evidence_count
-            
-            # Flag if more than 50% evidence is invalid OR average confidence < 30%
-            if invalid_ratio > 0.5 or avg_confidence < 0.3:
-                report.rule_status = "flagged"
-                report.is_flagged = True
-                report.flag_reason = f"Poor evidence validation: {invalid_evidence_count}/{total_evidence_count} evidence items invalid, avg confidence: {avg_confidence:.2f}"
-                
-                # Add evidence validation info to feature vector
-                fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
-                fv["evidence_validation"] = {
-                    "invalid_ratio": invalid_ratio,
-                    "avg_confidence": avg_confidence,
-                    "invalid_count": invalid_evidence_count,
-                    "total_count": total_evidence_count,
-                    "issues": [issue for ev in evidence_validations for issue in ev['validation']['issues']]
-                }
-                report.feature_vector = _json_safe(fv)
-                
-                logger.warning(f"Report {report.report_id} flagged due to poor evidence validation: {report.flag_reason}")
-                
-                # Auto-assign evidence-flagged report to officer for review
-                try:
-                    assigned_officer_id = _assign_officer_to_report_based_on_location(db, float(report.latitude), float(report.longitude))
-                    if assigned_officer_id:
-                        report.verified_by = assigned_officer_id
-                        report.handling_station_id = db.query(PoliceUser.station_id).filter(PoliceUser.police_user_id == assigned_officer_id).scalar()
-                        logger.info(f"Auto-assigned evidence-flagged report {report.report_id} to officer {assigned_officer_id}")
-                except Exception as e:
-                    logger.error(f"Failed to auto-assign evidence-flagged report {report.report_id}: {e}")
-                
-                # Send notification for evidence flagging
-                try:
-                    from app.api.v1.notifications import create_role_notifications
-                    create_role_notifications(
-                        db=db,
-                        title=f"Report Flagged - Poor Evidence: {report.report_id[:8]}...",
-                        message=f"Report flagged due to poor evidence validation. {report.flag_reason}",
-                        notif_type="report",
-                        related_entity_type="report",
-                        related_entity_id=str(report.report_id),
-                        target_roles=["supervisor", "admin"],
-                        send_email=True
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to send evidence flagging notification: {e}")
-        
-        # Store evidence validation results in feature vector for analysis
-        fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
-        fv["evidence_analysis"] = {
-            "validations": evidence_validations,
-            "analysis_timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        report.feature_vector = _json_safe(fv)
-
-        now_utc = datetime.now(timezone.utc)
-        device.total_reports += 1
-        if hasattr(device, "last_seen_at"):
-            device.last_seen_at = now_utc
-        if hasattr(device, "flagged_reports"):
-            device.flagged_reports = (device.flagged_reports or 0) + 1
-        if hasattr(device, "spam_flags"):
-            device.spam_flags = (device.spam_flags or 0) + 1
-
-        client_ip = request.client.host if request.client else None
-        user_agent = request.headers.get("user-agent")
-        
-        # Auto-assign boundary-rejected report to officer in nearest station for review
-        assigned_officer_id = None
+    # Text-only analysis for reports without evidence
+    elif not evidence_validations:
+        # This report has no evidence files - perform text-only analysis
         try:
-            assigned_officer_id = _assign_officer_to_report_based_on_location(db, float(report.latitude), float(report.longitude))
-            if assigned_officer_id:
-                report.verified_by = assigned_officer_id
-                report.handling_station_id = db.query(PoliceUser.station_id).filter(PoliceUser.police_user_id == assigned_officer_id).scalar()
-                print(f"Auto-assigned boundary-rejected report {report.report_id} to officer {assigned_officer_id}")
+            from app.services.evidence_analysis import analyze_text_only_report
+            
+            incident_type = db.query(IncidentType).filter(IncidentType.incident_type_id == report.incident_type_id).first()
+            incident_type_name = incident_type.type_name if incident_type else "unknown"
+            
+            # Perform text-only analysis
+            text_analysis = analyze_text_only_report(
+                description=report_data.description or "",
+                incident_type_name=incident_type_name,
+                incident_type_id=report.incident_type_id
+            )
+
+            # Extract quality metrics
+            blur_score = float(analysis.blur_score) if analysis.blur_score else None
+            tamper_score = float(1.0 - analysis.confidence_score) if analysis.confidence_score else None
+
+            # Determine quality label based on analysis
+            if analysis.confidence_score >= 0.8:
+                quality_label = "good"
+            elif analysis.confidence_score >= 0.5:
+                quality_label = "fair"
+            else:
+                quality_label = "poor"
+
+            # Log validation results
+            logger.info(f"Evidence validation for report {report.report_id}: "
+                       f"valid={validation_result['valid']}, "
+                       f"confidence={validation_result['confidence']:.2f}, "
+                       f"issues={validation_result['issues']}")
+
+            # Store validation for later processing
+            evidence_validations.append({
+                'evidence_url': normalized_url,
+                'validation': validation_result
+            })
+
         except Exception as e:
-            print(f"Failed to auto-assign boundary-rejected report {report.report_id}: {e}")
-        
-        # Send email notification for boundary flagging
-        try:
-            from app.api.v1.notifications import create_role_notifications
-            create_role_notifications(
-                db=db,
-                title=f"Report Rejected - Out of Boundary: {report.report_id[:8]}...",
-                message=f"Report automatically rejected: {report.flag_reason}. Location: {report.latitude}, {report.longitude}" + (f" Assigned to officer {assigned_officer_id}" if assigned_officer_id else ""),
-                notif_type="report",
-                related_entity_type="report",
-                related_entity_id=str(report.report_id),
-                target_roles=["supervisor", "admin"],
-                send_email=True
-            )
-            
-            # Send notification to assigned officer if one was assigned
-            if assigned_officer_id:
-                from app.api.v1.notifications import create_notification
-                create_notification(
-                    db=db,
-                    police_user_id=assigned_officer_id,
-                    title=f"Boundary Report Assigned: {report.report_id[:8]}...",
-                    message=f"Out-of-boundary report assigned for review: {report.flag_reason}. Location: {report.latitude}, {report.longitude}",
-                    notif_type="assignment",
-                    related_entity_type="report",
-                    related_entity_id=str(report.report_id),
-                    send_email=True
-                )
-                
-                # Trigger workload balancing after assignment
-                try:
-                    _balance_report_workload_and_reassign(db)
-                except Exception as e:
-                    print(f"Failed to balance report workload after boundary assignment: {e}")
-        except Exception as e:
-            print(f"Failed to send email notification for boundary rejection {report.report_id}: {e}")
-        log_action(
-            db,
-            "report_created_out_of_boundary",
-            entity_type="report",
-            entity_id=str(report.report_id),
-            actor_type="system",
-            action_details={"reason": report.flag_reason},
-            ip_address=client_ip,
-            user_agent=user_agent,
-            success=True,
-        )
+            logger.error(f"Error analyzing evidence {normalized_url}: {e}")
+            # Set default values if analysis fails
+            quality_label = "poor"
+            blur_score = 0.0
+            tamper_score = 1.0
 
-        try:
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-            raise HTTPException(status_code=409, detail="Report already exists")
-        db.refresh(report)
-        background_tasks.add_task(
-            manager.broadcast,
-            {"type": "refresh_data", "entity": "report", "action": "created"},
-        )
-        return report
-
-    # Quick initial commit to get report ID back to user fast
-    try:
-        db.commit()
-        db.refresh(report)
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Report already exists")
-
-    # Move heavy processing to background tasks for faster response
-    evidence_count = len(report_data.evidence_files)
-    background_tasks.add_task(
-        _process_report_background,
-        str(report.report_id),
-        str(device.device_id),
-        evidence_count,
-        evidence_metadata_list
+    evidence = EvidenceFile(
+        evidence_id=uuid4(),
+        report_id=report.report_id,
+        file_url=normalized_url,
+        file_type=evidence_data.file_type,
+        media_latitude=evidence_data.media_latitude,
+        media_longitude=evidence_data.media_longitude,
+        captured_at=evidence_data.captured_at,
+        is_live_capture=evidence_data.is_live_capture,
+        blur_score=blur_score,
+        tamper_score=tamper_score,
+        quality_label=quality_label,
     )
-    db.refresh(report)  # Ensure we have the latest data including ML predictions
-
-    # Get ML prediction for AI verification
-    from app.models.ml_prediction import MLPrediction
-    ml_prediction = db.query(MLPrediction).filter(MLPrediction.report_id == report.report_id).order_by(MLPrediction.evaluated_at.desc()).first()
-    if ml_prediction:
-        print(f"Using ML prediction for AI verification: {ml_prediction.prediction_label}, trust_score: {ml_prediction.trust_score}")  # Debug log
-    
-    # AI-primary verification - automatic verification for high-confidence reports
-    ai_status = "pending"
-    is_flagged = False
-    flag_reason = None
-    
-    # Start with ML prediction for automatic verification
-    if ml_prediction:
-        if ml_prediction.prediction_label == "likely_real" and (ml_prediction.trust_score or 0) >= 70:
-            ai_status = "passed"  # Auto-verified
-            print(f"AI-primary verification: AUTO-VERIFIED (confidence: {ml_prediction.trust_score}%)")
-        elif ml_prediction.prediction_label in ["fake", "suspicious"] or (ml_prediction.trust_score or 0) < 40:
-            ai_status = "rejected"
-            print(f"AI-primary verification: REJECTED (confidence: {ml_prediction.trust_score}%)")
-        else:
-            ai_status = "pending"  # Medium confidence - needs review
-            flag_reason = f"AI medium confidence: {ml_prediction.prediction_label} (score: {ml_prediction.trust_score})"
-            print(f"AI-primary verification: PENDING REVIEW (confidence: {ml_prediction.trust_score}%)")
-    else:
-        # No ML prediction - pending for review
-        ai_status = "pending"
-        flag_reason = "No ML prediction available"
-        print("AI-primary verification: PENDING REVIEW (no ML prediction)")
-    
-    # Apply enhanced verification results
-    if verification_issues:
-        # If we have verification issues, downgrade the status
-        if ai_status == "passed":
-            ai_status = "pending"  # Downgrade from auto-verified
-            is_flagged = True
-            flag_reason = f"Enhanced verification issues: {'; '.join(verification_issues[:3])}"
-            print(f"AI-primary verification: DOWNGRADED TO PENDING due to verification issues")
-        elif ai_status == "pending":
-            is_flagged = True
-            flag_reason = f"Multiple verification issues: {'; '.join(verification_issues[:3])}"
-        
-        # Store verification issues in report metadata
-        fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
-        fv["enhanced_verification_issues"] = verification_issues
-        fv["evidence_verification_count"] = len(evidence_metadata_list)
-        report.feature_vector = _json_safe(fv)
-        
-        print(f"Enhanced verification found {len(verification_issues)} issues: {verification_issues[:2]}")
-    
-    # Final status override for critical issues
-    critical_issues = [issue for issue in verification_issues if any(keyword in issue.lower() for keyword in ['screenshot', 'screen_recording', 'future_timestamp'])]
-    if critical_issues:
-        ai_status = "rejected"
-        is_flagged = True
-        flag_reason = f"Critical verification issues: {'; '.join(critical_issues[:2])}"
-        print(f"Critical issues detected, rejecting report: {critical_issues}")
-    
-    print(f"AI-primary verification result - status: {ai_status}, flagged: {is_flagged}")
-    
-    print(f"AI verification result - status: {ai_status}, flagged: {is_flagged}")  # Debug log
-    
-    # Apply AI results to report
-    report.rule_status = ai_status  # Keep field for compatibility
-    report.is_flagged = is_flagged
-    if flag_reason:
-        report.flag_reason = flag_reason
-    
-    # Set verification status for AI-primary verification
-    if ai_status == "passed":
-        report.status = "verified"
-        report.verification_status = "verified"
-        report.verified_at = datetime.now(timezone.utc)
-        print("AI-primary verification: Report automatically verified")
-    elif ai_status == "rejected":
-        report.status = "rejected"
-        report.verification_status = "rejected"
-        print("AI-primary verification: Report automatically rejected")
-    else:  # pending
-        report.status = "pending"
-        report.verification_status = "pending"
-        print("AI-primary verification: Report requires manual review")
-    
-    # Set ai_ready = true to indicate AI processing complete
-    report.ai_ready = True
-    report.features_extracted_at = datetime.now(timezone.utc)
-    
-    # Automatic incident consolidation for verified reports
-    if ai_status == "passed":
-        try:
-            _automatic_incident_consolidation(db, report)
-        except Exception as e:
-            print(f"Automatic incident consolidation failed: {e}")
-            # Don't fail the report creation if consolidation fails
-    
-    # Two-stage verification: Mobile Rules + Backend AI
-    mobile_rules_passed = (
-        report_data.mobile_rule_status == "passed" and
-        (report_data.location_consistency_check is True) and
-        (report_data.evidence_source_valid is True) and
-        (report_data.evidence_tampering_detected is False)
-    )
-    
-    print(f"Mobile rules status: {report_data.mobile_rule_status}, consistency: {report_data.location_consistency_check}, source_valid: {report_data.evidence_source_valid}, tampering: {report_data.evidence_tampering_detected}")
-    print(f"Backend AI status: {ai_status}, flagged: {is_flagged}")
-    
-    # Both mobile rules AND backend AI must pass for auto-verification
-    if mobile_rules_passed and ai_status == "passed" and not is_flagged:
-        # Both stages passed - auto-verify
-        report.verification_status = "verified"
-        report.status = "verified"
-        print(f"AUTO-VERIFIED: Report {report.report_id} - Mobile rules + Backend AI both passed")
-    elif ai_status == "rejected" or report_data.mobile_rule_status == "failed":
-        # Either stage rejected - auto-reject
-        report.verification_status = "rejected"
-        report.status = "rejected"
-        rejection_reason = []
-        if report_data.mobile_rule_status == "failed":
-            rejection_reason.append("mobile_rules_failed")
-        if ai_status == "rejected":
-            rejection_reason.append("backend_ai_rejected")
-        print(f"AUTO-REJECTED: Report {report.report_id} - {' + '.join(rejection_reason)}")
-    else:
-        # Any stage flagged/warning or mixed results - human review
-        report.verification_status = "under_review"
-        report.status = "pending"
-        review_reasons = []
-        if not mobile_rules_passed:
-            review_reasons.append("mobile_rules_issue")
-        if is_flagged:
-            review_reasons.append(f"backend_ai_flagged: {flag_reason}")
-        if ai_status not in ["passed", "rejected"]:
-            review_reasons.append(f"backend_ai_{ai_status}")
-        print(f"HUMAN REVIEW NEEDED: Report {report.report_id} - {' + '.join(review_reasons)}")
-        
-        # Auto-assign flagged report to officer in nearest station
-        assigned_officer_id = None
-        try:
-            assigned_officer_id = _assign_officer_to_report_based_on_location(db, float(report.latitude), float(report.longitude))
-            if assigned_officer_id:
-                report.verified_by = assigned_officer_id
-                report.handling_station_id = db.query(PoliceUser.station_id).filter(PoliceUser.police_user_id == assigned_officer_id).scalar()
-                print(f"Auto-assigned flagged report {report.report_id} to officer {assigned_officer_id}")
-        except Exception as e:
-            print(f"Failed to auto-assign flagged report {report.report_id}: {e}")
-        
-        # Send email notification for flagged report
-        try:
-            from app.api.v1.notifications import create_role_notifications
-            create_role_notifications(
-                db=db,
-                title=f"Report Flagged for Review: {report.report_id[:8]}...",
-                message=f"Report requires human review: {' + '.join(review_reasons)}. Incident type: {report.incident_type_id}" + (f" Assigned to officer {assigned_officer_id}" if assigned_officer_id else ""),
-                notif_type="report",
-                related_entity_type="report",
-                related_entity_id=str(report.report_id),
-                target_roles=["supervisor", "admin"],
-                send_email=True
-            )
-            
-            # Send notification to assigned officer if one was assigned
-            if assigned_officer_id:
-                from app.api.v1.notifications import create_notification
-                create_notification(
-                    db=db,
-                    police_user_id=assigned_officer_id,
-                    title=f"Report Assigned for Review: {report.report_id[:8]}...",
-                    message=f"Flagged report assigned to you: {' + '.join(review_reasons)}. Please review and take action.",
-                    notif_type="assignment",
-                    related_entity_type="report",
-                    related_entity_id=str(report.report_id),
-                    send_email=True
-                )
-                
-                # Trigger workload balancing after assignment
-                try:
-                    _balance_report_workload_and_reassign(db)
-                except Exception as e:
-                    print(f"Failed to balance report workload after assignment: {e}")
-        except Exception as e:
-            print(f"Failed to send email notification for flagged report {report.report_id}: {e}")
-    
-    # Store mobile verification results for audit trail
-    report.feature_vector = report.feature_vector or {}
-    if isinstance(report.feature_vector, dict):
-        report.feature_vector.update({
-            "mobile_rule_status": report_data.mobile_rule_status,
-            "mobile_rule_details": report_data.mobile_rule_details,
-            "location_consistency_check": report_data.location_consistency_check,
-            "evidence_source_valid": report_data.evidence_source_valid,
-            "evidence_tampering_detected": report_data.evidence_tampering_detected,
-            "mobile_rules_passed": mobile_rules_passed
-        })
-
-    # Update device stats
-    now_utc = datetime.now(timezone.utc)
-    device.total_reports += 1
-    if hasattr(device, "last_seen_at"):
-        device.last_seen_at = now_utc
-    
-    # Update device sector_location_id if report has valid location
-    if village_info and village_info.get("sector_location_id"):
-        device.sector_location_id = village_info["sector_location_id"]
-    
-    # Merge non-identifying runtime details into device.metadata_json for debugging/analytics.
-    # (Keep it anonymous: app/network/battery/sensor signals, not personal identifiers.)
-    if hasattr(device, "metadata_json"):
-        meta = getattr(device, "metadata_json", None) or {}
-        if not isinstance(meta, dict):
-            meta = {}
-        meta["last_seen_at"] = now_utc.isoformat()
-        
-        # Add location hierarchy information to device metadata
-        if village_info:
-            if village_info.get("sector_name"):
-                meta["last_sector_name"] = village_info["sector_name"]
-            if village_info.get("sector_location_id"):
-                meta["last_sector_location_id"] = village_info["sector_location_id"]
-            if village_info.get("cell_name"):
-                meta["last_cell_name"] = village_info["cell_name"]
-            if village_info.get("cell_location_id"):
-                meta["last_cell_location_id"] = village_info["cell_location_id"]
-            if village_info.get("village_name"):
-                meta["last_village_name"] = village_info["village_name"]
-            if village_info.get("village_location_id"):
-                meta["last_village_location_id"] = village_info["village_location_id"]
-        
-        if report_data.app_version is not None:
-            meta["last_app_version"] = report_data.app_version
-        if report_data.network_type is not None:
-            meta["last_network_type"] = report_data.network_type
-        if report_data.battery_level is not None:
-            try:
-                meta["last_battery_level"] = float(report_data.battery_level)
-            except Exception:
-                meta["last_battery_level"] = report_data.battery_level
-        if report_data.gps_accuracy is not None:
-            meta["last_gps_accuracy_m"] = report_data.gps_accuracy
-        if report_data.motion_level is not None:
-            meta["last_motion_level"] = report_data.motion_level
-        if report_data.movement_speed is not None:
-            meta["last_movement_speed_mps"] = report_data.movement_speed
-        if report_data.was_stationary is not None:
-            meta["last_was_stationary"] = report_data.was_stationary
-        
-        # Store the most recent location coordinates from this report
-        if report_data.latitude is not None and report_data.longitude is not None:
-            meta["last_latitude"] = float(report_data.latitude)
-            meta["last_longitude"] = float(report_data.longitude)
-            meta["last_location_timestamp"] = now_utc.isoformat()
-            
-            # Store location history (keep last 10 locations)
-            if "location_history" not in meta:
-                meta["location_history"] = []
-            
-            location_entry = {
-                "latitude": float(report_data.latitude),
-                "longitude": float(report_data.longitude),
-                "timestamp": now_utc.isoformat(),
-                "gps_accuracy": float(report_data.gps_accuracy) if report_data.gps_accuracy is not None else None,
-                "report_id": str(report.report_id)
-            }
-            
-            # Add to history and keep only last 10 entries
-            meta["location_history"].append(location_entry)
-            if len(meta["location_history"]) > 10:
-                meta["location_history"] = meta["location_history"][-10:]
-        
-        if report_data.aggregate_update_at is not None:
-            meta["last_aggregate_update_at"] = report_data.aggregate_update_at.isoformat()
-        device.metadata_json = _json_safe(meta)
-    # Best-effort counters based on current auto decision.
-    # (Later police review can further adjust downstream analytics, but these keep the UI populated.)
-    if report.is_flagged or report.rule_status in ("flagged", "rejected"):
-        if hasattr(device, "flagged_reports"):
-            device.flagged_reports = (device.flagged_reports or 0) + 1
-        if hasattr(device, "spam_flags"):
-            # Treat flagged/rejected submissions as one spam signal
-            device.spam_flags = (device.spam_flags or 0) + 1
-
-    # Get client IP and user agent for audit logging
-    client_ip = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-    
-    log_action(
-        db, 
-        "report_created", 
-        entity_type="report", 
-        entity_id=str(report.report_id), 
-        actor_type="system", 
-        ip_address=client_ip,
-        user_agent=user_agent,
-        success=True
-    )
-
-    # Create notifications for supervisors and admins about new report
-    from app.api.v1.notifications import create_role_notifications
-    create_role_notifications(
-        db,
-        title="New Report Submitted",
-        message=f"A new {incident_type.type_name or 'incident'} report has been submitted (ID: {report.report_number}).",
-        notif_type="report",
-        related_entity_type="report",
-        related_entity_id=str(report.report_id),
-        target_roles=["supervisor", "admin"],
-        target_location_id=report.village_location_id,
-    )
-
-    db.commit()
-    db.refresh(report)
-
-    # AI-PRIMARY with human oversight for flagged reports
-    print(f" AI-PRIMARY VERIFICATION - rule_status: {rule_status}, is_flagged: {is_flagged}")  # Debug log
-    
-    if rule_status == "passed" and not is_flagged:
-        # AI makes final decision for clean reports
-        report.status = "verified"
-        report.verification_status = "verified"
-        print(" AI-PRIMARY: Report auto-verified - AI rules passed")  # Debug log
-        db.commit()
-        
-        # Count auto-verified reports toward device trusted_reports
-        if hasattr(device, "trusted_reports"):
-            device.trusted_reports = (device.trusted_reports or 0) + 1
-            db.commit()
-        
-        # Real-time automation is queued once below after final lifecycle state is settled.
-    elif rule_status == "rejected":
-        # Clear rejections are auto-rejected
-        report.status = "rejected"
-        report.verification_status = "rejected"
-        print(f" AI-PRIMARY: Report auto-rejected - {rule_status}")  # Debug log
-        db.commit()
-    else:
-        # Flagged reports need human review
-        report.status = "pending"
-        report.verification_status = "under_review"
-        print(f"👮‍♂️ HUMAN REVIEW NEEDED: Report flagged - {flag_reason}")  # Debug log
-        db.commit()
-
-    # Keep device-level ML/behavior metadata in sync with the final lifecycle outcome.
-    # This ensures Device Profile "ML reasons (aggregated)" reflects latest trusted/flagged updates.
-    try:
-        if device is not None:
-            update_device_ml_aggregates(db, device, window=30)
-            db.commit()
-    except Exception:
-        db.rollback()
-    
-    # Auto-remove rejected reports to keep system clean
-    if report.verification_status == "rejected" and report.status == "rejected":
-        print(f" Auto-removing rejected report {report.report_id} - {report.flag_reason}")
-        # Add to audit log before removal
-        log_action(
-            db,
-            "report_auto_removed",
-            entity_type="report",
-            entity_id=str(report.report_id),
-            actor_type="system",
-            action_details={"reason": report.flag_reason, "auto_removed": True},
-            success=True
-        )
-        # Schedule background task for actual removal (to avoid blocking)
-        background_tasks.add_task(_auto_remove_rejected_report, str(report.report_id))
-
-    # Always refresh hotspots for live changes; create/merge cases only for verified reports.
-    background_tasks.add_task(run_hotspot_auto)
-    if report.verification_status == "verified":
-        background_tasks.add_task(run_auto_case_for_report, str(report.report_id))
-    
-    background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "report", "action": "created"})
-    
-    # Trigger geographic intelligence update
-    background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "geographic_intelligence", "action": "updated"})
-    
-    return report
-
-
-def _build_report_response(r: Report, db: Optional[Session] = None, request_device_id: Optional[str] = None) -> ReportResponse:
-    village_name = None
-    sector_name = None
-    cell_name = None
-    
-    # Extract location hierarchy from village_location
-    if getattr(r, "village_location", None) and r.village_location:
-        village_name = r.village_location.location_name
-        
-        # Get cell level (parent of village)
-        if getattr(r.village_location, "parent", None) and r.village_location.parent:
-            cell_name = r.village_location.parent.location_name
-            
-            # Get sector level (parent of cell)
-            if getattr(r.village_location.parent, "parent", None) and r.village_location.parent.parent:
-                sector_name = r.village_location.parent.parent.location_name
-        elif r.village_location.location_type == 'sector':
-            # If village_location is actually a sector
-            sector_name = r.village_location.location_name
-    
-    # Fallback: look up village from coordinates (e.g. for older reports or when village_location_id was null)
-    if village_name is None and db is not None and r.latitude is not None and r.longitude is not None:
-        try:
-            info = get_village_location_info(db, float(r.latitude), float(r.longitude))
-            if info:
-                village_name = info.get("village_name")
-        except Exception:
-            pass
-    
-    # Extract station assignments from police users
-    assigned_station = None
-    assigned_officers = []
-    
-    if getattr(r, "assignments", None) and r.assignments:
-        for assignment in r.assignments:
-            if assignment.police_user:
-                officer_info = {
-                    "police_user_id": assignment.police_user.police_user_id,
-                    "full_name": getattr(assignment.police_user, "full_name", None),
-                    "badge_number": getattr(assignment.police_user, "badge_number", None),
-                    "station": None
-                }
-                
-                if getattr(assignment.police_user, "station", None):
-                    officer_info["station"] = {
-                        "station_id": assignment.police_user.station.station_id,
-                        "station_name": assignment.police_user.station.station_name,
-                        "station_code": assignment.police_user.station.station_code,
-                        "station_type": assignment.police_user.station.station_type
-                    }
-                    # Use the first assigned officer's station
-                    if assigned_station is None:
-                        assigned_station = officer_info["station"]
-                
-                assigned_officers.append(officer_info)
-
-    evidence_files = list(getattr(r, "evidence_files", None) or [])
-    evidence_files.sort(key=lambda x: (x.uploaded_at is None, x.uploaded_at), reverse=False)
-    evidence_preview = [
-        EvidencePreview(evidence_id=ef.evidence_id, file_url=ef.file_url, file_type=ef.file_type)
-        for ef in evidence_files[:3]
-    ]
-
-    hotspot_id = None
-    hotspot_risk_level = None
-    hotspot_incident_count = None
-    hotspot_label = None
-
-    hotspots = []  # Hotspots relationship not available yet
-    if hotspots:
-        risk_rank = {"low": 0, "medium": 1, "high": 2}
-        hotspots.sort(
-            key=lambda h: (risk_rank.get((h.risk_level or "").lower(), 0), h.incident_count, h.detected_at),
-            reverse=True,
-        )
-        h: Hotspot = hotspots[0]
-        hotspot_id = h.hotspot_id
-        hotspot_risk_level = h.risk_level
-        hotspot_incident_count = h.incident_count
-        type_name = h.incident_type.type_name if h.incident_type else (r.incident_type.type_name if r.incident_type else f"Type {r.incident_type_id}")
-        area_name = village_name or "this area"
-        hotspot_label = f"{type_name} hotspot in {area_name}"
-
-    ml_prediction = resolve_ml_prediction_for_report(r)
-    trust_factors = ml_prediction.explanation if ml_prediction else None
-    trust_score = (
-        float(ml_prediction.trust_score)
-        if ml_prediction is not None and ml_prediction.trust_score is not None
-        else None
-    )
-    ml_prediction_label = None
-    if ml_prediction is not None:
-        raw_label = getattr(ml_prediction, "prediction_label", None)
-        if raw_label is not None and str(raw_label).strip():
-            ml_prediction_label = str(raw_label).strip().lower()
-
-    # Aggregate assignment priority/status for list views
-    assignment_priority = None
-    assignment_status = None
-    assignments = list(getattr(r, "assignments", None) or [])
-    if assignments:
-        pr_rank = {"urgent": 3, "high": 2, "medium": 1, "low": 0}
-        assignments.sort(
-            key=lambda a: pr_rank.get((a.priority or "").lower(), 0),
-            reverse=True,
-        )
-        top = assignments[0]
-        assignment_priority = top.priority
-        assignment_status = top.status
-
-    context_tags = getattr(r, "context_tags", None) or []
-    if context_tags is None:
-        context_tags = []
-
-    linked_case_id = None
-    cr_links = list(getattr(r, "case_reports", None) or [])
-    if cr_links:
-        linked_case_id = cr_links[0].case_id
-
-    # Parse community votes from feature_vector
-    community_votes = {"real": 0, "false": 0, "unknown": 0}
-    user_vote = None
-    if getattr(r, "feature_vector", None) and isinstance(r.feature_vector, dict):
-        votes_dict = r.feature_vector.get("community_votes", {})
-        for dict_device_id, v in votes_dict.items():
-            if str(v) in community_votes:
-                community_votes[str(v)] += 1
-            if request_device_id and str(dict_device_id) == str(request_device_id):
-                user_vote = str(v)
-
-    # Get device metadata and trust score
-    device_metadata = getattr(r.device, "metadata_json", {}) if r.device else {}
-    device_trust_score = getattr(r.device, "device_trust_score", None) if r.device else None
-    total_reports = getattr(r.device, "total_reports", None) if r.device else None
-    trusted_reports = getattr(r.device, "trusted_reports", None) if r.device else None
-
-    return ReportResponse(
-        report_id=r.report_id,
-        report_number=getattr(r, "report_number", None),
-        case_id=linked_case_id,
-        device_id=r.device_id,
-        incident_type_id=r.incident_type_id,
-        description=r.description,
-        latitude=r.latitude,
-        longitude=r.longitude,
-        gps_accuracy=getattr(r, "gps_accuracy", None),
-        motion_level=getattr(r, "motion_level", None),
-        movement_speed=getattr(r, "movement_speed", None),
-        was_stationary=getattr(r, "was_stationary", None),
-        reported_at=r.reported_at,
-        rule_status=r.rule_status,
-        priority=getattr(r, "priority", "medium"),  # Include calculated priority
-        status=getattr(r, "status", None),
-        verification_status=getattr(r, "verification_status", None),
-        village_location_id=r.village_location_id,
-        village_name=village_name,
-        cell_name=cell_name,
-        sector_name=sector_name,
-        incident_type_name=r.incident_type.type_name if r.incident_type else None,
-        evidence_count=len(evidence_files),
-        evidence_preview=evidence_preview,
-        trust_score=float(trust_score) if trust_score is not None else None,
-        trust_factors=trust_factors,
-        ml_prediction_label=ml_prediction_label,
-        hotspot_id=hotspot_id,
-        hotspot_risk_level=hotspot_risk_level,
-        hotspot_incident_count=hotspot_incident_count,
-        hotspot_label=hotspot_label,
-        is_flagged=getattr(r, "is_flagged", None),
-        flag_reason=getattr(r, "flag_reason", None),
-        verified_at=getattr(r, "verified_at", None),
-        context_tags=context_tags,
-        app_version=getattr(r, "app_version", None),
-        network_type=getattr(r, "network_type", None),
-        battery_level=float(r.battery_level) if getattr(r, "battery_level", None) is not None else None,
-        assignment_priority=assignment_priority,
-        assignment_status=assignment_status,
-        community_votes=community_votes,
-        user_vote=user_vote,
-        # Add device metadata fields
-        metadata_json=device_metadata,
-        device_trust_score=float(device_trust_score) if device_trust_score is not None else None,
-        total_reports=total_reports,
-        trusted_reports=trusted_reports,
-        # Add location hierarchy and station assignment data
-        assigned_station=assigned_station,
-        assigned_officers=assigned_officers,
-    )
-
-
-@router.get("/{report_id}/related", response_model=List[ReportResponse])
-def list_related_reports(
-    report_id: UUID,
-    current_user: Annotated[PoliceUser, Depends(get_current_user)],
-    db: Session = Depends(get_db),
-    limit: int = Query(5, ge=1, le=20),
-):
-    """
-    Return reports related to this one:
-    - Same incident_type_id
-    - Same village (when known)
-    - Reported within a 3 day window around this report
-    """
-    base: Report | None = (
-        db.query(Report)
-        .options(
-            joinedload(Report.incident_type),
-            joinedload(Report.village_location),
-            joinedload(Report.device),
-            joinedload(Report.ml_predictions),
-            selectinload(Report.case_reports),
-            # joinedload(Report.hotspots).joinedload(Hotspot.incident_type),  # Hotspots relationship not available yet
-        )
-        .filter(Report.report_id == report_id)
-        .first()
-    )
-    if not base:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
-
-    # Time window +/- 3 days
-    window = timedelta(days=3)
-    from_time = (base.reported_at or datetime.now(timezone.utc)) - window
-    to_time = (base.reported_at or datetime.now(timezone.utc)) + window
-
-    q = db.query(Report).options(
-        joinedload(Report.incident_type),
-        joinedload(Report.village_location),
-        joinedload(Report.device),
-        joinedload(Report.ml_predictions),
-        selectinload(Report.case_reports),
-        # joinedload(Report.hotspots).joinedload(Hotspot.incident_type),  # Hotspots relationship not available yet
-    )
-
-    q = q.filter(
-        Report.report_id != base.report_id,
-        Report.incident_type_id == base.incident_type_id,
-        Report.reported_at >= from_time,
-        Report.reported_at <= to_time,
-    )
-
-    if base.village_location_id is not None:
-        q = q.filter(Report.village_location_id == base.village_location_id)
-
-    related = (
-        q.order_by(Report.reported_at.desc())
-        .limit(limit)
-        .all()
-    )
-
-    return [_build_report_response(r, db) for r in related]
-
-
-def _float_or_none(val) -> Optional[float]:
-    if val is None:
-        return None
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return None
-
-
-def _compute_incident_location_with_villages(
-    report: Report,
-    db: Session,
-) -> Tuple[Optional[float], Optional[float], str, Optional[Dict[str, Any]]]:
-    """
-    Decide incident location by comparing reporter village vs evidence villages.
-
-    Preference order:
-    - If reporter + all evidence are in the same village -> use that village ("same_village_all").
-    - Else if reporter village exists -> use reporter village ("reporter_only" or "village_conflict").
-    - Else if evidence villages exist -> use dominant evidence village ("evidence_only" or "evidence_conflict").
-    - Else fall back to raw reporter/evidence coordinates.
-    """
-    rep_lat = _float_or_none(report.latitude)
-    rep_lon = _float_or_none(report.longitude)
-
-    report_info: Optional[Dict[str, Any]] = None
-    report_village: Optional[str] = None
-    if rep_lat is not None and rep_lon is not None:
-        try:
-            report_info = get_village_location_info(db, rep_lat, rep_lon)
-            if report_info:
-                report_village = report_info.get("village_name")
-        except Exception:
-            report_info = None
-
-    evidence_points: list[Dict[str, Any]] = []
-    evidence_villages: list[str] = []
-
-    for ef in report.evidence_files or []:
-        lat = _float_or_none(ef.media_latitude)
-        lon = _float_or_none(ef.media_longitude)
-        if lat is None or lon is None:
-            continue
-        info = None
-        village_name = None
-        try:
-            info = get_village_location_info(db, lat, lon)
-            if info:
-                village_name = info.get("village_name")
-        except Exception:
-            info = None
-        evidence_points.append({"lat": lat, "lon": lon, "info": info, "village": village_name})
-        if village_name:
-            evidence_villages.append(village_name)
-
-    unique_evidence_villages = set(ev for ev in evidence_villages if ev)
-
-    # Case 1: reporter + all evidence in same village
-    if report_village and unique_evidence_villages and len(unique_evidence_villages) == 1 and report_village in unique_evidence_villages:
-        chosen_info = report_info
-        chosen_lat, chosen_lon = rep_lat, rep_lon
-        if chosen_lat is None or chosen_lon is None:
-            same_village_points = [p for p in evidence_points if p.get("village") == report_village]
-            if same_village_points:
-                chosen_lat = same_village_points[0]["lat"]
-                chosen_lon = same_village_points[0]["lon"]
-                chosen_info = same_village_points[0]["info"] or chosen_info
-        return chosen_lat, chosen_lon, "same_village_all", chosen_info
-
-    # Case 2: reporter village exists (with or without evidence)
-    if report_village:
-        chosen_lat, chosen_lon, chosen_info = rep_lat, rep_lon, report_info
-        if unique_evidence_villages and (len(unique_evidence_villages) > 1 or report_village not in unique_evidence_villages):
-            source = "village_conflict"
-        else:
-            source = "reporter_only"
-        return chosen_lat, chosen_lon, source, chosen_info
-
-    # Case 3: no reporter village, but evidence villages exist
-    if unique_evidence_villages:
-        from collections import Counter
-
-        counts = Counter(ev for ev in evidence_villages if ev)
-        dominant_village, _ = counts.most_common(1)[0]
-        dominant_points = [p for p in evidence_points if p.get("village") == dominant_village]
-        chosen = dominant_points[0] if dominant_points else evidence_points[0]
-        source = "evidence_only" if len(unique_evidence_villages) == 1 else "evidence_conflict"
-        return chosen["lat"], chosen["lon"], source, chosen["info"]
-
-    # Case 4: no villages at all – fall back to raw coordinates
-    if rep_lat is not None and rep_lon is not None:
-        return rep_lat, rep_lon, "reporter_only_no_village", None
-    if evidence_points:
-        p = evidence_points[0]
-        return p["lat"], p["lon"], "evidence_only_no_village", p["info"]
-
-    return None, None, "unknown", None
-
-
-@router.get("/", response_model=ReportListResponse | List[ReportResponse])
-def list_reports(
-    device_id: Optional[str] = Query(None, description="Device ID for 'my reports' (mobile). If omitted, auth required for all reports."),
-    current_user: Annotated[Optional[PoliceUser], Depends(get_optional_user)] = None,
-    db: Session = Depends(get_db),
-    rule_status: Optional[str] = Query(None, description="Filter by rule_status: pending, passed, flagged, rejected."),
-    report_status: Optional[str] = Query(None, alias="status", description="Filter by report status: pending, verified, flagged, rejected. For list consistency, flagged includes rejected."),
-    boundary_status: Optional[str] = Query(
-        None,
-        description="Filter by boundary status: out_of_boundary | in_boundary.",
-    ),
-    incident_type_id: Optional[int] = Query(None, description="Filter by incident type."),
-    village_location_id: Optional[int] = Query(None, description="Filter by village/location."),
-    sector_location_id: Optional[int] = Query(None, description="Filter by sector location id."),
-    from_date: Optional[datetime] = Query(None, description="Reports reported on or after this date (ISO)."),
-    to_date: Optional[datetime] = Query(None, description="Reports reported on or before this date (ISO)."),
-    limit: int = Query(20, ge=1, le=100, description="Page size (police list only)."),
-    offset: int = Query(0, ge=0, description="Skip N items (police list only)."),
-):
-    """List reports.
-
-    - With device_id: list for that device (mobile).
-    - Without device_id: auth required.
-      * Officers: only reports assigned to them.
-      * Supervisors: reports in their assigned location (if set).
-      * Admins: all reports.
-    """
-    if device_id is not None:
-        mobile_query = (
-            db.query(Report)
-            .options(
-                joinedload(Report.device),
-                joinedload(Report.incident_type),
-                joinedload(Report.village_location)
-                .joinedload(Location.parent),  # Load parent location (cell -> sector hierarchy)
-                selectinload(Report.evidence_files),
-                selectinload(Report.assignments)
-                .joinedload(ReportAssignment.police_user)
-                .joinedload(PoliceUser.station),  # Load station through police user assignments
-                selectinload(Report.ml_predictions),
-                selectinload(Report.case_reports),
-            )
-            .filter(Report.device_id == device_id)
-        )
-        if boundary_status == "out_of_boundary":
-            mobile_query = mobile_query.filter(Report.flag_reason.like("out_of_musanze_boundary%"))
-        elif boundary_status == "in_boundary":
-            mobile_query = mobile_query.filter(
-                or_(Report.flag_reason.is_(None), ~Report.flag_reason.like("out_of_musanze_boundary%"))
-            )
-
-        reports = mobile_query.order_by(Report.reported_at.desc()).all()
-        return [_build_report_response(r, db, request_device_id=device_id) for r in reports]
-    if current_user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    query = db.query(Report).options(
-        joinedload(Report.device),
-        joinedload(Report.incident_type),
-        joinedload(Report.village_location)
-        .joinedload(Location.parent),  # Load parent location (cell -> sector hierarchy)
-        selectinload(Report.evidence_files),
-        # selectinload(Report.hotspots),  # Hotspots relationship not available yet
-        selectinload(Report.assignments)
-        .joinedload(ReportAssignment.police_user)
-        .joinedload(PoliceUser.station),  # Load station through police user assignments
-        selectinload(Report.ml_predictions),
-        selectinload(Report.case_reports),
-    )
-    role = getattr(current_user, "role", None)
-
-    # Officers see only reports assigned to them
-    if role == "officer":
-        query = query.join(Report.assignments).filter(
-            ReportAssignment.police_user_id == current_user.police_user_id
-        ).distinct()
-    # Supervisors are restricted to their own station's sector.
-    elif role == "supervisor":
-        supervisor_station_id = getattr(current_user, "station_id", None)
-        if supervisor_station_id is None:
-            raise HTTPException(
-                status_code=403,
-                detail="Supervisor station is not configured",
-            )
-        
-        # Get station to find its sector location(s)
-        station = db.query(Station).filter(Station.station_id == supervisor_station_id).first()
-        if station:
-            # Handle both primary and secondary sectors
-            sector_location_ids = []
-            
-            # Primary sector
-            if station.location_id:
-                sector_location_id = station.location_id
-                # Find all villages/cells in this sector
-                sector_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector_location_id,  # The sector itself
-                        Location.parent_location_id == sector_location_id,  # Direct children (cells)
-                        # Also get villages under cells in this sector
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
-            
-            # Secondary sector (if exists)
-            if station.sector2_id:
-                sector2_location_id = station.sector2_id
-                # Find all villages/cells in secondary sector
-                sector2_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector2_location_id,  # The sector itself
-                        Location.parent_location_id == sector2_location_id,  # Direct children (cells)
-                        # Also get villages under cells in this sector
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector2_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
-            
-            # Remove duplicates
-            sector_location_ids = list(set(sector_location_ids))
-            
-            # Filter reports by location hierarchy (village_location_id in sector) + station assignments
-            query = query.filter(
-                or_(
-                    Report.handling_station_id == supervisor_station_id,
-                    Report.assignments.any(
-                        ReportAssignment.police_user.has(PoliceUser.station_id == supervisor_station_id)
-                    ),
-                    Report.village_location_id.in_(sector_location_ids)
-                )
-            )
-        else:
-            # Fallback: only station-based filtering
-            query = query.filter(
-                or_(
-                    Report.handling_station_id == supervisor_station_id,
-                    Report.assignments.any(
-                        ReportAssignment.police_user.has(PoliceUser.station_id == supervisor_station_id)
-                    ),
-                )
-            )
-    if rule_status:
-        query = query.filter(Report.rule_status == rule_status)
-    if report_status:
-        if report_status == "flagged":
-            query = query.filter(Report.status.in_(["flagged", "rejected"]))
-        else:
-            query = query.filter(Report.status == report_status)
-    if boundary_status == "out_of_boundary":
-        query = query.filter(Report.flag_reason.like("out_of_musanze_boundary%"))
-    elif boundary_status == "in_boundary":
-        query = query.filter(
-            or_(Report.flag_reason.is_(None), ~Report.flag_reason.like("out_of_musanze_boundary%"))
-        )
-    if incident_type_id is not None:
-        query = query.filter(Report.incident_type_id == incident_type_id)
-    if village_location_id is not None:
-        query = query.filter(Report.village_location_id == village_location_id)
-    if sector_location_id is not None:
-        # Villages can be direct children of sector or nested under cells in that sector.
-        cell_ids = [
-            row[0]
-            for row in db.query(Location.location_id)
-            .filter(
-                Location.location_type == "cell",
-                Location.parent_location_id == sector_location_id,
-            )
-            .all()
-        ]
-        village_q = db.query(Location.location_id).filter(
-            Location.location_type == "village"
-        )
-        if cell_ids:
-            village_q = village_q.filter(
-                or_(
-                    Location.parent_location_id == sector_location_id,
-                    Location.parent_location_id.in_(cell_ids),
-                )
-            )
-        else:
-            village_q = village_q.filter(
-                Location.parent_location_id == sector_location_id
-            )
-        sector_village_ids = [row[0] for row in village_q.all()]
-        if not sector_village_ids:
-            return ReportListResponse(items=[], total=0, limit=limit, offset=offset)
-        query = query.filter(Report.village_location_id.in_(sector_village_ids))
-    if from_date is not None:
-        query = query.filter(Report.reported_at >= from_date)
-    if to_date is not None:
-        query = query.filter(Report.reported_at <= to_date)
-    total = query.count()
-    reports = (
-        query.order_by(Report.reported_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
-    return ReportListResponse(
-        items=[_build_report_response(r, db, request_device_id=device_id) for r in reports],
-        total=total,
-        limit=limit,
-        offset=offset,
-    )
-
-
-@router.get("/{report_id}", response_model=ReportDetailResponse)
-def get_report(
-    report_id: UUID,
-    device_id: Optional[UUID] = Query(None, description="Device ID (mobile owner). If omitted, auth required."),
-    current_user: Annotated[Optional[PoliceUser], Depends(get_optional_user)] = None,
-    request: Request = None,
-    db: Session = Depends(get_db),
-):
-    """Get one report. With device_id: only if device owns it. Without: require auth (police). Returns report with evidence_files."""
-    if device_id is not None:
-        # Mobile: allow the device owner to view their own report,
-        # and allow non-owners to view *eligible* reports for community confirmation.
-        # This enables "nearby confirmations" where users can vote on other
-        # devices' pending/under_review reports.
-        report = (
-            db.query(Report)
-            .options(
-                joinedload(Report.incident_type),
-                joinedload(Report.evidence_files),
-                joinedload(Report.device),
-                selectinload(Report.ml_predictions),
-            )
-            .filter(Report.report_id == report_id)
-            .first()
-        )
-    else:
-        if current_user is None:
-            raise HTTPException(status_code=401, detail="Authentication required")
-        report = (
-            db.query(Report)
-            .options(
-                joinedload(Report.incident_type),
-                joinedload(Report.evidence_files),
-                joinedload(Report.device),
-                selectinload(Report.ml_predictions),
-                joinedload(Report.assignments).joinedload(ReportAssignment.police_user),
-                joinedload(Report.police_reviews).joinedload(PoliceReview.police_user),
-            )
-            .filter(Report.report_id == report_id)
-            .first()
-        )
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-
-    def _absolute_evidence_url(raw: str | None) -> str | None:
-        if not raw:
-            return None
-        s = str(raw).strip()
-        if not s:
-            return None
-        if s.startswith("http://") or s.startswith("https://"):
-            return s
-        # If the DB stored only a filename, assume it's under our dev uploads path.
-        if not s.startswith("/"):
-            s = f"/uploads/evidence/{s}"
-        if request is None:
-            return s
-        base = str(request.base_url).rstrip("/")
-        return f"{base}{s}"
-
-    # AI-PRIMARY: No community voting needed - AI makes all decisions
-    # Community confirmation is deprecated in AI-primary mode
-    if device_id is not None and report.device_id != device_id:
-        raise HTTPException(status_code=403, detail="Community confirmation not available in AI-primary mode")
-    # Officers may only view reports assigned to them
-    if device_id is None and current_user and getattr(current_user, "role", None) == "officer":
-        assigned_to_me = any(
-            a.police_user_id == current_user.police_user_id
-            for a in (report.assignments or [])
-        )
-        if not assigned_to_me:
-            raise HTTPException(status_code=403, detail="You can only view reports assigned to you")
-    # Supervisors may only view reports within their station scope.
-    if device_id is None and current_user and getattr(current_user, "role", None) == "supervisor":
-        supervisor_station_id = getattr(current_user, "station_id", None)
-        if supervisor_station_id is None:
-            raise HTTPException(status_code=403, detail="Supervisor station is not configured")
-        
-        # Get station to find its sector location(s)
-        station = db.query(Station).filter(Station.station_id == supervisor_station_id).first()
-        if station:
-            # Handle both primary and secondary sectors
-            sector_location_ids = []
-            
-            # Primary sector
-            if station.location_id:
-                sector_location_id = station.location_id
-                # Find all villages/cells in this sector
-                sector_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector_location_id,  # The sector itself
-                        Location.parent_location_id == sector_location_id,  # Direct children (cells)
-                        # Also get villages under cells in this sector
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
-            
-            # Secondary sector (if exists)
-            if station.sector2_id:
-                sector2_location_id = station.sector2_id
-                # Find all villages/cells in secondary sector
-                sector2_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector2_location_id,  # The sector itself
-                        Location.parent_location_id == sector2_location_id,  # Direct children (cells)
-                        # Also get villages under cells in this sector
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector2_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
-            
-            # Remove duplicates
-            sector_location_ids = list(set(sector_location_ids))
-            
-            # Check if report is within supervisor's scope (station-based OR sector-based)
-            in_station_scope = (
-                report.handling_station_id == supervisor_station_id
-                or any(
-                    getattr(a.police_user, "station_id", None) == supervisor_station_id
-                    for a in (report.assignments or [])
-                )
-                or report.village_location_id in sector_location_ids
-            )
-        else:
-            # Fallback: only station-based filtering
-            in_station_scope = (
-                report.handling_station_id == supervisor_station_id
-                or any(
-                    getattr(a.police_user, "station_id", None) == supervisor_station_id
-                    for a in (report.assignments or [])
-                )
-            )
-        
-        if not in_station_scope:
-            raise HTTPException(
-                status_code=403,
-                detail="You can only view reports in your station or sector",
-            )
-
-    assignment_list = []
-    if device_id is None and getattr(report, "assignments", None):
-        for a in report.assignments:
-            officer_name = None
-            if a.police_user:
-                officer_name = f"{a.police_user.first_name or ''} {a.police_user.last_name or ''}".strip() or a.police_user.email
-            assignment_list.append(
-                AssignmentResponse(
-                    assignment_id=a.assignment_id,
-                    report_id=a.report_id,
-                    police_user_id=a.police_user_id,
-                    status=a.status,
-                    priority=a.priority,
-                    assigned_at=a.assigned_at,
-                    completed_at=a.completed_at,
-                    officer_name=officer_name,
-                )
-            )
-        assignment_list.sort(key=lambda x: x.assigned_at, reverse=True)
-
-    review_list = []
-    if device_id is None and getattr(report, "police_reviews", None):
-        for r in report.police_reviews:
-            reviewer_name = None
-            if r.police_user:
-                reviewer_name = f"{r.police_user.first_name or ''} {r.police_user.last_name or ''}".strip() or r.police_user.email
-            review_list.append(
-                ReviewResponse(
-                    review_id=r.review_id,
-                    report_id=r.report_id,
-                    police_user_id=r.police_user_id,
-                    decision=r.decision,
-                    review_note=r.review_note,
-                    reviewed_at=r.reviewed_at,
-                    reviewer_name=reviewer_name,
-                )
-            )
-        review_list.sort(key=lambda x: x.reviewed_at, reverse=True)
-
-    incident_lat, incident_lon, incident_source, incident_location_info = _compute_incident_location_with_villages(report, db)
-
-    # Trust score and ML label come from backend ML prediction only.
+    db.add(evidence)
     ml_prediction = resolve_ml_prediction_for_report(report)
     trust_score = (
         float(ml_prediction.trust_score)
@@ -2699,6 +1447,238 @@ def get_report(
     )
     
     return response
+
+
+@router.get("/", response_model=ReportListResponse)
+def list_reports(
+    device_id: Optional[UUID] = Query(None, description="Device ID (mobile owner). If omitted, auth required."),
+    current_user: Annotated[Optional[PoliceUser], Depends(get_optional_user)] = None,
+    db: Session = Depends(get_db),
+    limit: int = Query(20, le=100),
+    offset: int = Query(0, ge=0),
+    report_status: Optional[str] = Query(None, description="Filter by report status"),
+    rule_status: Optional[str] = Query(None, description="Filter by rule status"),
+    boundary_status: Optional[str] = Query(None, description="Filter by boundary status"),
+    incident_type_id: Optional[UUID] = Query(None, description="Filter by incident type"),
+    village_location_id: Optional[UUID] = Query(None, description="Filter by village location"),
+    sector_location_id: Optional[UUID] = Query(None, description="Filter by sector location"),
+    from_date: Optional[datetime] = Query(None, description="Filter reports from this date"),
+    to_date: Optional[datetime] = Query(None, description="Filter reports to this date"),
+):
+    """List reports.
+
+    - With device_id: list for that device (mobile).
+    - Without device_id: auth required.
+      * Officers: only reports assigned to them.
+      * Supervisors: reports in their assigned location (if set).
+      * Admins: all reports.
+    """
+    if device_id is not None:
+        mobile_query = (
+            db.query(Report)
+            .options(
+                joinedload(Report.device),
+                joinedload(Report.incident_type),
+                joinedload(Report.village_location)
+                .joinedload(Location.parent),  # Load parent location (cell -> sector hierarchy)
+                selectinload(Report.evidence_files),
+                selectinload(Report.assignments)
+                .joinedload(ReportAssignment.police_user)
+                .joinedload(PoliceUser.station),  # Load station through police user assignments
+                selectinload(Report.ml_predictions),
+                selectinload(Report.case_reports),
+            )
+            .filter(Report.device_id == device_id)
+        )
+        if boundary_status == "out_of_boundary":
+            mobile_query = mobile_query.filter(Report.flag_reason.like("out_of_musanze_boundary%"))
+        elif boundary_status == "in_boundary":
+            mobile_query = mobile_query.filter(
+                or_(Report.flag_reason.is_(None), ~Report.flag_reason.like("out_of_musanze_boundary%"))
+            )
+
+        reports = mobile_query.order_by(Report.reported_at.desc()).all()
+        return [_build_report_response(r, db, request_device_id=device_id) for r in reports]
+    
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    query = db.query(Report).options(
+        joinedload(Report.device),
+        joinedload(Report.incident_type),
+        joinedload(Report.village_location)
+        .joinedload(Location.parent),  # Load parent location (cell -> sector hierarchy)
+        selectinload(Report.evidence_files),
+        selectinload(Report.assignments)
+        .joinedload(ReportAssignment.police_user)
+        .joinedload(PoliceUser.station),  # Load station through police user assignments
+        selectinload(Report.ml_predictions),
+        selectinload(Report.case_reports),
+    )
+    
+    role = getattr(current_user, "role", None)
+    
+    # Officers see only reports assigned to them
+    if role == "officer":
+        query = query.join(Report.assignments).filter(
+            ReportAssignment.police_user_id == current_user.police_user_id
+        ).distinct()
+    
+    # Supervisors are restricted to their own station's sector.
+    elif role == "supervisor":
+        supervisor_station_id = getattr(current_user, "station_id", None)
+        if supervisor_station_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Supervisor station is not configured",
+            )
+        
+        # Get station to find its sector location(s)
+        station = db.query(Station).filter(Station.station_id == supervisor_station_id).first()
+        if station:
+            # Handle both primary and secondary sectors
+            sector_location_ids = []
+            
+            # Primary sector
+            if station.location_id:
+                sector_location_id = station.location_id
+                # Find all villages/cells in this sector
+                sector_locations_query = db.query(Location.location_id).filter(
+                    or_(
+                        Location.location_id == sector_location_id,  # The sector itself
+                        Location.parent_location_id == sector_location_id,  # Direct children (cells)
+                        # Also get villages under cells in this sector
+                        Location.location_id.in_(
+                            db.query(Location.location_id).filter(
+                                Location.parent_location_id.in_(
+                                    db.query(Location.location_id).filter(
+                                        Location.parent_location_id == sector_location_id
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+                sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
+            
+            # Secondary sector (if exists)
+            if station.sector2_id:
+                sector2_location_id = station.sector2_id
+                # Find all villages/cells in secondary sector
+                sector2_locations_query = db.query(Location.location_id).filter(
+                    or_(
+                        Location.location_id == sector2_location_id,  # The sector itself
+                        Location.parent_location_id == sector2_location_id,  # Direct children (cells)
+                        # Also get villages under cells in this sector
+                        Location.location_id.in_(
+                            db.query(Location.location_id).filter(
+                                Location.parent_location_id.in_(
+                                    db.query(Location.location_id).filter(
+                                        Location.parent_location_id == sector2_location_id
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+                sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
+            
+            # Remove duplicates
+            sector_location_ids = list(set(sector_location_ids))
+            
+            # Filter reports by location hierarchy (village_location_id in sector) + station assignments
+            query = query.filter(
+                or_(
+                    Report.handling_station_id == supervisor_station_id,
+                    Report.assignments.any(
+                        ReportAssignment.police_user.has(PoliceUser.station_id == supervisor_station_id)
+                    ),
+                    Report.village_location_id.in_(sector_location_ids)
+                )
+            )
+        else:
+            # Fallback: only station-based filtering
+            query = query.filter(
+                or_(
+                    Report.handling_station_id == supervisor_station_id,
+                    Report.assignments.any(
+                        ReportAssignment.police_user.has(PoliceUser.station_id == supervisor_station_id)
+                    ),
+                )
+            )
+    
+    if rule_status:
+        query = query.filter(Report.rule_status == rule_status)
+    
+    if report_status:
+        if report_status == "flagged":
+            query = query.filter(Report.status.in_(["flagged", "rejected"]))
+        else:
+            query = query.filter(Report.status == report_status)
+    
+    if boundary_status == "out_of_boundary":
+        query = query.filter(Report.flag_reason.like("out_of_musanze_boundary%"))
+    elif boundary_status == "in_boundary":
+        query = query.filter(
+            or_(Report.flag_reason.is_(None), ~Report.flag_reason.like("out_of_musanze_boundary%"))
+        )
+    
+    if incident_type_id is not None:
+        query = query.filter(Report.incident_type_id == incident_type_id)
+    
+    if village_location_id is not None:
+        query = query.filter(Report.village_location_id == village_location_id)
+    
+    if sector_location_id is not None:
+        # Villages can be direct children of sector or nested under cells in that sector.
+        cell_ids = [
+            row[0]
+            for row in db.query(Location.location_id)
+            .filter(
+                Location.location_type == "cell",
+                Location.parent_location_id == sector_location_id,
+            )
+            .all()
+        ]
+        village_q = db.query(Location.location_id).filter(
+            Location.location_type == "village"
+        )
+        if cell_ids:
+            village_q = village_q.filter(
+                or_(
+                    Location.parent_location_id == sector_location_id,
+                    Location.parent_location_id.in_(cell_ids),
+                )
+            )
+        else:
+            village_q = village_q.filter(
+                Location.parent_location_id == sector_location_id
+            )
+        sector_village_ids = [row[0] for row in village_q.all()]
+        if not sector_village_ids:
+            return ReportListResponse(items=[], total=0, limit=limit, offset=offset)
+        query = query.filter(Report.village_location_id.in_(sector_village_ids))
+    
+    if from_date is not None:
+        query = query.filter(Report.reported_at >= from_date)
+    
+    if to_date is not None:
+        query = query.filter(Report.reported_at <= to_date)
+    
+    total = query.count()
+    reports = (
+        query.order_by(Report.reported_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    
+    return ReportListResponse(
+        items=[_build_report_response(r, db, request_device_id=device_id) for r in reports],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post("/{report_id}/reviews", response_model=ReviewResponse, status_code=201)
@@ -3012,6 +1992,34 @@ def add_review(
     )
 
 
+@router.get("/{report_id}", response_model=ReportResponse)
+def get_report(
+    report_id: UUID,
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    """Get a single report by ID."""
+    from sqlalchemy.orm import joinedload
+    
+    report = (
+        db.query(Report)
+        .options(
+            joinedload(Report.device),
+            joinedload(Report.incident_type),
+            joinedload(Report.village_location),
+            joinedload(Report.evidence_files),
+            joinedload(Report.police_reviews).joinedload(PoliceReview.police_user),
+        )
+        .filter(Report.report_id == report_id)
+        .first()
+    )
+    
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    return _build_report_response(report, db)
+
+
 @router.get("/{report_id}/reviews", response_model=List[ReviewResponse])
 def get_reviews(
     report_id: UUID,
@@ -3050,6 +2058,71 @@ def get_reviews(
             )
     
     return review_list
+
+
+@router.get("/{report_id}/related", response_model=List[ReportResponse])
+def get_related_reports(
+    report_id: UUID,
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    limit: int = Query(10, ge=1, le=50),
+):
+    """Get related reports based on location and incident type."""
+    from sqlalchemy.orm import joinedload
+    
+    # Get the original report
+    report = db.query(Report).filter(Report.report_id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    # Find related reports based on:
+    # 1. Same incident type
+    # 2. Nearby location (within ~5km)
+    # 3. Recent reports (last 30 days)
+    
+    from datetime import datetime, timedelta
+    from sqlalchemy import and_, or_
+    
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    
+    # Calculate nearby location bounds (approximate 5km radius)
+    lat_diff = 0.05  # ~5.5km
+    lon_diff = 0.05  # ~5.5km at equator
+    
+    related_reports = (
+        db.query(Report)
+        .options(
+            joinedload(Report.device),
+            joinedload(Report.incident_type),
+            joinedload(Report.village_location),
+            joinedload(Report.evidence_files),
+            joinedload(Report.police_reviews).joinedload(PoliceReview.police_user),
+        )
+        .filter(
+            and_(
+                Report.report_id != report_id,  # Exclude the original report
+                Report.reported_at >= thirty_days_ago,
+                or_(
+                    Report.incident_type_id == report.incident_type_id,  # Same incident type
+                    and_(
+                        Report.latitude.between(
+                            float(report.latitude) - lat_diff,
+                            float(report.latitude) + lat_diff
+                        ),
+                        Report.longitude.between(
+                            float(report.longitude) - lon_diff,
+                            float(report.longitude) + lon_diff
+                        )
+                    )  # Nearby location
+                )
+            )
+        )
+        .order_by(Report.reported_at.desc())
+        .limit(limit)
+        .all()
+    )
+    
+    return [_build_report_response(r, db) for r in related_reports]
 
 
 @router.get("/{report_id}/location-history")
@@ -4830,5 +3903,119 @@ def _automatic_incident_consolidation(db: Session, report: Report):
     except Exception as e:
         print(f"Auto-case creation failed for report {report.report_id}: {e}")
         # Don't fail the report creation if case creation fails
+
+
+def _build_report_response(report: Report, db: Session, request_device_id: Optional[str] = None) -> ReportResponse:
+    """Build a ReportResponse from a Report object."""
+    # Get ML prediction
+    ml_prediction = resolve_ml_prediction_for_report(report)
+    trust_score = (
+        float(ml_prediction.trust_score)
+        if ml_prediction is not None and ml_prediction.trust_score is not None
+        else None
+    )
+    ml_prediction_label = None
+    if ml_prediction is not None:
+        raw_label = getattr(ml_prediction, "prediction_label", None)
+        if raw_label is not None and str(raw_label).strip():
+            ml_prediction_label = str(raw_label).strip().lower()
+    
+    # Get device metadata and calculate device trust score
+    device_metadata = None
+    device_trust_score = None
+    total_reports = None
+    trusted_reports = None
+    
+    if report.device:
+        device_metadata = report.device.metadata_json or {}
+        
+        # Get basic stats from device metadata
+        total_reports = device_metadata.get("total_reports", 0)
+        confirmed_reports = device_metadata.get("confirmed_reports", 0)
+        
+        # Calculate device trust score based on confirmed reports vs total reports
+        if total_reports and total_reports > 0:
+            # Device trust score = (confirmed_reports / total_reports) * 100
+            # But cap at 100% and handle cases where confirmed_reports > total_reports
+            if confirmed_reports and confirmed_reports > 0:
+                # Ensure confirmed_reports doesn't exceed total_reports for calculation
+                effective_confirmed = min(confirmed_reports, total_reports)
+                device_trust_score = (effective_confirmed / total_reports) * 100
+                # Cap at 100%
+                device_trust_score = min(100, device_trust_score)
+            else:
+                # For new devices with no confirmed reports, give a baseline score
+                # More reports = higher baseline trust (up to 50% max)
+                device_trust_score = min(50, total_reports * 10)
+        else:
+            device_trust_score = 0
+            
+        # Use confirmed_reports as trusted_reports for display
+        trusted_reports = confirmed_reports
+        
+        # Also check if device_trust_score is explicitly stored and use that if available
+        stored_device_trust_score = device_metadata.get("device_trust_score")
+        if stored_device_trust_score is not None:
+            device_trust_score = float(stored_device_trust_score)
+    
+    # Build evidence files response
+    evidence_files_response = [
+        EvidenceFileResponse(
+            report_id=str(report.report_id),
+            evidence_id=str(ef.evidence_id),
+            file_url=ef.file_url,
+            file_type=ef.file_type,
+            file_size=ef.file_size,
+            uploaded_at=ef.uploaded_at,
+            media_latitude=float(ef.media_latitude) if ef.media_latitude is not None else None,
+            media_longitude=float(ef.media_longitude) if ef.media_longitude is not None else None,
+            blur_score=float(ef.blur_score) if getattr(ef, "blur_score", None) is not None else None,
+            tamper_score=float(ef.tamper_score) if getattr(ef, "tamper_score", None) is not None else None,
+            quality_label=ef.quality_label.value if ef.quality_label else None,
+        )
+        for ef in (report.evidence_files or [])
+    ]
+    
+    return ReportResponse(
+        report_id=str(report.report_id),
+        report_number=report.report_number,
+        title=None,  # Report model doesn't have title field
+        description=report.description,
+        incident_type_id=str(report.incident_type_id) if report.incident_type_id else None,
+        incident_type=report.incident_type,
+        status=report.status,
+        verification_status=report.verification_status,
+        rule_status=report.rule_status,
+        reported_at=report.reported_at,
+        village_location_id=str(report.village_location_id) if report.village_location_id else None,
+        village_location=report.village_location,
+        reporter_name=None,  # Report model doesn't have reporter_name field
+        reporter_contact=None,  # Report model doesn't have reporter_contact field
+        is_anonymous=True,  # Default to True since reports are from devices
+        evidence_files=evidence_files_response,
+        assignments=[],
+        reviews=[],
+        community_votes={},  # Changed from [] to {} to match dict type
+        user_vote=None,
+        metadata_json=device_metadata,
+        device_trust_score=float(device_trust_score) if device_trust_score is not None else None,
+        total_reports=total_reports,
+        trusted_reports=trusted_reports,
+        trust_score=trust_score,
+        ml_prediction_label=ml_prediction_label,
+        # Add missing required fields
+        device_id=str(report.device_id),
+        latitude=float(report.latitude) if report.latitude else None,
+        longitude=float(report.longitude) if report.longitude else None,
+        # Add fields needed by frontend reports table
+        incident_type_name=report.incident_type.type_name if report.incident_type else None,
+        village_name=report.village_location.location_name if report.village_location else None,
+        # Add ML predictions array for frontend
+        ml_predictions=[{
+            'trust_score': float(ml_prediction.trust_score) if ml_prediction and ml_prediction.trust_score else None,
+            'prediction_label': ml_prediction.prediction_label if ml_prediction else None,
+            'evaluated_at': ml_prediction.evaluated_at.isoformat() if ml_prediction and ml_prediction.evaluated_at else None
+        }] if ml_prediction else [],
+    )
 
 
