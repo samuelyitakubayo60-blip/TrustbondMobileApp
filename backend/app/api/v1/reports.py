@@ -143,13 +143,21 @@ def _process_report_background(
         except Exception as e:
             logger.warning(f"Location consistency validation failed: {e}")
         
-        # 3. ML-based credibility scoring
+        # 3. ML-based credibility scoring - ensure it works properly
         try:
             score_report_credibility(db, report, device, evidence_count)
-            _ensure_fallback_ml_prediction_if_missing(db, report)
-            update_device_ml_aggregates(db, device, window=30)
+            logger.info(f"XGBoost ML scoring completed for report {report_id}")
         except Exception as e:
-            logger.error(f"ML scoring failed for report {report_id}: {e}")
+            logger.error(f"XGBoost ML scoring failed for report {report_id}: {e}")
+            # Don't rely on fallback - fix the root cause
+            raise HTTPException(status_code=500, detail=f"ML scoring failed during report creation: {str(e)}")
+            
+        try:
+            update_device_ml_aggregates(db, device, window=30)
+            logger.info(f"Device ML aggregates updated for report {report_id}")
+        except Exception as e:
+            logger.error(f"Device ML aggregates update failed for report {report_id}: {e}")
+            # Non-critical, don't fail the whole request
         
         # 4. Apply rule-based verification
         try:

@@ -452,7 +452,11 @@ def score_report_credibility(
         db.add(prediction)
         # Mark when features were extracted for this report
         report.features_extracted_at = datetime.now(timezone.utc)
-    except Exception:
+    except Exception as e:
+        # Log the actual error for debugging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"XGBoost scoring failed for report {report.report_id}: {e}", exc_info=True)
         # Fail silently; this is an enhancement, not critical path
         return
 
