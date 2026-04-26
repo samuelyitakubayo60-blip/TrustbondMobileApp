@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import '../services/location_service.dart';
+import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import '../services/platform_service.dart';
 
@@ -197,10 +197,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       
       if (value) {
-        await MockNotificationService.enableNotifications();
+        await NotificationService().enableNotifications();
         _showSuccess('Push notifications enabled');
       } else {
-        await MockNotificationService.disableNotifications();
+        await NotificationService().disableNotifications();
         _showSuccess('Push notifications disabled');
       }
       setState(() => _pushNotif = value);
@@ -218,10 +218,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       
       if (value) {
-        await MockNotificationService.subscribeToTopic('hotspot_alerts');
+        await NotificationService().subscribeToTopic('hotspot_alerts');
         _showSuccess('Hotspot alerts enabled');
       } else {
-        await MockNotificationService.unsubscribeFromTopic('hotspot_alerts');
+        await NotificationService().unsubscribeFromTopic('hotspot_alerts');
         _showSuccess('Hotspot alerts disabled');
       }
       setState(() => _hotspotAlerts = value);
@@ -239,10 +239,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       
       if (value) {
-        await MockNotificationService.subscribeToTopic('report_updates');
+        await NotificationService().subscribeToTopic('report_updates');
         _showSuccess('Report updates enabled');
       } else {
-        await MockNotificationService.unsubscribeFromTopic('report_updates');
+        await NotificationService().unsubscribeFromTopic('report_updates');
         _showSuccess('Report updates disabled');
       }
       setState(() => _reportUpdates = value);

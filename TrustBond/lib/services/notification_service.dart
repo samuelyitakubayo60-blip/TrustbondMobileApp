@@ -1,7 +1,7 @@
 import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -144,15 +144,6 @@ class NotificationService {
       // Request notification permission
       final notificationStatus = await Permission.notification.request();
       
-      // For Android 13+ (API 33+)
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        final androidVersion = await _getAndroidVersion();
-        if (androidVersion >= 33) {
-          final postNotificationsStatus = await Permission.postNotifications.request();
-          return notificationStatus.isGranted && postNotificationsStatus.isGranted;
-        }
-      }
-      
       return notificationStatus.isGranted;
     } catch (e) {
       debugPrint('Failed to request notification permissions: $e');
@@ -161,12 +152,6 @@ class NotificationService {
   }
 
   /// Get Android version (helper method)
-  Future<int> _getAndroidVersion() async {
-    // In a real implementation, you'd use device_info_plus
-    // For now, assume Android 13+ (API 33+)
-    return 33;
-  }
-
   /// Enable notifications
   Future<void> enableNotifications() async {
     final hasPermission = await requestPermissions();
@@ -218,6 +203,12 @@ class NotificationService {
 /// Background message handler (top-level function)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  try {
+    // Required on background isolate.
+    await Firebase.initializeApp();
+  } catch (_) {
+    // ignore: avoid_catches_without_on_clauses
+  }
   debugPrint('Handling background message: ${message.messageId}');
   // Handle background messages here
   // You can initialize Firebase if needed

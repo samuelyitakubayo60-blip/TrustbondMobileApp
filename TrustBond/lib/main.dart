@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config/theme.dart';
 import 'screens/main_shell.dart';
 import 'screens/splash_screen.dart';
 import 'services/platform_service.dart';
+import 'services/notification_service.dart';
 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize mock notification service for all platforms
-  // Firebase will be enabled later when running on mobile
-  await MockNotificationService.initialize();
+  // Initialize Firebase + notifications only on mobile.
+  if (PlatformService.supportsFirebase) {
+    await Firebase.initializeApp();
+    await NotificationService().initialize();
+  } else {
+    await MockNotificationService.initialize();
+  }
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
