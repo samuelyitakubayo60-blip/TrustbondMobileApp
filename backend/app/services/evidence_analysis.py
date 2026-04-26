@@ -186,71 +186,17 @@ class EvidenceAnalysisService:
             'local_produce': {'yolo_classes': [52, 54], 'color_range': [(20, 100, 50), (80, 255, 255)], 'context': 'market'},
         }
         
-        # Enhanced rules based on TrustBond incident types
+        # Legacy defaults (used only if JSON rules missing).
         self.enhanced_rules = {
-            1: {  # Theft
-                'expected_objects': ['person', 'people', 'bag', 'phone', 'money', 'wallet'],
-                'expected_actions': ['running', 'struggling', 'taking', 'grabbing'],
-                'expected_scenes': ['market', 'street', 'shop'],
-                'keywords': ['robbery', 'smart', 'phone', 'stole', 'thief'],
-                'weight': 1.2
-            },
-            2: {  # Assault
-                'expected_objects': ['person', 'people', 'weapon', 'blood', 'injury'],
-                'expected_actions': ['fighting', 'hitting', 'attacking', 'struggling'],
-                'expected_scenes': ['street', 'public', 'building'],
-                'keywords': ['panga', 'attacked', 'fight', 'assault', 'violent'],
-                'weight': 1.6
-            },
-            3: {  # Vandalism
-                'expected_objects': ['broken', 'damaged', 'graffiti', 'property'],
-                'expected_actions': ['breaking', 'destroying', 'painting'],
-                'expected_scenes': ['wall', 'building', 'vehicle'],
-                'keywords': ['vandalism', 'broken', 'damaged', 'destroyed'],
-                'weight': 1.1
-            },
-            4: {  # Suspicious Activity
-                'expected_objects': ['person', 'people', 'group', 'vehicle'],
-                'expected_actions': ['lurking', 'watching', 'hiding', 'crossing'],
-                'expected_scenes': ['street', 'region', 'night'],
-                'keywords': ['unusual', 'suspicious', 'strange', 'movements'],
-                'weight': 1.0
-            },
-            5: {  # Domestic Violence
-                'expected_objects': ['person', 'people', 'child', 'woman', 'man'],
-                'expected_actions': ['abuse', 'violence', 'threatening'],
-                'expected_scenes': ['home', 'household', 'inside'],
-                'keywords': ['abuse', 'child', 'wife', 'husband', 'domestic'],
-                'weight': 1.7
-            },
-            6: {  # Drug Activity
-                'expected_objects': ['person', 'people', 'drugs', 'paraphernalia'],
-                'expected_actions': ['using', 'selling', 'spreading'],
-                'expected_scenes': ['street', 'youth', 'group'],
-                'keywords': ['drugs', 'spreading', 'youth', 'using'],
-                'weight': 1.4
-            },
-            7: {  # Fraud/Scam
-                'expected_objects': ['person', 'people', 'phone', 'money', 'document'],
-                'expected_actions': ['deceiving', 'scamming', 'tricking'],
-                'expected_scenes': ['public', 'market', 'shop'],
-                'keywords': ['fraud', 'scam', 'deception', 'mobile money'],
-                'weight': 1.3
-            },
-            8: {  # Harassment
-                'expected_objects': ['person', 'people', 'group'],
-                'expected_actions': ['threatening', 'stalking', 'intimidating'],
-                'expected_scenes': ['public', 'street', 'repeated'],
-                'keywords': ['threatening', 'harassment', 'stalking', 'words'],
-                'weight': 1.2
-            },
-            9: {  # Traffic Incident
-                'expected_objects': ['vehicle', 'car', 'person', 'people'],
-                'expected_actions': ['accident', 'collision', 'blocking'],
-                'expected_scenes': ['road', 'street', 'intersection'],
-                'keywords': ['traffic', 'accident', 'road', 'vehicle'],
-                'weight': 1.0
-            }
+            1: {'expected_objects': ['person', 'cell phone', 'handbag', 'backpack', 'money'], 'expected_actions': ['running', 'grabbing', 'taking', 'struggling'], 'expected_scenes': ['market', 'street', 'shop'], 'keywords': ['stole', 'stolen', 'thief', 'theft', 'robbed'], 'weight': 1.2},
+            2: {'expected_objects': ['person', 'knife', 'blood', 'injury'], 'expected_actions': ['fighting', 'hitting', 'attacking', 'struggling'], 'expected_scenes': ['street', 'public', 'bar'], 'keywords': ['attack', 'assault', 'fight', 'violent', 'injured'], 'weight': 1.6},
+            3: {'expected_objects': ['structure', 'vehicle', 'broken', 'damaged'], 'expected_actions': ['breaking', 'destroying', 'painting'], 'expected_scenes': ['wall', 'building', 'street'], 'keywords': ['vandalism', 'broken', 'damaged', 'graffiti'], 'weight': 1.1},
+            4: {'expected_objects': ['person', 'vehicle'], 'expected_actions': ['lurking', 'watching', 'hiding', 'following'], 'expected_scenes': ['street', 'building', 'night'], 'keywords': ['suspicious', 'strange', 'unusual', 'lurking'], 'weight': 1.0},
+            5: {'expected_objects': ['person', 'chair', 'couch', 'bed'], 'expected_actions': ['fighting', 'hitting', 'struggling'], 'expected_scenes': ['home', 'house', 'indoor'], 'keywords': ['domestic', 'abuse', 'husband', 'wife', 'partner'], 'weight': 1.7},
+            6: {'expected_objects': ['person', 'bottle'], 'expected_actions': ['lurking', 'watching'], 'expected_scenes': ['street', 'night'], 'keywords': ['drug', 'drugs', 'dealer', 'selling', 'using'], 'weight': 1.4},
+            7: {'expected_objects': ['cell phone', 'mobile_money', 'rwf_note', 'laptop'], 'expected_actions': ['taking'], 'expected_scenes': ['market', 'shop', 'public'], 'keywords': ['fraud', 'scam', 'mobile money', 'otp', 'pin'], 'weight': 1.3},
+            8: {'expected_objects': ['person'], 'expected_actions': ['following', 'watching', 'lurking'], 'expected_scenes': ['street', 'public', 'night'], 'keywords': ['harass', 'harassment', 'threat', 'stalking'], 'weight': 1.2},
+            9: {'expected_objects': ['car', 'truck', 'bus', 'motorcycle', 'bicycle', 'person'], 'expected_actions': ['running'], 'expected_scenes': ['road', 'street', 'intersection'], 'keywords': ['accident', 'crash', 'collision', 'traffic', 'road'], 'weight': 1.0},
         }
     
     def _load_validation_rules(self) -> Dict:
@@ -263,6 +209,208 @@ class EvidenceAnalysisService:
         except Exception as e:
             logger.warning(f"Could not load validation rules: {e}")
         return {}
+
+    def _get_rules_for_incident(self, incident_type_id: int) -> Dict[str, Any]:
+        """
+        Return merged rules for an incident type.
+        Prefers JSON file (`backend/evidence_validation_rules.json`) when present.
+        """
+        # JSON stores keys as strings
+        raw = None
+        try:
+            raw = (self.validation_rules or {}).get(str(int(incident_type_id)))
+        except Exception:
+            raw = None
+        if isinstance(raw, dict):
+            # Normalize: some files may store `rule` at top-level.
+            evidence_rules = raw.get("evidence_rules") if isinstance(raw.get("evidence_rules"), dict) else {}
+            rule = evidence_rules.get("rule") if isinstance(evidence_rules.get("rule"), dict) else raw.get("rule", {})
+            return {
+                "incident_name": raw.get("incident_name"),
+                "severity": raw.get("severity"),
+                "allow_no_evidence": bool(raw.get("allow_no_evidence", True)),
+                "text_rules": raw.get("text_rules") if isinstance(raw.get("text_rules"), dict) else {},
+                "evidence_rules": {
+                    "allowed_media_types": evidence_rules.get("allowed_media_types", ["photo", "video", "audio"]),
+                    "recommended_media_types": evidence_rules.get("recommended_media_types", []),
+                    "min_evidence_count_for_auto_verify": evidence_rules.get("min_evidence_count_for_auto_verify", 1),
+                    "rule": rule if isinstance(rule, dict) else {},
+                },
+            }
+        # Legacy fallback
+        legacy = self.enhanced_rules.get(int(incident_type_id), {}) if incident_type_id else {}
+        return {
+            "incident_name": None,
+            "severity": legacy.get("weight"),
+            "allow_no_evidence": True,
+            "text_rules": {},
+            "evidence_rules": {
+                "allowed_media_types": ["photo", "video", "audio"],
+                "recommended_media_types": [],
+                "min_evidence_count_for_auto_verify": 1,
+                "rule": legacy,
+            },
+        }
+
+    def analyze_video_from_url(self, video_url: str, *, sample_frames: int = 5) -> EvidenceAnalysis:
+        """
+        Lightweight video analysis:
+        - Download video
+        - Sample a few frames
+        - Run the same per-frame checks we use for images (YOLO objects + basic quality)
+        """
+        analysis = EvidenceAnalysis()
+        try:
+            response = requests.get(video_url, timeout=15)
+            response.raise_for_status()
+            video_bytes = response.content
+            if not video_bytes:
+                return analysis
+
+            # Write to a temp file for OpenCV VideoCapture
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=True) as tmp:
+                tmp.write(video_bytes)
+                tmp.flush()
+                cap = cv2.VideoCapture(tmp.name)
+                if not cap.isOpened():
+                    return analysis
+
+                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+                if frame_count <= 0:
+                    # Still try reading first frame
+                    frame_count = 1
+
+                picks = []
+                if sample_frames <= 1 or frame_count == 1:
+                    picks = [0]
+                else:
+                    step = max(1, frame_count // sample_frames)
+                    picks = list(range(0, min(frame_count, step * sample_frames), step))
+
+                all_objects: set[str] = set()
+                people_any = False
+                people_max = 0
+                blur_scores: list[float] = []
+                brightness_scores: list[float] = []
+
+                for idx in picks:
+                    try:
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                        ok, frame = cap.read()
+                        if not ok or frame is None:
+                            continue
+                        # Basic per-frame stats
+                        has_people, people_count = self._detect_people(frame)
+                        people_any = people_any or has_people
+                        people_max = max(people_max, int(people_count or 0))
+                        is_blurry, blur_score = self._detect_blur(frame)
+                        blur_scores.append(float(blur_score or 0.0))
+                        brightness_scores.append(float(self._analyze_brightness(frame) or 0.0))
+
+                        objs = self._detect_objects_with_yolo(frame)
+                        for o in objs or []:
+                            all_objects.add(str(o))
+                    except Exception:
+                        continue
+
+                analysis.detected_objects = sorted(all_objects)
+                analysis.has_people = bool(people_any)
+                analysis.people_count = int(people_max)
+                if blur_scores:
+                    analysis.blur_score = float(sum(blur_scores) / len(blur_scores))
+                    analysis.is_blurry = analysis.blur_score < 100.0  # keep same semantics as image method
+                if brightness_scores:
+                    analysis.brightness = float(sum(brightness_scores) / len(brightness_scores))
+
+                # Estimate confidence from "content richness"
+                # (video has no EXIF; keep it conservative)
+                base = 0.35
+                if analysis.has_people:
+                    base += 0.2
+                if analysis.detected_objects and "unknown" not in analysis.detected_objects:
+                    base += 0.2
+                if analysis.blur_score and analysis.blur_score >= 80:
+                    base += 0.15
+                analysis.confidence_score = max(0.0, min(1.0, base))
+        except Exception as e:
+            logger.warning(f"Video analysis failed for URL {video_url}: {e}")
+        return analysis
+
+    def analyze_audio_from_url(self, audio_url: str) -> Dict[str, Any]:
+        """
+        Lightweight audio validation without heavy dependencies:
+        - Detect supported WAV via Python stdlib (wave)
+        - Compute duration + simple RMS energy + silence ratio
+        For non-WAV formats, returns 'unsupported_format' (still stored for review).
+        """
+        result: Dict[str, Any] = {
+            "supported": False,
+            "duration_seconds": None,
+            "rms": None,
+            "silence_ratio": None,
+            "issues": [],
+        }
+        try:
+            response = requests.get(audio_url, timeout=15)
+            response.raise_for_status()
+            data = response.content or b""
+            if not data:
+                result["issues"].append("empty_audio")
+                return result
+
+            # Try WAV parsing
+            import wave
+            import contextlib
+            import tempfile
+            import math
+            import struct
+
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
+                tmp.write(data)
+                tmp.flush()
+                try:
+                    with contextlib.closing(wave.open(tmp.name, "rb")) as wf:
+                        n_channels = wf.getnchannels()
+                        sampwidth = wf.getsampwidth()
+                        framerate = wf.getframerate()
+                        n_frames = wf.getnframes()
+                        if framerate and n_frames:
+                            dur = float(n_frames) / float(framerate)
+                        else:
+                            dur = 0.0
+                        result["supported"] = True
+                        result["duration_seconds"] = dur
+                        if dur < 1.0:
+                            result["issues"].append("audio_too_short")
+
+                        # Read a limited chunk to estimate energy
+                        frames = wf.readframes(min(n_frames, framerate * 10))  # up to 10s
+                        if sampwidth == 2 and frames:
+                            count = len(frames) // 2
+                            samples = struct.unpack("<" + "h" * count, frames)
+                            if n_channels > 1:
+                                # downmix (rough)
+                                samples = samples[::n_channels]
+                            # RMS
+                            mean_sq = sum((s * s for s in samples)) / max(1, len(samples))
+                            rms = math.sqrt(mean_sq) / 32768.0
+                            result["rms"] = float(rms)
+                            # Silence ratio (very rough): abs(sample) < threshold
+                            thr = int(32768 * 0.01)
+                            silent = sum(1 for s in samples if abs(s) < thr)
+                            result["silence_ratio"] = float(silent / max(1, len(samples)))
+                            if result["silence_ratio"] is not None and result["silence_ratio"] > 0.92:
+                                result["issues"].append("mostly_silence")
+                        else:
+                            result["issues"].append("audio_energy_unavailable")
+                except wave.Error:
+                    result["issues"].append("unsupported_format")
+        except Exception as e:
+            logger.warning(f"Audio analysis failed for URL {audio_url}: {e}")
+            result["issues"].append("audio_download_or_parse_failed")
+        return result
     
     def analyze_image_from_url(self, image_url: str) -> EvidenceAnalysis:
         """Analyze image from Cloudinary URL"""
@@ -1698,13 +1846,32 @@ class EvidenceAnalysisService:
         
         return max(min(score, 1.0), 0.0)
     
-    def validate_incident_evidence(self, incident_type_id: int, description: str, 
-                                 analysis: EvidenceAnalysis) -> Dict:
-        """Advanced evidence validation against incident type requirements"""
+    def validate_incident_evidence(
+        self,
+        incident_type_id: int,
+        description: str,
+        analysis: EvidenceAnalysis,
+        *,
+        media_type: str = "photo",
+    ) -> Dict:
+        """Advanced evidence validation against incident type requirements (photo/video/audio)."""
         logger.info(f"Advanced validation for incident type {incident_type_id}")
         
-        # Get rules for this incident type
-        rules = self.enhanced_rules.get(incident_type_id, {})
+        rules_bundle = self._get_rules_for_incident(incident_type_id)
+        ev = rules_bundle.get("evidence_rules", {}) if isinstance(rules_bundle, dict) else {}
+        allowed = ev.get("allowed_media_types", ["photo", "video", "audio"])
+        if media_type and media_type not in allowed:
+            return {
+                "valid": False,
+                "reason": "media_type_not_allowed",
+                "confidence": 0.0,
+                "issues": [f"Media type '{media_type}' not allowed for this incident type"],
+                "warnings": [],
+                "advanced_analysis": {"media_type": media_type, "allowed_media_types": allowed},
+            }
+
+        # Get evidence rules for this incident type
+        rules = ev.get("rule", {}) if isinstance(ev.get("rule"), dict) else {}
         
         if not rules:
             return {

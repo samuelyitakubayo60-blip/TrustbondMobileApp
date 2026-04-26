@@ -1231,13 +1231,16 @@ def create_report(
             "file_type": evidence_data.file_type,
         })
         
-        # Analyze evidence content for image files
+        # Analyze evidence content for media files (photo/video/audio)
         blur_score = None
         tamper_score = None
         quality_label = None
         validation_result = None
+        ai_checked_at = datetime.now(timezone.utc)
         
-        if evidence_data.file_type and evidence_data.file_type.lower() in ['photo', 'image/jpeg', 'image/png', 'image/jpg']:
+        file_type_lower = (evidence_data.file_type or "").lower().strip()
+
+        if file_type_lower in ['photo', 'image/jpeg', 'image/png', 'image/jpg']:
             try:
                 # Perform evidence analysis
                 analysis = evidence_analysis_service.analyze_image_from_url(normalized_url)
@@ -1246,7 +1249,8 @@ def create_report(
                 validation_result = evidence_analysis_service.validate_incident_evidence(
                     incident_type_id=report_data.incident_type_id,
                     description=report_data.description or "",
-                    analysis=analysis
+                    analysis=analysis,
+                    media_type="photo",
                 )
                 
                 # Extract quality metrics
@@ -1279,6 +1283,51 @@ def create_report(
                 quality_label = "poor"
                 blur_score = 0.0
                 tamper_score = 1.0
+
+        elif file_type_lower in ["video", "video/mp4", "video/mov", "video/quicktime", "video/webm"]:
+            try:
+                analysis = evidence_analysis_service.analyze_video_from_url(normalized_url, sample_frames=5)
+                validation_result = evidence_analysis_service.validate_incident_evidence(
+                    incident_type_id=report_data.incident_type_id,
+                    description=report_data.description or "",
+                    analysis=analysis,
+                    media_type="video",
+                )
+                blur_score = float(getattr(analysis, "blur_score", None)) if getattr(analysis, "blur_score", None) is not None else None
+                tamper_score = float(1.0 - getattr(analysis, "confidence_score", 0.0)) if getattr(analysis, "confidence_score", None) is not None else None
+                conf = float(getattr(analysis, "confidence_score", 0.0) or 0.0)
+                if conf >= 0.8:
+                    quality_label = "good"
+                elif conf >= 0.5:
+                    quality_label = "fair"
+                else:
+                    quality_label = "poor"
+                evidence_validations.append({'evidence_url': normalized_url, 'validation': validation_result})
+            except Exception as e:
+                logger.error(f"Error analyzing video evidence {normalized_url}: {e}")
+                quality_label = "poor"
+
+        elif file_type_lower in ["audio", "audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3", "audio/aac", "audio/ogg"]:
+            try:
+                audio_analysis = evidence_analysis_service.analyze_audio_from_url(normalized_url)
+                # Audio can't use YOLO; we validate via audio quality + description rules later.
+                validation_result = {
+                    "valid": not bool(audio_analysis.get("issues")),
+                    "confidence": 1.0 if not audio_analysis.get("issues") else 0.3,
+                    "threshold_used": 0.6,
+                    "issues": audio_analysis.get("issues", []),
+                    "warnings": [],
+                    "advanced_analysis": {"audio": audio_analysis},
+                    "analysis_summary": {"media_type": "audio"},
+                }
+                # For audio, keep fields conservative
+                blur_score = None
+                tamper_score = 0.5 if audio_analysis.get("issues") else 0.1
+                quality_label = "fair" if not audio_analysis.get("issues") else "poor"
+                evidence_validations.append({'evidence_url': normalized_url, 'validation': validation_result})
+            except Exception as e:
+                logger.error(f"Error analyzing audio evidence {normalized_url}: {e}")
+                quality_label = "poor"
         
         evidence = EvidenceFile(
             evidence_id=uuid4(),
@@ -1292,6 +1341,7 @@ def create_report(
             blur_score=blur_score,
             tamper_score=tamper_score,
             quality_label=quality_label,
+            ai_checked_at=ai_checked_at.replace(tzinfo=None) if ai_checked_at is not None else None,
         )
         db.add(evidence)
 
@@ -1309,13 +1359,17 @@ def create_report(
         report.feature_vector = _json_safe(fv)
     
     # Text-only analysis for reports without evidence
-    elif not evidence_validations:
-        # This report has no evidence files - perform text-only analysis
+    elif not evidence_metadata_list:
+        # This report has no evidence files - perform text-only analysis + type-vs-description checks
         try:
             from app.services.evidence_analysis import analyze_text_only_report
             
-            incident_type = db.query(IncidentType).filter(IncidentType.incident_type_id == report.incident_type_id).first()
-            incident_type_name = incident_type.type_name if incident_type else "unknown"
+            incident_type_row = (
+                db.query(IncidentType)
+                .filter(IncidentType.incident_type_id == report.incident_type_id)
+                .first()
+            )
+            incident_type_name = incident_type_row.type_name if incident_type_row else "unknown"
             
             # Perform text-only analysis
             text_analysis = analyze_text_only_report(
@@ -1323,52 +1377,94 @@ def create_report(
                 incident_type_name=incident_type_name,
                 incident_type_id=report.incident_type_id
             )
+            fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+            fv["text_only_validation"] = text_analysis
+            report.feature_vector = _json_safe(fv)
 
-            # Extract quality metrics
-            blur_score = float(analysis.blur_score) if analysis.blur_score else None
-            tamper_score = float(1.0 - analysis.confidence_score) if analysis.confidence_score else None
-
-            # Determine quality label based on analysis
-            if analysis.confidence_score >= 0.8:
-                quality_label = "good"
-            elif analysis.confidence_score >= 0.5:
-                quality_label = "fair"
-            else:
-                quality_label = "poor"
-
-            # Log validation results
-            logger.info(f"Evidence validation for report {report.report_id}: "
-                       f"valid={validation_result['valid']}, "
-                       f"confidence={validation_result['confidence']:.2f}, "
-                       f"issues={validation_result['issues']}")
-
-            # Store validation for later processing
-            evidence_validations.append({
-                'evidence_url': normalized_url,
-                'validation': validation_result
-            })
+            # If text-only analysis strongly indicates mismatch/low quality, flag for review
+            if not bool(text_analysis.get("valid")):
+                if report.rule_status != "rejected":
+                    report.rule_status = "flagged"
+                    report.is_flagged = True
+                    report.flag_reason = "text_only_validation_failed"
+                    report.verification_status = "under_review"
 
         except Exception as e:
-            logger.error(f"Error analyzing evidence {normalized_url}: {e}")
-            # Set default values if analysis fails
-            quality_label = "poor"
-            blur_score = 0.0
-            tamper_score = 1.0
+            logger.error(f"Text-only analysis failed for report {report.report_id}: {e}")
 
-    evidence = EvidenceFile(
-        evidence_id=uuid4(),
-        report_id=report.report_id,
-        file_url=normalized_url,
-        file_type=evidence_data.file_type,
-        media_latitude=evidence_data.media_latitude,
-        media_longitude=evidence_data.media_longitude,
-        captured_at=evidence_data.captured_at,
-        is_live_capture=evidence_data.is_live_capture,
-        blur_score=blur_score,
-        tamper_score=tamper_score,
-        quality_label=quality_label,
-    )
-    db.add(evidence)
+    # Persist evidence validation summary on the report for auditability
+    try:
+        fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+        if evidence_validations:
+            fv["evidence_validations"] = evidence_validations
+        report.feature_vector = _json_safe(fv)
+    except Exception:
+        pass
+
+    # If any evidence validation clearly fails, flag the report (do not hard-reject by default)
+    try:
+        failed = []
+        for ev in evidence_validations:
+            v = (ev or {}).get("validation") or {}
+            if v.get("valid") is False:
+                failed.append(v)
+        if failed and not out_of_boundary and report.rule_status != "rejected":
+            report.rule_status = "flagged"
+            report.is_flagged = True
+            report.flag_reason = "evidence_incident_mismatch"
+            report.verification_status = "under_review"
+    except Exception:
+        pass
+
+    # === Apply rule-based + ML pipeline (sync, lightweight) ===
+    evidence_count = len(evidence_metadata_list)
+    try:
+        from app.core.report_priority import apply_ai_enhanced_rules, calculate_report_priority
+
+        # Best-effort ML scoring before AI-enhanced rules (so it can influence priority/review).
+        # (score_report_credibility itself may be best-effort depending on configuration.)
+        try:
+            score_report_credibility(db, report, device, evidence_count)
+        except Exception as e:
+            logger.error(f"ML scoring failed during report creation for {report.report_id}: {e}")
+
+        ml_prediction_tmp = resolve_ml_prediction_for_report(report)
+        rule_status, is_flagged, flag_reason = apply_ai_enhanced_rules(
+            report, evidence_count, ml_prediction_tmp, db
+        )
+
+        # Preserve hard rejections (boundary) and existing flags unless the rule engine rejects.
+        if report.rule_status != "rejected":
+            report.rule_status = rule_status
+        if rule_status == "rejected":
+            report.status = "rejected"
+            report.verification_status = "rejected"
+            report.is_flagged = True
+        else:
+            report.is_flagged = bool(report.is_flagged or is_flagged)
+            if report.is_flagged:
+                report.verification_status = "under_review"
+            if report.flag_reason is None and flag_reason:
+                report.flag_reason = flag_reason
+
+        report.priority = calculate_report_priority(report, ml_prediction_tmp, evidence_count, db)
+
+        # Device aggregates (best-effort; doesn't block submission).
+        try:
+            update_device_ml_aggregates(db, device, window=30)
+        except Exception:
+            pass
+    except Exception as e:
+        logger.warning(f"AI-enhanced rules pipeline failed for report {report.report_id}: {e}")
+
+    # Persist everything before responding
+    try:
+        db.commit()
+        db.refresh(report)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to save report: {e}")
+
     ml_prediction = resolve_ml_prediction_for_report(report)
     trust_score = (
         float(ml_prediction.trust_score)

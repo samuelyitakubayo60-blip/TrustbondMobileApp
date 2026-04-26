@@ -1,6 +1,7 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -9,6 +10,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatf
 import 'package:geolocator/geolocator.dart';
 
 import 'package:image_picker/image_picker.dart';
+import 'package:exif/exif.dart';
 
 import '../services/api_service.dart';
 
@@ -77,6 +79,96 @@ class _ReportScreenState extends State<ReportScreen> {
   bool _isSubmitting = false;
 
   final List<EvidenceAttachment> _attachments = [];
+
+  double? _exifToDouble(dynamic value) {
+    // exif package may return Ratio / IfdRatios / num / String.
+    try {
+      if (value == null) return null;
+      if (value is num) return value.toDouble();
+      final s = value.toString();
+      // Ratio typically renders as "123/100" or "12"
+      if (s.contains('/')) {
+        final parts = s.split('/');
+        if (parts.length == 2) {
+          final a = double.tryParse(parts[0].trim());
+          final b = double.tryParse(parts[1].trim());
+          if (a != null && b != null && b != 0) return a / b;
+        }
+      }
+      return double.tryParse(s.trim());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  double? _exifGpsToDecimal(dynamic gpsValues, String? ref) {
+    try {
+      if (gpsValues == null) return null;
+      final list = gpsValues is List ? gpsValues : null;
+      if (list == null || list.length < 3) return null;
+      final deg = _exifToDouble(list[0]);
+      final min = _exifToDouble(list[1]);
+      final sec = _exifToDouble(list[2]);
+      if (deg == null || min == null || sec == null) return null;
+      var dec = deg + (min / 60.0) + (sec / 3600.0);
+      final r = (ref ?? '').toUpperCase().trim();
+      if (r == 'S' || r == 'W') dec = -dec;
+      return dec;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  DateTime? _parseExifDateTime(dynamic value) {
+    try {
+      if (value == null) return null;
+      final s = value.toString().trim();
+      // EXIF often uses "YYYY:MM:DD HH:MM:SS"
+      if (s.length >= 19 && s[4] == ':' && s[7] == ':' && s[10] == ' ') {
+        final yyyy = int.parse(s.substring(0, 4));
+        final mm = int.parse(s.substring(5, 7));
+        final dd = int.parse(s.substring(8, 10));
+        final hh = int.parse(s.substring(11, 13));
+        final mi = int.parse(s.substring(14, 16));
+        final ss = int.parse(s.substring(17, 19));
+        return DateTime(yyyy, mm, dd, hh, mi, ss);
+      }
+      // fallback to DateTime.parse if it happens to be ISO-like
+      return DateTime.tryParse(s);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<({DateTime? capturedAt, double? lat, double? lon, bool hasExif, String? error})>
+      _readImageExifForAttachment(String filePath) async {
+    try {
+      final bytes = await File(filePath).readAsBytes();
+      final Map<String, IfdTag> exifData = await readExifFromBytes(bytes);
+      if (exifData.isEmpty) {
+        return (capturedAt: null, lat: null, lon: null, hasExif: false, error: null);
+      }
+
+      // Keys vary; try common ones.
+      final dt =
+          _parseExifDateTime(exifData['EXIF DateTimeOriginal']?.printable) ??
+          _parseExifDateTime(exifData['Image DateTime']?.printable) ??
+          _parseExifDateTime(exifData['EXIF DateTimeDigitized']?.printable);
+
+      final lat = _exifGpsToDecimal(
+        exifData['GPS GPSLatitude']?.values,
+        exifData['GPS GPSLatitudeRef']?.printable,
+      );
+      final lon = _exifGpsToDecimal(
+        exifData['GPS GPSLongitude']?.values,
+        exifData['GPS GPSLongitudeRef']?.printable,
+      );
+
+      return (capturedAt: dt, lat: lat, lon: lon, hasExif: true, error: null);
+    } catch (e) {
+      return (capturedAt: null, lat: null, lon: null, hasExif: false, error: e.toString());
+    }
+  }
 
 
 
@@ -330,24 +422,41 @@ class _ReportScreenState extends State<ReportScreen> {
 
         setState(() {
 
+          // Gallery selection: try to extract EXIF capture time and GPS when available.
+          // If EXIF missing (common after edits / some share flows), we keep nulls and backend will treat as warning.
           _attachments.add(EvidenceAttachment(
 
             path: image.path,
 
             isVideo: false,
 
-            // Gallery selection: we may not know true capture location/time
-
             capturedAt: null,
-
             mediaLatitude: null,
-
             mediaLongitude: null,
-
             isLiveCapture: false,
 
           ));
 
+        });
+
+        // Populate EXIF asynchronously (avoid blocking UI thread).
+        final exif = await _readImageExifForAttachment(image.path);
+        if (!mounted) return;
+        setState(() {
+          final idx = _attachments.lastIndexWhere((a) => a.path == image.path);
+          if (idx >= 0) {
+            final existing = _attachments[idx];
+            _attachments[idx] = EvidenceAttachment(
+              path: existing.path,
+              isVideo: existing.isVideo,
+              capturedAt: exif.capturedAt ?? existing.capturedAt,
+              mediaLatitude: exif.lat ?? existing.mediaLatitude,
+              mediaLongitude: exif.lon ?? existing.mediaLongitude,
+              isLiveCapture: existing.isLiveCapture,
+              hasExif: exif.hasExif,
+              exifParseError: exif.error,
+            );
+          }
         });
 
       }
@@ -386,17 +495,37 @@ class _ReportScreenState extends State<ReportScreen> {
 
             isVideo: true,
 
+            // Gallery video: EXIF is not reliable; use filesystem modified time as a best-effort timestamp.
             capturedAt: null,
-
             mediaLatitude: null,
-
             mediaLongitude: null,
-
             isLiveCapture: false,
 
           ));
 
         });
+
+        // Best-effort timestamp for videos
+        try {
+          final ts = await File(video.path).lastModified();
+          if (!mounted) return;
+          setState(() {
+            final idx = _attachments.lastIndexWhere((a) => a.path == video.path);
+            if (idx >= 0) {
+              final existing = _attachments[idx];
+              _attachments[idx] = EvidenceAttachment(
+                path: existing.path,
+                isVideo: existing.isVideo,
+                capturedAt: existing.capturedAt ?? ts,
+                mediaLatitude: existing.mediaLatitude,
+                mediaLongitude: existing.mediaLongitude,
+                isLiveCapture: existing.isLiveCapture,
+                hasExif: false,
+                exifParseError: null,
+              );
+            }
+          });
+        } catch (_) {}
 
       }
 

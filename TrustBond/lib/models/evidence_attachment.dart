@@ -6,6 +6,8 @@ class EvidenceAttachment {
   final double? mediaLatitude;
   final double? mediaLongitude;
   final bool isLiveCapture;
+  final bool hasExif;
+  final String? exifParseError;
 
   EvidenceAttachment({
     required this.path,
@@ -14,5 +16,7 @@ class EvidenceAttachment {
     this.mediaLatitude,
     this.mediaLongitude,
     this.isLiveCapture = false,
+    this.hasExif = false,
+    this.exifParseError,
   });
 }

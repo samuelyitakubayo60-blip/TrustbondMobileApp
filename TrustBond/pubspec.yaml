@@ -47,6 +47,7 @@ dependencies:
   connectivity_plus: ^6.0.0
   battery_plus: ^4.0.0
   image: ^4.2.0
+  exif: ^3.3.0
   path: ^1.8.3
   # flutter_sound: ^9.2.13
   # record: ^6.2.0

@@ -1,312 +1,355 @@
 {
   "1": {
     "incident_name": "Theft",
-    "rule": {
-      "expected_objects": [
-        "person",
-        "people",
-        "bag",
-        "money",
-        "wallet",
-        "phone"
-      ],
-      "expected_actions": [
-        "running",
-        "struggling",
-        "taking",
-        "grabbing"
-      ],
-      "expected_scenes": [
-        "market",
-        "street",
-        "shop",
-        "crowd"
-      ],
-      "keywords": [
+    "severity": 1.2,
+    "allow_no_evidence": true,
+    "text_rules": {
+      "min_description_chars": 25,
+      "min_description_words": 5,
+      "must_include_any": [
         "stole",
         "stolen",
         "thief",
         "theft",
-        "took",
-        "robbed"
+        "robbed",
+        "snatched",
+        "pickpocket",
+        "burglary",
+        "break in",
+        "took my"
+      ],
+      "recommended_details": [
+        "what was stolen (phone/money/bag/etc.)",
+        "where it happened",
+        "when it happened (approx time)",
+        "how it happened (snatched/forced/break-in)"
+      ],
+      "red_flags": [
+        "just testing",
+        "prank",
+        "not real",
+        "fake report"
       ]
     },
-    "severity": 1.2,
-    "keywords_from_db": [
-      "robbery",
-      "smart",
-      "phone",
-      "near",
-      "ubworoherane"
-    ]
+    "evidence_rules": {
+      "allowed_media_types": ["photo", "video", "audio"],
+      "recommended_media_types": ["photo", "video"],
+      "min_evidence_count_for_auto_verify": 1,
+      "rule": {
+        "expected_objects": ["person", "cell phone", "handbag", "backpack", "rwf_note", "mobile_money"],
+        "expected_actions": ["running", "grabbing", "taking", "struggling"],
+        "expected_scenes": ["market", "street", "shop", "bus", "taxi"],
+        "keywords": ["stole", "stolen", "thief", "theft", "robbed", "snatched"]
+      }
+    }
   },
   "2": {
     "incident_name": "Assault",
-    "rule": {
-      "expected_objects": [
-        "person",
-        "people",
-        "weapon",
-        "blood"
-      ],
-      "expected_actions": [
-        "fighting",
-        "hitting",
-        "struggling",
-        "running"
-      ],
-      "expected_scenes": [
-        "street",
-        "bar",
-        "nightclub",
-        "public"
-      ],
-      "keywords": [
-        "fight",
-        "assault",
-        "attack",
-        "beat",
-        "violent"
-      ]
-    },
     "severity": 1.6,
-    "keywords_from_db": [
-      "with",
-      "they",
-      "someone",
-      "panga",
-      "attacked",
-      "girl",
-      "snatch",
-      "from",
-      "young",
-      "women's"
-    ]
+    "allow_no_evidence": true,
+    "text_rules": {
+      "min_description_chars": 30,
+      "min_description_words": 6,
+      "must_include_any": [
+        "attack",
+        "assault",
+        "fight",
+        "hit",
+        "beaten",
+        "injured",
+        "punched",
+        "kicked",
+        "knife",
+        "panga",
+        "machete"
+      ],
+      "recommended_details": [
+        "who was attacked (victim)",
+        "what happened (fight/attack)",
+        "any weapon involved",
+        "injuries",
+        "where and when"
+      ],
+      "red_flags": ["just testing", "prank", "not real", "fake report"]
+    },
+    "evidence_rules": {
+      "allowed_media_types": ["photo", "video", "audio"],
+      "recommended_media_types": ["video", "photo"],
+      "min_evidence_count_for_auto_verify": 1,
+      "rule": {
+        "expected_objects": ["person", "knife", "panga", "machete", "traditional_knife"],
+        "expected_actions": ["fighting", "hitting", "struggling", "running"],
+        "expected_scenes": ["street", "bar", "night", "public", "market"],
+        "keywords": ["fight", "assault", "attack", "beaten", "violent", "injured"]
+      }
+    }
   },
   "3": {
     "incident_name": "Vandalism",
-    "rule": {
-      "expected_objects": [
-        "broken",
-        "graffiti",
-        "damaged",
-        "property"
-      ],
-      "expected_actions": [
-        "breaking",
-        "destroying",
-        "painting"
-      ],
-      "expected_scenes": [
-        "wall",
-        "building",
-        "vehicle",
-        "property"
-      ],
-      "keywords": [
-        "vandalism",
-        "broken",
-        "damaged",
-        "graffiti",
-        "destroyed"
-      ]
-    },
     "severity": 1.1,
-    "keywords_from_db": [
-      "vandalism"
-    ]
+    "allow_no_evidence": true,
+    "text_rules": {
+      "min_description_chars": 25,
+      "min_description_words": 5,
+      "must_include_any": [
+        "vandalism",
+        "damaged",
+        "broken",
+        "destroyed",
+        "graffiti",
+        "smashed",
+        "defaced"
+      ],
+      "recommended_details": [
+        "what was damaged (wall/vehicle/shop/etc.)",
+        "where it happened",
+        "when it happened"
+      ],
+      "red_flags": ["just testing", "prank", "not real", "fake report"]
+    },
+    "evidence_rules": {
+      "allowed_media_types": ["photo", "video"],
+      "recommended_media_types": ["photo"],
+      "min_evidence_count_for_auto_verify": 1,
+      "rule": {
+        "expected_objects": ["structure", "vehicle", "vase"],
+        "expected_actions": ["breaking", "destroying", "painting"],
+        "expected_scenes": ["wall", "building", "street", "property"],
+        "keywords": ["vandalism", "broken", "damaged", "graffiti", "destroyed"]
+      }
+    }
   },
   "4": {
     "incident_name": "Suspicious Activity",
-    "rule": {
-      "expected_objects": [
-        "person",
-        "people",
-        "vehicle"
-      ],
-      "expected_actions": [
-        "lurking",
-        "watching",
-        "hiding",
-        "following"
-      ],
-      "expected_scenes": [
-        "street",
-        "building",
-        "park",
-        "night"
-      ],
-      "keywords": [
+    "severity": 1.0,
+    "allow_no_evidence": true,
+    "text_rules": {
+      "min_description_chars": 30,
+      "min_description_words": 6,
+      "must_include_any": [
         "suspicious",
         "strange",
-        "weird",
         "unusual",
-        "lurking"
-      ]
+        "lurking",
+        "watching",
+        "following",
+        "hiding",
+        "loitering"
+      ],
+      "recommended_details": [
+        "what the person(s) were doing",
+        "how many people/vehicles",
+        "where exactly",
+        "time of day"
+      ],
+      "red_flags": ["just testing", "prank", "not real", "fake report"]
     },
-    "severity": 1.0,
-    "keywords_from_db": [
-      "un-usual",
-      "movements",
-      "hood",
-      "usuals",
-      "group",
-      "people",
-      "crossing",
-      "region",
-      "with",
-      "traditional"
-    ]
+    "evidence_rules": {
+      "allowed_media_types": ["photo", "video", "audio"],
+      "recommended_media_types": ["video", "photo"],
+      "min_evidence_count_for_auto_verify": 1,
+      "rule": {
+        "expected_objects": ["person", "motorcycle_taxi", "bicycle_taxi", "car", "vehicle"],
+        "expected_actions": ["lurking", "watching", "hiding", "following"],
+        "expected_scenes": ["street", "building", "park", "night"],
+        "keywords": ["suspicious", "strange", "unusual", "lurking", "watching", "following"]
+      }
+    }
   },
   "5": {
     "incident_name": "Domestic Violence",
-    "rule": {
-      "expected_objects": [
-        "person",
-        "people"
-      ],
-      "expected_actions": [
-        "standing",
-        "walking"
-      ],
-      "expected_scenes": [
-        "outdoor",
-        "public"
-      ],
-      "keywords": [
-        "incident",
-        "happening",
-        "saw"
-      ]
-    },
     "severity": 1.7,
-    "keywords_from_db": [
-      "child",
-      "abuse",
-      "gikwege",
-      "gfsfhhnn",
-      "hhhh",
-      "bgfh",
-      "wife",
-      "husband"
-    ]
+    "allow_no_evidence": true,
+    "text_rules": {
+      "min_description_chars": 35,
+      "min_description_words": 7,
+      "must_include_any": [
+        "domestic",
+        "husband",
+        "wife",
+        "partner",
+        "home",
+        "family",
+        "beating",
+        "abuse",
+        "threatened",
+        "child"
+      ],
+      "recommended_details": [
+        "relationship (husband/wife/partner/family)",
+        "what happened (threats/violence)",
+        "whether children are involved",
+        "where and when"
+      ],
+      "red_flags": ["just testing", "prank", "not real", "fake report"]
+    },
+    "evidence_rules": {
+      "allowed_media_types": ["photo", "video", "audio"],
+      "recommended_media_types": ["audio", "video"],
+      "min_evidence_count_for_auto_verify": 1,
+      "rule": {
+        "expected_objects": ["person", "chair", "couch", "bed", "dining table"],
+        "expected_actions": ["fighting", "hitting", "struggling"],
+        "expected_scenes": ["home", "house", "indoor", "inside"],
+        "keywords": ["domestic", "abuse", "husband", "wife", "partner", "beating", "threatened"]
+      }
+    }
   },
   "6": {
     "incident_name": "Drug Activity",
-    "rule": {
-      "expected_objects": [
-        "person",
-        "people"
-      ],
-      "expected_actions": [
-        "standing",
-        "walking"
-      ],
-      "expected_scenes": [
-        "outdoor",
-        "public"
-      ],
-      "keywords": [
-        "incident",
-        "happening",
-        "saw"
-      ]
-    },
     "severity": 1.4,
-    "keywords_from_db": [
-      "drugs",
-      "spreading",
-      "youths",
-      "people",
-      "using",
-      "meet",
-      "group",
-      "boys",
-      "near",
-      "street"
-    ]
+    "allow_no_evidence": true,
+    "text_rules": {
+      "min_description_chars": 30,
+      "min_description_words": 6,
+      "must_include_any": [
+        "drug",
+        "drugs",
+        "weed",
+        "marijuana",
+        "cocaine",
+        "heroin",
+        "selling",
+        "dealer",
+        "using",
+        "smoking"
+      ],
+      "recommended_details": [
+        "what you observed (selling/using)",
+        "where it happened",
+        "how many people",
+        "time of day"
+      ],
+      "red_flags": ["just testing", "prank", "not real", "fake report"]
+    },
+    "evidence_rules": {
+      "allowed_media_types": ["photo", "video", "audio"],
+      "recommended_media_types": ["video", "photo"],
+      "min_evidence_count_for_auto_verify": 1,
+      "rule": {
+        "expected_objects": ["person", "bottle", "cup"],
+        "expected_actions": ["lurking", "watching", "hiding"],
+        "expected_scenes": ["street", "market", "night", "public"],
+        "keywords": ["drug", "drugs", "dealer", "selling", "using", "smoking"]
+      }
+    }
   },
   "7": {
     "incident_name": "Fraud/Scam",
-    "rule": {
-      "expected_objects": [
-        "person",
-        "people"
-      ],
-      "expected_actions": [
-        "standing",
-        "walking"
-      ],
-      "expected_scenes": [
-        "outdoor",
-        "public"
-      ],
-      "keywords": [
-        "incident",
-        "happening",
-        "saw"
-      ]
-    },
     "severity": 1.3,
-    "keywords_from_db": []
+    "allow_no_evidence": true,
+    "text_rules": {
+      "min_description_chars": 35,
+      "min_description_words": 7,
+      "must_include_any": [
+        "fraud",
+        "scam",
+        "con",
+        "mobile money",
+        "momo",
+        "airtime",
+        "otp",
+        "pin",
+        "code",
+        "transaction",
+        "sent money",
+        "asked for"
+      ],
+      "recommended_details": [
+        "how the scam happened (call/message/agent)",
+        "numbers/accounts involved (if safe to share)",
+        "amount and transaction type",
+        "where and when"
+      ],
+      "red_flags": ["just testing", "prank", "not real", "fake report"]
+    },
+    "evidence_rules": {
+      "allowed_media_types": ["photo", "video", "audio"],
+      "recommended_media_types": ["photo", "audio"],
+      "min_evidence_count_for_auto_verify": 1,
+      "rule": {
+        "expected_objects": ["cell phone", "mobile_money", "rwf_note", "laptop"],
+        "expected_actions": ["taking", "grabbing"],
+        "expected_scenes": ["shop", "market", "indoor", "public"],
+        "keywords": ["fraud", "scam", "mobile money", "transaction", "otp", "pin"]
+      }
+    }
   },
   "8": {
     "incident_name": "Harassment",
-    "rule": {
-      "expected_objects": [
-        "person",
-        "people"
-      ],
-      "expected_actions": [
-        "standing",
-        "walking"
-      ],
-      "expected_scenes": [
-        "outdoor",
-        "public"
-      ],
-      "keywords": [
-        "incident",
-        "happening",
-        "saw"
-      ]
-    },
     "severity": 1.2,
-    "keywords_from_db": [
-      "threatening",
-      "person",
-      "telling",
-      "words",
-      "group",
-      "young",
-      "boys",
-      "girl",
-      "that",
-      "happens"
-    ]
+    "allow_no_evidence": true,
+    "text_rules": {
+      "min_description_chars": 30,
+      "min_description_words": 6,
+      "must_include_any": [
+        "harass",
+        "harassment",
+        "threat",
+        "threatened",
+        "stalk",
+        "stalking",
+        "intimidat",
+        "followed me",
+        "unwanted"
+      ],
+      "recommended_details": [
+        "what was said/done (threats/stalking)",
+        "whether it is repeated",
+        "where and when",
+        "description of suspect(s)"
+      ],
+      "red_flags": ["just testing", "prank", "not real", "fake report"]
+    },
+    "evidence_rules": {
+      "allowed_media_types": ["photo", "video", "audio"],
+      "recommended_media_types": ["audio", "video"],
+      "min_evidence_count_for_auto_verify": 1,
+      "rule": {
+        "expected_objects": ["person"],
+        "expected_actions": ["following", "watching", "lurking"],
+        "expected_scenes": ["street", "public", "market", "night"],
+        "keywords": ["harass", "harassment", "threat", "stalking", "intimidat"]
+      }
+    }
   },
   "9": {
     "incident_name": "Traffic Incident",
-    "rule": {
-      "expected_objects": [
-        "person",
-        "people"
-      ],
-      "expected_actions": [
-        "standing",
-        "walking"
-      ],
-      "expected_scenes": [
-        "outdoor",
-        "public"
-      ],
-      "keywords": [
-        "incident",
-        "happening",
-        "saw"
-      ]
-    },
     "severity": 1.0,
-    "keywords_from_db": []
+    "allow_no_evidence": true,
+    "text_rules": {
+      "min_description_chars": 25,
+      "min_description_words": 5,
+      "must_include_any": [
+        "accident",
+        "crash",
+        "collision",
+        "traffic",
+        "road",
+        "vehicle",
+        "car",
+        "motorcycle",
+        "bicycle",
+        "blocking"
+      ],
+      "recommended_details": [
+        "what happened (crash/blocking)",
+        "vehicles involved",
+        "injuries (if any)",
+        "where and when"
+      ],
+      "red_flags": ["just testing", "prank", "not real", "fake report"]
+    },
+    "evidence_rules": {
+      "allowed_media_types": ["photo", "video"],
+      "recommended_media_types": ["photo", "video"],
+      "min_evidence_count_for_auto_verify": 1,
+      "rule": {
+        "expected_objects": ["car", "truck", "bus", "motorcycle", "bicycle", "person"],
+        "expected_actions": ["running"],
+        "expected_scenes": ["road", "street", "intersection"],
+        "keywords": ["accident", "crash", "collision", "traffic", "road", "vehicle"]
+      }
+    }
   }
 }
