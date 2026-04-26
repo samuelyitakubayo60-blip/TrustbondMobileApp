@@ -117,16 +117,22 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final pages = [
+      HomeScreen(
+        onOpenMapTab: () {
+          setState(() => _currentIndex = 1);
+        },
+      ),
+      const SafetyMapScreen(),
+      // index 2 is the FAB, not a tab
+      const MyReportsScreen(),
+      const ProfileScreen(),
+    ];
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex > 2 ? _currentIndex - 1 : _currentIndex,
-        children: const [
-          HomeScreen(),
-          SafetyMapScreen(),
-          // index 2 is the FAB, not a tab
-          MyReportsScreen(),
-          ProfileScreen(),
-        ],
+        children: pages,
       ),
       bottomNavigationBar: _buildBottomNav(),
     );

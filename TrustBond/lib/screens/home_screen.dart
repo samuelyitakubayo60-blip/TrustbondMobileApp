@@ -16,7 +16,9 @@ import 'report_detail_screen.dart';
 import 'safety_map_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final VoidCallback? onOpenMapTab;
+
+  const HomeScreen({super.key, this.onOpenMapTab});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -569,6 +571,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildMapPreview() {
     return GestureDetector(
       onTap: () {
+        if (widget.onOpenMapTab != null) {
+          widget.onOpenMapTab!();
+          return;
+        }
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => const SafetyMapScreen(showDetailedView: true),
