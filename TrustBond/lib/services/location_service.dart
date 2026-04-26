@@ -29,7 +29,9 @@ class LocationService {
 
   /// Disable location tracking (mock implementation for settings)
   Future<void> disableLocationTracking() async {
-    print('LocationService: Location tracking disabled (mock implementation)');
+    if (kDebugMode) {
+      debugPrint('LocationService: Location tracking disabled (mock implementation)');
+    }
   }
 
   /// Request location permission (mock implementation for settings)
@@ -45,7 +47,9 @@ class LocationService {
       return permission == LocationPermission.whileInUse ||
              permission == LocationPermission.always;
     } catch (e) {
-      print('LocationService: Permission request failed: $e');
+      if (kDebugMode) {
+        debugPrint('LocationService: Permission request failed: $e');
+      }
       return false;
     }
   }

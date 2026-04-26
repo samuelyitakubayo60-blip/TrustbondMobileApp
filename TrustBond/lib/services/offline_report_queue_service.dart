@@ -253,7 +253,7 @@ class OfflineReportQueueService {
     }
 
     // At this point, resolvedDeviceId is guaranteed to be non-null
-    final deviceId = resolvedDeviceId!;
+    final deviceId = resolvedDeviceId;
 
     try {
       // Upload evidence files in parallel for better performance

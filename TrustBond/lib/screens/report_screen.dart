@@ -3,7 +3,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform, kIsWeb, kDebugMode, debugPrint;
 
 import 'package:geolocator/geolocator.dart';
 
@@ -835,10 +836,12 @@ class _ReportScreenState extends State<ReportScreen> {
         evidenceMetadata: evidenceMetadata,
       );
 
-      print('Mobile verification result: ${mobileVerification.status}');
-      print('Location consistency: ${mobileVerification.locationConsistencyCheck}');
-      print('Evidence source valid: ${mobileVerification.evidenceSourceValid}');
-      print('Tampering detected: ${mobileVerification.evidenceTamperingDetected}');
+      if (kDebugMode) {
+        debugPrint('Mobile verification result: ${mobileVerification.status}');
+        debugPrint('Location consistency: ${mobileVerification.locationConsistencyCheck}');
+        debugPrint('Evidence source valid: ${mobileVerification.evidenceSourceValid}');
+        debugPrint('Tampering detected: ${mobileVerification.evidenceTamperingDetected}');
+      }
 
       // Block submission if verification fails due to non-original evidence
       if (mobileVerification.status == "failed") {

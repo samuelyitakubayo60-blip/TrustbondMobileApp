@@ -90,7 +90,6 @@ class _HomeScreenState extends State<HomeScreen> {
       // Try to load online data first
       List<ReportListItem> reports = [];
       double deviceTrustScore = 0;
-      bool onlineSuccess = false;
       
       try {
         // Load device profile to get actual trust score
@@ -102,7 +101,6 @@ class _HomeScreenState extends State<HomeScreen> {
         reports = list
             .map((e) => ReportListItem.fromJson(e as Map<String, dynamic>))
             .toList();
-        onlineSuccess = true;
       } catch (e) {
         debugPrint('Online data loading failed, trying offline cache: $e');
         // Fall back to cached data - try to load cached device profile first

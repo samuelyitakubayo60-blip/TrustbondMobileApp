@@ -27,7 +27,9 @@ class NotificationService {
 
     // Skip Firebase initialization on Windows
     if (defaultTargetPlatform == TargetPlatform.windows) {
-      print('Firebase notifications not supported on Windows');
+      if (kDebugMode) {
+        debugPrint('Firebase notifications not supported on Windows');
+      }
       return;
     }
 

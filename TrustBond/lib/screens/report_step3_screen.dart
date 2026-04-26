@@ -1,13 +1,10 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 // import 'package:record/record.dart'; // Temporarily disabled
 import 'package:path_provider/path_provider.dart';
-import 'package:http/http.dart' as http;
-import 'package:crypto/crypto.dart';
 import '../config/theme.dart';
 import '../services/device_status_service.dart';
 import '../services/motion_service.dart';
@@ -174,6 +171,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
     }
     
     if (warningMessage.isNotEmpty) {
+      if (!mounted) return;
       showDialog(
         context: context,
         builder: (BuildContext context) {
