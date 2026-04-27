@@ -67,7 +67,7 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
   useEffect(() => {
     let cancelled = false;
     api
-      .get('/api/v1/stations?only_active=true')
+      .get('/api/v1/stations/?only_active=true')
       .then((res) => {
         if (cancelled) return;
         const map = {};

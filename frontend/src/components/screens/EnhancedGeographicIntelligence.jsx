@@ -26,7 +26,7 @@ const EnhancedGeographicIntelligence = () => {
 
   // Load sectors for dropdown
   useEffect(() => {
-    api.get('/api/v1/locations')
+    api.get('/api/v1/locations/')
       .then(res => {
         const sectorList = (res || []).filter(loc => loc.location_type === 'sector');
         setSectors(sectorList);

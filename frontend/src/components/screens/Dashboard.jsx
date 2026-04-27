@@ -89,7 +89,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
         console.log(`${role} performance data loaded:`, d);
         console.log(`${role} performance_data:`, d.performance_data);
         console.log(`${role} performance_data[0]:`, d.performance_data?.[0]);
-        console.log(`${role} total_reports:`, d.total_reports);
+        console.log(`${role} total_reports:`, d.total_reports ?? d.total_sectors ?? 0);
         setSectorData(d);
       })
       .catch((err) => {

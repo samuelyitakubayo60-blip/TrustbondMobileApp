@@ -36,7 +36,7 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
     let cancelled = false;
     const loadLocations = async () => {
       try {
-        const data = await api.get('/api/v1/locations?limit=2000');
+        const data = await api.get('/api/v1/locations/?limit=2000');
         if (cancelled) return;
         setLocations(data || []);
       } catch {
@@ -225,7 +225,7 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
       if (isEdit && station?.station_id) {
         await api.put(`/api/v1/stations/${station.station_id}`, payload);
       } else {
-        await api.post('/api/v1/stations', payload);
+        await api.post('/api/v1/stations/', payload);
       }
       onSaved?.();
       onClose?.();

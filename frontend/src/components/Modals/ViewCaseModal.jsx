@@ -42,7 +42,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
             let sawCaseId = false;
             let anyRows = false;
             while (!cancelled) {
-              const page = await api.get(`/api/v1/reports?limit=${limit}&offset=${offset}`);
+              const page = await api.get(`/api/v1/reports/?limit=${limit}&offset=${offset}`);
               const items = Array.isArray(page) ? page : page?.items ?? [];
               if (total === null && page && typeof page.total === 'number') total = page.total;
               if (items.length) anyRows = true;
@@ -120,7 +120,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
       }
       params.append('limit', '50');
       
-      const response = await api.get(`/api/v1/cases?${params}`);
+      const response = await api.get(`/api/v1/cases/?${params}`);
       let cases = Array.isArray(response) ? response : (response?.items || []);
       
       // Additional client-side filtering to ensure incident type match

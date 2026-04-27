@@ -39,9 +39,9 @@ const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
       try {
         console.log('Loading incident types, officers, and stations...');
         const [types, offs, sts] = await Promise.all([
-          api.get('/api/v1/incident-types'),
+          api.get('/api/v1/incident-types/'),
           api.get('/api/v1/police-users/options'),
-          api.get('/api/v1/stations'),
+          api.get('/api/v1/stations/'),
         ]);
         if (cancelled) return;
         console.log('Loaded data:', { types, offs, sts });
@@ -99,7 +99,7 @@ const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
     };
 
     try {
-      await api.post('/api/v1/cases', payload);
+      await api.post('/api/v1/cases/', payload);
       onCreated?.();
       onClose?.();
     } catch (e) {
@@ -137,7 +137,7 @@ const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
         params.append('incident_type_id', incidentTypeId);
       }
       
-      const url = `/api/v1/cases/available-reports?${params.toString()}`;
+      const url = `/api/v1/cases/available-reports/?${params.toString()}`;
       console.log('Fetching reports from:', url);
       
       const res = await api.get(url);

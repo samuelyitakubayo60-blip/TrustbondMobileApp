@@ -29,7 +29,7 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
 
   useEffect(() => {
     let mounted = true;
-    api.get('/api/v1/notifications?limit=50')
+    api.get('/api/v1/notifications/?limit=50')
       .then((res) => { if (mounted) { setItems(res || []); setLoading(false); } })
       .catch(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
@@ -62,7 +62,7 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
           api.patch(`/api/v1/notifications/${n.notification_id}/read`)
         )
       );
-      const refreshed = await api.get('/api/v1/notifications?limit=50');
+      const refreshed = await api.get('/api/v1/notifications/?limit=50');
       setItems(refreshed || []);
     } catch {
       // ignore

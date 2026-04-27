@@ -30,7 +30,7 @@ const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
     setLoading(true);
     try {
       const [list, s] = await Promise.all([
-        api.get(statusFilter === 'all' ? '/api/v1/cases?limit=50&offset=0' : `/api/v1/cases?limit=50&offset=0&status=${encodeURIComponent(statusFilter)}`),
+        api.get(statusFilter === 'all' ? '/api/v1/cases/?limit=50&offset=0' : `/api/v1/cases/?limit=50&offset=0&status=${encodeURIComponent(statusFilter)}`),
         api.get('/api/v1/cases/stats'),
       ]);
       if (!mounted) return;
@@ -49,7 +49,7 @@ const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
   // Load stations so we can filter/group by station.
   useEffect(() => {
     let cancelled = false;
-    api.get('/api/v1/stations?only_active=true')
+    api.get('/api/v1/stations/?only_active=true')
       .then((res) => {
         if (cancelled) return;
         const map = {};

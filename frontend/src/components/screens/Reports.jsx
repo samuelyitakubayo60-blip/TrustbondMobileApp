@@ -57,8 +57,8 @@ const Reports = ({
     // Load incident types for Types dropdown
     // Only include inactive types if user is admin
     const incidentTypesUrl = isAdmin
-      ? "/api/v1/incident-types?include_inactive=true"
-      : "/api/v1/incident-types";
+      ? "/api/v1/incident-types/?include_inactive=true"
+      : "/api/v1/incident-types/";
 
     api
       .get(incidentTypesUrl)
@@ -66,7 +66,7 @@ const Reports = ({
       .catch(() => setIncidentTypes([]));
     // Load locations (sectors) – only sectors for dropdown
     api
-      .get("/api/v1/locations")
+      .get("/api/v1/locations/")
       .then((res) => {
         const sectors = (res || []).filter(
           (loc) => loc.location_type === "sector",
@@ -112,7 +112,7 @@ const Reports = ({
       end.setHours(23, 59, 59, 999);
       params.set("to_date", end.toISOString());
     }
-    return `/api/v1/reports?${params.toString()}`;
+    return `/api/v1/reports/?${params.toString()}`;
   };
 
   const loadReports = () => {

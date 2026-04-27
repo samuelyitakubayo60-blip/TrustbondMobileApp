@@ -624,7 +624,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
       }
       params.append('limit', '50');
       
-      const response = await api.get(`/api/v1/cases?${params}`);
+      const response = await api.get(`/api/v1/cases/?${params}`);
       let cases = Array.isArray(response) ? response : (response?.items || []);
       
       // Additional client-side filtering to ensure incident type match

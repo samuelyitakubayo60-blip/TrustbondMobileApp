@@ -151,7 +151,7 @@ const DeviceTrust = ({ wsRefreshKey }) => {
       params.set('trust_level', trustLevel);
     }
     api
-      .get(`/api/v1/devices?${params.toString()}`)
+      .get(`/api/v1/devices/?${params.toString()}`)
       .then((res) => {
         if (!mounted) return;
         setDevices(res.items || []);
@@ -169,7 +169,7 @@ const DeviceTrust = ({ wsRefreshKey }) => {
   // Load sectors for dropdown (locations with type=sector)
   useEffect(() => {
     api
-      .get('/api/v1/locations')
+      .get('/api/v1/locations/')
       .then((res) => {
         const sectorList = (res || []).filter(
           (loc) => loc.location_type === 'sector',

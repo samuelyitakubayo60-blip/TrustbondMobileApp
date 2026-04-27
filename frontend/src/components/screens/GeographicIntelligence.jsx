@@ -45,7 +45,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
 
   // Load locations for dropdowns
   useEffect(() => {
-    api.get('/api/v1/locations')
+    api.get('/api/v1/locations/')
       .then(res => {
         const allLocations = res || [];
         setSectors(allLocations.filter(loc => loc.location_type === 'sector'));
@@ -89,9 +89,9 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
         const [sectorPerf, behavior, locations, reports, incidentTypes] = await Promise.all([
           api.get(`/api/v1/geographic-intelligence/sector-performance?${params}`),
           api.get(`/api/v1/geographic-intelligence/behavior-patterns?${params}`),
-          api.get('/api/v1/locations'),
-          api.get('/api/v1/reports?limit=100'),
-          api.get('/api/v1/incident-types')
+          api.get('/api/v1/locations/'),
+          api.get('/api/v1/reports/?limit=100'),
+          api.get('/api/v1/incident-types/')
         ]);
         
         console.log('📊 API Responses:');

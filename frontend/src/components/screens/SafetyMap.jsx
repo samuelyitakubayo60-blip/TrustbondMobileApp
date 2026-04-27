@@ -211,7 +211,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       query.set("time_window_hours", String(params.time_window_hours));
     }
     api
-      .get(`/api/v1/hotspots${query.toString() ? `?${query}` : ""}`)
+      .get(`/api/v1/hotspots/${query.toString() ? `?${query}` : ""}`)
       .then((res) => {
         setHotspots(res || []);
         setLoading(false);
@@ -232,8 +232,8 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     }
 
     const url = params.toString()
-      ? `/api/v1/hotspots?${params.toString()}`
-      : "/api/v1/hotspots";
+      ? `/api/v1/hotspots/?${params.toString()}`
+      : "/api/v1/hotspots/";
 
     api
       .get(url)
@@ -303,7 +303,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   useEffect(() => {
     let mounted = true;
     api
-      .get("/api/v1/incident-types")
+      .get("/api/v1/incident-types/")
       .then((res) => {
         if (!mounted || !Array.isArray(res)) return;
         setIncidentTypes(res);

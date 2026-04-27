@@ -194,7 +194,7 @@ const HotspotDetails = ({ hotspotId, wsRefreshKey }) => {
         console.log('Loading hotspot details for ID:', hotspotId);
         
         // Use the admin endpoint for location data (which works perfectly)
-        const allHotspotsResponse = await api.get('/api/v1/hotspots');
+        const allHotspotsResponse = await api.get('/api/v1/hotspots/');
         console.log('🔍 HOTSPOT RESPONSE ANALYSIS:');
         console.log('Full response:', allHotspotsResponse);
         console.log('Response type:', typeof allHotspotsResponse);
@@ -291,7 +291,7 @@ const HotspotDetails = ({ hotspotId, wsRefreshKey }) => {
               console.log(`Querying reports near lat: ${lat}, lng: ${lng}, radius: ${radius}m`);
               
               // Query reports in the area
-              const reportsResponse = await api.get(`/api/v1/reports?limit=50&lat=${lat}&lng=${lng}&radius=${radius}`);
+              const reportsResponse = await api.get(`/api/v1/reports/?limit=50&lat=${lat}&lng=${lng}&radius=${radius}`);
               console.log('Reports by location:', reportsResponse);
               
               // Handle different response formats

@@ -13,8 +13,8 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
   const loadTypes = () => {
     Promise.resolve().then(() => setLoading(true));
     Promise.all([
-      api.get('/api/v1/incident-types?include_inactive=true'),
-      api.get('/api/v1/reports?limit=100')
+      api.get('/api/v1/incident-types/?include_inactive=true'),
+      api.get('/api/v1/reports/?limit=100')
     ])
       .then(([typesRes, reportsRes]) => {
         setTypes(typesRes || []);
@@ -24,7 +24,7 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
       .catch((error) => {
         console.error('Error loading data:', error);
         // Still set types even if reports fail
-        api.get('/api/v1/incident-types?include_inactive=true')
+        api.get('/api/v1/incident-types/?include_inactive=true')
           .then((typesRes) => {
             setTypes(typesRes || []);
             setLoading(false);

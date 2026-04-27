@@ -56,7 +56,7 @@ const AddIncidentModal = ({ isOpen, onClose, mode = 'add', incidentType = null, 
         if (!incidentId) throw new Error('Missing incident type id.');
         await api.put(`/api/v1/incident-types/${incidentId}`, payload);
       } else {
-        await api.post('/api/v1/incident-types', payload);
+        await api.post('/api/v1/incident-types/', payload);
       }
       onSaved?.();
       onClose?.();

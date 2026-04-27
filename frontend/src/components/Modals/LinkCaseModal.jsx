@@ -18,7 +18,7 @@ const LinkCaseModal = ({ isOpen, onClose, reportId, onLinked }) => {
 
     const load = async () => {
       try {
-        const res = await api.get('/api/v1/cases?limit=50&offset=0');
+        const res = await api.get('/api/v1/cases/?limit=50&offset=0');
         if (cancelled) return;
         setCases(res?.items || []);
       } catch {

@@ -20,7 +20,7 @@ const AddUserModal = ({ isOpen, onClose, onSaved }) => {
     let cancelled = false;
     const load = async () => {
       try {
-        const res = await api.get("/api/v1/stations?only_active=true");
+        const res = await api.get("/api/v1/stations/?only_active=true");
         if (!cancelled) setStations(res?.items || []);
       } catch {
         if (!cancelled) setStations([]);
