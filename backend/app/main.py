@@ -145,9 +145,9 @@ print(f"DEBUG: cors_origins setting: {settings.cors_origins}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Temporarily allow all origins to test
+    allow_origins=settings.get_cors_origins_list(),  # Dynamic origins from environment
     allow_origin_regex=settings.cors_origin_regex,
-    allow_credentials=True,
+    allow_credentials=True,  # Allow credentials with specific origins
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["*"],
     expose_headers=["*"],
