@@ -10,7 +10,7 @@
  */
 const BASE =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
-  "https://huggingface.co/spaces/samuelyitakubayo/trustbond-backend";
+  "/api";
 
 const TOKEN_KEY = "tb_token";
 /** Cookie name must match Path=/ for SPA */
