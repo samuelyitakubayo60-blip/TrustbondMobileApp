@@ -137,13 +137,21 @@ app = FastAPI(
     title=settings.app_name,
     lifespan=lifespan,
 )
+# Debug: Log the actual CORS origins being used
+cors_origins = settings.get_cors_origins_list()
+print(f"DEBUG: CORS origins loaded: {cors_origins}")
+print(f"DEBUG: FRONTEND_URL setting: {settings.frontend_url}")
+print(f"DEBUG: cors_origins setting: {settings.cors_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.get_cors_origins_list(),
+    allow_origins=["*"],  # Temporarily allow all origins to test
     allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=600,  # Cache preflight for 10 minutes
 )
 
 # Mount static files for evidence uploads
@@ -172,6 +180,10 @@ app.include_router(geographic_intelligence.router, prefix="/api/v1/geographic-in
 @app.get("/health")
 def health():
     return {"status": "ok", "app": settings.app_name}
+
+@app.options("/health")
+def health_options():
+    return {"status": "ok"}
 @app.get("")
 def home():
     return {""}
