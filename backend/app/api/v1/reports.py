@@ -1371,6 +1371,35 @@ def create_report(
 
     _enforce_device_submission_guards(db, device, report_data, request)
 
+    # Mobile rule gate (strict): only "passed" reports are allowed to be created.
+    # Any other status must be blocked before persistence.
+    mobile_rule_status = (getattr(report_data, "mobile_rule_status", None) or "").strip().lower()
+    if mobile_rule_status != "passed":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Report blocked by mobile verification rules. "
+                "Only reports with mobile_rule_status='passed' can be submitted."
+            ),
+        )
+
+    # Additional safety checks for explicit mobile boolean signals.
+    if getattr(report_data, "evidence_source_valid", True) is False:
+        raise HTTPException(
+            status_code=400,
+            detail="Report blocked: evidence source validation failed on mobile.",
+        )
+    if getattr(report_data, "evidence_tampering_detected", False) is True:
+        raise HTTPException(
+            status_code=400,
+            detail="Report blocked: evidence tampering/screenshot detected on mobile.",
+        )
+    if getattr(report_data, "location_consistency_check", True) is False:
+        raise HTTPException(
+            status_code=400,
+            detail="Report blocked: location consistency validation failed on mobile.",
+        )
+
     # Verify incident type exists and is active
     incident_type = (
         db.query(IncidentType)
@@ -1643,7 +1672,12 @@ def create_report(
         pass
 
     # Persist AI-generated evidence description for auditing and UI explainability.
-    report.ai_evidence_description = _compose_ai_evidence_description(evidence_validations)
+    report.ai_evidence_description = _compose_ai_evidence_description(
+        evidence_validations,
+        incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
+        reporter_description=report_data.description or report.description,
+        context_tags=list(getattr(report, "context_tags", None) or []),
+    )
 
     # Semantic consistency check (report text vs evidence meaning vs incident type)
     try:
@@ -1731,6 +1765,9 @@ def create_report(
             ml_prediction_label=getattr(ml_prediction_tmp, "prediction_label", None),
             trust_score=float(ml_prediction_tmp.trust_score) if getattr(ml_prediction_tmp, "trust_score", None) is not None else None,
             semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
+            incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
+            reporter_description=report.description,
+            context_tags=list(getattr(report, "context_tags", None) or []),
         )
 
         # Device aggregates (best-effort; doesn't block submission).
@@ -3248,7 +3285,12 @@ async def upload_evidence(
         fv_after = report_after.feature_vector if isinstance(report_after.feature_vector, dict) else {}
         validations_after = fv_after.get("evidence_validations") if isinstance(fv_after.get("evidence_validations"), list) else []
         semantic_after = fv_after.get("semantic_alignment") if isinstance(fv_after.get("semantic_alignment"), dict) else None
-        report_after.ai_evidence_description = _compose_ai_evidence_description(validations_after)
+        report_after.ai_evidence_description = _compose_ai_evidence_description(
+            validations_after,
+            incident_type_name=getattr(getattr(report_after, "incident_type", None), "type_name", None),
+            reporter_description=report_after.description,
+            context_tags=list(getattr(report_after, "context_tags", None) or []),
+        )
         report_after.ai_verification_reason = _compose_ai_verification_reason(
             verification_status=report_after.verification_status,
             rule_status=report_after.rule_status,
@@ -3257,6 +3299,9 @@ async def upload_evidence(
             ml_prediction_label=getattr(ml_prediction, "prediction_label", None) if ml_prediction else None,
             trust_score=float(ml_prediction.trust_score) if ml_prediction and getattr(ml_prediction, "trust_score", None) is not None else None,
             semantic_alignment=semantic_after,
+            incident_type_name=getattr(getattr(report_after, "incident_type", None), "type_name", None),
+            reporter_description=report_after.description,
+            context_tags=list(getattr(report_after, "context_tags", None) or []),
         )
         db.commit()
     

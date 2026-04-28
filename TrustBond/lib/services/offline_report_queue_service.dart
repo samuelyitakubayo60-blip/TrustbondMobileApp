@@ -70,6 +70,11 @@ class OfflineReportQueueService {
     required double? movementSpeed,
     required bool? wasStationary,
     required double? batteryLevel,
+    required String mobileRuleStatus,
+    required Map<String, dynamic> mobileRuleDetails,
+    required bool locationConsistencyCheck,
+    required bool evidenceSourceValid,
+    required bool evidenceTamperingDetected,
   }) async {
     final deviceHash = await _deviceService.getDeviceHash();
     final deviceId = await _deviceService.getDeviceId();
@@ -102,6 +107,11 @@ class OfflineReportQueueService {
       wasStationary: wasStationary,
       contextTags: contextTags,
       mediaItems: mediaItems,
+      mobileRuleStatus: mobileRuleStatus,
+      mobileRuleDetails: mobileRuleDetails,
+      locationConsistencyCheck: locationConsistencyCheck,
+      evidenceSourceValid: evidenceSourceValid,
+      evidenceTamperingDetected: evidenceTamperingDetected,
       state: OfflineReportSyncState.pending,
       retryCount: 0,
       nextRetryAt: null,
@@ -336,6 +346,11 @@ class OfflineReportQueueService {
       'context_tags': item.contextTags,
       'network_type': item.networkTypeAtSubmit,
       'battery_level': item.batteryLevel,
+      'mobile_rule_status': item.mobileRuleStatus,
+      'mobile_rule_details': item.mobileRuleDetails,
+      'location_consistency_check': item.locationConsistencyCheck,
+      'evidence_source_valid': item.evidenceSourceValid,
+      'evidence_tampering_detected': item.evidenceTamperingDetected,
     };
   }
 

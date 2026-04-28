@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 // import 'package:record/record.dart'; // Temporarily disabled
@@ -8,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../config/theme.dart';
 import '../services/device_status_service.dart';
 import '../services/motion_service.dart';
+import '../services/mobile_verification_service.dart';
 import '../services/app_refresh_bus.dart';
 import '../services/offline_report_queue_service.dart';
 import '../widgets/shared_widgets.dart';
@@ -234,6 +236,55 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
     });
 
     try {
+      final verificationService = MobileVerificationService();
+      final evidenceFiles = _files.map((file) => File(file.path)).toList(growable: false);
+      final evidenceMetadata = _files
+          .map((file) => {
+                'mediaLatitude': widget.latitude,
+                'mediaLongitude': widget.longitude,
+                'capturedAt': DateTime.now().toIso8601String(),
+                'isLiveCapture': file.isLive,
+              })
+          .toList(growable: false);
+
+      final mobileVerification = await verificationService.verifyReport(
+        reportLocation: Position(
+          longitude: widget.longitude,
+          latitude: widget.latitude,
+          timestamp: DateTime.now(),
+          accuracy: widget.gpsAccuracy ?? 0,
+          altitude: 0,
+          altitudeAccuracy: 0,
+          heading: 0,
+          headingAccuracy: 0,
+          speed: 0,
+          speedAccuracy: 0,
+        ),
+        evidenceFiles: evidenceFiles,
+        evidenceMetadata: evidenceMetadata,
+      );
+
+      if (mobileVerification.status != 'passed') {
+        String errorMessage = "Cannot submit report: ";
+        if (!mobileVerification.evidenceSourceValid) {
+          errorMessage +=
+              "Evidence appears to be downloaded or not original. Please use original photos/videos taken at the scene.";
+        } else if (mobileVerification.evidenceTamperingDetected) {
+          errorMessage +=
+              "Evidence appears to be a screenshot or screen recording. Please use original photos/videos taken at the scene.";
+        } else if (!mobileVerification.locationConsistencyCheck) {
+          errorMessage +=
+              "Evidence location does not match report location. Please ensure evidence was taken at the reported location.";
+        } else {
+          errorMessage += "Mobile verification did not pass. Please review evidence and try again.";
+        }
+        setState(() {
+          _error = errorMessage;
+          _submitting = false;
+        });
+        return;
+      }
+
       MotionSample motion;
       try {
         motion = await collectMotionSample().timeout(const Duration(milliseconds: 800));
@@ -253,13 +304,18 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
         latitude: widget.latitude,
         longitude: widget.longitude,
         gpsAccuracy: widget.gpsAccuracy,
-        evidenceFiles: _files.map((file) => File(file.path)).toList(growable: false),
+        evidenceFiles: evidenceFiles,
         isLiveCapture: _files.map((file) => file.isLive).toList(growable: false),
         contextTags: widget.tags,
         motionLevel: motion.motionLevel,
         movementSpeed: motion.movementSpeed,
         wasStationary: motion.wasStationary,
         batteryLevel: batteryLevel,
+        mobileRuleStatus: mobileVerification.status,
+        mobileRuleDetails: mobileVerification.details,
+        locationConsistencyCheck: mobileVerification.locationConsistencyCheck,
+        evidenceSourceValid: mobileVerification.evidenceSourceValid,
+        evidenceTamperingDetected: mobileVerification.evidenceTamperingDetected,
       );
 
       AppRefreshBus.notify('report_submitted');

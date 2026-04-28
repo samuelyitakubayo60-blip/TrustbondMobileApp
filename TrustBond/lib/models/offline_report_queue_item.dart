@@ -52,6 +52,11 @@ class OfflineReportQueueItem {
   final bool? wasStationary;
   final List<String> contextTags;
   final List<OfflineReportMediaItem> mediaItems;
+  final String mobileRuleStatus;
+  final Map<String, dynamic> mobileRuleDetails;
+  final bool locationConsistencyCheck;
+  final bool evidenceSourceValid;
+  final bool evidenceTamperingDetected;
   final OfflineReportSyncState state;
   final int retryCount;
   final String? nextRetryAt;
@@ -75,6 +80,11 @@ class OfflineReportQueueItem {
     required this.wasStationary,
     required this.contextTags,
     required this.mediaItems,
+    required this.mobileRuleStatus,
+    required this.mobileRuleDetails,
+    required this.locationConsistencyCheck,
+    required this.evidenceSourceValid,
+    required this.evidenceTamperingDetected,
     required this.state,
     required this.retryCount,
     required this.nextRetryAt,
@@ -107,6 +117,13 @@ class OfflineReportQueueItem {
                 Map<String, dynamic>.from(item),
               ))
           .toList(growable: false),
+      mobileRuleStatus: json['mobile_rule_status'] as String? ?? 'passed',
+      mobileRuleDetails: json['mobile_rule_details'] is Map
+          ? Map<String, dynamic>.from(json['mobile_rule_details'] as Map)
+          : <String, dynamic>{},
+      locationConsistencyCheck: json['location_consistency_check'] as bool? ?? true,
+      evidenceSourceValid: json['evidence_source_valid'] as bool? ?? true,
+      evidenceTamperingDetected: json['evidence_tampering_detected'] as bool? ?? false,
       state: _stateFromJson(json['state'] as String?),
       retryCount: json['retry_count'] as int? ?? 0,
       nextRetryAt: json['next_retry_at'] as String?,
@@ -146,6 +163,11 @@ class OfflineReportQueueItem {
       'was_stationary': wasStationary,
       'context_tags': contextTags,
       'media_items': mediaItems.map((item) => item.toJson()).toList(growable: false),
+      'mobile_rule_status': mobileRuleStatus,
+      'mobile_rule_details': mobileRuleDetails,
+      'location_consistency_check': locationConsistencyCheck,
+      'evidence_source_valid': evidenceSourceValid,
+      'evidence_tampering_detected': evidenceTamperingDetected,
       'state': state.name,
       'retry_count': retryCount,
       'next_retry_at': nextRetryAt,
@@ -178,6 +200,11 @@ class OfflineReportQueueItem {
       wasStationary: wasStationary,
       contextTags: contextTags,
       mediaItems: mediaItems,
+      mobileRuleStatus: mobileRuleStatus,
+      mobileRuleDetails: mobileRuleDetails,
+      locationConsistencyCheck: locationConsistencyCheck,
+      evidenceSourceValid: evidenceSourceValid,
+      evidenceTamperingDetected: evidenceTamperingDetected,
       state: state ?? this.state,
       retryCount: retryCount ?? this.retryCount,
       nextRetryAt: identical(nextRetryAt, _unset)
