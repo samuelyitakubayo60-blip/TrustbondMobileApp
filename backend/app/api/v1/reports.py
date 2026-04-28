@@ -2353,8 +2353,19 @@ def list_reports(
                 or_(Report.flag_reason.is_(None), ~Report.flag_reason.like("out_of_musanze_boundary%"))
             )
 
-        reports = mobile_query.order_by(Report.reported_at.desc()).all()
-        return [_build_report_response(r, db, request_device_id=device_id) for r in reports]
+        total = mobile_query.count()
+        reports = (
+            mobile_query.order_by(Report.reported_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return ReportListResponse(
+            items=[_build_report_response(r, db, request_device_id=device_id) for r in reports],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
     
     if current_user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
