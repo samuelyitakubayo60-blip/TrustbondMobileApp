@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     # Optional semantic description matcher (disabled by default to avoid model downloads/runtime overhead).
     enable_semantic_match: bool = False
 
+    # Optional LLM narrative generation for human-like AI explanations.
+    llm_narrative_enabled: bool = True
+    llm_api_key: Optional[str] = None
+    llm_base_url: Optional[str] = None
+    llm_model: str = "gpt-4o-mini"
+    llm_timeout_seconds: int = 12
+    llm_max_tokens: int = 420
+
     # Device anti-abuse guardrails for report creation.
     duplicate_report_time_window_seconds: int = 120
     duplicate_report_radius_meters: int = 250

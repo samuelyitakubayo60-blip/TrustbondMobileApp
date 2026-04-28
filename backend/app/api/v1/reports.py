@@ -9,6 +9,7 @@ import io
 import os
 import math
 import hashlib
+from pathlib import Path
 
 import cloudinary
 import cloudinary.uploader
@@ -75,6 +76,11 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 logger = logging.getLogger(__name__)
 _SEMANTIC_MODEL = None
 _SEMANTIC_MODEL_UNAVAILABLE = False
+_LLM_CLIENT = None
+_LLM_UNAVAILABLE = False
+_SEMANTIC_MODEL_CACHE_DIR = (
+    Path(__file__).resolve().parents[3] / "models" / "sentence_transformers"
+)
 
 
 def _get_semantic_matcher():
@@ -86,12 +92,112 @@ def _get_semantic_matcher():
         return None
     try:
         from sentence_transformers import SentenceTransformer
-        _SEMANTIC_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+        _SEMANTIC_MODEL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        _SEMANTIC_MODEL = SentenceTransformer(
+            "all-MiniLM-L6-v2",
+            cache_folder=str(_SEMANTIC_MODEL_CACHE_DIR),
+        )
         return _SEMANTIC_MODEL
     except Exception as exc:
         logger.warning("Semantic model unavailable for evidence matching: %s", exc)
         _SEMANTIC_MODEL_UNAVAILABLE = True
         return None
+
+
+def _get_llm_client():
+    """Lazy-load LLM client for natural-language narration."""
+    global _LLM_CLIENT, _LLM_UNAVAILABLE
+    if _LLM_CLIENT is not None:
+        return _LLM_CLIENT
+    if _LLM_UNAVAILABLE or not settings.llm_narrative_enabled:
+        return None
+    if not settings.llm_api_key:
+        _LLM_UNAVAILABLE = True
+        logger.info("LLM narrative generation disabled: no llm_api_key configured")
+        return None
+    try:
+        from openai import OpenAI
+        kwargs = {"api_key": settings.llm_api_key}
+        if settings.llm_base_url:
+            kwargs["base_url"] = settings.llm_base_url
+        _LLM_CLIENT = OpenAI(**kwargs)
+        return _LLM_CLIENT
+    except Exception as exc:
+        logger.warning("LLM client unavailable: %s", exc)
+        _LLM_UNAVAILABLE = True
+        return None
+
+
+def _naturalize_ai_text(
+    *,
+    text_kind: str,
+    structured_text: str,
+    must_include: Optional[List[str]] = None,
+) -> str:
+    """Rewrite structured AI text into natural, human-like narration."""
+    client = _get_llm_client()
+    fallback = (structured_text or "").strip()
+    if client is None or not fallback:
+        return fallback
+    include_lines = "\n".join(f"- {x}" for x in (must_include or []) if str(x).strip())
+    prompt = (
+        f"Rewrite this {text_kind} summary into natural, clear human language.\n"
+        "Keep all facts unchanged. Do not invent details. Keep causal reasoning explicit.\n"
+        "If there are decision drivers, explain why each driver affected the outcome.\n"
+        "Return plain text only.\n\n"
+        "Facts that must remain present:\n"
+        f"{include_lines if include_lines else '- Preserve all key facts from input'}\n\n"
+        "INPUT:\n"
+        f"{fallback}"
+    )
+    try:
+        response = client.chat.completions.create(
+            model=settings.llm_model,
+            messages=[
+                {"role": "system", "content": "You write concise, professional incident-analysis explanations."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+            max_tokens=settings.llm_max_tokens,
+            timeout=settings.llm_timeout_seconds,
+        )
+        content = ((response.choices or [None])[0].message.content or "").strip() if response else ""
+        if content:
+            return content[:3000]
+    except Exception as exc:
+        logger.warning("LLM narrative generation failed (%s): %s", text_kind, exc)
+    return fallback
+
+
+def warmup_narrative_models_on_startup() -> None:
+    """
+    Warm-up narrative components on startup (YOLO-like operational behavior).
+    - Initializes semantic matcher if enabled.
+    - Initializes LLM client and performs a minimal readiness call.
+    """
+    try:
+        if settings.enable_semantic_match:
+            _get_semantic_matcher()
+            logger.info("Semantic matcher warm-up complete")
+    except Exception as exc:
+        logger.warning("Semantic matcher warm-up failed: %s", exc)
+
+    try:
+        client = _get_llm_client()
+        if client is None:
+            logger.info("LLM narrative warm-up skipped (client unavailable)")
+            return
+        # Minimal readiness ping to force connection/auth/model validation at startup.
+        client.chat.completions.create(
+            model=settings.llm_model,
+            messages=[{"role": "user", "content": "ok"}],
+            temperature=0,
+            max_tokens=4,
+            timeout=settings.llm_timeout_seconds,
+        )
+        logger.info("LLM narrative warm-up complete")
+    except Exception as exc:
+        logger.warning("LLM narrative warm-up failed: %s", exc)
 
 
 def _build_evidence_semantic_text(evidence_validations: List[Dict[str, Any]]) -> str:
@@ -212,7 +318,12 @@ def _compose_ai_evidence_description(
                 parts.append(f"Reporter states: {desc_excerpt}.")
             if tags_text:
                 parts.append(f"Context tags: {tags_text}.")
-            return " ".join(parts)[:2000]
+            fallback_text = " ".join(parts)[:2000]
+            return _naturalize_ai_text(
+                text_kind="evidence summary",
+                structured_text=fallback_text,
+                must_include=[incident_label, desc_excerpt, tags_text or "", media_text],
+            )
         parts = [
             f"Report context: {incident_label}.",
             "No evidence files uploaded; verification relies on reporter description and metadata checks.",
@@ -221,7 +332,12 @@ def _compose_ai_evidence_description(
             parts.append(f"Reporter states: {desc_excerpt}.")
         if tags_text:
             parts.append(f"Context tags: {tags_text}.")
-        return " ".join(parts)[:2000]
+        fallback_text = " ".join(parts)[:2000]
+        return _naturalize_ai_text(
+            text_kind="evidence summary",
+            structured_text=fallback_text,
+            must_include=[incident_label, desc_excerpt, tags_text or "no context tags"],
+        )
 
     media_types: List[str] = []
     object_counter: Dict[str, int] = {}
@@ -266,7 +382,12 @@ def _compose_ai_evidence_description(
         parts.append(f"Reporter states: {desc_excerpt}.")
     if tags_text:
         parts.append(f"Context tags: {tags_text}.")
-    return " ".join(parts)[:2000]
+    fallback_text = " ".join(parts)[:2000]
+    return _naturalize_ai_text(
+        text_kind="evidence summary",
+        structured_text=fallback_text,
+        must_include=[incident_label, object_text, media_text, desc_excerpt],
+    )
 
 
 def _compose_ai_verification_reason(
@@ -515,8 +636,19 @@ def _compose_ai_verification_reason(
         parts.append(f"Decision patterns: {', '.join(pattern_codes)}.")
     if pattern_explanations:
         parts.append(f"Pattern explanations: {'; '.join(pattern_explanations)}.")
-
-    return " ".join(parts)[:3000]
+    fallback_text = " ".join(parts)[:3000]
+    return _naturalize_ai_text(
+        text_kind="verification reason",
+        structured_text=fallback_text,
+        must_include=[
+            f"verification status: {status}",
+            f"incident: {incident_label}",
+            f"rule_status: {rule_status or 'unknown'}",
+            f"flag_reason: {flag_reason or 'none'}",
+            f"ml_label: {ml_prediction_label or 'none'}",
+            f"decision_patterns: {', '.join(pattern_codes) if pattern_codes else 'none'}",
+        ],
+    )
 
 
 def _extract_decision_patterns(ai_verification_reason: Optional[str]) -> List[str]:

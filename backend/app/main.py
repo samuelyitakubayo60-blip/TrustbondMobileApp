@@ -49,6 +49,13 @@ async def lifespan(app: FastAPI):
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
         conn.commit()
     
+    # Warm-up AI narrative/semantic components on startup (best-effort).
+    try:
+        from app.api.v1.reports import warmup_narrative_models_on_startup
+        warmup_narrative_models_on_startup()
+    except Exception:
+        pass
+
     # Process existing pending reports through AI on startup
     import asyncio
     import logging
