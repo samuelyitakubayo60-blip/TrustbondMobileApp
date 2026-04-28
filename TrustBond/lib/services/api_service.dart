@@ -84,7 +84,8 @@ class ApiService {
     try {
       final response = await _client.get(uri, headers: _getHeaders).timeout(_timeout);
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as List<dynamic>;
+        final responseData = jsonDecode(response.body) as Map<String, dynamic>;
+        final data = responseData['items'] as List<dynamic>;
         await _saveCache(cacheKey, data);
         await _cacheReportDetailStubs(deviceId, data);
         return data;
