@@ -37,6 +37,10 @@ class ReportListItem {
 
   final String? flagReason;
 
+  final String? aiEvidenceDescription;
+
+  final String? aiVerificationReason;
+
   final DateTime? verifiedAt;
 
 
@@ -75,6 +79,10 @@ class ReportListItem {
 
     this.flagReason,
 
+    this.aiEvidenceDescription,
+
+    this.aiVerificationReason,
+
     this.verifiedAt,
 
   });
@@ -102,6 +110,8 @@ class ReportListItem {
         contextTags: tags is List ? tags.map((e) => e.toString()).toList() : [],
         isFlagged: json['is_flagged'] as bool?,
         flagReason: json['flag_reason'] as String?,
+        aiEvidenceDescription: json['ai_evidence_description'] as String?,
+        aiVerificationReason: json['ai_verification_reason'] as String?,
         verifiedAt: json['verified_at'] != null ? parseApiDateTimeToLocal(json['verified_at'] as String) : null,
       );
     } catch (e) {
@@ -226,6 +236,10 @@ class ReportDetailItem {
 
   final String? flagReason;
 
+  final String? aiEvidenceDescription;
+
+  final String? aiVerificationReason;
+
   final DateTime? verifiedAt;
 
   final Map<String, int> communityVotes;
@@ -269,6 +283,10 @@ class ReportDetailItem {
     this.isFlagged,
 
     this.flagReason,
+
+    this.aiEvidenceDescription,
+
+    this.aiVerificationReason,
 
     this.verifiedAt,
 
@@ -332,6 +350,10 @@ class ReportDetailItem {
       isFlagged: json['is_flagged'] as bool?,
 
       flagReason: json['flag_reason'] as String?,
+
+      aiEvidenceDescription: json['ai_evidence_description'] as String?,
+
+      aiVerificationReason: json['ai_verification_reason'] as String?,
 
       verifiedAt: json['verified_at'] != null ? parseApiDateTimeToLocal(json['verified_at'] as String) : null,
 

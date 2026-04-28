@@ -164,6 +164,7 @@ class ReportItemCard extends StatelessWidget {
   final bool showDeliveryIndicator;
   final VoidCallback? onRetryTap;
   final bool showRetryLink;
+  final String? aiSnippet;
 
   const ReportItemCard({
     super.key,
@@ -181,6 +182,7 @@ class ReportItemCard extends StatelessWidget {
     this.showDeliveryIndicator = false,
     this.onRetryTap,
     this.showRetryLink = false,
+    this.aiSnippet,
   });
 
   @override
@@ -241,6 +243,29 @@ class ReportItemCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12, color: AppColors.muted),
                   ),
+                  if (aiSnippet != null && aiSnippet!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.smart_toy_outlined,
+                            size: 12, color: AppColors.accent2),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            aiSnippet!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.accent2,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 7),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

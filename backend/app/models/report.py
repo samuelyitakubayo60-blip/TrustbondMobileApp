@@ -28,6 +28,8 @@ class Report(Base):
     rule_status = Column(String(20), default="pending")  # passed, flagged, rejected (rule engine)
     is_flagged = Column(Boolean, default=False)
     flag_reason = Column(Text)  # set when is_flagged or when police flags
+    ai_evidence_description = Column(Text)  # AI-generated human-readable evidence summary
+    ai_verification_reason = Column(Text)  # Why AI verified/flagged/rejected the report
     priority = Column(String(20), default="medium")  # low, medium, high, urgent - auto-calculated
     # verification_status enum: pending, under_review, verified, rejected
     verification_status = Column(String(20), default="pending")

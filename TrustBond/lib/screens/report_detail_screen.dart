@@ -92,6 +92,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               const SizedBox(height: 14),
               _buildInfoCard(r),
               const SizedBox(height: 14),
+              if ((r.aiVerificationReason ?? '').trim().isNotEmpty ||
+                  (r.aiEvidenceDescription ?? '').trim().isNotEmpty) ...[
+                _buildAiAnalysisCard(r),
+                const SizedBox(height: 14),
+              ],
               _buildDescCard(r),
               const SizedBox(height: 14),
               _buildLocationCard(r),
@@ -242,6 +247,42 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         r.description ?? 'No description provided',
         style: const TextStyle(fontSize: 13, color: AppColors.text, height: 1.5),
       ),
+    ]);
+  }
+
+  Widget _buildAiAnalysisCard(ReportDetailItem r) {
+    final aiReason = (r.aiVerificationReason ?? '').trim();
+    final aiSummary = (r.aiEvidenceDescription ?? '').trim();
+
+    return _card([
+      const Row(
+        children: [
+          Text('🤖', style: TextStyle(fontSize: 14)),
+          SizedBox(width: 6),
+          Text('AI Analysis',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        ],
+      ),
+      const SizedBox(height: 10),
+      if (aiReason.isNotEmpty) ...[
+        const Text('AI Decision Reason',
+            style: TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text(
+          aiReason,
+          style: const TextStyle(fontSize: 12, color: AppColors.text, height: 1.45),
+        ),
+      ],
+      if (aiReason.isNotEmpty && aiSummary.isNotEmpty) const SizedBox(height: 10),
+      if (aiSummary.isNotEmpty) ...[
+        const Text('AI Evidence Summary',
+            style: TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text(
+          aiSummary,
+          style: const TextStyle(fontSize: 12, color: AppColors.text, height: 1.45),
+        ),
+      ],
     ]);
   }
 
@@ -756,12 +797,17 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         longitude: r.longitude,
         reportedAt: r.reportedAt,
         ruleStatus: r.ruleStatus,
+        status: r.status,
+        verificationStatus: r.verificationStatus,
         evidenceFiles: r.evidenceFiles,
         trustScore: r.trustScore,
         reportNumber: r.reportNumber,
         contextTags: r.contextTags,
         isFlagged: r.isFlagged,
         flagReason: r.flagReason,
+        aiEvidenceDescription: r.aiEvidenceDescription,
+        aiVerificationReason: r.aiVerificationReason,
+        verifiedAt: r.verifiedAt,
         communityVotes: currentVotes,
         userVote: vote,
       );

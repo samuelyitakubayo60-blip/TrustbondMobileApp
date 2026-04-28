@@ -944,6 +944,34 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 {friendlyFlagReason(report.flag_reason)}
               </div>
             )}
+            {(report.ai_verification_reason || report.ai_evidence_description) && (
+              <div
+                style={{
+                  margin: "0 14px 12px",
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  background: "rgba(33, 150, 243, 0.10)",
+                  border: "1px solid rgba(33, 150, 243, 0.30)",
+                  color: "var(--text)",
+                  fontSize: 12,
+                  display: "grid",
+                  gap: 8,
+                }}
+              >
+                {report.ai_verification_reason && (
+                  <div>
+                    <strong>AI Decision Reason:</strong>{" "}
+                    <span>{report.ai_verification_reason}</span>
+                  </div>
+                )}
+                {report.ai_evidence_description && (
+                  <div>
+                    <strong>AI Evidence Summary:</strong>{" "}
+                    <span>{report.ai_evidence_description}</span>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="detail-grid">
               <div className="detail-field">
                 <div className="dfl">Incident Type</div>

@@ -86,6 +86,8 @@ class ReportResponse(BaseModel):
     hotspot_label: Optional[str] = None
     is_flagged: Optional[bool] = None
     flag_reason: Optional[str] = None
+    ai_evidence_description: Optional[str] = None
+    ai_verification_reason: Optional[str] = None
     verified_at: Optional[datetime] = None
     context_tags: list[str] = []
     app_version: Optional[str] = None

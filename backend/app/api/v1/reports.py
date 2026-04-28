@@ -73,6 +73,247 @@ from sqlalchemy.exc import IntegrityError
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 logger = logging.getLogger(__name__)
+_SEMANTIC_MODEL = None
+_SEMANTIC_MODEL_UNAVAILABLE = False
+
+
+def _get_semantic_matcher():
+    """Lazy-load sentence transformer for evidence/description semantic checks."""
+    global _SEMANTIC_MODEL, _SEMANTIC_MODEL_UNAVAILABLE
+    if _SEMANTIC_MODEL is not None:
+        return _SEMANTIC_MODEL
+    if _SEMANTIC_MODEL_UNAVAILABLE:
+        return None
+    try:
+        from sentence_transformers import SentenceTransformer
+        _SEMANTIC_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+        return _SEMANTIC_MODEL
+    except Exception as exc:
+        logger.warning("Semantic model unavailable for evidence matching: %s", exc)
+        _SEMANTIC_MODEL_UNAVAILABLE = True
+        return None
+
+
+def _build_evidence_semantic_text(evidence_validations: List[Dict[str, Any]]) -> str:
+    """Create a compact semantic description from evidence validation outputs."""
+    fragments: List[str] = []
+    for item in evidence_validations or []:
+        validation = (item or {}).get("validation") or {}
+        summary = validation.get("analysis_summary") or {}
+        advanced = validation.get("advanced_analysis") or {}
+
+        objects = summary.get("detected_objects") or []
+        if isinstance(objects, list) and objects:
+            fragments.append("objects: " + ", ".join(str(o) for o in objects[:10]))
+
+        extracted_text = summary.get("extracted_text")
+        if isinstance(extracted_text, str) and extracted_text.strip():
+            fragments.append("text: " + extracted_text.strip()[:300])
+
+        actions = advanced.get("actions_detected") or []
+        if isinstance(actions, list) and actions:
+            fragments.append("actions: " + ", ".join(str(a) for a in actions[:8]))
+
+        scene_context = advanced.get("scene_context") or {}
+        lighting = scene_context.get("lighting")
+        weather = scene_context.get("weather")
+        indoor = scene_context.get("is_indoor")
+        scene_bits = []
+        if isinstance(indoor, bool):
+            scene_bits.append("indoor" if indoor else "outdoor")
+        if lighting:
+            scene_bits.append(str(lighting))
+        if weather:
+            scene_bits.append(str(weather))
+        if scene_bits:
+            fragments.append("scene: " + ", ".join(scene_bits))
+
+        media_type = summary.get("media_type")
+        if media_type:
+            fragments.append(f"media_type: {media_type}")
+
+    return " | ".join(fragments)[:2000]
+
+
+def _semantic_alignment_check(
+    *,
+    report_description: str,
+    incident_type_name: str,
+    incident_type_description: str,
+    evidence_semantic_text: str,
+) -> Optional[Dict[str, Any]]:
+    """Compare reporter description against evidence semantics and incident semantics."""
+    model = _get_semantic_matcher()
+    if model is None:
+        return None
+
+    desc = (report_description or "").strip()
+    evidence = (evidence_semantic_text or "").strip()
+    if len(desc) < 10 or len(evidence) < 10:
+        return None
+
+    incident_text = f"{(incident_type_name or '').strip()}: {(incident_type_description or '').strip()}".strip(": ").strip()
+    try:
+        from sentence_transformers import util
+        emb = model.encode([desc, evidence, incident_text], convert_to_tensor=True, normalize_embeddings=True)
+        desc_evidence = float(util.cos_sim(emb[0], emb[1]).item())
+        incident_evidence = float(util.cos_sim(emb[2], emb[1]).item()) if incident_text else 0.0
+        desc_incident = float(util.cos_sim(emb[0], emb[2]).item()) if incident_text else 0.0
+    except Exception as exc:
+        logger.warning("Semantic alignment check failed: %s", exc)
+        return None
+
+    # Conservative mismatch rule to avoid over-rejecting valid reports.
+    mismatch = (
+        desc_evidence < 0.32
+        and incident_evidence < 0.34
+        and desc_incident < 0.38
+    )
+    return {
+        "model": "all-MiniLM-L6-v2",
+        "description_evidence_similarity": round(desc_evidence, 4),
+        "incident_evidence_similarity": round(incident_evidence, 4),
+        "description_incident_similarity": round(desc_incident, 4),
+        "mismatch": bool(mismatch),
+    }
+
+
+def _compose_ai_evidence_description(
+    evidence_validations: List[Dict[str, Any]],
+    *,
+    incident_type_name: Optional[str] = None,
+    reporter_description: Optional[str] = None,
+    context_tags: Optional[List[str]] = None,
+) -> str:
+    """Generate a short, human-readable AI summary of uploaded evidence + report context."""
+    incident_label = (incident_type_name or "incident").strip() or "incident"
+    desc_excerpt = (reporter_description or "").strip()
+    desc_excerpt = " ".join(desc_excerpt.split())
+    if len(desc_excerpt) > 180:
+        desc_excerpt = f"{desc_excerpt[:177]}..."
+    tags = [str(t).strip() for t in (context_tags or []) if str(t).strip()]
+    tags_text = ", ".join(tags[:6]) if tags else None
+
+    if not evidence_validations:
+        parts = [
+            f"Report context: {incident_label}.",
+            "No evidence files uploaded; verification relies on reporter description and metadata checks.",
+        ]
+        if desc_excerpt:
+            parts.append(f"Reporter states: {desc_excerpt}.")
+        if tags_text:
+            parts.append(f"Context tags: {tags_text}.")
+        return " ".join(parts)[:2000]
+
+    media_types: List[str] = []
+    object_counter: Dict[str, int] = {}
+    quality_scores: List[float] = []
+
+    for item in evidence_validations:
+        validation = (item or {}).get("validation") or {}
+        summary = validation.get("analysis_summary") or {}
+        advanced = validation.get("advanced_analysis") or {}
+
+        media_type = summary.get("media_type") or advanced.get("media_type")
+        if isinstance(media_type, str) and media_type.strip():
+            media_types.append(media_type.strip())
+
+        for obj in summary.get("detected_objects") or []:
+            key = str(obj).strip().lower()
+            if key:
+                object_counter[key] = object_counter.get(key, 0) + 1
+
+        quality = summary.get("quality_score")
+        try:
+            if quality is not None:
+                quality_scores.append(float(quality))
+        except Exception:
+            pass
+
+    top_objects = sorted(object_counter.items(), key=lambda x: x[1], reverse=True)[:5]
+    object_text = ", ".join(obj for obj, _ in top_objects) if top_objects else "no clear objects"
+    avg_quality = (sum(quality_scores) / len(quality_scores)) if quality_scores else None
+    media_text = ", ".join(sorted(set(media_types))) if media_types else "photo/video/audio"
+
+    quality_text = ""
+    if avg_quality is not None:
+        quality_text = f" Average evidence quality score is {avg_quality:.2f}."
+
+    parts = [
+        f"Report context: {incident_label}.",
+        f"AI analyzed {len(evidence_validations)} evidence file(s) ({media_text}).",
+        f"Most visible evidence cues: {object_text}.{quality_text}".strip(),
+    ]
+    if desc_excerpt:
+        parts.append(f"Reporter states: {desc_excerpt}.")
+    if tags_text:
+        parts.append(f"Context tags: {tags_text}.")
+    return " ".join(parts)[:2000]
+
+
+def _compose_ai_verification_reason(
+    *,
+    verification_status: Optional[str],
+    rule_status: Optional[str],
+    is_flagged: Optional[bool],
+    flag_reason: Optional[str],
+    ml_prediction_label: Optional[str],
+    trust_score: Optional[float],
+    semantic_alignment: Optional[Dict[str, Any]],
+    incident_type_name: Optional[str] = None,
+    reporter_description: Optional[str] = None,
+    context_tags: Optional[List[str]] = None,
+) -> str:
+    """Generate an audit-friendly reason for AI confirmation/flag/rejection."""
+    status = (verification_status or "pending").lower()
+    parts: List[str] = []
+    incident_label = (incident_type_name or "incident").strip() or "incident"
+    desc_excerpt = (reporter_description or "").strip()
+    desc_excerpt = " ".join(desc_excerpt.split())
+    if len(desc_excerpt) > 180:
+        desc_excerpt = f"{desc_excerpt[:177]}..."
+    tags = [str(t).strip() for t in (context_tags or []) if str(t).strip()]
+    tags_text = ", ".join(tags[:6]) if tags else None
+
+    if status == "verified":
+        parts.append("AI verification result: confirmed as valid.")
+    elif status == "rejected":
+        parts.append("AI verification result: rejected.")
+    elif status == "under_review":
+        parts.append("AI verification result: pending human review after ML/rule analysis.")
+    else:
+        parts.append("AI verification result: pending.")
+
+    parts.append(f"Incident type considered: {incident_label}.")
+    if desc_excerpt:
+        parts.append(f"Reporter description considered: {desc_excerpt}.")
+    if tags_text:
+        parts.append(f"Context tags considered: {tags_text}.")
+
+    if rule_status:
+        parts.append(f"Rule status: {rule_status}.")
+    if is_flagged:
+        parts.append("Report is flagged.")
+    if flag_reason:
+        parts.append(f"Primary reason: {flag_reason}.")
+    if ml_prediction_label:
+        if trust_score is not None:
+            parts.append(f"ML label: {ml_prediction_label} (trust {trust_score:.2f}%).")
+        else:
+            parts.append(f"ML label: {ml_prediction_label}.")
+
+    if semantic_alignment:
+        de = semantic_alignment.get("description_evidence_similarity")
+        ie = semantic_alignment.get("incident_evidence_similarity")
+        mismatch = semantic_alignment.get("mismatch")
+        if de is not None and ie is not None:
+            parts.append(
+                f"Semantic similarity (description-evidence={de}, incident-evidence={ie})."
+            )
+        if mismatch is True:
+            parts.append("Semantic mismatch detected.")
+
+    return " ".join(parts)[:3000]
 
 def _process_report_background(
     report_id: str,
@@ -1401,6 +1642,37 @@ def create_report(
     except Exception:
         pass
 
+    # Persist AI-generated evidence description for auditing and UI explainability.
+    report.ai_evidence_description = _compose_ai_evidence_description(evidence_validations)
+
+    # Semantic consistency check (report text vs evidence meaning vs incident type)
+    try:
+        if evidence_validations:
+            incident_type_row = (
+                db.query(IncidentType)
+                .filter(IncidentType.incident_type_id == report.incident_type_id)
+                .first()
+            )
+            semantic_result = _semantic_alignment_check(
+                report_description=report_data.description or "",
+                incident_type_name=getattr(incident_type_row, "type_name", "") or "",
+                incident_type_description=getattr(incident_type_row, "description", "") or "",
+                evidence_semantic_text=_build_evidence_semantic_text(evidence_validations),
+            )
+            if semantic_result:
+                fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+                fv["semantic_alignment"] = semantic_result
+                report.feature_vector = _json_safe(fv)
+
+                if semantic_result.get("mismatch") and not out_of_boundary and report.rule_status != "rejected":
+                    report.rule_status = "flagged"
+                    report.is_flagged = True
+                    report.verification_status = "under_review"
+                    if not report.flag_reason:
+                        report.flag_reason = "description_evidence_mismatch"
+    except Exception as e:
+        logger.warning(f"Semantic consistency check failed for report {report.report_id}: {e}")
+
     # If any evidence validation clearly fails, flag the report (do not hard-reject by default)
     try:
         failed = []
@@ -1448,6 +1720,18 @@ def create_report(
                 report.flag_reason = flag_reason
 
         report.priority = calculate_report_priority(report, ml_prediction_tmp, evidence_count, db)
+        semantic_alignment_meta = None
+        if isinstance(report.feature_vector, dict):
+            semantic_alignment_meta = report.feature_vector.get("semantic_alignment")
+        report.ai_verification_reason = _compose_ai_verification_reason(
+            verification_status=report.verification_status,
+            rule_status=report.rule_status,
+            is_flagged=report.is_flagged,
+            flag_reason=report.flag_reason,
+            ml_prediction_label=getattr(ml_prediction_tmp, "prediction_label", None),
+            trust_score=float(ml_prediction_tmp.trust_score) if getattr(ml_prediction_tmp, "trust_score", None) is not None else None,
+            semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
+        )
 
         # Device aggregates (best-effort; doesn't block submission).
         try:
@@ -1518,6 +1802,8 @@ def create_report(
         context_tags=context_tags_list,
         is_flagged=getattr(report, "is_flagged", None),
         flag_reason=getattr(report, "flag_reason", None),
+        ai_evidence_description=getattr(report, "ai_evidence_description", None),
+        ai_verification_reason=getattr(report, "ai_verification_reason", None),
         incident_latitude=float(incident_lat) if incident_lat is not None else None,
         incident_longitude=float(incident_lon) if incident_lon is not None else None,
         incident_location_source=incident_source,
@@ -1912,6 +2198,11 @@ def add_review(
         # Update trusted_reports count
         if hasattr(report.device, "trusted_reports"):
             report.device.trusted_reports = (report.device.trusted_reports or 0) + 1
+        report.ai_verification_reason = (
+            body.review_note.strip()
+            if body.review_note and body.review_note.strip()
+            else "Confirmed by police reviewer. AI and human review agree this report is valid."
+        )
         
     elif decision == "rejected":
         # Police rejected report - update ML to learn from this
@@ -1974,6 +2265,11 @@ def add_review(
         # Update flagged_reports count
         if hasattr(report.device, "flagged_reports"):
             report.device.flagged_reports = (report.device.flagged_reports or 0) + 1
+        report.ai_verification_reason = (
+            body.review_note.strip()
+            if body.review_note and body.review_note.strip()
+            else "Rejected by police reviewer after verification checks."
+        )
         
     else:
         # Human review for flagged reports - police can make final decisions
@@ -1981,6 +2277,11 @@ def add_review(
         report.status = "verified"
         report.is_flagged = False
         report.flag_reason = None
+        report.ai_verification_reason = (
+            body.review_note.strip()
+            if body.review_note and body.review_note.strip()
+            else "Verified after manual police review."
+        )
         if body.review_note:
             print(f" POLICE VERIFIED: Report {report_id} manually verified - {body.review_note}")
         else:
@@ -2821,6 +3122,74 @@ async def upload_evidence(
     # Re-run AI-enhanced rule-based verification (evidence count changed)
     report_after = db.query(Report).filter(Report.report_id == report.report_id).first()
     if report_after:
+        # Validate newly uploaded evidence and persist semantic audit fields.
+        try:
+            current_validations: List[Dict[str, Any]] = []
+            fv_existing = report_after.feature_vector if isinstance(report_after.feature_vector, dict) else {}
+            if isinstance(fv_existing.get("evidence_validations"), list):
+                current_validations = list(fv_existing.get("evidence_validations") or [])
+
+            semantic_validation = None
+            if file_type == "photo":
+                analyzed = evidence_analysis_service.analyze_image_from_url(file_url)
+                semantic_validation = evidence_analysis_service.validate_incident_evidence(
+                    incident_type_id=report_after.incident_type_id,
+                    description=report_after.description or "",
+                    analysis=analyzed,
+                    media_type="photo",
+                )
+            elif file_type == "video":
+                analyzed = evidence_analysis_service.analyze_video_from_url(file_url, sample_frames=5)
+                semantic_validation = evidence_analysis_service.validate_incident_evidence(
+                    incident_type_id=report_after.incident_type_id,
+                    description=report_after.description or "",
+                    analysis=analyzed,
+                    media_type="video",
+                )
+            elif file_type == "audio":
+                audio_analysis = evidence_analysis_service.analyze_audio_from_url(file_url)
+                semantic_validation = {
+                    "valid": not bool(audio_analysis.get("issues")),
+                    "confidence": 1.0 if not audio_analysis.get("issues") else 0.3,
+                    "threshold_used": 0.6,
+                    "issues": audio_analysis.get("issues", []),
+                    "warnings": [],
+                    "advanced_analysis": {"audio": audio_analysis},
+                    "analysis_summary": {"media_type": "audio"},
+                }
+
+            if semantic_validation:
+                current_validations.append({
+                    "evidence_url": file_url,
+                    "validation": semantic_validation,
+                })
+
+                incident_type_row = (
+                    db.query(IncidentType)
+                    .filter(IncidentType.incident_type_id == report_after.incident_type_id)
+                    .first()
+                )
+                semantic_alignment = _semantic_alignment_check(
+                    report_description=report_after.description or "",
+                    incident_type_name=getattr(incident_type_row, "type_name", "") or "",
+                    incident_type_description=getattr(incident_type_row, "description", "") or "",
+                    evidence_semantic_text=_build_evidence_semantic_text(current_validations),
+                )
+
+                fv_update = report_after.feature_vector if isinstance(report_after.feature_vector, dict) else {}
+                fv_update["evidence_validations"] = current_validations
+                if semantic_alignment:
+                    fv_update["semantic_alignment"] = semantic_alignment
+                    if semantic_alignment.get("mismatch"):
+                        report_after.is_flagged = True
+                        report_after.rule_status = "flagged"
+                        report_after.verification_status = "under_review"
+                        if not report_after.flag_reason:
+                            report_after.flag_reason = "description_evidence_mismatch"
+                report_after.feature_vector = _json_safe(fv_update)
+        except Exception as e:
+            logger.warning(f"Post-upload semantic validation failed for report {report_after.report_id}: {e}")
+
         evidence_count = db.query(EvidenceFile).filter(EvidenceFile.report_id == report_after.report_id).count()
         print(f"Re-applying AI-enhanced rules after evidence upload - evidence_count: {evidence_count}")  # Debug log
         
@@ -2852,6 +3221,7 @@ async def upload_evidence(
             "ai_suspicious_review",
             "ai_uncertain_review",
             "incident_description_mismatch",
+            "description_evidence_mismatch",
             "evidence_time_mismatch",
             "stale_live_capture_timestamp",
             "device_burst_reporting",
@@ -2873,6 +3243,21 @@ async def upload_evidence(
             report_after.status = "pending"
             report_after.verification_status = "under_review"
             print(f" HUMAN REVIEW NEEDED: Report flagged after evidence upload - {flag_reason}")
+
+        # Persist human-readable AI summary and decision reasoning on report row.
+        fv_after = report_after.feature_vector if isinstance(report_after.feature_vector, dict) else {}
+        validations_after = fv_after.get("evidence_validations") if isinstance(fv_after.get("evidence_validations"), list) else []
+        semantic_after = fv_after.get("semantic_alignment") if isinstance(fv_after.get("semantic_alignment"), dict) else None
+        report_after.ai_evidence_description = _compose_ai_evidence_description(validations_after)
+        report_after.ai_verification_reason = _compose_ai_verification_reason(
+            verification_status=report_after.verification_status,
+            rule_status=report_after.rule_status,
+            is_flagged=report_after.is_flagged,
+            flag_reason=report_after.flag_reason,
+            ml_prediction_label=getattr(ml_prediction, "prediction_label", None) if ml_prediction else None,
+            trust_score=float(ml_prediction.trust_score) if ml_prediction and getattr(ml_prediction, "trust_score", None) is not None else None,
+            semantic_alignment=semantic_after,
+        )
         db.commit()
     
     await manager.broadcast({"type": "refresh_data", "entity": "report", "action": "evidence_added"})
@@ -4107,6 +4492,8 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         trusted_reports=trusted_reports,
         trust_score=trust_score,
         ml_prediction_label=ml_prediction_label,
+        ai_evidence_description=getattr(report, "ai_evidence_description", None),
+        ai_verification_reason=getattr(report, "ai_verification_reason", None),
         # Add missing required fields
         device_id=str(report.device_id),
         latitude=float(report.latitude) if report.latitude else None,

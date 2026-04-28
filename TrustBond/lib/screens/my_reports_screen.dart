@@ -306,6 +306,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
 
   Widget _buildRemoteReportCard(ReportListItem report) {
     final statusKey = report.workflowStatus;
+    final aiSnippet = _buildAiSnippet(report);
     return Stack(
       children: [
         ReportItemCard(
@@ -319,6 +320,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
           statusType: badgeTypeFromStatus(statusKey),
           reportNumber: report.reportNumber,
           trustScore: statusKey == 'verified' ? report.trustScore : null,
+          aiSnippet: aiSnippet,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => ReportDetailScreen(
@@ -335,6 +337,22 @@ class _MyReportsScreenState extends State<MyReportsScreen>
         ),
       ],
     );
+  }
+
+  String? _buildAiSnippet(ReportListItem report) {
+    String raw = '';
+    if ((report.aiVerificationReason ?? '').trim().isNotEmpty) {
+      raw = report.aiVerificationReason!.trim();
+    } else if ((report.flagReason ?? '').trim().isNotEmpty) {
+      raw = report.flagReason!.trim();
+    }
+    if (raw.isEmpty) return null;
+
+    final compact = raw.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.isEmpty) return null;
+    final maxLen = 80;
+    final clipped = compact.length > maxLen ? '${compact.substring(0, maxLen - 1)}…' : compact;
+    return 'AI: $clipped';
   }
 
   Widget _buildQueuedReportCard(OfflineReportQueueItem report) {
