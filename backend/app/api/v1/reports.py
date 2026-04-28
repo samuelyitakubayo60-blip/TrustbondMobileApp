@@ -184,6 +184,8 @@ def _compose_ai_evidence_description(
     incident_type_name: Optional[str] = None,
     reporter_description: Optional[str] = None,
     context_tags: Optional[List[str]] = None,
+    evidence_file_count: Optional[int] = None,
+    evidence_media_types: Optional[List[str]] = None,
 ) -> str:
     """Generate a short, human-readable AI summary of uploaded evidence + report context."""
     incident_label = (incident_type_name or "incident").strip() or "incident"
@@ -195,6 +197,22 @@ def _compose_ai_evidence_description(
     tags_text = ", ".join(tags[:6]) if tags else None
 
     if not evidence_validations:
+        media_types = [str(m).strip() for m in (evidence_media_types or []) if str(m).strip()]
+        media_text = ", ".join(sorted(set(media_types))) if media_types else "photo/video/audio"
+        if (evidence_file_count or 0) > 0:
+            parts = [
+                f"Report context: {incident_label}.",
+                (
+                    f"{evidence_file_count} evidence file(s) uploaded ({media_text}), "
+                    "but detailed AI evidence analysis is not available for this legacy record."
+                ),
+                "Verification therefore relies on reporter description, metadata checks, and available rule/ML signals.",
+            ]
+            if desc_excerpt:
+                parts.append(f"Reporter states: {desc_excerpt}.")
+            if tags_text:
+                parts.append(f"Context tags: {tags_text}.")
+            return " ".join(parts)[:2000]
         parts = [
             f"Report context: {incident_label}.",
             "No evidence files uploaded; verification relies on reporter description and metadata checks.",
@@ -263,10 +281,12 @@ def _compose_ai_verification_reason(
     incident_type_name: Optional[str] = None,
     reporter_description: Optional[str] = None,
     context_tags: Optional[List[str]] = None,
+    reviewer_note: Optional[str] = None,
 ) -> str:
     """Generate an audit-friendly reason for AI confirmation/flag/rejection."""
     status = (verification_status or "pending").lower()
     parts: List[str] = []
+    cause_parts: List[str] = []
     incident_label = (incident_type_name or "incident").strip() or "incident"
     desc_excerpt = (reporter_description or "").strip()
     desc_excerpt = " ".join(desc_excerpt.split())
@@ -276,11 +296,11 @@ def _compose_ai_verification_reason(
     tags_text = ", ".join(tags[:6]) if tags else None
 
     if status == "verified":
-        parts.append("AI verification result: confirmed as valid.")
+        parts.append("AI verification result: confirmed.")
     elif status == "rejected":
         parts.append("AI verification result: rejected.")
     elif status == "under_review":
-        parts.append("AI verification result: pending human review after ML/rule analysis.")
+        parts.append("AI verification result: pending human review.")
     else:
         parts.append("AI verification result: pending.")
 
@@ -294,13 +314,128 @@ def _compose_ai_verification_reason(
         parts.append(f"Rule status: {rule_status}.")
     if is_flagged:
         parts.append("Report is flagged.")
+    pattern_codes: List[str] = []
+    pattern_explanations: List[str] = []
+
+    def _add_pattern(code: str, explanation: str) -> None:
+        if code not in pattern_codes:
+            pattern_codes.append(code)
+            pattern_explanations.append(f"{code}: {explanation}")
+
     if flag_reason:
         parts.append(f"Primary reason: {flag_reason}.")
+        cause_parts.append(f"rule trigger ({flag_reason})")
+        raw_reason = str(flag_reason).strip().lower().replace("-", "_").replace(" ", "_")
+        reason_map = {
+            "description_evidence_mismatch": (
+                "CONTEXT_MISMATCH",
+                "report description does not align with evidence semantics",
+            ),
+            "evidence_incident_mismatch": (
+                "EVIDENCE_INCIDENT_MISMATCH",
+                "detected evidence cues do not support the selected incident type",
+            ),
+            "text_only_validation_failed": (
+                "UNCLEAR_DESCRIPTION",
+                "text-only checks found the description too weak/ambiguous for reliable verification",
+            ),
+            "unclear_description": (
+                "UNCLEAR_DESCRIPTION",
+                "description quality is too low for reliable incident validation",
+            ),
+            "out_of_musanze_boundary": (
+                "LOCATION_OUT_OF_BOUNDARY",
+                "report location is outside the allowed operational boundary",
+            ),
+            "rejected_by_reviewer": (
+                "HUMAN_REJECTION",
+                "police reviewer explicitly rejected the report",
+            ),
+            "duplicate_report": (
+                "DUPLICATE_REPORT",
+                "report appears to duplicate an existing incident submission",
+            ),
+            "spam_report": (
+                "SPAM_PATTERN",
+                "report matches spam/noise submission patterns",
+            ),
+            "tampered_evidence": (
+                "TAMPERED_EVIDENCE",
+                "evidence integrity checks indicate potential manipulation",
+            ),
+            "evidence_source_invalid": (
+                "INVALID_EVIDENCE_SOURCE",
+                "evidence source check failed (likely non-original capture)",
+            ),
+            "screenshot_detected": (
+                "SCREENSHOT_EVIDENCE",
+                "uploaded media appears to be a screenshot/repost instead of original capture",
+            ),
+        }
+        mapped = reason_map.get(raw_reason)
+        if mapped:
+            _add_pattern(mapped[0], mapped[1])
+        else:
+            # Fallback pattern inference for free-text/legacy reasons.
+            if "duplicate" in raw_reason:
+                _add_pattern(
+                    "DUPLICATE_REPORT",
+                    "report appears to duplicate an existing incident submission",
+                )
+            elif "spam" in raw_reason:
+                _add_pattern(
+                    "SPAM_PATTERN",
+                    "report matches spam/noise submission patterns",
+                )
+            elif "tamper" in raw_reason or "manipulat" in raw_reason:
+                _add_pattern(
+                    "TAMPERED_EVIDENCE",
+                    "evidence integrity checks indicate potential manipulation",
+                )
+            elif "screenshot" in raw_reason:
+                _add_pattern(
+                    "SCREENSHOT_EVIDENCE",
+                    "uploaded media appears to be a screenshot/repost instead of original capture",
+                )
+            elif "source" in raw_reason and ("invalid" in raw_reason or "fail" in raw_reason):
+                _add_pattern(
+                    "INVALID_EVIDENCE_SOURCE",
+                    "evidence source check failed (likely non-original capture)",
+                )
+            elif "boundary" in raw_reason or "location" in raw_reason:
+                _add_pattern(
+                    "LOCATION_CONFLICT",
+                    "location/boundary checks found an inconsistency",
+                )
+            elif "context" in raw_reason or "mismatch" in raw_reason:
+                _add_pattern(
+                    "CONTEXT_MISMATCH",
+                    "description/incident/evidence context appears inconsistent",
+                )
+            elif "unclear" in raw_reason or "insufficient" in raw_reason:
+                _add_pattern(
+                    "UNCLEAR_DESCRIPTION",
+                    "description quality is too low for reliable incident validation",
+                )
+            else:
+                _add_pattern("RULE_TRIGGER", f"rule engine raised: {flag_reason}")
     if ml_prediction_label:
         if trust_score is not None:
             parts.append(f"ML label: {ml_prediction_label} (trust {trust_score:.2f}%).")
         else:
             parts.append(f"ML label: {ml_prediction_label}.")
+        if ml_prediction_label in {"fake", "suspicious"}:
+            cause_parts.append(f"low-credibility ML outcome ({ml_prediction_label})")
+            _add_pattern(
+                "LOW_TRUST_SCORE",
+                f"ML classified report as {ml_prediction_label} with low/uncertain credibility",
+            )
+        elif ml_prediction_label == "likely_real":
+            cause_parts.append("high-credibility ML outcome")
+            _add_pattern(
+                "HIGH_TRUST_SCORE",
+                "ML credibility score supports authenticity",
+            )
 
     if semantic_alignment:
         de = semantic_alignment.get("description_evidence_similarity")
@@ -312,8 +447,160 @@ def _compose_ai_verification_reason(
             )
         if mismatch is True:
             parts.append("Semantic mismatch detected.")
+            cause_parts.append("description/evidence semantic mismatch")
+            _add_pattern(
+                "CONTEXT_MISMATCH",
+                "semantic comparison shows mismatch between description, incident type, and evidence",
+            )
+
+    if rule_status == "rejected":
+        cause_parts.append("hard rule rejection")
+        _add_pattern(
+            "RULE_REJECTION",
+            "rule engine produced a hard rejection state",
+        )
+    elif rule_status == "flagged":
+        cause_parts.append("rule-based flag")
+        _add_pattern(
+            "RULE_FLAGGED",
+            "rule engine marked report for investigation",
+        )
+    elif rule_status == "passed":
+        _add_pattern(
+            "RULES_PASSED",
+            "rule checks passed without blocking violations",
+        )
+
+    if status == "rejected":
+        _add_pattern("FINAL_REJECTED", "final decision is rejected")
+        if cause_parts:
+            parts.append(f"Decision drivers: {', '.join(dict.fromkeys(cause_parts))}.")
+        else:
+            parts.append(
+                "Decision drivers: report failed policy/rule thresholds during verification."
+            )
+    elif status in {"under_review", "pending"}:
+        _add_pattern("FINAL_PENDING_REVIEW", "final decision is pending human review")
+        if cause_parts:
+            parts.append(
+                f"Review is pending because these signals need human confirmation: {', '.join(dict.fromkeys(cause_parts))}."
+            )
+        else:
+            parts.append(
+                "Review is pending because current signals are insufficient for automatic confirmation."
+            )
+    elif status == "verified":
+        _add_pattern("FINAL_CONFIRMED", "final decision is confirmed")
+        positive_signals: List[str] = []
+        if rule_status == "passed":
+            positive_signals.append("rule checks passed")
+        if semantic_alignment and semantic_alignment.get("mismatch") is False:
+            positive_signals.append("semantic alignment is acceptable")
+        if ml_prediction_label == "likely_real":
+            positive_signals.append("ML credibility is high")
+        if positive_signals:
+            parts.append(f"Decision drivers: {', '.join(positive_signals)}.")
+        else:
+            parts.append("Decision drivers: no blocking rule or semantic conflicts were found.")
+
+    note = (reviewer_note or "").strip()
+    if note:
+        parts.append(f"Reviewer note: {note}.")
+        if status == "verified":
+            _add_pattern("HUMAN_CONFIRMED", "police reviewer confirmed the report")
+        elif status == "rejected":
+            _add_pattern("HUMAN_REJECTION", "police reviewer rejected the report")
+
+    if pattern_codes:
+        parts.append(f"Decision patterns: {', '.join(pattern_codes)}.")
+    if pattern_explanations:
+        parts.append(f"Pattern explanations: {'; '.join(pattern_explanations)}.")
 
     return " ".join(parts)[:3000]
+
+
+def _extract_decision_patterns(ai_verification_reason: Optional[str]) -> List[str]:
+    """Parse machine-readable decision pattern codes from generated reason text."""
+    text = (ai_verification_reason or "").strip()
+    if not text:
+        return []
+    marker = "Decision patterns:"
+    idx = text.find(marker)
+    if idx < 0:
+        return []
+    tail = text[idx + len(marker):].strip()
+    if not tail:
+        return []
+    # Keep only the comma-separated token segment before next sentence block.
+    segment = tail.split(". Pattern explanations:", 1)[0]
+    segment = segment.split(".", 1)[0]
+    codes = [c.strip() for c in segment.split(",") if c.strip()]
+    seen = set()
+    deduped: List[str] = []
+    for code in codes:
+        if code not in seen:
+            seen.add(code)
+            deduped.append(code)
+    return deduped
+
+
+def _extract_decision_pattern_explanations(ai_verification_reason: Optional[str]) -> Dict[str, str]:
+    """Parse decision pattern explanations from generated reason text."""
+    text = (ai_verification_reason or "").strip()
+    if not text:
+        return {}
+    marker = "Pattern explanations:"
+    idx = text.find(marker)
+    if idx < 0:
+        return {}
+    tail = text[idx + len(marker):].strip()
+    if not tail:
+        return {}
+    entries = [e.strip() for e in tail.split(";") if e.strip()]
+    parsed: Dict[str, str] = {}
+    for entry in entries:
+        if ":" not in entry:
+            continue
+        code, explanation = entry.split(":", 1)
+        code = code.strip()
+        explanation = explanation.strip().rstrip(".")
+        if code and explanation and code not in parsed:
+            parsed[code] = explanation
+    return parsed
+
+
+def _resolve_trust_factors(
+    report: Report,
+    ml_prediction: Optional[Any],
+    *,
+    evidence_count: Optional[int] = None,
+    community_votes: Optional[Dict[str, int]] = None,
+) -> Dict[str, Any]:
+    """
+    Return explainable trust factors for UI.
+    Prefer stored ML explanation, but provide a lightweight fallback for legacy rows.
+    """
+    factors: Dict[str, Any] = {}
+    if ml_prediction is not None and isinstance(getattr(ml_prediction, "explanation", None), dict):
+        factors.update(dict(ml_prediction.explanation or {}))
+
+    # Fallback for legacy predictions without explanation payload.
+    if not factors:
+        desc_len = len((getattr(report, "description", "") or "").strip())
+        if evidence_count is None:
+            evidence_count = len(getattr(report, "evidence_files", []) or [])
+        factors["content_score"] = min(100.0, round((desc_len / 120.0) * 60.0 + (evidence_count * 20.0), 1))
+        factors["location_score"] = 100.0
+        factors["cluster_score"] = 0.0
+        factors["user_behavior_score"] = 50.0
+        factors["coordination_penalty"] = 0.0
+
+    if community_votes:
+        real_votes = int(community_votes.get("real", 0) or 0)
+        false_votes = int(community_votes.get("false", 0) or 0)
+        factors["community_net_votes"] = real_votes - false_votes
+
+    return factors
 
 def _process_report_background(
     report_id: str,
@@ -1797,8 +2084,6 @@ def create_report(
         raw_label = getattr(ml_prediction, "prediction_label", None)
         if raw_label is not None and str(raw_label).strip():
             ml_prediction_label = str(raw_label).strip().lower()
-    context_tags_list = getattr(report, "context_tags", None) or []
-
     community_votes = {"real": 0, "false": 0, "unknown": 0}
     user_vote = None
     if getattr(report, "feature_vector", None) and isinstance(report.feature_vector, dict):
@@ -1808,6 +2093,13 @@ def create_report(
                 community_votes[str(v)] += 1
             if device_id and str(dict_device_id) == str(device_id):
                 user_vote = str(v)
+    trust_factors = _resolve_trust_factors(
+        report,
+        ml_prediction,
+        evidence_count=len(getattr(report, "evidence_files", []) or []),
+        community_votes=community_votes,
+    )
+    context_tags_list = getattr(report, "context_tags", None) or []
 
     # Get device metadata and trust score
     device_metadata = getattr(report.device, "metadata_json", {}) if report.device else {}
@@ -1835,12 +2127,17 @@ def create_report(
         village_location_id=report.village_location_id,
         incident_type_name=report.incident_type.type_name if report.incident_type else None,
         trust_score=float(trust_score) if trust_score is not None else None,
+        trust_factors=trust_factors,
         ml_prediction_label=ml_prediction_label,
         context_tags=context_tags_list,
         is_flagged=getattr(report, "is_flagged", None),
         flag_reason=getattr(report, "flag_reason", None),
         ai_evidence_description=getattr(report, "ai_evidence_description", None),
         ai_verification_reason=getattr(report, "ai_verification_reason", None),
+        decision_patterns=_extract_decision_patterns(getattr(report, "ai_verification_reason", None)),
+        decision_pattern_explanations=_extract_decision_pattern_explanations(
+            getattr(report, "ai_verification_reason", None)
+        ),
         incident_latitude=float(incident_lat) if incident_lat is not None else None,
         incident_longitude=float(incident_lon) if incident_lon is not None else None,
         incident_location_source=incident_source,
@@ -2235,11 +2532,6 @@ def add_review(
         # Update trusted_reports count
         if hasattr(report.device, "trusted_reports"):
             report.device.trusted_reports = (report.device.trusted_reports or 0) + 1
-        report.ai_verification_reason = (
-            body.review_note.strip()
-            if body.review_note and body.review_note.strip()
-            else "Confirmed by police reviewer. AI and human review agree this report is valid."
-        )
         
     elif decision == "rejected":
         # Police rejected report - update ML to learn from this
@@ -2302,11 +2594,6 @@ def add_review(
         # Update flagged_reports count
         if hasattr(report.device, "flagged_reports"):
             report.device.flagged_reports = (report.device.flagged_reports or 0) + 1
-        report.ai_verification_reason = (
-            body.review_note.strip()
-            if body.review_note and body.review_note.strip()
-            else "Rejected by police reviewer after verification checks."
-        )
         
     else:
         # Human review for flagged reports - police can make final decisions
@@ -2314,15 +2601,28 @@ def add_review(
         report.status = "verified"
         report.is_flagged = False
         report.flag_reason = None
-        report.ai_verification_reason = (
-            body.review_note.strip()
-            if body.review_note and body.review_note.strip()
-            else "Verified after manual police review."
-        )
         if body.review_note:
             print(f" POLICE VERIFIED: Report {report_id} manually verified - {body.review_note}")
         else:
             print(f" POLICE VERIFIED: Report {report_id} manually verified")
+
+    ml_prediction_tmp = resolve_ml_prediction_for_report(report)
+    semantic_alignment_meta = None
+    if isinstance(report.feature_vector, dict):
+        semantic_alignment_meta = report.feature_vector.get("semantic_alignment")
+    report.ai_verification_reason = _compose_ai_verification_reason(
+        verification_status=report.verification_status,
+        rule_status=report.rule_status,
+        is_flagged=report.is_flagged,
+        flag_reason=report.flag_reason,
+        ml_prediction_label=getattr(ml_prediction_tmp, "prediction_label", None),
+        trust_score=float(ml_prediction_tmp.trust_score) if getattr(ml_prediction_tmp, "trust_score", None) is not None else None,
+        semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
+        incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
+        reporter_description=report.description,
+        context_tags=list(getattr(report, "context_tags", None) or []),
+        reviewer_note=body.review_note,
+    )
 
     existing_review = (
         db.query(PoliceReview)
@@ -4453,6 +4753,23 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         raw_label = getattr(ml_prediction, "prediction_label", None)
         if raw_label is not None and str(raw_label).strip():
             ml_prediction_label = str(raw_label).strip().lower()
+    community_votes = {"real": 0, "false": 0, "unknown": 0}
+    user_vote = None
+    if getattr(report, "feature_vector", None) and isinstance(report.feature_vector, dict):
+        votes_dict = report.feature_vector.get("community_votes", {})
+        if isinstance(votes_dict, dict):
+            for device_key, v in votes_dict.items():
+                k = str(v)
+                if k in community_votes:
+                    community_votes[k] += 1
+                if request_device_id and str(device_key) == str(request_device_id):
+                    user_vote = k
+    trust_factors = _resolve_trust_factors(
+        report,
+        ml_prediction,
+        evidence_count=len(getattr(report, "evidence_files", []) or []),
+        community_votes=community_votes,
+    )
     
     # Get device metadata and calculate device trust score
     device_metadata = None
@@ -4529,16 +4846,21 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         evidence_files=evidence_files_response,
         assignments=[],
         reviews=[],
-        community_votes={},  # Changed from [] to {} to match dict type
-        user_vote=None,
+        community_votes=community_votes,
+        user_vote=user_vote,
         metadata_json=device_metadata,
         device_trust_score=float(device_trust_score) if device_trust_score is not None else None,
         total_reports=total_reports,
         trusted_reports=trusted_reports,
         trust_score=trust_score,
+        trust_factors=trust_factors,
         ml_prediction_label=ml_prediction_label,
         ai_evidence_description=getattr(report, "ai_evidence_description", None),
         ai_verification_reason=getattr(report, "ai_verification_reason", None),
+        decision_patterns=_extract_decision_patterns(getattr(report, "ai_verification_reason", None)),
+        decision_pattern_explanations=_extract_decision_pattern_explanations(
+            getattr(report, "ai_verification_reason", None)
+        ),
         # Add missing required fields
         device_id=str(report.device_id),
         latitude=float(report.latitude) if report.latitude else None,

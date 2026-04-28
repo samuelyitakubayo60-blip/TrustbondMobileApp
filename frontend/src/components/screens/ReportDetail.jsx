@@ -58,6 +58,67 @@ const friendlyPredictionLabel = (label) => {
   return map[key] || key.replace(/_/g, " ");
 };
 
+const renderDecisionPatternChips = (patterns, explanations) => {
+  if (!Array.isArray(patterns) || patterns.length === 0) return null;
+  const patternTone = (pattern) => {
+    const p = String(pattern || "").toUpperCase();
+    if (
+      p.includes("FINAL_REJECTED") ||
+      p.includes("RULE_REJECTION") ||
+      p.includes("LOW_TRUST") ||
+      p.includes("TAMPERED") ||
+      p.includes("INVALID_EVIDENCE") ||
+      p.includes("SCREENSHOT")
+    ) {
+      return { bg: "rgba(244,67,54,0.14)", border: "rgba(244,67,54,0.45)", text: "#ef5350" };
+    }
+    if (
+      p.includes("PENDING") ||
+      p.includes("FLAGGED") ||
+      p.includes("MISMATCH") ||
+      p.includes("CONFLICT") ||
+      p.includes("UNCLEAR")
+    ) {
+      return { bg: "rgba(255,152,0,0.14)", border: "rgba(255,152,0,0.45)", text: "#ffb74d" };
+    }
+    if (
+      p.includes("FINAL_CONFIRMED") ||
+      p.includes("RULES_PASSED") ||
+      p.includes("HIGH_TRUST") ||
+      p.includes("HUMAN_CONFIRMED")
+    ) {
+      return { bg: "rgba(76,175,80,0.14)", border: "rgba(76,175,80,0.45)", text: "#81c784" };
+    }
+    return { bg: "rgba(158,158,158,0.14)", border: "rgba(158,158,158,0.4)", text: "var(--text)" };
+  };
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      {patterns.map((p) => {
+        const tone = patternTone(p);
+        return (
+          <span
+            key={p}
+            style={{
+              fontSize: 10,
+              cursor: "help",
+              padding: "4px 8px",
+              borderRadius: 999,
+              border: `1px solid ${tone.border}`,
+              background: tone.bg,
+              color: tone.text,
+              fontWeight: 700,
+              letterSpacing: 0.2,
+            }}
+            title={(explanations && explanations[p]) || p}
+          >
+            {p}
+          </span>
+        );
+      })}
+    </div>
+  );
+};
+
 const relativeTime = (isoLike) => {
   if (!isoLike) return null;
   const t = new Date(isoLike);
@@ -753,6 +814,11 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
     : "DEV";
   const trustScore = report.trust_score ?? 0;
   const trustFactors = report.trust_factors || {};
+  const communityVotes = report.community_votes || { real: 0, false: 0, unknown: 0 };
+  const realVotes = Number(communityVotes.real || 0);
+  const falseVotes = Number(communityVotes.false || 0);
+  const unknownVotes = Number(communityVotes.unknown || 0);
+  const totalVotes = realVotes + falseVotes + unknownVotes;
   const createdAt = formatLocalDateTime(report.reported_at);
   const assignments = report.assignments || [];
   const hasCase = report.case_id; // Assuming case_id is available
@@ -807,12 +873,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
           Report {idLabel}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span
-            className={`badge ${statusConfig.color}`}
-            style={{ fontSize: "12px", padding: "4px 8px" }}
-          >
-            {statusConfig.text}
-          </span>
           {hasCase && (
             <span
               className="badge b-blue"
@@ -964,6 +1024,18 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                     <span>{report.ai_verification_reason}</span>
                   </div>
                 )}
+                {Array.isArray(report.decision_patterns) &&
+                  report.decision_patterns.length > 0 && (
+                    <div>
+                      <strong>Decision Patterns:</strong>
+                      <div style={{ marginTop: 6 }}>
+                        {renderDecisionPatternChips(
+                          report.decision_patterns,
+                          report.decision_pattern_explanations || {},
+                        )}
+                      </div>
+                    </div>
+                  )}
                 {report.ai_evidence_description && (
                   <div>
                     <strong>AI Evidence Summary:</strong>{" "}
@@ -2170,6 +2242,48 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 <div style={{ fontSize: "11px", color: "var(--muted)" }}>
                   {getVerificationStatus(report, mlPrediction)}
                 </div>
+              </div>
+
+              <div style={{ marginTop: 12, padding: "10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
+                <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>Community Votes</div>
+                {totalVotes > 0 ? (
+                  <>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        gap: 6,
+                        fontSize: 11,
+                      }}
+                    >
+                      <div><strong>{realVotes}</strong> real</div>
+                      <div><strong>{unknownVotes}</strong> unknown</div>
+                      <div><strong>{falseVotes}</strong> false</div>
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 8,
+                        height: 6,
+                        width: "100%",
+                        borderRadius: 999,
+                        overflow: "hidden",
+                        display: "flex",
+                        background: "var(--border2)",
+                      }}
+                    >
+                      <div style={{ width: `${(realVotes / totalVotes) * 100}%`, background: "#4caf50" }} />
+                      <div style={{ width: `${(unknownVotes / totalVotes) * 100}%`, background: "#9e9e9e" }} />
+                      <div style={{ width: `${(falseVotes / totalVotes) * 100}%`, background: "#f44336" }} />
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 10, color: "var(--muted)" }}>
+                      Total votes: {totalVotes}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                    No community votes recorded yet.
+                  </div>
+                )}
               </div>
 
               {report.flag_reason && (

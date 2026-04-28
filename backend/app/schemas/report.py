@@ -88,6 +88,8 @@ class ReportResponse(BaseModel):
     flag_reason: Optional[str] = None
     ai_evidence_description: Optional[str] = None
     ai_verification_reason: Optional[str] = None
+    decision_patterns: List[str] = []
+    decision_pattern_explanations: Dict[str, str] = {}
     verified_at: Optional[datetime] = None
     context_tags: list[str] = []
     app_version: Optional[str] = None

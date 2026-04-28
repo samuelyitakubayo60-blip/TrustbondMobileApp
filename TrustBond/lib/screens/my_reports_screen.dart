@@ -321,6 +321,8 @@ class _MyReportsScreenState extends State<MyReportsScreen>
           reportNumber: report.reportNumber,
           trustScore: statusKey == 'verified' ? report.trustScore : null,
           aiSnippet: aiSnippet,
+          decisionPatterns: report.decisionPatterns,
+          decisionPatternExplanations: report.decisionPatternExplanations,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => ReportDetailScreen(
@@ -340,6 +342,10 @@ class _MyReportsScreenState extends State<MyReportsScreen>
   }
 
   String? _buildAiSnippet(ReportListItem report) {
+    if (report.decisionPatterns.isNotEmpty) {
+      final top = report.decisionPatterns.take(2).join(', ');
+      return 'AI: $top';
+    }
     String raw = '';
     if ((report.aiVerificationReason ?? '').trim().isNotEmpty) {
       raw = report.aiVerificationReason!.trim();

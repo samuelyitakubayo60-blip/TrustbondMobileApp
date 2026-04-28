@@ -41,6 +41,10 @@ class ReportListItem {
 
   final String? aiVerificationReason;
 
+  final List<String> decisionPatterns;
+
+  final Map<String, String> decisionPatternExplanations;
+
   final DateTime? verifiedAt;
 
 
@@ -83,6 +87,10 @@ class ReportListItem {
 
     this.aiVerificationReason,
 
+    this.decisionPatterns = const [],
+
+    this.decisionPatternExplanations = const {},
+
     this.verifiedAt,
 
   });
@@ -112,6 +120,17 @@ class ReportListItem {
         flagReason: json['flag_reason'] as String?,
         aiEvidenceDescription: json['ai_evidence_description'] as String?,
         aiVerificationReason: json['ai_verification_reason'] as String?,
+        decisionPatterns: (json['decision_patterns'] is List)
+            ? (json['decision_patterns'] as List)
+                .map((e) => e.toString())
+                .where((e) => e.trim().isNotEmpty)
+                .toList()
+            : const [],
+        decisionPatternExplanations:
+            (json['decision_pattern_explanations'] is Map)
+                ? (json['decision_pattern_explanations'] as Map)
+                    .map((k, v) => MapEntry(k.toString(), v.toString()))
+                : const {},
         verifiedAt: json['verified_at'] != null ? parseApiDateTimeToLocal(json['verified_at'] as String) : null,
       );
     } catch (e) {
@@ -240,6 +259,10 @@ class ReportDetailItem {
 
   final String? aiVerificationReason;
 
+  final List<String> decisionPatterns;
+
+  final Map<String, String> decisionPatternExplanations;
+
   final DateTime? verifiedAt;
 
   final Map<String, int> communityVotes;
@@ -287,6 +310,10 @@ class ReportDetailItem {
     this.aiEvidenceDescription,
 
     this.aiVerificationReason,
+
+    this.decisionPatterns = const [],
+
+    this.decisionPatternExplanations = const {},
 
     this.verifiedAt,
 
@@ -354,6 +381,19 @@ class ReportDetailItem {
       aiEvidenceDescription: json['ai_evidence_description'] as String?,
 
       aiVerificationReason: json['ai_verification_reason'] as String?,
+
+      decisionPatterns: (json['decision_patterns'] is List)
+          ? (json['decision_patterns'] as List)
+              .map((e) => e.toString())
+              .where((e) => e.trim().isNotEmpty)
+              .toList()
+          : const [],
+
+      decisionPatternExplanations:
+          (json['decision_pattern_explanations'] is Map)
+              ? (json['decision_pattern_explanations'] as Map)
+                  .map((k, v) => MapEntry(k.toString(), v.toString()))
+              : const {},
 
       verifiedAt: json['verified_at'] != null ? parseApiDateTimeToLocal(json['verified_at'] as String) : null,
 

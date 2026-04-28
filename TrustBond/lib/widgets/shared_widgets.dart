@@ -165,6 +165,8 @@ class ReportItemCard extends StatelessWidget {
   final VoidCallback? onRetryTap;
   final bool showRetryLink;
   final String? aiSnippet;
+  final List<String> decisionPatterns;
+  final Map<String, String> decisionPatternExplanations;
 
   const ReportItemCard({
     super.key,
@@ -183,6 +185,8 @@ class ReportItemCard extends StatelessWidget {
     this.onRetryTap,
     this.showRetryLink = false,
     this.aiSnippet,
+    this.decisionPatterns = const [],
+    this.decisionPatternExplanations = const {},
   });
 
   @override
@@ -243,7 +247,9 @@ class ReportItemCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12, color: AppColors.muted),
                   ),
-                  if (aiSnippet != null && aiSnippet!.trim().isNotEmpty) ...[
+                  if ((decisionPatterns.isEmpty) &&
+                      aiSnippet != null &&
+                      aiSnippet!.trim().isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -264,6 +270,37 @@ class ReportItemCard extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ),
+                  ],
+                  if (decisionPatterns.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: decisionPatterns.take(3).map((pattern) {
+                        final tone = _decisionPatternTone(pattern);
+                        return Tooltip(
+                          message:
+                              decisionPatternExplanations[pattern] ?? pattern,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: tone.$1,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: tone.$2),
+                            ),
+                            child: Text(
+                              pattern,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: tone.$3,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ],
                   const SizedBox(height: 7),
@@ -289,6 +326,48 @@ class ReportItemCard extends StatelessWidget {
       ),
     );
   }
+}
+
+(Color, Color, Color) _decisionPatternTone(String pattern) {
+  final p = pattern.toUpperCase();
+  if (p.contains('FINAL_REJECTED') ||
+      p.contains('RULE_REJECTION') ||
+      p.contains('LOW_TRUST') ||
+      p.contains('TAMPERED') ||
+      p.contains('INVALID_EVIDENCE') ||
+      p.contains('SCREENSHOT')) {
+    return (
+      AppColors.danger.withValues(alpha: 0.16),
+      AppColors.danger.withValues(alpha: 0.45),
+      AppColors.danger
+    );
+  }
+  if (p.contains('PENDING') ||
+      p.contains('FLAGGED') ||
+      p.contains('MISMATCH') ||
+      p.contains('CONFLICT') ||
+      p.contains('UNCLEAR')) {
+    return (
+      AppColors.warn.withValues(alpha: 0.16),
+      AppColors.warn.withValues(alpha: 0.45),
+      AppColors.warn
+    );
+  }
+  if (p.contains('FINAL_CONFIRMED') ||
+      p.contains('RULES_PASSED') ||
+      p.contains('HIGH_TRUST') ||
+      p.contains('HUMAN_CONFIRMED')) {
+    return (
+      AppColors.ok.withValues(alpha: 0.16),
+      AppColors.ok.withValues(alpha: 0.45),
+      AppColors.ok
+    );
+  }
+  return (
+    AppColors.surface2,
+    AppColors.border,
+    AppColors.text,
+  );
 }
 
 /// Section header with line (matches .sec class).

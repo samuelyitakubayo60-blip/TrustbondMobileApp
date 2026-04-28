@@ -253,6 +253,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   Widget _buildAiAnalysisCard(ReportDetailItem r) {
     final aiReason = (r.aiVerificationReason ?? '').trim();
     final aiSummary = (r.aiEvidenceDescription ?? '').trim();
+    final patterns = r.decisionPatterns;
+    final explanations = r.decisionPatternExplanations;
 
     return _card([
       const Row(
@@ -274,6 +276,39 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         ),
       ],
       if (aiReason.isNotEmpty && aiSummary.isNotEmpty) const SizedBox(height: 10),
+      if (patterns.isNotEmpty) ...[
+        const Text('Decision Patterns',
+            style: TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: patterns.map((p) {
+            final exp = explanations[p];
+            final tone = _patternTone(p);
+            return Tooltip(
+              message: (exp ?? p),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: tone.$1,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: tone.$2),
+                ),
+                child: Text(
+                  p,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: tone.$3,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+      if (patterns.isNotEmpty && aiSummary.isNotEmpty) const SizedBox(height: 10),
       if (aiSummary.isNotEmpty) ...[
         const Text('AI Evidence Summary',
             style: TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w600)),
@@ -657,6 +692,48 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
+  (Color, Color, Color) _patternTone(String pattern) {
+    final p = pattern.toUpperCase();
+    if (p.contains('FINAL_REJECTED') ||
+        p.contains('RULE_REJECTION') ||
+        p.contains('LOW_TRUST') ||
+        p.contains('TAMPERED') ||
+        p.contains('INVALID_EVIDENCE') ||
+        p.contains('SCREENSHOT')) {
+      return (
+        AppColors.danger.withValues(alpha: 0.16),
+        AppColors.danger.withValues(alpha: 0.45),
+        AppColors.danger
+      );
+    }
+    if (p.contains('PENDING') ||
+        p.contains('FLAGGED') ||
+        p.contains('MISMATCH') ||
+        p.contains('CONFLICT') ||
+        p.contains('UNCLEAR')) {
+      return (
+        AppColors.warn.withValues(alpha: 0.16),
+        AppColors.warn.withValues(alpha: 0.45),
+        AppColors.warn
+      );
+    }
+    if (p.contains('FINAL_CONFIRMED') ||
+        p.contains('RULES_PASSED') ||
+        p.contains('HIGH_TRUST') ||
+        p.contains('HUMAN_CONFIRMED')) {
+      return (
+        AppColors.ok.withValues(alpha: 0.16),
+        AppColors.ok.withValues(alpha: 0.45),
+        AppColors.ok
+      );
+    }
+    return (
+      AppColors.surface2,
+      AppColors.border,
+      AppColors.text,
+    );
+  }
+
   Widget _buildCommunityConfirmationCard(ReportDetailItem r) {
     if (r.deviceId == widget.deviceId) {
       // Cannot vote on own report
@@ -807,6 +884,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         flagReason: r.flagReason,
         aiEvidenceDescription: r.aiEvidenceDescription,
         aiVerificationReason: r.aiVerificationReason,
+        decisionPatterns: r.decisionPatterns,
+        decisionPatternExplanations: r.decisionPatternExplanations,
         verifiedAt: r.verifiedAt,
         communityVotes: currentVotes,
         userVote: vote,
