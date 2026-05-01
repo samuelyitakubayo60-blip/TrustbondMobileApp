@@ -39,6 +39,7 @@ from app.api.v1 import (
     public_alerts,
     ws,
     geographic_intelligence,
+    submission_guidance,
 )
 
 
@@ -55,6 +56,31 @@ async def lifespan(app: FastAPI):
         warmup_narrative_models_on_startup()
     except Exception:
         pass
+    
+    # Download and cache ML models on startup
+    try:
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info("Downloading and caching ML models on startup...")
+        
+        # Ensure sentence transformer model is available
+        from app.core.model_manager import ensure_sentence_transformer_model
+        semantic_model = ensure_sentence_transformer_model("all-MiniLM-L6-v2")
+        logger.info(f"Sentence transformer model loaded: {semantic_model}")
+        
+        # Ensure YOLO model is available (will be downloaded by ultralytics on first use)
+        from app.core.model_manager import ensure_yolo_model
+        yolo_model = ensure_yolo_model("yolov8n.pt")
+        logger.info("YOLO model ready for use")
+        
+        logger.info("ML models successfully downloaded and cached")
+        
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to preload some ML models: {e}")
+        logger.info("Models will be downloaded on first use")
 
     # Process existing pending reports through AI on startup
     import asyncio
@@ -86,6 +112,15 @@ async def lifespan(app: FastAPI):
                 logger.info(f"Found {len(pending_reports)} reports to process through AI")
                 
                 for report in pending_reports:
+                    # Never auto-promote reports that were already rule-flagged/rejected.
+                    current_rule_status = (report.rule_status or "").strip().lower()
+                    if current_rule_status in {"flagged", "rejected"}:
+                        report.verification_status = (
+                            "rejected" if current_rule_status == "rejected" else "under_review"
+                        )
+                        report.status = "rejected" if current_rule_status == "rejected" else "pending"
+                        continue
+
                     # Run ML evaluation
                     ml_result = ml_evaluator.evaluate_report(report)
                     trust_score = float(ml_result['trust_score'])
@@ -183,6 +218,7 @@ app.include_router(public_hotspots.router, prefix="/api/v1")
 app.include_router(public_alerts.router, prefix="/api/v1")
 app.include_router(ws.router, prefix="/api/v1")
 app.include_router(geographic_intelligence.router, prefix="/api/v1/geographic-intelligence")
+app.include_router(submission_guidance.router, prefix="/api/v1")
 
 @app.get("/health")
 def health():

@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
+import re
 
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -23,6 +24,13 @@ META_PATH = ROOT / "TrustBond.json"
 
 _MODEL = None
 _META: Optional[Dict[str, Any]] = None
+
+DRUG_KEYWORDS = {
+    "drug", "drugs", "weed", "marijuana", "cocaine", "heroin",
+    "dealer", "dealing", "selling", "using", "smoking", "narcotic",
+    "meth", "ecstasy", "pills", "substance",
+}
+DRUG_INCIDENT_HINTS = ("drug", "narcotic", "substance")
 
 
 def _json_safe(value: Any) -> Any:
@@ -177,8 +185,14 @@ def _build_feature_row(
 
     time_of_day = _bucket_time_of_day(reported_at)
 
+    # Description analysis moved to Natural Language model
+    # Only keep drug-related analysis for historical patterns
     description = getattr(report, "description", None) or ""
-    description_length = len(description)
+    words = re.findall(r"[a-zA-Z]+", description.lower())
+    description_word_count = len(words)
+    drug_keyword_count = sum(1 for w in words if w in DRUG_KEYWORDS)
+    drug_keyword_ratio = (drug_keyword_count / description_word_count) if description_word_count else 0.0
+    mentions_drug_keywords = 1 if drug_keyword_count > 0 else 0
 
     latitude = getattr(report, "latitude", None)
     longitude = getattr(report, "longitude", None)
@@ -266,8 +280,27 @@ def _build_feature_row(
             row[col] = time_of_day
         elif col == "reported_at":
             row[col] = reported_at.isoformat() if reported_at is not None else None
-        elif col == "description_length":
-            row[col] = description_length
+        elif col == "description_word_count":
+            row[col] = description_word_count
+        elif col == "drug_keyword_count":
+            row[col] = drug_keyword_count
+        elif col == "drug_keyword_ratio":
+            row[col] = drug_keyword_ratio
+        elif col == "mentions_drug_keywords":
+            row[col] = mentions_drug_keywords
+        elif col == "incident_is_drug_type":
+            incident_name = getattr(getattr(report, "incident_type", None), "type_name", None) or ""
+            incident_lower = incident_name.strip().lower()
+            row[col] = 1 if any(h in incident_lower for h in DRUG_INCIDENT_HINTS) else 0
+        elif col == "incident_description_mismatch":
+            incident_name = getattr(getattr(report, "incident_type", None), "type_name", None) or ""
+            incident_lower = incident_name.strip().lower()
+            incident_is_drug = 1 if any(h in incident_lower for h in DRUG_INCIDENT_HINTS) else 0
+            row[col] = 1 if (incident_is_drug and not mentions_drug_keywords) else 0
+        elif col == "description":
+            row[col] = description
+        elif col == "description_text":
+            row[col] = description
         elif col == "network_type":
             row[col] = network_type
         elif col == "device_total_reports":
@@ -389,8 +422,10 @@ def score_report_credibility(
 ) -> None:
     """
     Run the trained XGBoost credibility model for a single report, and persist
-    the result into ml_predictions. Safe to call from API code; failures are
-    swallowed so they don't break report submission.
+    ONLY the credibility score (no decision making). Safe to call from API code; 
+    failures are swallowed so they don't break report submission.
+    
+    NOTE: This model now only outputs scores, no final decisions.
     """
     try:
         model, meta = _load_model_and_meta()
@@ -408,45 +443,35 @@ def score_report_credibility(
         proba = model.predict_proba(X)[0]
         prob_real = float(proba[1])
 
-        best_threshold = float(meta.get("best_threshold", 0.5))
-
-        trust_score_pct = prob_real * 100.0
+        # Calculate base credibility score (0-100)
+        credibility_score = prob_real * 100.0
         
-        # Apply anti-spam / coordination penalty before community votes
+        # Calculate trust factors for explanation (no decision making)
         factors = _compute_trust_factors(db, report, device, evidence_count, prob_real)
+        
+        # Apply coordination penalty (reduces score but doesn't make decisions)
         coord_penalty = float(factors.get("coordination_penalty", 0.0) or 0.0)
         if coord_penalty > 0:
-            # coord_penalty is already 0-100; temper it so ML still has signal.
-            trust_score_pct = max(0.0, trust_score_pct - (coord_penalty * 0.5))
+            credibility_score = max(0.0, credibility_score - (coord_penalty * 0.5))
 
-        # Apply Community Votes Modifier
+        # Apply community votes modifier (adjusts score but doesn't make decisions)
         community_net = factors.get("community_net_votes", 0)
         if community_net > 0:
-            trust_score_pct = min(100.0, trust_score_pct + (community_net * 5.0))
+            credibility_score = min(100.0, credibility_score + (community_net * 5.0))
         elif community_net < 0:
-            trust_score_pct = max(0.0, trust_score_pct + (community_net * 10.0))
+            credibility_score = max(0.0, credibility_score + (community_net * 10.0))
 
-        # Re-evaluate labels based on final trust_score_pct
-        if trust_score_pct >= 70.0:  # Changed from 85.0 to 70.0 for optimal threshold
-            prediction_label = "likely_real"
-        elif trust_score_pct >= 45.0:  # Changed from 60.0 to 45.0 for pending review
-            prediction_label = "suspicious"
-        elif trust_score_pct >= 30.0:
-            prediction_label = "uncertain"
-        else:
-            prediction_label = "fake"
-        
-
+        # Store ONLY the score - no prediction label or decision
         prediction = MLPrediction(
             prediction_id=uuid4(),
             report_id=report.report_id,
-            trust_score=Decimal(f"{trust_score_pct:.2f}"),
-            prediction_label=prediction_label,
+            trust_score=Decimal(f"{credibility_score:.2f}"),
+            prediction_label=None,  # No decision - let aggregator decide
             model_version=meta.get("model_version", "report_credibility_xgb_v1"),
             model_type="xgboost",
             confidence=Decimal(f"{prob_real:.3f}"),
-            is_final=True,
-            explanation=factors,  # Store the explainability breakdown here
+            is_final=False,  # Not final - will be aggregated
+            explanation=factors,  # Store factors for aggregator use
             processing_time=None,
         )
         db.add(prediction)
@@ -531,19 +556,42 @@ def update_device_ml_aggregates(
 
         confirm_rate = (trusted_reports / total_reports) if total_reports > 0 else 0.0
         spam_signal = spam_flags + flagged_reports
-        behavior_score = max(0.0, min(100.0, (confirm_rate * 100.0) - (spam_signal * 2.5)))
-
+        
+        # Improved behavior score calculation with recovery mechanisms
+        # Base score from confirmation rate, but with floor to prevent death spiral
+        base_score = confirm_rate * 100.0
+        
         # Location diversity from recent reports (distinct villages / recent reports)
         recent_reports = (
-            db.query(Report.village_location_id)
+            db.query(Report.village_location_id, Report.reported_at)
             .filter(Report.device_id == device.device_id)
             .order_by(Report.reported_at.desc())
             .limit(window)
             .all()
         )
         total_recent = len(recent_reports)
-        distinct_villages = len({v for (v,) in recent_reports if v is not None})
+        distinct_villages = len({v for (v, _) in recent_reports if v is not None})
         location_diversity = (distinct_villages / total_recent) if total_recent > 0 else 0.0
+        
+        # Time-based decay: older negative impacts fade over time
+        from datetime import datetime, timezone, timedelta
+        now = datetime.now(timezone.utc)
+        decay_factor = 1.0
+        
+        if recent_reports:
+            oldest_report_time = recent_reports[-1][1] if recent_reports[-1][1] else now
+            days_since_oldest = (now - oldest_report_time).days
+            # Decay factor: 1.0 (recent) to 0.3 (old) over 90 days
+            decay_factor = max(0.3, 1.0 - (days_since_oldest / 90.0) * 0.7)
+        
+        # Apply spam penalty but less severe (was 2.5, now 1.5) with time decay
+        spam_penalty = (spam_signal * 1.5) * decay_factor
+        
+        # Add recovery bonus: new reports get some trust back
+        recovery_bonus = min(20.0, total_reports * 0.5) if confirm_rate > 0 else 0.0
+        
+        # Calculate final behavior score with minimum floor
+        behavior_score = max(10.0, min(100.0, base_score - spam_penalty + recovery_bonus))
 
         weights = _load_trust_formula(db)
         blended = compute_trust_score(

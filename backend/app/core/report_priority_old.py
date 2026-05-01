@@ -1,12 +1,12 @@
 """
-Refactored Report priority calculation and anti-fraud integration utilities.
-Integrates with unified validation system and removes duplicate ML logic.
+Report priority calculation and AI integration utilities.
 """
 
 from decimal import Decimal
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 from app.models.report import Report
+from app.models.ml_prediction import MLPrediction
 from app.models.evidence_file import EvidenceFile
 from app.models.incident_type import IncidentType
 from app.models.system_config import SystemConfig
@@ -19,20 +19,19 @@ _SEMANTIC_MODEL_UNAVAILABLE = False
 
 def calculate_report_priority(
     report: Report,
+    ml_prediction: Optional[MLPrediction] = None,
     evidence_count: int = 0,
-    db: Session = None,
-    unified_validation_result: Optional[dict] = None
+    db: Session = None
 ) -> str:
     """
     Calculate automatic report priority based on multiple factors.
     Returns: 'low', 'medium', 'high', or 'urgent'
-    
-    Now integrates with unified validation results.
     """
     priority_score = 0
     
     # 1. Incident type severity (0-3 points)
     if db and report.incident_type_id:
+        from app.models.incident_type import IncidentType
         incident_type = db.query(IncidentType).filter(
             IncidentType.incident_type_id == report.incident_type_id
         ).first()
@@ -45,24 +44,25 @@ def calculate_report_priority(
             else:
                 priority_score += 1  # Low severity
     
-    # 2. Unified validation influence (0-2 points) - REPLACES old ML logic
-    if unified_validation_result:
-        trust_band = unified_validation_result.get("trust_band", "")
-        aggregated_score = unified_validation_result.get("aggregated_score", 0)
-        
-        if trust_band == "reject":
-            priority_score += 2  # Rejected reports need urgent review
-        elif trust_band == "low_confidence":
-            priority_score += 1  # Low confidence needs review
-        # medium_confidence and high_confidence don't increase priority
-        
-        # Additional priority for very low scores
-        if aggregated_score < 20:
-            priority_score += 1
+    # 2. AI prediction influence (0-2 points)
+    if ml_prediction:
+        if ml_prediction.prediction_label == "fake":
+            priority_score += 2  # Fake reports need urgent review
+        elif ml_prediction.prediction_label in ["suspicious", "uncertain"]:
+            priority_score += 1  # Suspicious/uncertain needs review
+        # likely_real doesn't increase priority
     
     # 3. Evidence count (0-1 point)
     if evidence_count >= 3:
         priority_score += 1  # Multiple evidence pieces increase priority
+    
+    # 4. Trust score (inverse - lower trust = higher priority)
+    if ml_prediction and ml_prediction.trust_score is not None:
+        trust_score = float(ml_prediction.trust_score)
+        if trust_score < 0.3:
+            priority_score += 2  # Very low trust
+        elif trust_score < 0.6:
+            priority_score += 1  # Low trust
     
     # Convert score to priority level
     if priority_score >= 6:
@@ -75,16 +75,15 @@ def calculate_report_priority(
         return "low"
 
 
-def apply_anti_fraud_rules(
+def apply_ai_enhanced_rules(
     report: Report,
     evidence_count: int,
+    ml_prediction: Optional[MLPrediction] = None,
     db: Session = None
 ) -> Tuple[str, bool, Optional[str]]:
     """
-    Anti-fraud and spam detection rules.
+    Enhanced rule-based logic that incorporates AI predictions.
     Returns (rule_status, is_flagged, flag_reason or None).
-    
-    REMOVED duplicate ML logic - now focuses on anti-fraud only.
     """
     # Get basic rule-based result first
     from app.core.report_rules import apply_rule_based_status
@@ -92,7 +91,7 @@ def apply_anti_fraud_rules(
         report, evidence_count, db
     )
 
-    # Anti-fraud checks (non-ML)
+    # Additional anti-false-positive checks (non-ML) before ML overrides.
     # 1) Evidence timestamp mismatch (captured_at much older than reported_at).
     stale_reason = _stale_evidence_reason(report, db)
     if stale_reason:
@@ -126,7 +125,35 @@ def apply_anti_fraud_rules(
             return base_status, base_flagged, base_reason
         return "flagged", True, "duplicate_description_recent"
     
-    # NO MORE ML LOGIC HERE - unified validation handles trust scoring
+    # AI enhancement: Override or enhance based on ML prediction
+    if ml_prediction:
+        prediction_label = ml_prediction.prediction_label
+        trust_score = float(ml_prediction.trust_score) if ml_prediction.trust_score else 0.5
+        
+        # FIXED: Clearer AI rules based on new prediction labels
+        # Rule: AI says "fake" (0-30%) -> always flagged for review
+        if prediction_label == "fake":
+            return "flagged", True, "ai_detected_fake"
+        
+        # Rule: AI says "uncertain" (30-60%) -> keep as passed but set verification_status to under_review
+        if prediction_label == "uncertain":
+            if base_status == "passed":
+                # Keep rule_status as passed but don't auto-verify (will be handled in verification_status)
+                return "passed", False, "ai_uncertain_review"
+            # Keep other statuses (rejected, flagged) as-is
+        
+        # Rule: AI says "suspicious" (60-85%) -> keep as passed but set verification_status to under_review
+        if prediction_label == "suspicious":
+            if base_status == "passed":
+                # Keep rule_status as passed but don't auto-verify (will be handled in verification_status)
+                return "passed", False, "ai_suspicious_review"
+            # Keep other statuses (rejected, flagged) as-is
+        
+        # Rule: AI says "likely_real" (85-100%) -> no changes, proceed with normal verification
+        if prediction_label == "likely_real":
+            # Keep base status, no AI interference
+            pass
+    
     return base_status, base_flagged, base_reason
 
 

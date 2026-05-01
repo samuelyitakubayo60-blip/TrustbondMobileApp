@@ -255,7 +255,7 @@ class ApiService {
     double radiusKm = 10.0,
     int limit = 20,
   }) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/v1/public/alerts').replace(
+    final uri = Uri.parse('${ApiConfig.baseUrl}/public/alerts').replace(
       queryParameters: {
         'latitude': latitude.toString(),
         'longitude': longitude.toString(),

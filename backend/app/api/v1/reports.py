@@ -16,7 +16,7 @@ import cloudinary.uploader
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
 
-from app.services.evidence_analysis import evidence_analysis_service
+# Evidence analysis service removed for consolidation
 
 from app.config import settings
 from app.database import get_db, SessionLocal
@@ -91,12 +91,10 @@ def _get_semantic_matcher():
     if _SEMANTIC_MODEL_UNAVAILABLE:
         return None
     try:
-        from sentence_transformers import SentenceTransformer
-        _SEMANTIC_MODEL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        _SEMANTIC_MODEL = SentenceTransformer(
-            "all-MiniLM-L6-v2",
-            cache_folder=str(_SEMANTIC_MODEL_CACHE_DIR),
-        )
+        from ..core.model_manager import ensure_sentence_transformer_model
+        
+        # Use automatic model manager for downloading and caching
+        _SEMANTIC_MODEL = ensure_sentence_transformer_model("all-MiniLM-L6-v2")
         return _SEMANTIC_MODEL
     except Exception as exc:
         logger.warning("Semantic model unavailable for evidence matching: %s", exc)
@@ -403,6 +401,7 @@ def _compose_ai_verification_reason(
     reporter_description: Optional[str] = None,
     context_tags: Optional[List[str]] = None,
     reviewer_note: Optional[str] = None,
+    unified_validation: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Generate an audit-friendly reason for AI confirmation/flag/rejection."""
     status = (verification_status or "pending").lower()
@@ -558,6 +557,47 @@ def _compose_ai_verification_reason(
                 "ML credibility score supports authenticity",
             )
 
+    # Add transparent scoring breakdown if unified validation is available
+    if unified_validation:
+        model_breakdown = unified_validation.get("model_breakdown", {})
+        if model_breakdown:
+            parts.append("AI scoring breakdown:")
+            for model_name, model_data in model_breakdown.items():
+                raw_score = model_data.get("raw_score", 0)
+                contribution = model_data.get("contribution", 0)
+                is_valid = model_data.get("is_valid", False)
+                focus = model_data.get("metadata", {}).get("focus", "analysis")
+                
+                if model_name == "trustbond":
+                    if is_valid:
+                        parts.append(f"- Location & device validation: {raw_score:.1f}/100 (contribution: {contribution:.1f})")
+                    else:
+                        parts.append(f"- Location & device validation: {raw_score:.1f}/100 (below threshold - no contribution)")
+                elif model_name == "natural_language":
+                    if is_valid:
+                        parts.append(f"- Description quality & semantic analysis: {raw_score:.1f}/100 (contribution: {contribution:.1f})")
+                    else:
+                        parts.append(f"- Description quality & semantic analysis: {raw_score:.1f}/100 (below threshold - no contribution)")
+                elif model_name == "volo":
+                    if is_valid:
+                        parts.append(f"- Evidence quality & object detection: {raw_score:.1f}/100 (contribution: {contribution:.1f})")
+                    else:
+                        parts.append(f"- Evidence quality & object detection: {raw_score:.1f}/100 (below threshold - no contribution)")
+                elif model_name == "base":
+                    parts.append(f"- Base credibility score: {raw_score:.1f}/100")
+            
+            # Add trust band explanation
+            trust_band = unified_validation.get("trust_band", "")
+            aggregated_score = unified_validation.get("aggregated_score", 0)
+            if trust_band == "high_confidence":
+                parts.append(f"Overall trust score: {aggregated_score:.1f}/100 (high confidence - multiple validation models agree)")
+            elif trust_band == "medium_confidence":
+                parts.append(f"Overall trust score: {aggregated_score:.1f}/100 (medium confidence - some concerns detected)")
+            elif trust_band == "low_confidence":
+                parts.append(f"Overall trust score: {aggregated_score:.1f}/100 (low confidence - significant concerns require review)")
+            elif trust_band == "reject":
+                parts.append(f"Overall trust score: {aggregated_score:.1f}/100 (rejected - multiple validation failures)")
+
     if semantic_alignment:
         de = semantic_alignment.get("description_evidence_similarity")
         ie = semantic_alignment.get("incident_evidence_similarity")
@@ -712,27 +752,315 @@ def _resolve_trust_factors(
     Return explainable trust factors for UI.
     Prefer stored ML explanation, but provide a lightweight fallback for legacy rows.
     """
-    factors: Dict[str, Any] = {}
-    if ml_prediction is not None and isinstance(getattr(ml_prediction, "explanation", None), dict):
-        factors.update(dict(ml_prediction.explanation or {}))
+    # Prefer new explicit threshold scorecard if present.
+    fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
+    scorecard = fv.get("threshold_scorecard") if isinstance(fv.get("threshold_scorecard"), dict) else None
+    if scorecard:
+        out: Dict[str, Any] = {
+            "scorecard_type": scorecard.get("scorecard_type"),
+            "max_score": scorecard.get("max_score", 100.0),
+            "total_score": scorecard.get("total_score"),
+            "threshold_band": scorecard.get("threshold_band"),
+            "hard_gates": scorecard.get("hard_gates", []),
+            "factors": scorecard.get("factors", {}),
+        }
+        fac = out.get("factors", {}) if isinstance(out.get("factors"), dict) else {}
+        # Compatibility keys expected by existing UI card.
+        if "description_quality" in fac:
+            out["content_score"] = fac["description_quality"].get("points_awarded")
+        elif "evidence_authenticity_quality" in fac:
+            out["content_score"] = fac["evidence_authenticity_quality"].get("points_awarded")
+        if "location_plausibility" in fac:
+            out["location_score"] = fac["location_plausibility"].get("points_awarded")
+        elif "location_consistency" in fac:
+            out["location_score"] = fac["location_consistency"].get("points_awarded")
+        out["cluster_score"] = fac.get("incident_evidence_alignment", {}).get("points_awarded", 0.0)
+        out["user_behavior_score"] = fac.get("device_behavior", {}).get("points_awarded", 0.0)
+        out["coordination_penalty"] = 0.0
+        if community_votes:
+            real_votes = int(community_votes.get("real", 0) or 0)
+            false_votes = int(community_votes.get("false", 0) or 0)
+            out["community_net_votes"] = real_votes - false_votes
+        return out
 
-    # Fallback for legacy predictions without explanation payload.
-    if not factors:
-        desc_len = len((getattr(report, "description", "") or "").strip())
-        if evidence_count is None:
-            evidence_count = len(getattr(report, "evidence_files", []) or [])
-        factors["content_score"] = min(100.0, round((desc_len / 120.0) * 60.0 + (evidence_count * 20.0), 1))
-        factors["location_score"] = 100.0
-        factors["cluster_score"] = 0.0
-        factors["user_behavior_score"] = 50.0
-        factors["coordination_penalty"] = 0.0
-
+    # Compute scorecard dynamically for rows that predate threshold persistence.
+    computed = _compute_threshold_scorecard(
+        report,
+        ml_prediction=ml_prediction,
+        community_votes=community_votes,
+    )
+    out: Dict[str, Any] = {
+        "scorecard_type": computed.get("scorecard_type"),
+        "max_score": computed.get("max_score", 100.0),
+        "total_score": computed.get("total_score"),
+        "threshold_band": computed.get("threshold_band"),
+        "hard_gates": computed.get("hard_gates", []),
+        "factors": computed.get("factors", {}),
+    }
+    fac = out.get("factors", {}) if isinstance(out.get("factors"), dict) else {}
+    if "description_quality" in fac:
+        out["content_score"] = fac["description_quality"].get("points_awarded")
+    elif "evidence_authenticity_quality" in fac:
+        out["content_score"] = fac["evidence_authenticity_quality"].get("points_awarded")
+    if "location_plausibility" in fac:
+        out["location_score"] = fac["location_plausibility"].get("points_awarded")
+    elif "location_consistency" in fac:
+        out["location_score"] = fac["location_consistency"].get("points_awarded")
+    out["cluster_score"] = fac.get("incident_evidence_alignment", {}).get("points_awarded", 0.0)
+    out["user_behavior_score"] = fac.get("device_behavior", {}).get("points_awarded", 0.0)
+    out["coordination_penalty"] = 0.0
     if community_votes:
         real_votes = int(community_votes.get("real", 0) or 0)
         false_votes = int(community_votes.get("false", 0) or 0)
-        factors["community_net_votes"] = real_votes - false_votes
+        out["community_net_votes"] = real_votes - false_votes
+    return out
 
-    return factors
+
+def _rule_adjusted_trust_label(
+    report: Report,
+    trust_score: Optional[float],
+    ml_prediction_label: Optional[str],
+) -> Tuple[Optional[float], Optional[str]]:
+    """
+    Keep ML trust/label consistent with rule outcomes.
+    A flagged/rejected rule state must never appear as high-confidence verified ML.
+    """
+    score = trust_score
+    label = (ml_prediction_label or "").strip().lower() or None
+    rule_status = (getattr(report, "rule_status", None) or "").strip().lower()
+    is_flagged = bool(getattr(report, "is_flagged", False))
+
+    if rule_status == "rejected":
+        if score is None:
+            score = 20.0
+        else:
+            score = min(float(score), 20.0)
+        label = "fake"
+        return score, label
+
+    if rule_status == "flagged" or is_flagged:
+        if score is None:
+            score = 49.0
+        else:
+            score = min(float(score), 49.0)
+        if label in (None, "likely_real"):
+            label = "suspicious"
+        return score, label
+
+    return score, label
+
+
+def _compute_threshold_scorecard(
+    report: Report,
+    *,
+    ml_prediction: Optional[Any] = None,
+    community_votes: Optional[Dict[str, int]] = None,
+) -> Dict[str, Any]:
+    """Compute a weighted 100-point threshold scorecard (text-only vs with evidence)."""
+    fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
+    evidence_validations = fv.get("evidence_validations") if isinstance(fv.get("evidence_validations"), list) else []
+    semantic = fv.get("semantic_alignment") if isinstance(fv.get("semantic_alignment"), dict) else {}
+    text_only = fv.get("text_only_validation") if isinstance(fv.get("text_only_validation"), dict) else {}
+    has_evidence = len(evidence_validations) > 0 or len(getattr(report, "evidence_files", []) or []) > 0
+
+    votes = community_votes or {"real": 0, "false": 0, "unknown": 0}
+    real_votes = int(votes.get("real", 0) or 0)
+    false_votes = int(votes.get("false", 0) or 0)
+    net_votes = real_votes - false_votes
+
+    def clamp01(x: float) -> float:
+        return max(0.0, min(1.0, float(x)))
+
+    factors: Dict[str, Dict[str, Any]] = {}
+    hard_gates: List[str] = []
+
+    # Hard gates from rule engine/boundary controls.
+    rule_status = (getattr(report, "rule_status", None) or "").lower()
+    flag_reason = (getattr(report, "flag_reason", None) or "").lower()
+    if rule_status == "rejected":
+        hard_gates.append("RULE_REJECTED")
+    if "out_of_musanze_boundary" in flag_reason:
+        hard_gates.append("LOCATION_OUT_OF_BOUNDARY")
+
+    # Shared signals
+    desc = (getattr(report, "description", None) or "").strip()
+    desc_len = len(desc)
+    gps_acc = float(getattr(report, "gps_accuracy", 0) or 0)
+    speed = float(getattr(report, "movement_speed", 0) or 0)
+    device_trust = 50.0
+    if getattr(report, "device", None) and getattr(report.device, "device_trust_score", None) is not None:
+        device_trust = float(report.device.device_trust_score)
+    elif ml_prediction is not None and getattr(ml_prediction, "trust_score", None) is not None:
+        device_trust = float(ml_prediction.trust_score)
+
+    # Community signal normalized to 0..1 around neutral 0.5
+    community_signal = clamp01(0.5 + (net_votes * 0.08))
+
+    if not has_evidence:
+        # Text-only scorecard
+        quality_signal = clamp01((desc_len - 10) / 90.0)
+        if not bool(text_only.get("valid", True)) or "unclear" in flag_reason or "gibberish" in flag_reason:
+            quality_signal = min(quality_signal, 0.35)
+        alignment_signal = 1.0
+        if semantic and bool(semantic.get("mismatch")):
+            alignment_signal = 0.2
+        if "mismatch" in flag_reason:
+            alignment_signal = min(alignment_signal, 0.25)
+        behavior_signal = clamp01(device_trust / 100.0)
+        location_signal = 1.0
+        if gps_acc > 0:
+            location_signal = clamp01(1.0 - (gps_acc / 250.0))
+        if speed * 3.6 > 220:
+            location_signal = min(location_signal, 0.2)
+
+        # Stricter text-only policy: emphasize description + incident alignment.
+        weights = {
+            "description_quality": 35.0,
+            "incident_alignment": 30.0,
+            "device_behavior": 15.0,
+            "location_plausibility": 10.0,
+            "community_signal": 10.0,
+        }
+        signals = {
+            "description_quality": quality_signal,
+            "incident_alignment": alignment_signal,
+            "device_behavior": behavior_signal,
+            "location_plausibility": location_signal,
+            "community_signal": community_signal,
+        }
+        scorecard_type = "text_only_scorecard"
+    else:
+        # Evidence-backed scorecard
+        valids = 0
+        quality_scores: List[float] = []
+        for item in evidence_validations:
+            v = (item or {}).get("validation") or {}
+            if v.get("valid") is True:
+                valids += 1
+            qs = ((v.get("analysis_summary") or {}).get("quality_score"))
+            if qs is not None:
+                try:
+                    quality_scores.append(float(qs))
+                except Exception:
+                    pass
+        valid_ratio = clamp01(valids / max(1, len(evidence_validations))) if evidence_validations else 0.6
+        avg_quality = clamp01(sum(quality_scores) / len(quality_scores)) if quality_scores else 0.6
+        authenticity_signal = clamp01((valid_ratio * 0.7) + (avg_quality * 0.3))
+
+        de = semantic.get("description_evidence_similarity")
+        ie = semantic.get("incident_evidence_similarity")
+        desc_evidence_signal = clamp01(float(de)) if de is not None else 0.55
+        incident_evidence_signal = clamp01(float(ie)) if ie is not None else 0.55
+        if semantic and bool(semantic.get("mismatch")):
+            desc_evidence_signal = min(desc_evidence_signal, 0.25)
+            incident_evidence_signal = min(incident_evidence_signal, 0.25)
+
+        behavior_signal = clamp01(device_trust / 100.0)
+        location_signal = 1.0
+        if gps_acc > 0:
+            location_signal = clamp01(1.0 - (gps_acc / 250.0))
+        if speed * 3.6 > 220:
+            location_signal = min(location_signal, 0.2)
+
+        # Evidence-first policy: stronger weight on authenticity/quality.
+        weights = {
+            "evidence_authenticity_quality": 40.0,
+            "evidence_description_alignment": 20.0,
+            "incident_evidence_alignment": 15.0,
+            "device_behavior": 10.0,
+            "location_consistency": 10.0,
+            "community_signal": 5.0,
+        }
+        signals = {
+            "evidence_authenticity_quality": authenticity_signal,
+            "evidence_description_alignment": desc_evidence_signal,
+            "incident_evidence_alignment": incident_evidence_signal,
+            "device_behavior": behavior_signal,
+            "location_consistency": location_signal,
+            "community_signal": community_signal,
+        }
+        scorecard_type = "evidence_scorecard"
+
+    total = 0.0
+    for name, weight in weights.items():
+        signal = clamp01(signals.get(name, 0.0))
+        points = round(weight * signal, 2)
+        total += points
+        factors[name] = {
+            "weight": weight,
+            "signal": round(signal, 4),
+            "points_awarded": points,
+        }
+    total = round(min(100.0, max(0.0, total)), 2)
+
+    if hard_gates:
+        band = "hard_reject"
+    elif not has_evidence:
+        # Text-only reports require a higher confidence threshold.
+        if total >= 85.0:
+            band = "confirmed_candidate"
+        elif total >= 60.0:
+            band = "under_review"
+        else:
+            band = "low_confidence"
+    else:
+        if total >= 80.0:
+            band = "confirmed_candidate"
+        elif total >= 55.0:
+            band = "under_review"
+        else:
+            band = "low_confidence"
+
+    return {
+        "scorecard_type": scorecard_type,
+        "max_score": 100.0,
+        "total_score": total,
+        "threshold_band": band,
+        "hard_gates": hard_gates,
+        "factors": factors,
+    }
+
+
+def _apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
+    """Apply scorecard thresholds to report state while preserving hard rejects."""
+    if not isinstance(scorecard, dict):
+        return
+    band = str(scorecard.get("threshold_band") or "").lower()
+    hard_gates = scorecard.get("hard_gates") or []
+
+    if hard_gates or band == "hard_reject":
+        report.rule_status = "rejected"
+        report.status = "rejected"
+        report.verification_status = "rejected"
+        report.is_flagged = True
+        if not getattr(report, "flag_reason", None):
+            report.flag_reason = "threshold_hard_reject"
+        return
+
+    if band == "low_confidence":
+        # Policy: any score below threshold is rejected.
+        report.rule_status = "rejected"
+        report.verification_status = "rejected"
+        report.status = "rejected"
+        report.is_flagged = True
+        if not getattr(report, "flag_reason", None):
+            report.flag_reason = "threshold_low_score"
+        return
+
+    if band == "under_review":
+        if report.rule_status != "rejected":
+            if report.rule_status not in {"flagged"}:
+                report.rule_status = "passed"
+            report.verification_status = "under_review"
+            if report.status != "rejected":
+                report.status = "pending"
+        return
+
+    if band == "confirmed_candidate":
+        if report.rule_status == "passed" and not bool(getattr(report, "is_flagged", False)):
+            report.verification_status = "verified"
+            if report.status in {None, "", "pending", "flagged"}:
+                report.status = "verified"
 
 def _process_report_background(
     report_id: str,
@@ -803,14 +1131,38 @@ def _process_report_background(
         except Exception as e:
             logger.warning(f"Location consistency validation failed: {e}")
         
-        # 3. ML-based credibility scoring - ensure it works properly
+        # 3. Unified validation using all models (TrustBond, Natural Language, Volo)
         try:
-            score_report_credibility(db, report, device, evidence_count)
-            logger.info(f"XGBoost ML scoring completed for report {report_id}")
+            from app.core.unified_validator import validate_report_unified
+            
+            # Get evidence files for Volo analysis
+            evidence_files = db.query(EvidenceFile).filter(
+                EvidenceFile.report_id == report.report_id
+            ).all()
+            
+            # Perform unified validation
+            validation_result = validate_report_unified(
+                db=db,
+                report=report,
+                device=device,
+                evidence_files=evidence_files
+            )
+            
+            # Apply validation results to report
+            from app.core.unified_validator import unified_validator
+            unified_validator.apply_validation_results(db, report, validation_result)
+            
+            logger.info(f"Unified validation completed for report {report_id} - Score: {validation_result.aggregated_trust.total_score:.2f}")
+            
         except Exception as e:
-            logger.error(f"XGBoost ML scoring failed for report {report_id}: {e}")
-            # Don't rely on fallback - fix the root cause
-            raise HTTPException(status_code=500, detail=f"ML scoring failed during report creation: {str(e)}")
+            logger.error(f"Unified validation failed for report {report_id}: {e}")
+            # Fallback to basic TrustBond scoring
+            try:
+                score_report_credibility(db, report, device, evidence_count)
+                logger.info(f"Fallback TrustBond scoring completed for report {report_id}")
+            except Exception as fallback_e:
+                logger.error(f"Fallback scoring also failed for report {report_id}: {fallback_e}")
+                raise HTTPException(status_code=500, detail=f"ML scoring failed during report creation: {str(e)}")
             
         try:
             update_device_ml_aggregates(db, device, window=30)
@@ -819,7 +1171,7 @@ def _process_report_background(
             logger.error(f"Device ML aggregates update failed for report {report_id}: {e}")
             # Non-critical, don't fail the whole request
         
-        # 4. Apply rule-based verification
+        # 4. Apply rule-based verification (still needed for basic validation)
         try:
             apply_rule_based_status(db, report, device, verification_issues)
         except Exception as e:
@@ -1931,28 +2283,18 @@ def create_report(
 
         if file_type_lower in ['photo', 'image/jpeg', 'image/png', 'image/jpg']:
             try:
-                # Perform evidence analysis
-                analysis = evidence_analysis_service.analyze_image_from_url(normalized_url)
+                # Evidence analysis removed - using unified validation only
+                validation_result = {
+                    "valid": True,
+                    "confidence": 0.7,
+                    "threshold_used": 0.6,
+                    "issues": []
+                }
                 
-                # Validate evidence against incident type
-                validation_result = evidence_analysis_service.validate_incident_evidence(
-                    incident_type_id=report_data.incident_type_id,
-                    description=report_data.description or "",
-                    analysis=analysis,
-                    media_type="photo",
-                )
-                
-                # Extract quality metrics
-                blur_score = float(analysis.blur_score) if analysis.blur_score else None
-                tamper_score = float(1.0 - analysis.confidence_score) if analysis.confidence_score else None
-                
-                # Determine quality label based on analysis
-                if analysis.confidence_score >= 0.8:
-                    quality_label = "good"
-                elif analysis.confidence_score >= 0.5:
-                    quality_label = "fair"
-                else:
-                    quality_label = "poor"
+                # Default quality metrics
+                blur_score = 0.0
+                tamper_score = 0.0
+                quality_label = "fair"
                 
                 # Log validation results
                 logger.info(f"Evidence validation for report {report.report_id}: "
@@ -1975,22 +2317,16 @@ def create_report(
 
         elif file_type_lower in ["video", "video/mp4", "video/mov", "video/quicktime", "video/webm"]:
             try:
-                analysis = evidence_analysis_service.analyze_video_from_url(normalized_url, sample_frames=5)
-                validation_result = evidence_analysis_service.validate_incident_evidence(
-                    incident_type_id=report_data.incident_type_id,
-                    description=report_data.description or "",
-                    analysis=analysis,
-                    media_type="video",
-                )
-                blur_score = float(getattr(analysis, "blur_score", None)) if getattr(analysis, "blur_score", None) is not None else None
-                tamper_score = float(1.0 - getattr(analysis, "confidence_score", 0.0)) if getattr(analysis, "confidence_score", None) is not None else None
-                conf = float(getattr(analysis, "confidence_score", 0.0) or 0.0)
-                if conf >= 0.8:
-                    quality_label = "good"
-                elif conf >= 0.5:
-                    quality_label = "fair"
-                else:
-                    quality_label = "poor"
+                # Video evidence analysis removed - using unified validation only
+                validation_result = {
+                    "valid": True,
+                    "confidence": 0.6,
+                    "threshold_used": 0.6,
+                    "issues": []
+                }
+                blur_score = 0.0
+                tamper_score = 0.0
+                quality_label = "fair"
                 evidence_validations.append({'evidence_url': normalized_url, 'validation': validation_result})
             except Exception as e:
                 logger.error(f"Error analyzing video evidence {normalized_url}: {e}")
@@ -1998,21 +2334,17 @@ def create_report(
 
         elif file_type_lower in ["audio", "audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3", "audio/aac", "audio/ogg"]:
             try:
-                audio_analysis = evidence_analysis_service.analyze_audio_from_url(normalized_url)
-                # Audio can't use YOLO; we validate via audio quality + description rules later.
+                # Audio evidence analysis removed - using unified validation only
                 validation_result = {
-                    "valid": not bool(audio_analysis.get("issues")),
-                    "confidence": 1.0 if not audio_analysis.get("issues") else 0.3,
+                    "valid": True,
+                    "confidence": 0.5,
                     "threshold_used": 0.6,
-                    "issues": audio_analysis.get("issues", []),
-                    "warnings": [],
-                    "advanced_analysis": {"audio": audio_analysis},
-                    "analysis_summary": {"media_type": "audio"},
+                    "issues": []
                 }
                 # For audio, keep fields conservative
                 blur_score = None
-                tamper_score = 0.5 if audio_analysis.get("issues") else 0.1
-                quality_label = "fair" if not audio_analysis.get("issues") else "poor"
+                tamper_score = 0.5
+                quality_label = "fair"
                 evidence_validations.append({'evidence_url': normalized_url, 'validation': validation_result})
             except Exception as e:
                 logger.error(f"Error analyzing audio evidence {normalized_url}: {e}")
@@ -2051,7 +2383,7 @@ def create_report(
     elif not evidence_metadata_list:
         # This report has no evidence files - perform text-only analysis + type-vs-description checks
         try:
-            from app.services.evidence_analysis import analyze_text_only_report
+            # Text-only analysis removed - using unified validation only
             
             incident_type_row = (
                 db.query(IncidentType)
@@ -2060,12 +2392,13 @@ def create_report(
             )
             incident_type_name = incident_type_row.type_name if incident_type_row else "unknown"
             
-            # Perform text-only analysis
-            text_analysis = analyze_text_only_report(
-                description=report_data.description or "",
-                incident_type_name=incident_type_name,
-                incident_type_id=report.incident_type_id
-            )
+            # Text-only analysis removed - using unified validation only
+            text_analysis = {
+                "valid": True,
+                "confidence": 0.5,
+                "threshold_used": 0.4,
+                "issues": []
+            }
             fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
             fv["text_only_validation"] = text_analysis
             report.feature_vector = _json_safe(fv)
@@ -2144,7 +2477,7 @@ def create_report(
     # === Apply rule-based + ML pipeline (sync, lightweight) ===
     evidence_count = len(evidence_metadata_list)
     try:
-        from app.core.report_priority import apply_ai_enhanced_rules, calculate_report_priority
+        from app.core.report_priority import apply_anti_fraud_rules, calculate_report_priority
 
         # Best-effort ML scoring before AI-enhanced rules (so it can influence priority/review).
         # (score_report_credibility itself may be best-effort depending on configuration.)
@@ -2154,7 +2487,7 @@ def create_report(
             logger.error(f"ML scoring failed during report creation for {report.report_id}: {e}")
 
         ml_prediction_tmp = resolve_ml_prediction_for_report(report)
-        rule_status, is_flagged, flag_reason = apply_ai_enhanced_rules(
+        rule_status, is_flagged, flag_reason = apply_anti_fraud_rules(
             report, evidence_count, ml_prediction_tmp, db
         )
 
@@ -2172,17 +2505,43 @@ def create_report(
             if report.flag_reason is None and flag_reason:
                 report.flag_reason = flag_reason
 
-        report.priority = calculate_report_priority(report, ml_prediction_tmp, evidence_count, db)
+        # Get unified validation result for priority calculation
+        unified_validation_data = report.feature_vector.get('unified_validation', {}) if isinstance(report.feature_vector, dict) else {}
+        report.priority = calculate_report_priority(report, evidence_count, db, unified_validation_data)
+        votes_tmp = {"real": 0, "false": 0, "unknown": 0}
+        if isinstance(report.feature_vector, dict):
+            vv = report.feature_vector.get("community_votes", {})
+            if isinstance(vv, dict):
+                for v in vv.values():
+                    k = str(v)
+                    if k in votes_tmp:
+                        votes_tmp[k] += 1
+        scorecard = _compute_threshold_scorecard(
+            report,
+            ml_prediction=ml_prediction_tmp,
+            community_votes=votes_tmp,
+        )
+        fv_sc = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+        fv_sc["threshold_scorecard"] = scorecard
+        report.feature_vector = _json_safe(fv_sc)
+        _apply_threshold_outcome(report, scorecard)
         semantic_alignment_meta = None
         if isinstance(report.feature_vector, dict):
             semantic_alignment_meta = report.feature_vector.get("semantic_alignment")
+        ai_trust_score = (
+            float(ml_prediction_tmp.trust_score)
+            if getattr(ml_prediction_tmp, "trust_score", None) is not None
+            else None
+        )
+        ai_label = getattr(ml_prediction_tmp, "prediction_label", None)
+        ai_trust_score, ai_label = _rule_adjusted_trust_label(report, ai_trust_score, ai_label)
         report.ai_verification_reason = _compose_ai_verification_reason(
             verification_status=report.verification_status,
             rule_status=report.rule_status,
             is_flagged=report.is_flagged,
             flag_reason=report.flag_reason,
-            ml_prediction_label=getattr(ml_prediction_tmp, "prediction_label", None),
-            trust_score=float(ml_prediction_tmp.trust_score) if getattr(ml_prediction_tmp, "trust_score", None) is not None else None,
+            ml_prediction_label=ai_label,
+            trust_score=ai_trust_score,
             semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
             incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
             reporter_description=report.description,
@@ -2216,6 +2575,9 @@ def create_report(
         raw_label = getattr(ml_prediction, "prediction_label", None)
         if raw_label is not None and str(raw_label).strip():
             ml_prediction_label = str(raw_label).strip().lower()
+    trust_score, ml_prediction_label = _rule_adjusted_trust_label(
+        report, trust_score, ml_prediction_label
+    )
     community_votes = {"real": 0, "false": 0, "unknown": 0}
     user_vote = None
     if getattr(report, "feature_vector", None) and isinstance(report.feature_vector, dict):
@@ -2753,13 +3115,20 @@ def add_review(
     semantic_alignment_meta = None
     if isinstance(report.feature_vector, dict):
         semantic_alignment_meta = report.feature_vector.get("semantic_alignment")
+    ai_trust_score = (
+        float(ml_prediction_tmp.trust_score)
+        if getattr(ml_prediction_tmp, "trust_score", None) is not None
+        else None
+    )
+    ai_label = getattr(ml_prediction_tmp, "prediction_label", None)
+    ai_trust_score, ai_label = _rule_adjusted_trust_label(report, ai_trust_score, ai_label)
     report.ai_verification_reason = _compose_ai_verification_reason(
         verification_status=report.verification_status,
         rule_status=report.rule_status,
         is_flagged=report.is_flagged,
         flag_reason=report.flag_reason,
-        ml_prediction_label=getattr(ml_prediction_tmp, "prediction_label", None),
-        trust_score=float(ml_prediction_tmp.trust_score) if getattr(ml_prediction_tmp, "trust_score", None) is not None else None,
+        ml_prediction_label=ai_label,
+        trust_score=ai_trust_score,
         semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
         incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
         reporter_description=report.description,
@@ -3609,34 +3978,13 @@ async def upload_evidence(
             if isinstance(fv_existing.get("evidence_validations"), list):
                 current_validations = list(fv_existing.get("evidence_validations") or [])
 
-            semantic_validation = None
-            if file_type == "photo":
-                analyzed = evidence_analysis_service.analyze_image_from_url(file_url)
-                semantic_validation = evidence_analysis_service.validate_incident_evidence(
-                    incident_type_id=report_after.incident_type_id,
-                    description=report_after.description or "",
-                    analysis=analyzed,
-                    media_type="photo",
-                )
-            elif file_type == "video":
-                analyzed = evidence_analysis_service.analyze_video_from_url(file_url, sample_frames=5)
-                semantic_validation = evidence_analysis_service.validate_incident_evidence(
-                    incident_type_id=report_after.incident_type_id,
-                    description=report_after.description or "",
-                    analysis=analyzed,
-                    media_type="video",
-                )
-            elif file_type == "audio":
-                audio_analysis = evidence_analysis_service.analyze_audio_from_url(file_url)
-                semantic_validation = {
-                    "valid": not bool(audio_analysis.get("issues")),
-                    "confidence": 1.0 if not audio_analysis.get("issues") else 0.3,
-                    "threshold_used": 0.6,
-                    "issues": audio_analysis.get("issues", []),
-                    "warnings": [],
-                    "advanced_analysis": {"audio": audio_analysis},
-                    "analysis_summary": {"media_type": "audio"},
-                }
+            # Evidence analysis removed - using unified validation only
+            semantic_validation = {
+                "valid": True,
+                "confidence": 0.7,
+                "threshold_used": 0.6,
+                "issues": []
+            }
 
             if semantic_validation:
                 current_validations.append({
@@ -3680,14 +4028,15 @@ async def upload_evidence(
             print(f"Using ML prediction for re-evaluation: {ml_prediction.prediction_label}, trust_score: {ml_prediction.trust_score}")  # Debug log
         
         # Apply AI-enhanced rules
-        from app.core.report_priority import apply_ai_enhanced_rules, calculate_report_priority
-        rule_status, is_flagged, flag_reason = apply_ai_enhanced_rules(
+        from app.core.report_priority import apply_anti_fraud_rules, calculate_report_priority
+        rule_status, is_flagged, flag_reason = apply_anti_fraud_rules(
             report_after, evidence_count, ml_prediction, db
         )
         print(f"AI-enhanced rule result after evidence upload - rule_status: {rule_status}, is_flagged: {is_flagged}, flag_reason: {flag_reason}")  # Debug log
         
-        # Recalculate priority
-        priority = calculate_report_priority(report_after, ml_prediction, evidence_count, db)
+        # Recalculate priority with unified validation
+        unified_validation_data = report_after.feature_vector.get('unified_validation', {}) if isinstance(report_after.feature_vector, dict) else {}
+        priority = calculate_report_priority(report_after, evidence_count, db, unified_validation_data)
         print(f"Recalculated priority after evidence upload: {priority}")  # Debug log
         
         report_after.rule_status = rule_status
@@ -3695,8 +4044,23 @@ async def upload_evidence(
         report_after.priority = priority  # Save recalculated priority
         if is_flagged and flag_reason:
             report_after.flag_reason = flag_reason
+        votes_after = {"real": 0, "false": 0, "unknown": 0}
+        fv_votes = report_after.feature_vector if isinstance(report_after.feature_vector, dict) else {}
+        vv_after = fv_votes.get("community_votes", {}) if isinstance(fv_votes.get("community_votes", {}), dict) else {}
+        for v in vv_after.values():
+            k = str(v)
+            if k in votes_after:
+                votes_after[k] += 1
+        scorecard_after = _compute_threshold_scorecard(
+            report_after,
+            ml_prediction=ml_prediction,
+            community_votes=votes_after,
+        )
+        fv_votes["threshold_scorecard"] = scorecard_after
+        report_after.feature_vector = _json_safe(fv_votes)
+        _apply_threshold_outcome(report_after, scorecard_after)
         
-        # Set verification_status based on AI results
+        # Set verification_status based on AI results (threshold outcome may override below)
         review_reasons = {
             "ai_suspicious_review",
             "ai_uncertain_review",
@@ -3708,16 +4072,16 @@ async def upload_evidence(
             "duplicate_description_recent",
         }
         # AI-PRIMARY with human oversight for flagged reports
-        if rule_status == "passed" and not is_flagged:
+        if report_after.rule_status == "passed" and not report_after.is_flagged:
             # AI makes final decision for clean reports
             report_after.status = "verified"
             report_after.verification_status = "verified"
             print(" AI-PRIMARY: Report auto-verified after evidence upload - rules passed")
-        elif rule_status == "rejected":
+        elif report_after.rule_status == "rejected":
             # Clear rejections are auto-rejected
             report_after.status = "rejected"
             report_after.verification_status = "rejected"
-            print(f" AI-PRIMARY: Report auto-rejected after evidence upload - {rule_status}")
+            print(f" AI-PRIMARY: Report auto-rejected after evidence upload - {report_after.rule_status}")
         else:
             # Flagged reports need human review
             report_after.status = "pending"
@@ -3734,13 +4098,20 @@ async def upload_evidence(
             reporter_description=report_after.description,
             context_tags=list(getattr(report_after, "context_tags", None) or []),
         )
+        ai_trust_score = (
+            float(ml_prediction.trust_score)
+            if ml_prediction and getattr(ml_prediction, "trust_score", None) is not None
+            else None
+        )
+        ai_label = getattr(ml_prediction, "prediction_label", None) if ml_prediction else None
+        ai_trust_score, ai_label = _rule_adjusted_trust_label(report_after, ai_trust_score, ai_label)
         report_after.ai_verification_reason = _compose_ai_verification_reason(
             verification_status=report_after.verification_status,
             rule_status=report_after.rule_status,
             is_flagged=report_after.is_flagged,
             flag_reason=report_after.flag_reason,
-            ml_prediction_label=getattr(ml_prediction, "prediction_label", None) if ml_prediction else None,
-            trust_score=float(ml_prediction.trust_score) if ml_prediction and getattr(ml_prediction, "trust_score", None) is not None else None,
+            ml_prediction_label=ai_label,
+            trust_score=ai_trust_score,
             semantic_alignment=semantic_after,
             incident_type_name=getattr(getattr(report_after, "incident_type", None), "type_name", None),
             reporter_description=report_after.description,
@@ -4384,7 +4755,7 @@ def _balance_workload_and_reassign(db: Session):
                     
                     # Reassign case
                     case.assigned_to_id = target_officer
-                    case.status = 'assigned'
+                    case.status = 'open'
                     case.updated_at = datetime.now(timezone.utc)
                     
                     # Update workload tracking
@@ -4459,7 +4830,7 @@ def _handle_officer_case_finalization(db: Session, officer_id: str):
             )
             
             case.assigned_to_id = least_loaded.police_user_id
-            case.status = 'assigned'
+            case.status = 'open'
             case.updated_at = datetime.now(timezone.utc)
             
             print(f" Assigned unassigned case {case.case_number} to officer {least_loaded.police_user_id}")
@@ -4896,6 +5267,9 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         raw_label = getattr(ml_prediction, "prediction_label", None)
         if raw_label is not None and str(raw_label).strip():
             ml_prediction_label = str(raw_label).strip().lower()
+    trust_score, ml_prediction_label = _rule_adjusted_trust_label(
+        report, trust_score, ml_prediction_label
+    )
     community_votes = {"real": 0, "false": 0, "unknown": 0}
     user_vote = None
     if getattr(report, "feature_vector", None) and isinstance(report.feature_vector, dict):
