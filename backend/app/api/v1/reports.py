@@ -2491,19 +2491,30 @@ def create_report(
             report, evidence_count, ml_prediction_tmp, db
         )
 
-        # Preserve hard rejections (boundary) and existing flags unless the rule engine rejects.
+        # HARD REJECTION: If rule-based validation fails, reject report immediately (like boundary rejection)
+        if rule_status == "rejected":
+            # Rollback any database changes and return HTTP 400
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "RULE_BASED_REJECTION",
+                    "message": "Report rejected by rule-based validation",
+                    "flag_reason": flag_reason or "anti_fraud_rules_violation",
+                    "rule_status": rule_status
+                }
+            )
+
+        # Preserve existing flags unless the rule engine flags
         if report.rule_status != "rejected":
             report.rule_status = rule_status
-        if rule_status == "rejected":
-            report.status = "rejected"
-            report.verification_status = "rejected"
-            report.is_flagged = True
-        else:
-            report.is_flagged = bool(report.is_flagged or is_flagged)
-            if report.is_flagged:
-                report.verification_status = "under_review"
-            if report.flag_reason is None and flag_reason:
-                report.flag_reason = flag_reason
+        
+        # Handle flagging from rule engine (not rejection)
+        report.is_flagged = bool(report.is_flagged or is_flagged)
+        if report.is_flagged:
+            report.verification_status = "under_review"
+        if report.flag_reason is None and flag_reason:
+            report.flag_reason = flag_reason
 
         # Get unified validation result for priority calculation
         unified_validation_data = report.feature_vector.get('unified_validation', {}) if isinstance(report.feature_vector, dict) else {}

@@ -1,6 +1,7 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:flutter/foundation.dart'
@@ -17,9 +18,13 @@ import '../services/device_service.dart';
 
 import '../services/motion_service.dart';
 
+import '../services/guidance_service.dart';
+
 import '../models/report_model.dart';
 
 import '../models/evidence_attachment.dart';
+
+import '../widgets/guidance_widgets.dart';
 
 import 'package:trustbond/services/mobile_verification_service.dart';
 
@@ -78,6 +83,13 @@ class _ReportScreenState extends State<ReportScreen> {
   bool _isSubmitting = false;
 
   final List<EvidenceAttachment> _attachments = [];
+
+  // Guidance state
+  GuidanceResponse? _currentGuidance;
+  DescriptionValidationResponse? _descriptionValidation;
+  EvidenceValidationResponse? _evidenceValidation;
+  bool _isLoadingGuidance = false;
+  Timer? _guidanceDebounceTimer;
 
   double? _exifToDouble(dynamic value) {
     // exif package may return Ratio / IfdRatios / num / String.
@@ -313,6 +325,9 @@ class _ReportScreenState extends State<ReportScreen> {
 
         });
 
+        // Trigger guidance update
+        _onEvidenceChanged();
+
       }
 
     } catch (e) {
@@ -385,6 +400,9 @@ class _ReportScreenState extends State<ReportScreen> {
 
         });
 
+        // Trigger guidance update
+        _onEvidenceChanged();
+
       }
 
     } catch (e) {
@@ -437,6 +455,9 @@ class _ReportScreenState extends State<ReportScreen> {
           ));
 
         });
+
+        // Trigger guidance update
+        _onEvidenceChanged();
 
         // Populate EXIF asynchronously (avoid blocking UI thread).
         final exif = await _readImageExifForAttachment(image.path);
@@ -504,6 +525,9 @@ class _ReportScreenState extends State<ReportScreen> {
 
         });
 
+        // Trigger guidance update
+        _onEvidenceChanged();
+
         // Best-effort timestamp for videos
         try {
           final ts = await File(video.path).lastModified();
@@ -544,24 +568,53 @@ class _ReportScreenState extends State<ReportScreen> {
 
   }
 
+          if (image != null && mounted) {
 
+            setState(() {
 
-  void _removeAttachment(int index) {
+              // Gallery selection: try to extract EXIF capture time and GPS when available.
+              // If EXIF missing (common after edits / some share flows), we keep nulls and backend will treat as warning.
+              _attachments.add(EvidenceAttachment(
 
-    setState(() {
+                path: image.path,
 
-      _attachments.removeAt(index);
+                isVideo: false,
 
-    });
+                capturedAt: null,
+                mediaLatitude: null,
+                mediaLongitude: null,
+                isLiveCapture: false,
 
-  }
+              ));
 
+            });
 
+            // Trigger guidance update
+            _onEvidenceChanged();
 
-  void _showMediaOptions() {
+            // Populate EXIF asynchronously (avoid blocking UI thread).
+            final exif = await _readImageExifForAttachment(image.path);
+            if (!mounted) return;
+            setState(() {
+              final idx = _attachments.lastIndexWhere((a) => a.path == image.path);
+              if (idx >= 0) {
+                final existing = _attachments[idx];
+                _attachments[idx] = EvidenceAttachment(
+                  path: existing.path,
+                  isVideo: existing.isVideo,
+                  capturedAt: exif.capturedAt ?? existing.capturedAt,
+                  mediaLatitude: exif.lat ?? existing.mediaLatitude,
+                  mediaLongitude: exif.lon ?? existing.mediaLongitude,
+                  isLiveCapture: existing.isLiveCapture,
+                  hasExif: exif.hasExif,
+                  exifParseError: exif.error,
+                );
+              }
+            });
 
-    showModalBottomSheet(
+          }
 
+        } catch (e) {
       context: context,
 
       builder: (context) => SafeArea(
@@ -957,11 +1010,80 @@ class _ReportScreenState extends State<ReportScreen> {
 
       if (mounted) {
 
-        ScaffoldMessenger.of(context).showSnackBar(
-
-          SnackBar(content: Text('Failed to submit report: $e')),
-
-        );
+        String errorMessage = 'Failed to submit report';
+        String errorDetail = e.toString();
+        
+        // Check for rule-based rejection
+        if (errorDetail.contains('RULE_BASED_REJECTION') || 
+            errorDetail.contains('rejected by rule-based validation')) {
+          errorMessage = 'Report Rejected by Validation Rules';
+          
+          // Extract specific reason if available
+          if (errorDetail.contains('Reason:')) {
+            final reasonMatch = RegExp(r'Reason: (.+)$').firstMatch(errorDetail);
+            if (reasonMatch != null) {
+              errorDetail = reasonMatch.group(1) ?? 'Validation rules not met';
+            }
+          } else {
+            errorDetail = 'Please check your report details and try again';
+          }
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 6),
+              action: SnackBarAction(
+                label: 'Details',
+                textColor: Colors.white,
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Report Rejected'),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Your report was rejected by our validation system. This helps maintain the quality and reliability of reports.',
+                            style: TextStyle(fontSize: 14),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Common reasons:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text('• Suspicious patterns detected'),
+                          const Text('• Invalid location data'),
+                          const Text('• Poor evidence quality'),
+                          const Text('• Duplicate or spam content'),
+                          const SizedBox(height: 8),
+                          Text('Specific reason: $errorDetail'),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('OK'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          );
+        } else {
+          // Handle other errors normally
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to submit report: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
 
       }
 
@@ -1039,6 +1161,9 @@ class _ReportScreenState extends State<ReportScreen> {
 
                         });
 
+                        // Trigger guidance update when incident type changes
+                        _updateGuidance();
+
                       },
 
                 validator: (value) {
@@ -1111,9 +1236,25 @@ class _ReportScreenState extends State<ReportScreen> {
 
                 maxLines: 4,
 
+                onChanged: (_) => _onDescriptionChanged(),
+
               ),
 
               const SizedBox(height: 16),
+
+              // Description quality indicator
+              if (_descriptionValidation != null)
+                DescriptionQualityIndicator(validation: _descriptionValidation!),
+
+              // Trust score display
+              if (_currentGuidance != null)
+                TrustScoreDisplay(trustEstimate: _currentGuidance!.trustEstimate),
+
+              // Location quality indicator
+              LocationQualityIndicator(
+                gpsAccuracy: _gpsAccuracy,
+                movementSpeed: null, // Could be added from motion service
+              ),
 
               const Text(
 
@@ -1146,6 +1287,33 @@ class _ReportScreenState extends State<ReportScreen> {
                 ),
 
               ),
+
+              // Evidence quality indicator
+              if (_evidenceValidation != null)
+                EvidenceQualityIndicator(validation: _evidenceValidation!),
+
+              // Guidance cards
+              if (_currentGuidance != null && _currentGuidance!.guidanceItems.isNotEmpty)
+                Column(
+                  children: [
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Suggestions for Better Report',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    // Show critical items first
+                    ..._currentGuidance!.criticalItems.map((item) => 
+                      GuidanceCard(item: item)
+                    ),
+                    // Show warning items
+                    ..._currentGuidance!.warningItems.take(3).map((item) => 
+                      GuidanceCard(item: item)
+                    ),
+                    // Show summary card
+                    GuidanceSummaryCard(guidance: _currentGuidance!),
+                  ],
+                ),
 
               if (_attachments.isNotEmpty) ...[
 
@@ -1342,6 +1510,8 @@ class _ReportScreenState extends State<ReportScreen> {
   void dispose() {
 
     _descriptionController.dispose();
+
+    _guidanceDebounceTimer?.cancel();
 
     super.dispose();
 

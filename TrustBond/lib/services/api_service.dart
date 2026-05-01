@@ -187,10 +187,26 @@ class ApiService {
     String message = 'Failed to submit report';
     try {
       final err = jsonDecode(response.body);
-      if (err is Map && err['detail'] != null) {
-        message = err['detail'] is String
-            ? err['detail'] as String
-            : err['detail'].toString();
+      if (err is Map) {
+        if (err['detail'] != null) {
+          // Handle new structured error format (rule-based rejection)
+          if (err['detail'] is Map) {
+            final detail = err['detail'] as Map<String, dynamic>;
+            if (detail['error'] == 'RULE_BASED_REJECTION') {
+              message = detail['message'] ?? 'Report rejected by rule-based validation';
+              // Add specific reason if available
+              if (detail['flag_reason'] != null) {
+                message += '\nReason: ${detail['flag_reason']}';
+              }
+            } else {
+              message = detail.toString();
+            }
+          } else {
+            message = err['detail'] is String
+                ? err['detail'] as String
+                : err['detail'].toString();
+          }
+        }
       }
     } catch (_) {}
     throw ApiRequestException(message, response.statusCode);
