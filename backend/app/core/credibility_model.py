@@ -461,12 +461,20 @@ def score_report_credibility(
         elif community_net < 0:
             credibility_score = max(0.0, credibility_score + (community_net * 10.0))
 
-        # Store ONLY the score - no prediction label or decision
+        # Calculate prediction label based on trust score
+        if credibility_score >= 70.0:
+            prediction_label = "likely_real"
+        elif credibility_score >= 40.0:
+            prediction_label = "suspicious"
+        else:
+            prediction_label = "fake"
+        
+        # Store the score with prediction label
         prediction = MLPrediction(
             prediction_id=uuid4(),
             report_id=report.report_id,
             trust_score=Decimal(f"{credibility_score:.2f}"),
-            prediction_label=None,  # No decision - let aggregator decide
+            prediction_label=prediction_label,  # Set prediction label based on score
             model_version=meta.get("model_version", "report_credibility_xgb_v1"),
             model_type="xgboost",
             confidence=Decimal(f"{prob_real:.3f}"),

@@ -86,8 +86,18 @@ def resolve_ml_prediction_for_report(report: Any):
             if p.is_final or p.trust_score is not None or p.prediction_label is not None
         ]
         if preds:
+            # Prioritize predictions with actual labels over those without
             preds.sort(
-                key=lambda p: (p.evaluated_at or datetime.min.replace(tzinfo=timezone.utc)),
+                key=lambda p: (
+                    # First priority: is_final
+                    bool(p.is_final),
+                    # Second priority: has prediction_label (not None/empty)
+                    bool(p.prediction_label and p.prediction_label.strip() and p.prediction_label != "unknown"),
+                    # Third priority: has trust_score
+                    bool(p.trust_score is not None),
+                    # Fourth priority: most recent
+                    p.evaluated_at or datetime.min.replace(tzinfo=timezone.utc)
+                ),
                 reverse=True,
             )
             return preds[0]
