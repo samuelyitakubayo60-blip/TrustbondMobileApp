@@ -55,20 +55,28 @@ class ApiService {
 
   Future<List<dynamic>> getIncidentTypes() async {
     try {
+      final url = '${ApiConfig.incidentTypesUrl}/';
+      print('Fetching incident types from: $url');
+      
       final response = await _client.get(
-        Uri.parse('${ApiConfig.incidentTypesUrl}/'),
+        Uri.parse(url),
         headers: _getHeaders,
       ).timeout(_timeout);
+
+      print('Incident types response status: ${response.statusCode}');
+      print('Incident types response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as List<dynamic>;
         await _saveCache(_incidentTypesCacheKey, data);
         return data;
       }
-      throw Exception('Failed to get incident types: ${response.statusCode}');
-    } catch (_) {
+      throw Exception('Failed to get incident types: ${response.statusCode} - ${response.body}');
+    } catch (e) {
+      print('Error fetching incident types: $e');
       final cached = await _readCache(_incidentTypesCacheKey);
       if (cached is List) {
+        print('Using cached incident types');
         return cached;
       }
       rethrow;

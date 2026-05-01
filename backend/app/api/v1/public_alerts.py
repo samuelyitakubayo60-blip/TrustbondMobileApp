@@ -89,6 +89,7 @@ def _prediction_narrative(classification: str, incident_name: str, distance_km: 
 
 
 @router.get("/", response_model=List[Dict[str, Any]])
+@router.get("", response_model=List[Dict[str, Any]])
 def list_public_alerts(
     latitude: float = Query(..., description="User latitude for proximity filtering."),
     longitude: float = Query(..., description="User longitude for proximity filtering."),

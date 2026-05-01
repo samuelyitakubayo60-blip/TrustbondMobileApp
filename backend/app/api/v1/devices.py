@@ -570,7 +570,7 @@ async def get_report_prediction_endpoint(
         prediction_id=str(prediction.prediction_id),
         report_id=str(prediction.report_id),
         trust_score=float(prediction.trust_score),
-        prediction_label=prediction.prediction_label,
+        prediction_label=prediction.prediction_label or "unknown",
         model_version=prediction.model_version,
         confidence=float(prediction.confidence),
         evaluated_at=prediction.evaluated_at.isoformat() if prediction.evaluated_at else None,

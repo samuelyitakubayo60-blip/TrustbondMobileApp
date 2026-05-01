@@ -2643,8 +2643,8 @@ def create_report(
         decision_pattern_explanations=_extract_decision_pattern_explanations(
             getattr(report, "ai_verification_reason", None)
         ),
-        incident_latitude=float(incident_lat) if incident_lat is not None else None,
-        incident_longitude=float(incident_lon) if incident_lon is not None else None,
+        incident_latitude=float(report.latitude) if report.latitude is not None else None,
+        incident_longitude=float(report.longitude) if report.longitude is not None else None,
         incident_location_source=incident_source,
         incident_village_name=incident_location_info["village_name"] if incident_location_info else None,
         incident_cell_name=incident_location_info.get("cell_name") if incident_location_info else None,
@@ -3257,7 +3257,7 @@ def add_review(
     )
 
 
-@router.get("/{report_id}", response_model=ReportResponse)
+@router.get("/{report_id}", response_model=ReportDetailResponse)
 def get_report(
     report_id: UUID,
     current_user: Annotated[PoliceUser, Depends(get_current_user)],
@@ -3274,6 +3274,8 @@ def get_report(
             joinedload(Report.village_location),
             joinedload(Report.evidence_files),
             joinedload(Report.police_reviews).joinedload(PoliceReview.police_user),
+            joinedload(Report.assignments).joinedload(ReportAssignment.police_user).joinedload(PoliceUser.station),
+            selectinload(Report.ml_predictions),
         )
         .filter(Report.report_id == report_id)
         .first()
@@ -3282,7 +3284,7 @@ def get_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     
-    return _build_report_response(report, db)
+    return _build_report_detail_response(report, db)
 
 
 @router.get("/{report_id}/reviews", response_model=List[ReviewResponse])
@@ -5262,6 +5264,178 @@ def _automatic_incident_consolidation(db: Session, report: Report):
     except Exception as e:
         print(f"Auto-case creation failed for report {report.report_id}: {e}")
         # Don't fail the report creation if case creation fails
+
+
+def _build_report_detail_response(report: Report, db: Session) -> ReportDetailResponse:
+    """Build a ReportDetailResponse from a Report object."""
+    # Get ML prediction
+    ml_prediction = resolve_ml_prediction_for_report(report)
+    trust_score = (
+        float(ml_prediction.trust_score)
+        if ml_prediction is not None and ml_prediction.trust_score is not None
+        else None
+    )
+    ml_prediction_label = None
+    if ml_prediction is not None:
+        raw_label = getattr(ml_prediction, "prediction_label", None)
+        if raw_label is not None and str(raw_label).strip():
+            ml_prediction_label = str(raw_label).strip().lower()
+    trust_score, ml_prediction_label = _rule_adjusted_trust_label(
+        report, trust_score, ml_prediction_label
+    )
+    community_votes = {"real": 0, "false": 0, "unknown": 0}
+    user_vote = None
+    if getattr(report, "feature_vector", None) and isinstance(report.feature_vector, dict):
+        votes_dict = report.feature_vector.get("community_votes", {})
+        for dict_device_id, v in votes_dict.items():
+            if str(v) in community_votes:
+                community_votes[str(v)] += 1
+    trust_factors = _resolve_trust_factors(
+        report,
+        ml_prediction,
+        evidence_count=len(getattr(report, "evidence_files", []) or []),
+        community_votes=community_votes,
+    )
+    context_tags_list = getattr(report, "context_tags", None) or []
+
+    # Get device metadata and trust score
+    device_metadata = getattr(report.device, "metadata_json", {}) if report.device else {}
+    device_trust_score = getattr(report.device, "device_trust_score", None) if report.device else None
+    total_reports = getattr(report.device, "total_reports", None) if report.device else None
+    trusted_reports = getattr(report.device, "trusted_reports", None) if report.device else None
+
+    # Get incident location info
+    incident_location_info = {}
+    incident_source = "reporter_only"
+    if report.evidence_files and len(report.evidence_files) > 0:
+        # Check if any evidence has location data
+        evidence_with_location = [ef for ef in report.evidence_files if ef.media_latitude and ef.media_longitude]
+        if evidence_with_location:
+            incident_source = "combined"
+            # Use evidence location for incident location
+            ef = evidence_with_location[0]
+            try:
+                from app.core.village_lookup import get_village_location_info
+                incident_location_info = get_village_location_info(float(ef.media_latitude), float(ef.media_longitude))
+            except Exception:
+                pass
+        else:
+            incident_source = "reporter_only"
+    else:
+        incident_source = "reporter_only"
+    
+    # If no evidence location, use report location
+    if not incident_location_info and report.latitude and report.longitude:
+        try:
+            from app.core.village_lookup import get_village_location_info
+            incident_location_info = get_village_location_info(float(report.latitude), float(report.longitude))
+        except Exception:
+            pass
+
+    # Build assignments list
+    assignment_list = []
+    if hasattr(report, 'assignments') and report.assignments:
+        for assignment in report.assignments:
+            assignment_list.append(AssignmentResponse(
+                assignment_id=assignment.assignment_id,
+                report_id=assignment.report_id,
+                police_user_id=assignment.police_user_id,
+                assigned_at=assignment.assigned_at,
+                assigned_by=assignment.assigned_by,
+                status=assignment.status,
+                notes=assignment.notes,
+                officer_name=getattr(assignment.police_user, 'full_name', None) if assignment.police_user else None,
+                officer_badge=getattr(assignment.police_user, 'badge_number', None) if assignment.police_user else None,
+                station_name=getattr(getattr(assignment.police_user, 'station', None), 'station_name', None) if assignment.police_user else None,
+            ))
+
+    # Build reviews list
+    review_list = []
+    if hasattr(report, 'police_reviews') and report.police_reviews:
+        for review in report.police_reviews:
+            reviewer_name = None
+            if review.police_user:
+                reviewer_name = review.police_user.full_name or review.police_user.badge_number
+            review_list.append(ReviewResponse(
+                review_id=review.review_id,
+                report_id=review.report_id,
+                police_user_id=review.police_user_id,
+                decision=review.decision,
+                review_note=review.review_note,
+                reviewed_at=review.reviewed_at,
+                reviewer_name=reviewer_name,
+            ))
+
+    return ReportDetailResponse(
+        report_id=report.report_id,
+        report_number=getattr(report, "report_number", None),
+        device_id=report.device_id,
+        incident_type_id=report.incident_type_id,
+        description=report.description,
+        latitude=report.latitude,
+        longitude=report.longitude,
+        gps_accuracy=getattr(report, "gps_accuracy", None),
+        motion_level=getattr(report, "motion_level", None),
+        movement_speed=getattr(report, "movement_speed", None),
+        was_stationary=getattr(report, "was_stationary", None),
+        reported_at=report.reported_at,
+        rule_status=report.rule_status,
+        priority=getattr(report, "priority", "medium"),
+        status=report.status,
+        verification_status=report.verification_status,
+        village_location_id=report.village_location_id,
+        village_name=getattr(report.village_location, "village_name", None) if report.village_location else None,
+        cell_name=getattr(getattr(report.village_location, "parent", None), "village_name", None) if report.village_location and report.village_location.parent else None,
+        sector_name=getattr(getattr(getattr(report.village_location, "parent", None), "parent", None), "village_name", None) if report.village_location and report.village_location.parent and report.village_location.parent.parent else None,
+        incident_type_name=report.incident_type.type_name if report.incident_type else None,
+        trust_score=float(trust_score) if trust_score is not None else None,
+        trust_factors=trust_factors,
+        ml_prediction_label=ml_prediction_label,
+        context_tags=context_tags_list,
+        is_flagged=getattr(report, "is_flagged", None),
+        flag_reason=getattr(report, "flag_reason", None),
+        ai_evidence_description=getattr(report, "ai_evidence_description", None),
+        ai_verification_reason=getattr(report, "ai_verification_reason", None),
+        decision_patterns=_extract_decision_patterns(getattr(report, "ai_verification_reason", None)),
+        decision_pattern_explanations=_extract_decision_pattern_explanations(
+            getattr(report, "ai_verification_reason", None)
+        ),
+        incident_latitude=float(report.latitude) if report.latitude is not None else None,
+        incident_longitude=float(report.longitude) if report.longitude is not None else None,
+        incident_location_source=incident_source,
+        incident_village_name=incident_location_info.get("village_name") if incident_location_info else None,
+        incident_cell_name=incident_location_info.get("cell_name") if incident_location_info else None,
+        incident_sector_name=incident_location_info.get("sector_name") if incident_location_info else None,
+        evidence_files=[
+            EvidenceFileResponse(
+                evidence_id=ef.evidence_id,
+                report_id=ef.report_id,
+                file_url=_absolute_evidence_url(getattr(ef, "file_url", None)) or "",
+                file_type=ef.file_type,
+                uploaded_at=ef.uploaded_at,
+                media_latitude=float(ef.media_latitude) if ef.media_latitude is not None else None,
+                media_longitude=float(ef.media_longitude) if ef.media_longitude is not None else None,
+                blur_score=float(ef.blur_score) if getattr(ef, "blur_score", None) is not None else None,
+                tamper_score=float(ef.tamper_score) if getattr(ef, "tamper_score", None) is not None else None,
+                quality_label=ef.quality_label.value if ef.quality_label else None,
+            )
+            for ef in report.evidence_files
+        ],
+        assignments=assignment_list,
+        reviews=review_list,
+        community_votes=community_votes,
+        user_vote=user_vote,
+        metadata_json=device_metadata,
+        device_trust_score=float(device_trust_score) if device_trust_score is not None else None,
+        total_reports=total_reports,
+        trusted_reports=trusted_reports,
+        evidence_count=len(getattr(report, "evidence_files", []) or []),
+        hotspot_id=getattr(report, "hotspot_id", None),
+        hotspot_risk_level=getattr(report, "hotspot_risk_level", None),
+        hotspot_incident_count=getattr(report, "hotspot_incident_count", None),
+        hotspot_label=getattr(report, "hotspot_label", None),
+        ml_predictions=[],
+    )
 
 
 def _build_report_response(report: Report, db: Session, request_device_id: Optional[str] = None) -> ReportResponse:

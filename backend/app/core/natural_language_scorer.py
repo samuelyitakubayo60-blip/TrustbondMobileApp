@@ -39,7 +39,7 @@ class NaturalLanguageScorer:
             return None
         
         try:
-            from .model_manager import ensure_sentence_transformer_model
+            from app.core.model_manager import ensure_sentence_transformer_model
             self.semantic_model = ensure_sentence_transformer_model("all-MiniLM-L6-v2")
             return self.semantic_model
         except Exception as exc:

@@ -22,6 +22,7 @@ def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
 
 
 @router.get("/", response_model=List[HotspotResponse])
+@router.get("", response_model=List[HotspotResponse])
 def list_public_hotspots(
     limit: int = Query(30, ge=1, le=200),
     risk_level: Optional[str] = Query(None),
