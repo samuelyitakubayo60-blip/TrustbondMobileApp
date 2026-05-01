@@ -1028,13 +1028,42 @@ def _apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
     band = str(scorecard.get("threshold_band") or "").lower()
     hard_gates = scorecard.get("hard_gates") or []
 
-    if hard_gates or band == "hard_reject":
+    # Hard rejections from rule engine/boundary controls take priority.
+    if "boundary_reject" in hard_gates or "hard_rule_reject" in hard_gates:
         report.rule_status = "rejected"
-        report.status = "rejected"
         report.verification_status = "rejected"
+        report.status = "rejected"
         report.is_flagged = True
         if not getattr(report, "flag_reason", None):
-            report.flag_reason = "threshold_hard_reject"
+            report.flag_reason = "boundary_reject" if "boundary_reject" in hard_gates else "hard_rule_reject"
+        return
+
+    # Get the final trust score after all adjustments
+    ml_prediction = resolve_ml_prediction_for_report(report)
+    final_trust_score = None
+    if ml_prediction is not None and ml_prediction.trust_score is not None:
+        final_trust_score = float(ml_prediction.trust_score)
+        # Apply rule adjustments to get the final trust score
+        final_trust_score, _ = _rule_adjusted_trust_label(report, final_trust_score, getattr(ml_prediction, "prediction_label", None))
+
+    # Auto-verify high trust score reports (80%+ threshold)
+    if final_trust_score is not None and final_trust_score >= 80.0:
+        if report.rule_status != "rejected" and not bool(getattr(report, "is_flagged", False)):
+            report.rule_status = "passed"
+            report.verification_status = "verified"
+            report.status = "verified"
+            report.is_flagged = False
+            report.flag_reason = None
+            return
+
+    # Auto-reject very low trust score reports (below 30%)
+    if final_trust_score is not None and final_trust_score < 30.0:
+        report.rule_status = "rejected"
+        report.verification_status = "rejected"
+        report.status = "rejected"
+        report.is_flagged = True
+        if not getattr(report, "flag_reason", None):
+            report.flag_reason = "low_trust_score"
         return
 
     if band == "low_confidence":

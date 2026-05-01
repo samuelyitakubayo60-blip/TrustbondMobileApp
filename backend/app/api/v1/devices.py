@@ -561,23 +561,31 @@ async def get_report_prediction_endpoint(
     db: Session = Depends(get_db)
 ):
     """Get ML prediction for a specific report"""
-    prediction = get_report_prediction(db, report_id, device_id)
-    
-    if not prediction:
-        raise HTTPException(status_code=404, detail="Report not found or no prediction available")
-    
-    return MLPredictionResponse(
-        prediction_id=str(prediction.prediction_id),
-        report_id=str(prediction.report_id),
-        trust_score=float(prediction.trust_score),
-        prediction_label=prediction.prediction_label or "unknown",
-        model_version=prediction.model_version,
-        confidence=float(prediction.confidence),
-        evaluated_at=prediction.evaluated_at.isoformat() if prediction.evaluated_at else None,
-        is_final=prediction.is_final,
-        explanation=prediction.explanation,
-        processing_time=prediction.processing_time,
-    )
+    try:
+        prediction = get_report_prediction(db, report_id, device_id)
+        
+        if not prediction:
+            raise HTTPException(status_code=404, detail="Report not found or no prediction available")
+        
+        return MLPredictionResponse(
+            prediction_id=str(prediction.prediction_id),
+            report_id=str(prediction.report_id),
+            trust_score=float(prediction.trust_score) if prediction.trust_score is not None else None,
+            prediction_label=prediction.prediction_label or "unknown",
+            model_version=prediction.model_version,
+            confidence=float(prediction.confidence) if prediction.confidence is not None else None,
+            evaluated_at=prediction.evaluated_at.isoformat() if prediction.evaluated_at else None,
+            is_final=prediction.is_final,
+            explanation=prediction.explanation,
+            processing_time=prediction.processing_time,
+        )
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting ML prediction for report {report_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while fetching prediction")
 
 @router.get("/ml-insights", response_model=List[MLInsightResponse])
 async def get_home_insights_endpoint(
