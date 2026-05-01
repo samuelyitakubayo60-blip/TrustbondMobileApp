@@ -11,6 +11,7 @@ const SystemConfig = ({ wsRefreshKey }) => {
 
   const loadEffectiveFormula = async () => {
     try {
+      console.log("SystemConfig: Making request to /api/v1/system-config/effective/trust-score-formula");
       const res = await api.get('/api/v1/system-config/effective/trust-score-formula');
       setEffectiveFormula(res || null);
     } catch {
@@ -21,6 +22,10 @@ const SystemConfig = ({ wsRefreshKey }) => {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    // Debug: Log the actual URL being used for system-config
+    console.log("SystemConfig: Making request to /api/v1/system-config");
+    console.log("SystemConfig: Current BASE URL should be:", import.meta.env?.VITE_API_BASE_URL);
+    
     api
       .get('/api/v1/system-config')
       .then((res) => {

@@ -13,7 +13,7 @@ from app.schemas.system_config import SystemConfigItem, SystemConfigList
 from app.core.credibility_model import get_effective_trust_formula
 
 
-router = APIRouter(prefix="/system-config", tags=["system-config"])
+router = APIRouter(tags=["system-config"])
 
 
 @router.get("/", response_model=SystemConfigList)
