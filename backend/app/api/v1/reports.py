@@ -912,8 +912,6 @@ def _compute_threshold_scorecard(
     device_trust = 50.0
     if getattr(report, "device", None) and getattr(report.device, "device_trust_score", None) is not None:
         device_trust = float(report.device.device_trust_score)
-    elif ml_prediction is not None and getattr(ml_prediction, "trust_score", None) is not None:
-        device_trust = float(ml_prediction.trust_score)
 
     # Community signal normalized to 0..1 around neutral 0.5
     community_signal = clamp01(0.5 + (net_votes * 0.08))
@@ -994,7 +992,9 @@ def _compute_threshold_scorecard(
             alignment_signal = 0.2
         if "mismatch" in flag_reason:
             alignment_signal = min(alignment_signal, 0.25)
-        behavior_signal = clamp01(device_trust / 100.0)
+        # Compress behavior influence to a narrow band around neutral.
+        behavior_signal = clamp01(0.5 + ((device_trust - 50.0) / 250.0))
+        behavior_signal = max(0.35, min(0.65, behavior_signal))
         location_signal = 1.0
         if gps_acc > 0:
             location_signal = clamp01(1.0 - (gps_acc / 250.0))
@@ -1003,10 +1003,10 @@ def _compute_threshold_scorecard(
 
         # Stricter text-only policy: emphasize description + incident alignment.
         weights = {
-            "description_quality": 35.0,
-            "incident_alignment": 30.0,
-            "device_behavior": 15.0,
-            "location_plausibility": 10.0,
+            "description_quality": 38.0,
+            "incident_alignment": 34.0,
+            "device_behavior": 5.0,
+            "location_plausibility": 13.0,
             "community_signal": 10.0,
         }
         signals = {
@@ -1043,7 +1043,9 @@ def _compute_threshold_scorecard(
             desc_evidence_signal = min(desc_evidence_signal, 0.25)
             incident_evidence_signal = min(incident_evidence_signal, 0.25)
 
-        behavior_signal = clamp01(device_trust / 100.0)
+        # Compress behavior influence to a narrow band around neutral.
+        behavior_signal = clamp01(0.5 + ((device_trust - 50.0) / 250.0))
+        behavior_signal = max(0.35, min(0.65, behavior_signal))
         location_signal = 1.0
         if gps_acc > 0:
             location_signal = clamp01(1.0 - (gps_acc / 250.0))
@@ -1054,9 +1056,9 @@ def _compute_threshold_scorecard(
         weights = {
             "evidence_authenticity_quality": 40.0,
             "evidence_description_alignment": 20.0,
-            "incident_evidence_alignment": 15.0,
-            "device_behavior": 10.0,
-            "location_consistency": 10.0,
+            "incident_evidence_alignment": 17.0,
+            "device_behavior": 3.0,
+            "location_consistency": 15.0,
             "community_signal": 5.0,
         }
         signals = {

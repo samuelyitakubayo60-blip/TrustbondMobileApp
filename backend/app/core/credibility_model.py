@@ -277,7 +277,7 @@ def _build_feature_row(
     movement_speed = getattr(report, "movement_speed", None)
     was_stationary = getattr(report, "was_stationary", None)
 
-    # Device stats from DB (see devices table)
+    # Device stats from DB (real values; no synthetic neutral overrides).
     total_reports = getattr(device, "total_reports", None) or 0
     trusted_reports = getattr(device, "trusted_reports", None) or 0
     flagged_reports = getattr(device, "flagged_reports", None) or 0
