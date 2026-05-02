@@ -91,7 +91,7 @@ def _get_semantic_matcher():
     if _SEMANTIC_MODEL_UNAVAILABLE:
         return None
     try:
-        from ..core.model_manager import ensure_sentence_transformer_model
+        from app.core.model_manager import ensure_sentence_transformer_model
         
         # Use automatic model manager for downloading and caching
         _SEMANTIC_MODEL = ensure_sentence_transformer_model("all-MiniLM-L6-v2")
@@ -770,12 +770,22 @@ def _resolve_trust_factors(
             out["content_score"] = fac["description_quality"].get("points_awarded")
         elif "evidence_authenticity_quality" in fac:
             out["content_score"] = fac["evidence_authenticity_quality"].get("points_awarded")
+        elif "natural_language_contribution" in fac:
+            out["content_score"] = fac["natural_language_contribution"].get("points_awarded")
         if "location_plausibility" in fac:
             out["location_score"] = fac["location_plausibility"].get("points_awarded")
         elif "location_consistency" in fac:
             out["location_score"] = fac["location_consistency"].get("points_awarded")
-        out["cluster_score"] = fac.get("incident_evidence_alignment", {}).get("points_awarded", 0.0)
-        out["user_behavior_score"] = fac.get("device_behavior", {}).get("points_awarded", 0.0)
+        elif "trustbond_contribution" in fac:
+            out["location_score"] = fac["trustbond_contribution"].get("points_awarded")
+        out["cluster_score"] = (
+            fac.get("incident_evidence_alignment", {}).get("points_awarded", 0.0)
+            or fac.get("volo_contribution", {}).get("points_awarded", 0.0)
+        )
+        out["user_behavior_score"] = (
+            fac.get("device_behavior", {}).get("points_awarded", 0.0)
+            or fac.get("trustbond_contribution", {}).get("points_awarded", 0.0)
+        )
         out["coordination_penalty"] = 0.0
         if community_votes:
             real_votes = int(community_votes.get("real", 0) or 0)
@@ -788,6 +798,7 @@ def _resolve_trust_factors(
         report,
         ml_prediction=ml_prediction,
         community_votes=community_votes,
+        unified_validation=fv.get("unified_validation") if isinstance(fv.get("unified_validation"), dict) else None,
     )
     out: Dict[str, Any] = {
         "scorecard_type": computed.get("scorecard_type"),
@@ -802,12 +813,22 @@ def _resolve_trust_factors(
         out["content_score"] = fac["description_quality"].get("points_awarded")
     elif "evidence_authenticity_quality" in fac:
         out["content_score"] = fac["evidence_authenticity_quality"].get("points_awarded")
+    elif "natural_language_contribution" in fac:
+        out["content_score"] = fac["natural_language_contribution"].get("points_awarded")
     if "location_plausibility" in fac:
         out["location_score"] = fac["location_plausibility"].get("points_awarded")
     elif "location_consistency" in fac:
         out["location_score"] = fac["location_consistency"].get("points_awarded")
-    out["cluster_score"] = fac.get("incident_evidence_alignment", {}).get("points_awarded", 0.0)
-    out["user_behavior_score"] = fac.get("device_behavior", {}).get("points_awarded", 0.0)
+    elif "trustbond_contribution" in fac:
+        out["location_score"] = fac["trustbond_contribution"].get("points_awarded")
+    out["cluster_score"] = (
+        fac.get("incident_evidence_alignment", {}).get("points_awarded", 0.0)
+        or fac.get("volo_contribution", {}).get("points_awarded", 0.0)
+    )
+    out["user_behavior_score"] = (
+        fac.get("device_behavior", {}).get("points_awarded", 0.0)
+        or fac.get("trustbond_contribution", {}).get("points_awarded", 0.0)
+    )
     out["coordination_penalty"] = 0.0
     if community_votes:
         real_votes = int(community_votes.get("real", 0) or 0)
@@ -855,6 +876,7 @@ def _compute_threshold_scorecard(
     *,
     ml_prediction: Optional[Any] = None,
     community_votes: Optional[Dict[str, int]] = None,
+    unified_validation: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Compute a weighted 100-point threshold scorecard (text-only vs with evidence)."""
     fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
@@ -895,6 +917,72 @@ def _compute_threshold_scorecard(
 
     # Community signal normalized to 0..1 around neutral 0.5
     community_signal = clamp01(0.5 + (net_votes * 0.08))
+
+    # Prefer unified model aggregation when available so no single model concludes on its own.
+    if isinstance(unified_validation, dict):
+        model_breakdown = (
+            unified_validation.get("model_breakdown")
+            if isinstance(unified_validation.get("model_breakdown"), dict)
+            else {}
+        )
+        aggregated_score = float(unified_validation.get("aggregated_score") or 0.0)
+        scorecard_type = "evidence_scorecard" if has_evidence else "text_only_scorecard"
+
+        factors = {}
+        mapping = {
+            "trustbond": "trustbond_contribution",
+            "natural_language": "natural_language_contribution",
+            "volo": "volo_contribution",
+            "base": "base_credibility",
+        }
+        for model_name, factor_name in mapping.items():
+            model_data = model_breakdown.get(model_name)
+            if not isinstance(model_data, dict):
+                continue
+            contribution = float(model_data.get("contribution") or 0.0)
+            raw_score = float(model_data.get("raw_score") or 0.0)
+            factors[factor_name] = {
+                "weight": round(contribution, 2),
+                "signal": round(clamp01(raw_score / 100.0), 4),
+                "points_awarded": round(contribution, 2),
+                "model": model_name,
+                "is_valid": bool(model_data.get("is_valid", False)),
+            }
+        factors["community_signal"] = {
+            "weight": 0.0,
+            "signal": round(community_signal, 4),
+            "points_awarded": 0.0,
+            "model": "community",
+            "is_valid": True,
+        }
+
+        total = round(min(100.0, max(0.0, aggregated_score)), 2)
+        if hard_gates:
+            band = "hard_reject"
+        elif not has_evidence:
+            if total >= 85.0:
+                band = "confirmed_candidate"
+            elif total >= 60.0:
+                band = "under_review"
+            else:
+                band = "low_confidence"
+        else:
+            if total >= 80.0:
+                band = "confirmed_candidate"
+            elif total >= 55.0:
+                band = "under_review"
+            else:
+                band = "low_confidence"
+
+        return {
+            "scorecard_type": scorecard_type,
+            "max_score": 100.0,
+            "total_score": total,
+            "threshold_band": band,
+            "hard_gates": hard_gates,
+            "factors": factors,
+            "decision_source": "unified_validation",
+        }
 
     if not has_evidence:
         # Text-only scorecard
@@ -1038,34 +1126,6 @@ def _apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
             report.flag_reason = "boundary_reject" if "boundary_reject" in hard_gates else "hard_rule_reject"
         return
 
-    # Get the final trust score after all adjustments
-    ml_prediction = resolve_ml_prediction_for_report(report)
-    final_trust_score = None
-    if ml_prediction is not None and ml_prediction.trust_score is not None:
-        final_trust_score = float(ml_prediction.trust_score)
-        # Apply rule adjustments to get the final trust score
-        final_trust_score, _ = _rule_adjusted_trust_label(report, final_trust_score, getattr(ml_prediction, "prediction_label", None))
-
-    # Auto-verify high trust score reports (80%+ threshold)
-    if final_trust_score is not None and final_trust_score >= 80.0:
-        if report.rule_status != "rejected" and not bool(getattr(report, "is_flagged", False)):
-            report.rule_status = "passed"
-            report.verification_status = "verified"
-            report.status = "verified"
-            report.is_flagged = False
-            report.flag_reason = None
-            return
-
-    # Auto-reject very low trust score reports (below 30%)
-    if final_trust_score is not None and final_trust_score < 30.0:
-        report.rule_status = "rejected"
-        report.verification_status = "rejected"
-        report.status = "rejected"
-        report.is_flagged = True
-        if not getattr(report, "flag_reason", None):
-            report.flag_reason = "low_trust_score"
-        return
-
     if band == "low_confidence":
         # Policy: any score below threshold is rejected.
         report.rule_status = "rejected"
@@ -1091,6 +1151,55 @@ def _apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
             if report.status in {None, "", "pending", "flagged"}:
                 report.status = "verified"
 
+
+def _store_unified_validation_result(
+    db: Session,
+    report: Report,
+    validation_result: Any,
+) -> Dict[str, Any]:
+    """Persist unified validation outputs without letting one model decide the final verdict."""
+    from decimal import Decimal
+    from app.core.report_review import infer_prediction_label_from_trust_score
+    from app.models.ml_prediction import MLPrediction
+
+    aggregated = validation_result.aggregated_trust
+    model_breakdown = {
+        score.model_name: {
+            "raw_score": score.raw_score,
+            "contribution": score.contribution,
+            "is_valid": score.is_valid,
+            "metadata": score.metadata,
+        }
+        for score in aggregated.model_scores
+    }
+    unified_validation = {
+        "aggregated_score": round(float(aggregated.total_score), 2),
+        "trust_band": aggregated.trust_band.value,
+        "contributing_models": aggregated.contributing_models,
+        "model_breakdown": model_breakdown,
+        "validation_metadata": validation_result.validation_metadata,
+    }
+
+    fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
+    fv["unified_validation"] = unified_validation
+    report.feature_vector = _json_safe(fv)
+
+    ml_prediction = (
+        db.query(MLPrediction)
+        .filter(MLPrediction.report_id == report.report_id)
+        .order_by(MLPrediction.evaluated_at.desc())
+        .first()
+    )
+    if ml_prediction is not None:
+        aggregated_score = round(float(aggregated.total_score), 2)
+        ml_prediction.trust_score = Decimal(f"{aggregated_score:.2f}")
+        ml_prediction.prediction_label = infer_prediction_label_from_trust_score(aggregated_score)
+        explanation = ml_prediction.explanation if isinstance(ml_prediction.explanation, dict) else {}
+        explanation["unified_validation"] = unified_validation
+        ml_prediction.explanation = _json_safe(explanation)
+
+    return unified_validation
+
 def _process_report_background(
     report_id: str,
     device_id: str,
@@ -1105,6 +1214,17 @@ def _process_report_background(
         
         if not report or not device:
             logger.error(f"Background processing failed: report {report_id} or device {device_id} not found")
+            return
+        
+        # Check if device was banned after report creation
+        if getattr(device, "is_banned", False):
+            logger.warning(f"Device {device_id} was banned, rejecting report {report_id} in background processing")
+            report.rule_status = "rejected"
+            report.verification_status = "rejected"
+            report.status = "rejected"
+            report.is_flagged = True
+            report.flag_reason = "device_banned"
+            db.commit()
             return
         
         # 1. Enhanced evidence verification
@@ -1161,6 +1281,7 @@ def _process_report_background(
             logger.warning(f"Location consistency validation failed: {e}")
         
         # 3. Unified validation using all models (TrustBond, Natural Language, Volo)
+        unified_validation_data = None
         try:
             from app.core.unified_validator import validate_report_unified
             
@@ -1176,10 +1297,7 @@ def _process_report_background(
                 device=device,
                 evidence_files=evidence_files
             )
-            
-            # Apply validation results to report
-            from app.core.unified_validator import unified_validator
-            unified_validator.apply_validation_results(db, report, validation_result)
+            unified_validation_data = _store_unified_validation_result(db, report, validation_result)
             
             logger.info(f"Unified validation completed for report {report_id} - Score: {validation_result.aggregated_trust.total_score:.2f}")
             
@@ -1202,9 +1320,39 @@ def _process_report_background(
         
         # 4. Apply rule-based verification (still needed for basic validation)
         try:
-            apply_rule_based_status(db, report, device, verification_issues)
+            rule_status, is_flagged, flag_reason = apply_rule_based_status(
+                report, evidence_count, db
+            )
+            report.rule_status = rule_status
+            report.is_flagged = bool(getattr(report, "is_flagged", False) or is_flagged)
+            if is_flagged and flag_reason and not getattr(report, "flag_reason", None):
+                report.flag_reason = flag_reason
         except Exception as e:
             logger.error(f"Rule-based verification failed for report {report_id}: {e}")
+
+        # 4b. Apply threshold decision from aggregated model output + rule gates.
+        try:
+            votes_bg = {"real": 0, "false": 0, "unknown": 0}
+            fv_bg = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+            vv_bg = fv_bg.get("community_votes", {}) if isinstance(fv_bg.get("community_votes", {}), dict) else {}
+            for v in vv_bg.values():
+                k = str(v)
+                if k in votes_bg:
+                    votes_bg[k] += 1
+            ml_prediction_bg = resolve_ml_prediction_for_report(report)
+            scorecard_bg = _compute_threshold_scorecard(
+                report,
+                ml_prediction=ml_prediction_bg,
+                community_votes=votes_bg,
+                unified_validation=unified_validation_data if isinstance(unified_validation_data, dict) else (
+                    fv_bg.get("unified_validation") if isinstance(fv_bg.get("unified_validation"), dict) else None
+                ),
+            )
+            fv_bg["threshold_scorecard"] = scorecard_bg
+            report.feature_vector = _json_safe(fv_bg)
+            _apply_threshold_outcome(report, scorecard_bg)
+        except Exception as e:
+            logger.error(f"Threshold decision application failed for report {report_id}: {e}")
         
         # 5. Update hotspot clustering
         try:
@@ -2157,6 +2305,17 @@ def create_report(
             .first()
         )
         if not device:
+            # Check if this device_hash was previously banned (to prevent ban evasion)
+            banned_device_with_same_hash = (
+                db.query(Device)
+                .filter(Device.device_hash == report_data.device_hash.strip(), Device.is_banned == True)
+                .first()
+            )
+            if banned_device_with_same_hash:
+                raise HTTPException(
+                    status_code=403, 
+                    detail="This device hash is banned from submitting reports"
+                )
             device = Device(
                 device_id=uuid4(),
                 device_hash=report_data.device_hash.strip(),
@@ -2167,6 +2326,9 @@ def create_report(
         raise HTTPException(status_code=400, detail="Either device_id or device_hash is required")
     # Block reporting from banned devices (admin action)
     if getattr(device, "is_banned", False):
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Banned device {device.device_id} (hash: {device.device_hash}) attempted to submit report")
         raise HTTPException(status_code=403, detail="This device is banned from submitting reports")
 
     _enforce_device_submission_guards(db, device, report_data, request)
@@ -2506,18 +2668,28 @@ def create_report(
     # === Apply rule-based + ML pipeline (sync, lightweight) ===
     evidence_count = len(evidence_metadata_list)
     try:
+        from app.core.unified_validator import validate_report_unified
         from app.core.report_priority import apply_anti_fraud_rules, calculate_report_priority
 
-        # Best-effort ML scoring before AI-enhanced rules (so it can influence priority/review).
-        # (score_report_credibility itself may be best-effort depending on configuration.)
+        unified_validation_data = None
         try:
-            score_report_credibility(db, report, device, evidence_count)
+            validation_result = validate_report_unified(
+                db=db,
+                report=report,
+                device=device,
+                evidence_files=list(getattr(report, "evidence_files", []) or []),
+            )
+            unified_validation_data = _store_unified_validation_result(db, report, validation_result)
         except Exception as e:
-            logger.error(f"ML scoring failed during report creation for {report.report_id}: {e}")
+            logger.error(f"Unified validation failed during report creation for {report.report_id}: {e}")
+            try:
+                score_report_credibility(db, report, device, evidence_count)
+            except Exception as scoring_error:
+                logger.error(f"ML scoring failed during report creation for {report.report_id}: {scoring_error}")
 
         ml_prediction_tmp = resolve_ml_prediction_for_report(report)
         rule_status, is_flagged, flag_reason = apply_anti_fraud_rules(
-            report, evidence_count, ml_prediction_tmp, db
+            report, evidence_count, db
         )
 
         # HARD REJECTION: If rule-based validation fails, reject report immediately (like boundary rejection)
@@ -2546,7 +2718,11 @@ def create_report(
             report.flag_reason = flag_reason
 
         # Get unified validation result for priority calculation
-        unified_validation_data = report.feature_vector.get('unified_validation', {}) if isinstance(report.feature_vector, dict) else {}
+        unified_validation_data = (
+            unified_validation_data
+            if isinstance(unified_validation_data, dict)
+            else report.feature_vector.get('unified_validation', {}) if isinstance(report.feature_vector, dict) else {}
+        )
         report.priority = calculate_report_priority(report, evidence_count, db, unified_validation_data)
         votes_tmp = {"real": 0, "false": 0, "unknown": 0}
         if isinstance(report.feature_vector, dict):
@@ -2560,6 +2736,7 @@ def create_report(
             report,
             ml_prediction=ml_prediction_tmp,
             community_votes=votes_tmp,
+            unified_validation=unified_validation_data,
         )
         fv_sc = report.feature_vector if isinstance(report.feature_vector, dict) else {}
         fv_sc["threshold_scorecard"] = scorecard
@@ -2586,6 +2763,7 @@ def create_report(
             incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
             reporter_description=report.description,
             context_tags=list(getattr(report, "context_tags", None) or []),
+            unified_validation=unified_validation_data,
         )
 
         # Device aggregates (best-effort; doesn't block submission).
@@ -2604,107 +2782,7 @@ def create_report(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to save report: {e}")
 
-    ml_prediction = resolve_ml_prediction_for_report(report)
-    trust_score = (
-        float(ml_prediction.trust_score)
-        if ml_prediction is not None and ml_prediction.trust_score is not None
-        else None
-    )
-    ml_prediction_label = None
-    if ml_prediction is not None:
-        raw_label = getattr(ml_prediction, "prediction_label", None)
-        if raw_label is not None and str(raw_label).strip():
-            ml_prediction_label = str(raw_label).strip().lower()
-    trust_score, ml_prediction_label = _rule_adjusted_trust_label(
-        report, trust_score, ml_prediction_label
-    )
-    community_votes = {"real": 0, "false": 0, "unknown": 0}
-    user_vote = None
-    if getattr(report, "feature_vector", None) and isinstance(report.feature_vector, dict):
-        votes_dict = report.feature_vector.get("community_votes", {})
-        for dict_device_id, v in votes_dict.items():
-            if str(v) in community_votes:
-                community_votes[str(v)] += 1
-            if device_id and str(dict_device_id) == str(device_id):
-                user_vote = str(v)
-    trust_factors = _resolve_trust_factors(
-        report,
-        ml_prediction,
-        evidence_count=len(getattr(report, "evidence_files", []) or []),
-        community_votes=community_votes,
-    )
-    context_tags_list = getattr(report, "context_tags", None) or []
-
-    # Get device metadata and trust score
-    device_metadata = getattr(report.device, "metadata_json", {}) if report.device else {}
-    device_trust_score = getattr(report.device, "device_trust_score", None) if report.device else None
-    total_reports = getattr(report.device, "total_reports", None) if report.device else None
-    trusted_reports = getattr(report.device, "trusted_reports", None) if report.device else None
-
-    return ReportDetailResponse(
-        report_id=report.report_id,
-        report_number=getattr(report, "report_number", None),
-        device_id=report.device_id,
-        incident_type_id=report.incident_type_id,
-        description=report.description,
-        latitude=report.latitude,
-        longitude=report.longitude,
-        gps_accuracy=getattr(report, "gps_accuracy", None),
-        motion_level=getattr(report, "motion_level", None),
-        movement_speed=getattr(report, "movement_speed", None),
-        was_stationary=getattr(report, "was_stationary", None),
-        reported_at=report.reported_at,
-        rule_status=report.rule_status,
-        priority=getattr(report, "priority", "medium"),  # Include calculated priority
-        status=report.status,
-        verification_status=report.verification_status,
-        village_location_id=report.village_location_id,
-        incident_type_name=report.incident_type.type_name if report.incident_type else None,
-        trust_score=float(trust_score) if trust_score is not None else None,
-        trust_factors=trust_factors,
-        ml_prediction_label=ml_prediction_label,
-        context_tags=context_tags_list,
-        is_flagged=getattr(report, "is_flagged", None),
-        flag_reason=getattr(report, "flag_reason", None),
-        ai_evidence_description=getattr(report, "ai_evidence_description", None),
-        ai_verification_reason=getattr(report, "ai_verification_reason", None),
-        decision_patterns=_extract_decision_patterns(getattr(report, "ai_verification_reason", None)),
-        decision_pattern_explanations=_extract_decision_pattern_explanations(
-            getattr(report, "ai_verification_reason", None)
-        ),
-        incident_latitude=float(report.latitude) if report.latitude is not None else None,
-        incident_longitude=float(report.longitude) if report.longitude is not None else None,
-        incident_location_source=incident_source,
-        incident_village_name=incident_location_info["village_name"] if incident_location_info else None,
-        incident_cell_name=incident_location_info.get("cell_name") if incident_location_info else None,
-        incident_sector_name=incident_location_info.get("sector_name") if incident_location_info else None,
-        evidence_files=[
-            EvidenceFileResponse(
-                evidence_id=ef.evidence_id,
-                report_id=ef.report_id,
-                file_url=_absolute_evidence_url(getattr(ef, "file_url", None)) or "",
-                file_type=ef.file_type,
-                uploaded_at=ef.uploaded_at,
-                media_latitude=float(ef.media_latitude) if ef.media_latitude is not None else None,
-                media_longitude=float(ef.media_longitude) if ef.media_longitude is not None else None,
-                blur_score=float(ef.blur_score) if getattr(ef, "blur_score", None) is not None else None,
-                tamper_score=float(ef.tamper_score) if getattr(ef, "tamper_score", None) is not None else None,
-                quality_label=ef.quality_label.value if ef.quality_label else None,
-            )
-            for ef in report.evidence_files
-        ],
-        assignments=assignment_list,
-        reviews=review_list,
-        community_votes=community_votes,
-        user_vote=user_vote,
-        # Add device metadata fields
-        metadata_json=device_metadata,
-        device_trust_score=float(device_trust_score) if device_trust_score is not None else None,
-        total_reports=total_reports,
-        trusted_reports=trusted_reports,
-    )
-    
-    return response
+    return _build_report_detail_response(report, db)
 
 
 @router.get("/", response_model=ReportListResponse)
@@ -4063,21 +4141,38 @@ async def upload_evidence(
         evidence_count = db.query(EvidenceFile).filter(EvidenceFile.report_id == report_after.report_id).count()
         print(f"Re-applying AI-enhanced rules after evidence upload - evidence_count: {evidence_count}")  # Debug log
         
-        # Get ML prediction if available
-        ml_prediction = None
-        if hasattr(report_after, 'ml_predictions') and report_after.ml_predictions:
-            ml_prediction = max(report_after.ml_predictions, key=lambda p: p.evaluated_at or datetime.min.replace(tzinfo=timezone.utc))
+        # Re-run unified validation so TrustBond/NL/VOLO only contribute signals.
+        unified_validation_data = None
+        try:
+            from app.core.unified_validator import validate_report_unified
+
+            validation_result = validate_report_unified(
+                db=db,
+                report=report_after,
+                device=device,
+                evidence_files=list(getattr(report_after, "evidence_files", []) or []),
+            )
+            unified_validation_data = _store_unified_validation_result(db, report_after, validation_result)
+        except Exception as e:
+            logger.error(f"Unified validation failed after evidence upload for {report_after.report_id}: {e}")
+
+        ml_prediction = resolve_ml_prediction_for_report(report_after)
+        if ml_prediction is not None:
             print(f"Using ML prediction for re-evaluation: {ml_prediction.prediction_label}, trust_score: {ml_prediction.trust_score}")  # Debug log
-        
+
         # Apply AI-enhanced rules
         from app.core.report_priority import apply_anti_fraud_rules, calculate_report_priority
         rule_status, is_flagged, flag_reason = apply_anti_fraud_rules(
-            report_after, evidence_count, ml_prediction, db
+            report_after, evidence_count, db
         )
         print(f"AI-enhanced rule result after evidence upload - rule_status: {rule_status}, is_flagged: {is_flagged}, flag_reason: {flag_reason}")  # Debug log
         
         # Recalculate priority with unified validation
-        unified_validation_data = report_after.feature_vector.get('unified_validation', {}) if isinstance(report_after.feature_vector, dict) else {}
+        unified_validation_data = (
+            unified_validation_data
+            if isinstance(unified_validation_data, dict)
+            else report_after.feature_vector.get('unified_validation', {}) if isinstance(report_after.feature_vector, dict) else {}
+        )
         priority = calculate_report_priority(report_after, evidence_count, db, unified_validation_data)
         print(f"Recalculated priority after evidence upload: {priority}")  # Debug log
         
@@ -4097,38 +4192,11 @@ async def upload_evidence(
             report_after,
             ml_prediction=ml_prediction,
             community_votes=votes_after,
+            unified_validation=unified_validation_data,
         )
         fv_votes["threshold_scorecard"] = scorecard_after
         report_after.feature_vector = _json_safe(fv_votes)
         _apply_threshold_outcome(report_after, scorecard_after)
-        
-        # Set verification_status based on AI results (threshold outcome may override below)
-        review_reasons = {
-            "ai_suspicious_review",
-            "ai_uncertain_review",
-            "incident_description_mismatch",
-            "description_evidence_mismatch",
-            "evidence_time_mismatch",
-            "stale_live_capture_timestamp",
-            "device_burst_reporting",
-            "duplicate_description_recent",
-        }
-        # AI-PRIMARY with human oversight for flagged reports
-        if report_after.rule_status == "passed" and not report_after.is_flagged:
-            # AI makes final decision for clean reports
-            report_after.status = "verified"
-            report_after.verification_status = "verified"
-            print(" AI-PRIMARY: Report auto-verified after evidence upload - rules passed")
-        elif report_after.rule_status == "rejected":
-            # Clear rejections are auto-rejected
-            report_after.status = "rejected"
-            report_after.verification_status = "rejected"
-            print(f" AI-PRIMARY: Report auto-rejected after evidence upload - {report_after.rule_status}")
-        else:
-            # Flagged reports need human review
-            report_after.status = "pending"
-            report_after.verification_status = "under_review"
-            print(f" HUMAN REVIEW NEEDED: Report flagged after evidence upload - {flag_reason}")
 
         # Persist human-readable AI summary and decision reasoning on report row.
         fv_after = report_after.feature_vector if isinstance(report_after.feature_vector, dict) else {}
@@ -4158,6 +4226,7 @@ async def upload_evidence(
             incident_type_name=getattr(getattr(report_after, "incident_type", None), "type_name", None),
             reporter_description=report_after.description,
             context_tags=list(getattr(report_after, "context_tags", None) or []),
+            unified_validation=unified_validation_data,
         )
         db.commit()
     
@@ -5384,7 +5453,10 @@ def _build_report_detail_response(report: Report, db: Session) -> ReportDetailRe
         for review in report.police_reviews:
             reviewer_name = None
             if review.police_user:
-                reviewer_name = review.police_user.full_name or review.police_user.badge_number
+                first_name = (getattr(review.police_user, "first_name", None) or "").strip()
+                last_name = (getattr(review.police_user, "last_name", None) or "").strip()
+                full_name = f"{first_name} {last_name}".strip()
+                reviewer_name = full_name or getattr(review.police_user, "badge_number", None)
             review_list.append(ReviewResponse(
                 review_id=review.review_id,
                 report_id=review.report_id,

@@ -19,7 +19,7 @@ const ActiveSessions = ({ wsRefreshKey }) => {
     const params = new URLSearchParams();
     params.set("limit", String(100)); // Get more data for client-side pagination
     
-    api.get(`/api/v1/police-users/sessions/?${params.toString()}`)
+    api.get(`/api/v1/police-users/sessions?${params.toString()}`)
       .then((res) => {
         if (!mounted) return;
         setSessions(res || []);

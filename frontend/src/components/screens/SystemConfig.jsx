@@ -27,7 +27,7 @@ const SystemConfig = ({ wsRefreshKey }) => {
     console.log("SystemConfig: Current BASE URL should be:", import.meta.env?.VITE_API_BASE_URL);
     
     api
-      .get('/api/v1/system-config')
+      .get('/api/v1/system-config/')
       .then((res) => {
         if (cancelled) return;
         const rows = res?.items || [];

@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 import requests
+import shutil
 from urllib.parse import urlparse
 from tqdm import tqdm
 
@@ -151,7 +152,24 @@ def ensure_yolo_model(model_name: str = "yolov8n.pt"):
     """
     try:
         from ultralytics import YOLO
-        model = YOLO(model_name)
+        manager = get_model_manager()
+        model_path = manager.get_yolo_model_path(model_name)
+
+        # Keep a local backend copy under backend/models for deterministic startup behavior.
+        if not model_path.exists():
+            try:
+                from ultralytics.utils.downloads import attempt_download_asset
+
+                downloaded_path = Path(attempt_download_asset(model_name))
+                if downloaded_path.exists():
+                    if downloaded_path.resolve() != model_path.resolve():
+                        model_path.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(str(downloaded_path), str(model_path))
+                    logger.info(f"YOLO model cached locally at: {model_path}")
+            except Exception as dl_exc:
+                logger.warning(f"Could not pre-cache YOLO model locally: {dl_exc}")
+
+        model = YOLO(str(model_path) if model_path.exists() else model_name)
         return model
     except Exception as e:
         logger.error(f"Failed to load YOLO model: {e}")

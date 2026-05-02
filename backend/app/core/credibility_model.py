@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
-import re
 
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -24,14 +23,6 @@ META_PATH = ROOT / "TrustBond.json"
 
 _MODEL = None
 _META: Optional[Dict[str, Any]] = None
-
-DRUG_KEYWORDS = {
-    "drug", "drugs", "weed", "marijuana", "cocaine", "heroin",
-    "dealer", "dealing", "selling", "using", "smoking", "narcotic",
-    "meth", "ecstasy", "pills", "substance",
-}
-DRUG_INCIDENT_HINTS = ("drug", "narcotic", "substance")
-
 
 def _json_safe(value: Any) -> Any:
     """
@@ -69,10 +60,11 @@ def _load_trust_formula(db: Session) -> Dict[str, float]:
       {"history":0.3,"spam_penalty":0.2,"confirmation_rate":0.4,"location_diversity":0.1}
     """
     default = {
-        "history": 0.35,
-        "spam_penalty": 0.20,
-        "confirmation_rate": 0.35,
+        "history": 0.30,
+        "spam_penalty": 0.15,
+        "confirmation_rate": 0.30,
         "location_diversity": 0.10,
+        "location_quality": 0.15,
     }
     try:
         row = (
@@ -96,12 +88,98 @@ def _load_trust_formula(db: Session) -> Dict[str, float]:
         return default
 
 
+def calculate_location_score(db: Session, device_id: str, window: int = 10) -> float:
+    """
+    Calculate location score for a device based on GPS accuracy, consistency, and plausibility.
+    Returns a score from 0.0 to 1.0.
+    """
+    from app.models.report import Report
+    
+    # Get recent reports with location data
+    recent_reports = (
+        db.query(Report)
+        .filter(Report.device_id == device_id)
+        .order_by(Report.reported_at.desc())
+        .limit(window)
+        .all()
+    )
+    
+    if not recent_reports:
+        return 0.5  # Neutral score for devices with no location history
+    
+    location_scores = []
+    
+    for report in recent_reports:
+        report_score = 0.5  # Base score for this report
+        
+        # 1. GPS Accuracy Score (0.0 to 1.0)
+        if report.gps_accuracy is not None:
+            gps_accuracy = float(report.gps_accuracy)
+            if gps_accuracy <= 10:  # Excellent GPS (≤10m)
+                accuracy_score = 1.0
+            elif gps_accuracy <= 30:  # Good GPS (≤30m)
+                accuracy_score = 0.8
+            elif gps_accuracy <= 100:  # Fair GPS (≤100m)
+                accuracy_score = 0.6
+            elif gps_accuracy <= 500:  # Poor GPS (≤500m)
+                accuracy_score = 0.4
+            else:  # Very poor GPS (>500m)
+                accuracy_score = 0.2
+            report_score += (accuracy_score * 0.3)  # 30% weight for GPS accuracy
+        else:
+            report_score += 0.1  # Small penalty for missing GPS data
+        
+        # 2. Location Consistency Score (0.0 to 1.0)
+        if report.village_location_id is not None:
+            # Check if device reports consistently from same village
+            same_village_reports = sum(1 for r in recent_reports 
+                                     if r.village_location_id == report.village_location_id)
+            consistency_ratio = same_village_reports / len(recent_reports)
+            # Reward consistency but not too much (allows for legitimate travel)
+            if consistency_ratio >= 0.8:  # Very consistent
+                consistency_score = 0.8
+            elif consistency_ratio >= 0.5:  # Moderately consistent
+                consistency_score = 1.0  # Sweet spot - not too consistent, not too random
+            else:  # Very scattered
+                consistency_score = 0.6
+            report_score += (consistency_score * 0.3)  # 30% weight for consistency
+        else:
+            report_score += 0.1  # Small penalty for missing village data
+        
+        # 3. Movement Plausibility Score (0.0 to 1.0)
+        if report.movement_speed is not None and report.was_stationary is not None:
+            speed = float(report.movement_speed)
+            if report.was_stationary:
+                if speed <= 5:  # Reasonable speed when stationary
+                    plausibility_score = 1.0
+                else:
+                    plausibility_score = 0.3  # Suspicious: high speed while "stationary"
+            else:
+                if speed <= 15:  # Walking/running speed
+                    plausibility_score = 1.0
+                elif speed <= 50:  # Vehicle speed
+                    plausibility_score = 0.8
+                elif speed <= 100:  # Fast vehicle
+                    plausibility_score = 0.6
+                else:  # Very high speed (suspicious)
+                    plausibility_score = 0.3
+            report_score += (plausibility_score * 0.4)  # 40% weight for movement plausibility
+        else:
+            report_score += 0.2  # Neutral score for missing movement data
+        
+        location_scores.append(min(1.0, report_score))
+    
+    # Return average location score across recent reports
+    return sum(location_scores) / len(location_scores)
+
+
 def compute_trust_score(
     *,
     ml_avg: Optional[float],
     confirmation_rate: float,
     spam_signal: float,
     location_diversity: float,
+    location_score: float,
     weights: Dict[str, float],
 ) -> float:
     """Central trust score computation (0..100) used for device trust updates."""
@@ -110,12 +188,14 @@ def compute_trust_score(
     conf_component = max(0.0, min(1.0, confirmation_rate))
     spam_component = 1.0 - max(0.0, min(1.0, spam_signal / 10.0))
     diversity_component = max(0.0, min(1.0, location_diversity))
+    location_quality_component = max(0.0, min(1.0, location_score))
 
     score_0_1 = (
         weights.get("history", 0.0) * history_component
         + weights.get("confirmation_rate", 0.0) * conf_component
         + weights.get("spam_penalty", 0.0) * spam_component
         + weights.get("location_diversity", 0.0) * diversity_component
+        + weights.get("location_quality", 0.0) * location_quality_component
     )
     return max(0.0, min(100.0, score_0_1 * 100.0))
 
@@ -185,14 +265,11 @@ def _build_feature_row(
 
     time_of_day = _bucket_time_of_day(reported_at)
 
-    # Description analysis moved to Natural Language model
-    # Only keep drug-related analysis for historical patterns
-    description = getattr(report, "description", None) or ""
-    words = re.findall(r"[a-zA-Z]+", description.lower())
-    description_word_count = len(words)
-    drug_keyword_count = sum(1 for w in words if w in DRUG_KEYWORDS)
-    drug_keyword_ratio = (drug_keyword_count / description_word_count) if description_word_count else 0.0
-    mentions_drug_keywords = 1 if drug_keyword_count > 0 else 0
+    # TrustBond must avoid NLP-style conclusions; text quality/semantic checks belong to NL model.
+    description_word_count = 0
+    drug_keyword_count = 0
+    drug_keyword_ratio = 0.0
+    mentions_drug_keywords = 0
 
     latitude = getattr(report, "latitude", None)
     longitude = getattr(report, "longitude", None)
@@ -289,18 +366,16 @@ def _build_feature_row(
         elif col == "mentions_drug_keywords":
             row[col] = mentions_drug_keywords
         elif col == "incident_is_drug_type":
-            incident_name = getattr(getattr(report, "incident_type", None), "type_name", None) or ""
-            incident_lower = incident_name.strip().lower()
-            row[col] = 1 if any(h in incident_lower for h in DRUG_INCIDENT_HINTS) else 0
+            # Keep neutral to avoid incident-text coupling in TrustBond.
+            row[col] = 0
         elif col == "incident_description_mismatch":
-            incident_name = getattr(getattr(report, "incident_type", None), "type_name", None) or ""
-            incident_lower = incident_name.strip().lower()
-            incident_is_drug = 1 if any(h in incident_lower for h in DRUG_INCIDENT_HINTS) else 0
-            row[col] = 1 if (incident_is_drug and not mentions_drug_keywords) else 0
+            # NLP model owns semantic mismatch; keep neutral in TrustBond input.
+            row[col] = 0
         elif col == "description":
-            row[col] = description
+            # Keep text payload neutral in TrustBond to avoid duplicated NLP responsibility.
+            row[col] = ""
         elif col == "description_text":
-            row[col] = description
+            row[col] = ""
         elif col == "network_type":
             row[col] = network_type
         elif col == "device_total_reports":
@@ -325,6 +400,15 @@ def _build_feature_row(
             row[col] = gps_anomaly_flag
         elif col == "future_timestamp_flag":
             row[col] = future_timestamp_flag
+        elif col == "decision":
+            # Training artifact column: keep deterministic neutral value at inference time.
+            row[col] = "pending"
+        elif col == "confidence_level":
+            # Training artifact column: neutral midpoint to avoid leaking final outcomes.
+            row[col] = 0.5
+        elif col == "used_for_training":
+            # Inference-time rows are not labeled training records.
+            row[col] = 0
         else:
             # Unknown column – leave as None so the pipeline can handle it if needed
             row[col] = None
@@ -336,11 +420,10 @@ def _compute_trust_factors(db: Session, report: Report, device: Device, evidence
     """Calculate granular heuristics explaining the report's credibility."""
     factors: Dict[str, Any] = {}
     
-    # 1. Content Score (0-100)
-    desc_len = len(report.description or "")
-    desc_score = min(100.0, (desc_len / 100.0) * 50.0) # Up to 50 pts for 100+ chars
-    ev_score = min(100.0, evidence_count * 25.0)       # Up to 50 pts for 2+ evidence files
-    content_score = min(100.0, desc_score + ev_score)
+    # 1. Evidence Presence Score (0-100)
+    # NLP owns text quality; TrustBond only contributes non-textual heuristics.
+    ev_score = min(100.0, evidence_count * 50.0)  # Up to 100 points for 2+ evidence files
+    content_score = ev_score
     factors["content_score"] = round(content_score, 1)
 
     # 2. Location Match Score (0-100)
@@ -419,13 +502,24 @@ def score_report_credibility(
     report: Report,
     device: Device,
     evidence_count: int,
-) -> None:
+    *,
+    window: int = 30,
+    return_metadata: bool = False,
+) -> Optional[Dict[str, Any]]:
     """
-    Run the trained XGBoost credibility model for a single report, and persist
-    ONLY the credibility score (no decision making). Safe to call from API code; 
-    failures are swallowed so they don't break report submission.
+    Run XGBoost credibility model for a single report and persist the result.
+    This is the core ML scoring function used by the 3-model system.
     
-    NOTE: This model now only outputs scores, no final decisions.
+    Args:
+        db: Database session
+        report: Report object
+        device: Device object
+        evidence_count: Number of evidence files
+        window: Time window for device history analysis
+        return_metadata: If True, return metadata instead of persisting
+        
+    Returns:
+        Dict with metadata if return_metadata=True, otherwise None
     """
     try:
         model, meta = _load_model_and_meta()
@@ -461,20 +555,13 @@ def score_report_credibility(
         elif community_net < 0:
             credibility_score = max(0.0, credibility_score + (community_net * 10.0))
 
-        # Calculate prediction label based on trust score
-        if credibility_score >= 70.0:
-            prediction_label = "likely_real"
-        elif credibility_score >= 40.0:
-            prediction_label = "suspicious"
-        else:
-            prediction_label = "fake"
-        
-        # Store the score with prediction label
+        # Store TrustBond output as a model contribution only.
+        # Final label/decision is assigned later by unified aggregation.
         prediction = MLPrediction(
             prediction_id=uuid4(),
             report_id=report.report_id,
             trust_score=Decimal(f"{credibility_score:.2f}"),
-            prediction_label=prediction_label,  # Set prediction label based on score
+            prediction_label=None,
             model_version=meta.get("model_version", "report_credibility_xgb_v1"),
             model_type="xgboost",
             confidence=Decimal(f"{prob_real:.3f}"),
@@ -562,7 +649,15 @@ def update_device_ml_aggregates(
         spam_flags = float(getattr(device, "spam_flags", 0) or 0)
         flagged_reports = float(getattr(device, "flagged_reports", 0) or 0)
 
-        confirm_rate = (trusted_reports / total_reports) if total_reports > 0 else 0.0
+        # Fix confirmation rate calculation - don't penalize new devices with pending reports
+        if total_reports == 0:
+            confirm_rate = 0.5  # Neutral for new devices
+        elif trusted_reports == 0 and total_reports == 1:
+            # Single report that's still pending - don't penalize heavily
+            confirm_rate = 0.4  # Slightly lower than neutral but not zero
+        else:
+            confirm_rate = (trusted_reports / total_reports)
+        
         spam_signal = spam_flags + flagged_reports
         
         # Improved behavior score calculation with recovery mechanisms
@@ -601,17 +696,42 @@ def update_device_ml_aggregates(
         # Calculate final behavior score with minimum floor
         behavior_score = max(10.0, min(100.0, base_score - spam_penalty + recovery_bonus))
 
+        # Calculate location quality score
+        location_score = calculate_location_score(db, str(device.device_id))
+        
         weights = _load_trust_formula(db)
+        
+        # Debug logging to identify the issue
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Device trust calculation for {device.device_id}:")
+        logger.warning(f"  Current score: {getattr(device, 'device_trust_score', 'N/A')}")
+        logger.warning(f"  ML avg: {ml_avg}")
+        logger.warning(f"  Confirmation rate: {confirm_rate}")
+        logger.warning(f"  Spam signal: {spam_signal}")
+        logger.warning(f"  Location diversity: {location_diversity}")
+        logger.warning(f"  Location quality score: {location_score}")
+        logger.warning(f"  Weights: {weights}")
+        
         blended = compute_trust_score(
             ml_avg=float(ml_avg) if ml_avg is not None else None,
             confirmation_rate=confirm_rate,
             spam_signal=spam_signal,
             location_diversity=location_diversity,
+            location_score=location_score,
             weights=weights,
         )
 
         # Clamp 0..100 and persist
         blended = max(0.0, min(100.0, blended))
+        logger.warning(f"  New calculated score: {blended}")
+        
+        # Sanity check: don't allow dramatic drops for single good reports
+        current_score = float(getattr(device, 'device_trust_score', 50.0) or 50.0)
+        if ml_avg is not None and ml_avg >= 80.0 and blended < current_score - 20.0:
+            logger.warning(f"  OVERRIDING: Preventing dramatic drop after high-trust report")
+            blended = max(blended, current_score - 5.0)  # Allow small drop but not dramatic
+        
         if hasattr(device, "device_trust_score"):
             device.device_trust_score = Decimal(f"{blended:.2f}")
 

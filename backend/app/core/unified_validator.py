@@ -14,7 +14,7 @@ from .trust_aggregator import aggregate_trust_scores, AggregatedTrust, TrustBand
 from .natural_language_scorer import analyze_description_quality, NLAnalysisResult
 from .volo_scorer import analyze_evidence_content, VoloAnalysisResult
 from .credibility_model import score_report_credibility
-from .trust_thresholds import trust_thresholds, should_auto_verify, should_reject
+from .trust_thresholds import trust_thresholds
 from app.models.report import Report
 from app.models.device import Device
 from app.models.evidence_file import EvidenceFile
@@ -183,7 +183,8 @@ class UnifiedValidator:
         validation_result: ValidationResult
     ) -> None:
         """
-        Apply validation results to report state.
+        Apply validation metadata only.
+        Final label and report status are decided in API orchestration.
         
         Args:
             db: Database session
@@ -192,34 +193,15 @@ class UnifiedValidator:
         """
         aggregated = validation_result.aggregated_trust
         
-        # Update report with aggregated trust score
-        # Note: We don't set prediction_label here - let the display logic handle it
+        # Persist aggregated trust score as model contribution only.
         ml_prediction = db.query(MLPrediction).filter(
             MLPrediction.report_id == report.report_id,
             MLPrediction.model_type == "xgboost"
         ).first()
         
         if ml_prediction:
-            # Update existing prediction with aggregated score
             ml_prediction.trust_score = aggregated.total_score
-            # Keep prediction_label as None - aggregator decides
-            ml_prediction.model_type = "aggregated"
             ml_prediction.evaluated_at = datetime.now(timezone.utc)
-        
-        # Set report verification status based on aggregated trust
-        if should_auto_verify(aggregated):
-            report.verification_status = "verified"
-            report.status = "verified"
-            logger.info(f"Report {report.report_id} auto-verified")
-        elif should_reject(aggregated):
-            report.verification_status = "rejected"
-            report.status = "rejected"
-            report.is_flagged = True
-            report.flag_reason = "low_aggregated_trust"
-            logger.info(f"Report {report.report_id} auto-rejected")
-        else:
-            report.verification_status = "under_review"
-            logger.info(f"Report {report.report_id} marked for review")
         
         # Store validation metadata in feature_vector
         feature_vector = getattr(report, 'feature_vector', {}) or {}
@@ -243,8 +225,7 @@ class UnifiedValidator:
         from .credibility_model import _json_safe
         report.feature_vector = _json_safe(feature_vector)
         
-        db.commit()
-        logger.info(f"Applied validation results to report {report.report_id}")
+        logger.info(f"Applied validation metadata to report {report.report_id}")
     
     def _create_fallback_aggregation(
         self,

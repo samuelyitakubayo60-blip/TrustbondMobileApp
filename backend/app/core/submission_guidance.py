@@ -52,14 +52,20 @@ class SubmissionGuidance:
             'base': 0.1
         }
         
-        # Thresholds for offline estimation
+        # Thresholds for offline estimation (aligned with backend decision policy)
         self.thresholds = {
             'min_description_length': 20,
             'ideal_description_length': 50,
             'min_evidence_count': 1,
             'ideal_evidence_count': 3,
             'min_gps_accuracy': 50,  # meters
-            'min_words_for_detail': 15
+            'min_words_for_detail': 15,
+            # Text-only reports (no evidence)
+            'text_confirmed_min': 85.0,
+            'text_under_review_min': 60.0,
+            # Evidence-backed reports
+            'evidence_confirmed_min': 80.0,
+            'evidence_under_review_min': 55.0,
         }
     
     def analyze_submission_quality(
@@ -389,14 +395,18 @@ class SubmissionGuidance:
         if volo_score and volo_score > 20:
             contributing += 1
         
-        # Determine confidence and verification likelihood
-        if total_score >= 70:
+        has_evidence = evidence_count > 0
+        confirm_min = self.thresholds['evidence_confirmed_min'] if has_evidence else self.thresholds['text_confirmed_min']
+        review_min = self.thresholds['evidence_under_review_min'] if has_evidence else self.thresholds['text_under_review_min']
+
+        # Determine confidence and verification likelihood using aligned thresholds
+        if total_score >= confirm_min:
             confidence = "high_confidence"
             will_be_verified = True
-        elif total_score >= 45:
+        elif total_score >= review_min:
             confidence = "medium_confidence"
             will_be_verified = False
-        elif total_score >= 20:
+        elif total_score > 0:
             confidence = "low_confidence"
             will_be_verified = False
         else:
