@@ -354,7 +354,28 @@ class _MyReportsScreenState extends State<MyReportsScreen>
     }
     if (raw.isEmpty) return null;
 
-    final compact = raw.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    String cleaned = raw;
+    const markers = [
+      'Decision patterns:',
+      'Pattern explanations:',
+      'AI scoring breakdown:',
+      'ML label:',
+      'Rule status:',
+      'Semantic similarity',
+    ];
+    for (final marker in markers) {
+      final i = cleaned.indexOf(marker);
+      if (i >= 0) {
+        cleaned = cleaned.substring(0, i).trim();
+      }
+    }
+    cleaned = cleaned
+        .replaceFirst(RegExp(r'^AI verification result:\s*', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'^Report context:\s*', caseSensitive: false), '')
+        .trim();
+
+    final compact =
+        cleaned.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
     if (compact.isEmpty) return null;
     final maxLen = 80;
     final clipped = compact.length > maxLen ? '${compact.substring(0, maxLen - 1)}…' : compact;
