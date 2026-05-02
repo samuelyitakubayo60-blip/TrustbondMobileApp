@@ -5197,18 +5197,20 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
 
 
 def _create_auto_cases(db: Session) -> Dict[str, int]:
-    """Automatically create cases from verified reports using 12-hour time constraint and proper location-based clustering"""
+    """Automatically create/attach cases from verified reports without a time window.
+
+    Policy:
+    - If a compatible OPEN case exists, attach report to it.
+    - Create a NEW case only when no compatible open/in-progress case exists
+      (e.g., prior matching cases are closed).
+    """
     
     stats = {'cases_created': 0}
     
     try:
         from app.models.case import Case, CaseReport
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timezone
         case_reports_table = CaseReport.__table__
-        
-        # Time constraint: only reports within last 12 hours
-        time_window_hours = 12
-        since = datetime.now(timezone.utc) - timedelta(hours=time_window_hours)
         
         # Get clustering parameters from system config
         from app.models.system_config import SystemConfig
@@ -5231,44 +5233,50 @@ def _create_auto_cases(db: Session) -> Dict[str, int]:
         # Convert radius to kilometers for distance calculation
         cluster_radius_km = cluster_radius_meters / 1000.0
         
-        # Strategy 1: Cluster by village/location with time constraint (preferred)
+        # Strategy 1: attach to existing open cases first, then cluster/create new.
         village_clusters = {}
         verified_reports = db.query(Report).filter(
             Report.verification_status == 'verified',
             Report.status == 'verified',
-            Report.reported_at >= since,  # 12-hour time constraint
             ~Report.report_id.in_(
                 db.query(case_reports_table.c.report_id).distinct()
             )
         ).all()
         
         logger.info(f"Found {len(verified_reports)} verified reports available for case creation")
-        
-        # Group by village and incident type with time constraint
+
+        # First pass: attach to existing open/in-progress compatible cases.
+        reports_for_new_case_eval = []
         for report in verified_reports:
+            attached = _try_add_to_existing_case(db, report, cluster_radius_km)
+            if not attached:
+                reports_for_new_case_eval.append(report)
+        logger.info(
+            "Auto-case attachment pass complete: attached=%s remaining_for_new=%s",
+            len(verified_reports) - len(reports_for_new_case_eval),
+            len(reports_for_new_case_eval),
+        )
+        
+        # Group remaining reports by village and incident type.
+        for report in reports_for_new_case_eval:
             if report.village_location_id:
                 village_key = f"{report.village_location_id}_{report.incident_type_id}"
                 if village_key not in village_clusters:
                     village_clusters[village_key] = []
                 village_clusters[village_key].append(report)
         
-        # Create cases for village-based clusters with time filtering
+        # Create cases for village-based clusters.
         for village_key, reports in village_clusters.items():
             if len(reports) >= min_reports_threshold:
-                # Additional time filtering: ensure all reports in cluster are within 12 hours
-                reports.sort(key=lambda r: r.reported_at)
-                time_span = (reports[-1].reported_at - reports[0].reported_at).total_seconds() / 3600
-                
-                if time_span <= time_window_hours:  # Only create case if within 12-hour window
-                    case_stats = _create_case_from_reports(db, reports)
-                    stats['cases_created'] += case_stats['cases_created']
-                    village_id, incident_type_id = village_key.split('_')
-                    logger.info(f"Created ONE village-based case for {len(reports)} reports in village {village_id}, incident type {incident_type_id} (time span: {time_span:.1f}h)")
-                else:
-                    logger.info(f"Skipped village cluster for village {village_id}, incident type {incident_type_id} - time span {time_span:.1f}h exceeds {time_window_hours}h limit")
+                case_stats = _create_case_from_reports(db, reports)
+                stats['cases_created'] += case_stats['cases_created']
+                village_id, incident_type_id = village_key.split('_')
+                logger.info(
+                    f"Created ONE village-based case for {len(reports)} reports in village {village_id}, incident type {incident_type_id}"
+                )
         
         # Strategy 2: Geographic clustering for reports without village assignment
-        unassigned_reports = [r for r in verified_reports if not r.village_location_id]
+        unassigned_reports = [r for r in reports_for_new_case_eval if not r.village_location_id]
         if len(unassigned_reports) >= min_reports_threshold:
             # Group by incident type for geographic clustering
             by_incident_type = {}
@@ -5315,18 +5323,13 @@ def _create_auto_cases(db: Session) -> Dict[str, int]:
                             cluster.append(other_report)
                             processed.add(other_report.report_id)
                     
-                    # Create case if cluster has enough reports and within time window
+                    # Create case if cluster has enough reports
                     if len(cluster) >= min_reports_threshold:
-                        # Additional time filtering for geographic clusters
-                        cluster.sort(key=lambda r: r.reported_at)
-                        time_span = (cluster[-1].reported_at - cluster[0].reported_at).total_seconds() / 3600
-                        
-                        if time_span <= time_window_hours:  # Only create case if within 12-hour window
-                            case_stats = _create_case_from_reports(db, cluster)
-                            stats['cases_created'] += case_stats['cases_created']
-                            logger.info(f"Created ONE geo-clustered case for {len(cluster)} reports of incident type {incident_type_id} within {cluster_radius_meters}m (time span: {time_span:.1f}h)")
-                        else:
-                            logger.info(f"Skipped geo cluster for incident type {incident_type_id} - time span {time_span:.1f}h exceeds {time_window_hours}h limit")
+                        case_stats = _create_case_from_reports(db, cluster)
+                        stats['cases_created'] += case_stats['cases_created']
+                        logger.info(
+                            f"Created ONE geo-clustered case for {len(cluster)} reports of incident type {incident_type_id} within {cluster_radius_meters}m"
+                        )
         
         if stats['cases_created'] > 0:
             db.commit()

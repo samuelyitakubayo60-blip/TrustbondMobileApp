@@ -404,13 +404,9 @@ def list_hotspots(
     responses = []
     
     for h in hotspots:
-        # Defensive filter: only consider reports mapped to covered village locations.
-        reports_in_cluster = [
-            r
-            for r in (getattr(h, "reports", None) or [])
-            if getattr(r, "village_location_id", None) is not None
-            and getattr(r, "village_location", None) is not None
-        ]
+        # Include all clustered reports; some legacy rows may miss village linkage
+        # but still have valid coordinates required for map/hotspot analytics.
+        reports_in_cluster = list(getattr(h, "reports", None) or [])
         if not reports_in_cluster:
             continue
 
@@ -992,6 +988,40 @@ def get_hotspot_incidents(
     )
     if not hotspot:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hotspot not found")
+
+    incidents: List[HotspotIncidentResponse] = []
+    for r in hotspot.reports or []:
+        preds = list(getattr(r, "ml_predictions", None) or [])
+        final_preds = [p for p in preds if getattr(p, "is_final", False)]
+        source_preds = final_preds if final_preds else preds
+        source_preds.sort(
+            key=lambda p: p.evaluated_at or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
+        trust_score = None
+        if source_preds and getattr(source_preds[0], "trust_score", None) is not None:
+            trust_score = float(source_preds[0].trust_score)
+
+        incidents.append(
+            HotspotIncidentResponse(
+                report_id=str(r.report_id),
+                incident_type_name=r.incident_type.type_name if r.incident_type else None,
+                description=r.description,
+                latitude=r.latitude,
+                longitude=r.longitude,
+                reported_at=r.reported_at,
+                rule_status=r.rule_status,
+                verification_status=r.verification_status,
+                trust_score=trust_score,
+            )
+        )
+
+    incidents.sort(
+        key=lambda i: i.reported_at or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+    return incidents
+
 @router.get("/stats")
 async def get_hotspot_stats(
     time_period: Optional[str] = None,
@@ -1105,38 +1135,3 @@ async def get_hotspot_stats(
     except Exception as e:
         logger.error(f"Error getting hotspot stats: {e}")
         raise HTTPException(status_code=500, detail="Failed to get hotspot statistics")
-
-
-
-    incidents: List[HotspotIncidentResponse] = []
-    for r in hotspot.reports or []:
-        preds = list(getattr(r, "ml_predictions", None) or [])
-        final_preds = [p for p in preds if getattr(p, "is_final", False)]
-        source_preds = final_preds if final_preds else preds
-        source_preds.sort(
-            key=lambda p: p.evaluated_at or datetime.min.replace(tzinfo=timezone.utc),
-            reverse=True,
-        )
-        trust_score = None
-        if source_preds and getattr(source_preds[0], "trust_score", None) is not None:
-            trust_score = float(source_preds[0].trust_score)
-
-        incidents.append(
-            HotspotIncidentResponse(
-                report_id=str(r.report_id),
-                incident_type_name=r.incident_type.type_name if r.incident_type else None,
-                description=r.description,
-                latitude=r.latitude,
-                longitude=r.longitude,
-                reported_at=r.reported_at,
-                rule_status=r.rule_status,
-                verification_status=r.verification_status,
-                trust_score=trust_score,
-            )
-        )
-
-    incidents.sort(
-        key=lambda i: i.reported_at or datetime.min.replace(tzinfo=timezone.utc),
-        reverse=True,
-    )
-    return incidents

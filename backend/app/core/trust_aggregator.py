@@ -175,6 +175,19 @@ class TrustAggregator:
         if not missing_main_models:
             # All models available, return original weights
             return original_weights
+
+        # No evidence case: use strict 50/50 between TrustBond and NL, no base/VOLO share.
+        if (
+            not available_models.get('volo', False)
+            and available_models.get('trustbond', False)
+            and available_models.get('natural_language', False)
+        ):
+            return {
+                'trustbond': 0.5,
+                'natural_language': 0.5,
+                'volo': 0.0,
+                'base_score': 0.0,
+            }
         
         # Calculate total weight to redistribute from missing main models
         missing_weight = sum(original_weights[model] for model in missing_main_models)

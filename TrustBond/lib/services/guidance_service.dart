@@ -7,6 +7,7 @@ class GuidanceRequest {
   final String description;
   final String incidentType;
   final int evidenceCount;
+  final List<String> fileTypes;
   final double? gpsAccuracy;
   final double? movementSpeed;
   final String? deviceId;
@@ -17,6 +18,7 @@ class GuidanceRequest {
     required this.description,
     required this.incidentType,
     this.evidenceCount = 0,
+    this.fileTypes = const [],
     this.gpsAccuracy,
     this.movementSpeed,
     this.deviceId,
@@ -29,6 +31,7 @@ class GuidanceRequest {
       'description': description,
       'incident_type': incidentType,
       'evidence_count': evidenceCount,
+      'file_types': fileTypes,
       'gps_accuracy': gpsAccuracy,
       'movement_speed': movementSpeed,
       'device_id': deviceId,

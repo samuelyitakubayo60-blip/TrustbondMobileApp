@@ -10,8 +10,10 @@ import '../config/theme.dart';
 import '../services/device_status_service.dart';
 import '../services/motion_service.dart';
 import '../services/mobile_verification_service.dart';
+import '../services/guidance_service.dart';
 import '../services/app_refresh_bus.dart';
 import '../services/offline_report_queue_service.dart';
+import '../widgets/guidance_widgets.dart';
 import '../widgets/shared_widgets.dart';
 import 'report_success_screen.dart';
 
@@ -49,6 +51,9 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   bool _submitting = false;
   String? _error;
   bool _isRecording = false;
+  GuidanceResponse? _guidance;
+  bool _guidanceLoading = false;
+  Timer? _guidanceDebounce;
 
   Future<String> _sanitizePhotoPath(String sourcePath) async {
     try {
@@ -97,6 +102,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
       final sanitizedPath = await _sanitizePhotoPath(img.path);
       setState(() => _files
           .add(_EvidenceFile(path: sanitizedPath, type: 'photo', isLive: true)));
+      _scheduleGuidanceUpdate();
     }
   }
 
@@ -106,6 +112,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
     if (vid != null) {
       setState(() => _files
           .add(_EvidenceFile(path: vid.path, type: 'video', isLive: true)));
+      _scheduleGuidanceUpdate();
     }
   }
 
@@ -223,10 +230,53 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
     final sanitizedPath = await _sanitizePhotoPath(filePath);
     setState(() => _files
         .add(_EvidenceFile(path: sanitizedPath, type: fileType, isLive: isLiveCapture)));
+    _scheduleGuidanceUpdate();
   }
 
   void _removeFile(int index) {
     setState(() => _files.removeAt(index));
+    _scheduleGuidanceUpdate();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleGuidanceUpdate();
+  }
+
+  @override
+  void dispose() {
+    _guidanceDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleGuidanceUpdate() {
+    _guidanceDebounce?.cancel();
+    _guidanceDebounce = Timer(const Duration(milliseconds: 700), () async {
+      if (!mounted) return;
+      setState(() => _guidanceLoading = true);
+      try {
+        final guidance = await GuidanceService.analyzeSubmission(
+          GuidanceRequest(
+            description: widget.description,
+            incidentType: widget.incidentTypeName,
+            evidenceCount: _files.length,
+            fileTypes: _files.map((f) => f.type).toList(growable: false),
+            gpsAccuracy: widget.gpsAccuracy,
+            hasLiveCapture: _files.any((f) => f.isLive),
+            isOffline: false,
+          ),
+        );
+        if (!mounted) return;
+        setState(() {
+          _guidance = guidance;
+          _guidanceLoading = false;
+        });
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _guidanceLoading = false);
+      }
+    });
   }
 
   Future<void> _submit() async {
@@ -381,6 +431,8 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
                             TextStyle(fontSize: 12, color: AppColors.muted)),
                     const SizedBox(height: 16),
                     _buildUploadArea(),
+                    const SizedBox(height: 12),
+                    _buildGuidanceSection(),
                     if (_files.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       _buildFileList(),
@@ -446,35 +498,65 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
               style: TextStyle(fontSize: 11, color: AppColors.muted),
               textAlign: TextAlign.center),
           const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _actionChip('📷 Photo', _pickPhoto),
-              const SizedBox(width: 8),
-              _actionChip('🎥 Video', _pickVideo),
-              const SizedBox(width: 8),
-              _actionChip(_isRecording ? '⏹️ Stop' : '🎤 Audio', _isRecording ? _stopRecording : _pickAudio),
-              const SizedBox(width: 8),
-              _actionChip('🖼️ Gallery', _pickGallery),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final spacing = 8.0;
+              final itemWidth = (constraints.maxWidth - spacing) / 2;
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  SizedBox(
+                    width: itemWidth,
+                    child: _actionChip('📷 Photo', _pickPhoto),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    child: _actionChip('🎥 Video', _pickVideo),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    child: _actionChip(
+                      _isRecording ? '⏹️ Stop' : '🎤 Audio',
+                      _isRecording ? _stopRecording : _pickAudio,
+                    ),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    child: _actionChip('🖼️ Gallery', _pickGallery),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _actionChip(String label, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.surface2,
-          border: Border.all(color: AppColors.border),
-          borderRadius: BorderRadius.circular(20),
+  Widget _actionChip(String label, Future<void> Function() onTap) {
+    return Material(
+      color: AppColors.surface2,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          unawaited(onTap());
+        },
+        child: Container(
+          height: 44,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, color: AppColors.text),
+          ),
         ),
-        child: Text(label,
-            style: const TextStyle(fontSize: 12, color: AppColors.text)),
       ),
     );
   }
@@ -551,6 +633,34 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
             ),
           );
         }),
+      ],
+    );
+  }
+
+  Widget _buildGuidanceSection() {
+    if (_guidanceLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 8),
+            Text('Analyzing evidence guidance...'),
+          ],
+        ),
+      );
+    }
+    if (_guidance == null) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TrustScoreDisplay(trustEstimate: _guidance!.trustEstimate),
+        ..._guidance!.criticalItems.take(2).map((item) => GuidanceCard(item: item)),
+        ..._guidance!.warningItems.take(2).map((item) => GuidanceCard(item: item)),
       ],
     );
   }

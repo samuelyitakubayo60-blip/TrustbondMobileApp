@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../config/theme.dart';
 import '../models/musanze_map_data.dart';
+import '../services/guidance_service.dart';
 import '../services/location_service.dart';
+import '../widgets/guidance_widgets.dart';
 import '../widgets/shared_widgets.dart';
 import 'report_step3_screen.dart';
 
@@ -30,6 +33,9 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
   String? _locError;
   bool _canOpenSettings = false;
   final List<String> _selectedTags = [];
+  DescriptionValidationResponse? _descriptionValidation;
+  bool _guidanceLoading = false;
+  Timer? _guidanceDebounce;
 
   static const _tags = [
     'Night-time',
@@ -43,8 +49,12 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
   @override
   void initState() {
     super.initState();
-    _descController.addListener(() => setState(() {}));
+    _descController.addListener(() {
+      setState(() {});
+      _scheduleGuidanceUpdate();
+    });
     _getLocation();
+    _scheduleGuidanceUpdate();
   }
 
   Future<void> _getLocation() async {
@@ -71,6 +81,7 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
         _villageLocation = result.village;
         _locating = false;
       });
+      _scheduleGuidanceUpdate();
     } catch (e) {
       setState(() {
         _locError = 'Could not get location: $e';
@@ -90,8 +101,40 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
 
   @override
   void dispose() {
+    _guidanceDebounce?.cancel();
     _descController.dispose();
     super.dispose();
+  }
+
+  void _scheduleGuidanceUpdate() {
+    _guidanceDebounce?.cancel();
+    _guidanceDebounce = Timer(const Duration(milliseconds: 700), () async {
+      if (!mounted) return;
+      setState(() => _guidanceLoading = true);
+      try {
+        final text = _descController.text.trim();
+        if (text.isEmpty) {
+          if (!mounted) return;
+          setState(() {
+            _descriptionValidation = null;
+            _guidanceLoading = false;
+          });
+          return;
+        }
+        final validation = await GuidanceService.validateDescription(
+          text,
+          widget.incidentTypeName,
+        );
+        if (!mounted) return;
+        setState(() {
+          _descriptionValidation = validation;
+          _guidanceLoading = false;
+        });
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _guidanceLoading = false);
+      }
+    });
   }
 
   @override
@@ -111,6 +154,8 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
                     _buildTypeBadge(),
                     const SizedBox(height: 16),
                     _buildDescSection(),
+                    const SizedBox(height: 12),
+                    _buildGuidanceSection(),
                     const SizedBox(height: 20),
                     _buildLocationSection(),
                     const SizedBox(height: 20),
@@ -174,10 +219,10 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Description (Optional)',
+        const Text('Description (Required)',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
-        const Text('Add details if you want. You can submit without this.',
+        const Text('Describe what happened clearly. This field is required.',
             style: TextStyle(fontSize: 11, color: AppColors.muted)),
         const SizedBox(height: 8),
         TextField(
@@ -186,7 +231,7 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
           maxLength: 1000,
           style: const TextStyle(fontSize: 13, color: AppColors.text),
           decoration: InputDecoration(
-            hintText: 'I noticed...',
+            hintText: 'Describe what happened, where, and who was involved...',
             hintStyle: const TextStyle(color: AppColors.muted),
             filled: true,
             fillColor: AppColors.surface2,
@@ -204,6 +249,14 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
             ),
           ),
         ),
+        if (_descController.text.trim().isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text(
+              'Description is required to continue.',
+              style: TextStyle(fontSize: 11, color: AppColors.warn),
+            ),
+          ),
       ],
     );
   }
@@ -329,6 +382,45 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
     );
   }
 
+  Widget _buildGuidanceSection() {
+    if (_guidanceLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 8),
+            Text('Analyzing guidance...'),
+          ],
+        ),
+      );
+    }
+    if (_descriptionValidation == null) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DescriptionQualityIndicator(validation: _descriptionValidation!),
+        if (_descriptionValidation!.suggestions.isNotEmpty)
+          ..._descriptionValidation!.suggestions.take(3).map(
+                (s) => GuidanceCard(
+                  item: GuidanceItem(
+                    level: _descriptionValidation!.isValid ? 'info' : 'warning',
+                    title: _descriptionValidation!.isValid
+                        ? 'Description Tip'
+                        : 'Improve Description',
+                    message: s,
+                    actionable: false,
+                  ),
+                ),
+              ),
+      ],
+    );
+  }
+
   Widget _locationRow(String emoji, String label, String value) {
     return Row(
       children: [
@@ -397,7 +489,8 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
 
   Widget _buildContinueButton() {
     final hasLoc = _latitude != null;
-    final enabled = hasLoc;
+    final hasDescription = _descController.text.trim().isNotEmpty;
+    final enabled = hasLoc && hasDescription;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
       child: SizedBox(

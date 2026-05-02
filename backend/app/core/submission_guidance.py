@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 import re
 import math
+from collections import Counter
 from datetime import datetime
 
 class GuidanceLevel(Enum):
@@ -43,6 +44,8 @@ class SubmissionGuidance:
         self.description_rules = self._init_description_rules()
         self.evidence_rules = self._init_evidence_rules()
         self.location_rules = self._init_location_rules()
+        self._semantic_model = None
+        self._semantic_model_unavailable = False
         
         # Cached model weights (for offline estimation)
         self.model_weights = {
@@ -73,6 +76,7 @@ class SubmissionGuidance:
         description: str,
         incident_type: str,
         evidence_count: int = 0,
+        file_types: Optional[List[str]] = None,
         gps_accuracy: Optional[float] = None,
         movement_speed: Optional[float] = None,
         device_trust_score: Optional[float] = None,
@@ -91,7 +95,11 @@ class SubmissionGuidance:
         
         # Evidence analysis
         evidence_guidance = self._analyze_evidence(
-            evidence_count, has_live_capture, is_offline
+            evidence_count,
+            has_live_capture,
+            is_offline,
+            file_types=file_types,
+            incident_type=incident_type,
         )
         guidance_items.extend(evidence_guidance)
         
@@ -121,8 +129,10 @@ class SubmissionGuidance:
     def _analyze_description(self, description: str, incident_type: str, evidence_count: int = 0) -> List[GuidanceItem]:
         """Analyze description quality."""
         guidance = []
-        word_count = len(description.split())
-        char_count = len(description)
+        text = (description or "").strip()
+        word_count = len(text.split())
+        char_count = len(text)
+        quality_metrics = self.evaluate_description_quality(text, incident_type)
         
         # Length analysis
         if word_count < self.thresholds['min_words_for_detail']:
@@ -152,14 +162,14 @@ class SubmissionGuidance:
         recommended_keywords = incident_data["recommended"]
         evidence_hints = incident_data["evidence_hints"]
         
-        found_required = [kw for kw in required_keywords if kw.lower() in description.lower()]
-        found_recommended = [kw for kw in recommended_keywords if kw.lower() in description.lower()]
-        missing_required = [kw for kw in required_keywords if kw.lower() not in description.lower()]
-        missing_recommended = [kw for kw in recommended_keywords if kw.lower() not in description.lower()]
+        found_required = [kw for kw in required_keywords if kw.lower() in text.lower()]
+        found_recommended = [kw for kw in recommended_keywords if kw.lower() in text.lower()]
+        missing_required = [kw for kw in required_keywords if kw.lower() not in text.lower()]
+        missing_recommended = [kw for kw in recommended_keywords if kw.lower() not in text.lower()]
         
         # Check for people mentioned (for evidence suggestions)
-        people_mentioned = self._extract_people_count(description)
-        has_people = people_mentioned > 0 or any(word in description.lower() for word in ['people', 'person', 'man', 'woman', 'child', 'men', 'women', 'children', 'group', 'crowd'])
+        people_mentioned = self._extract_people_count(text)
+        has_people = people_mentioned > 0 or any(word in text.lower() for word in ['people', 'person', 'man', 'woman', 'child', 'men', 'women', 'children', 'group', 'crowd'])
         
         # Generate specific missing words guidance
         if missing_required:
@@ -188,7 +198,7 @@ class SubmissionGuidance:
             ))
         
         # Specific evidence hints based on mentioned keywords
-        mentioned_evidence_keywords = [hint for hint in evidence_hints if hint.lower() in description.lower()]
+        mentioned_evidence_keywords = [hint for hint in evidence_hints if hint.lower() in text.lower()]
         if mentioned_evidence_keywords and evidence_count == 0:
             guidance.append(GuidanceItem(
                 level=GuidanceLevel.CRITICAL,
@@ -198,7 +208,7 @@ class SubmissionGuidance:
             ))
         
         # Quality checks
-        if not re.search(r'\d', description):
+        if not re.search(r'\d', text):
             guidance.append(GuidanceItem(
                 level=GuidanceLevel.INFO,
                 title="Add Numbers",
@@ -208,7 +218,7 @@ class SubmissionGuidance:
         
         # Check for vague language
         vague_patterns = ['someone', 'something', 'somehow', 'somewhere', 'a person', 'a thing']
-        vague_found = [pattern for pattern in vague_patterns if pattern in description.lower()]
+        vague_found = [pattern for pattern in vague_patterns if pattern in text.lower()]
         
         if len(vague_found) > 2:
             guidance.append(GuidanceItem(
@@ -217,6 +227,29 @@ class SubmissionGuidance:
                 message="Replace vague terms with specific descriptions.",
                 suggested_action="Instead of 'someone', describe the person (gender, clothing, height, etc.)"
             ))
+
+        if quality_metrics["authenticity_score"] < 45:
+            guidance.append(GuidanceItem(
+                level=GuidanceLevel.CRITICAL,
+                title="Text Looks Repetitive or Random",
+                message="Description appears repetitive/noisy and may be rejected by language validation.",
+                suggested_action="Use plain sentences: who did what, where, when, and visible evidence."
+            ))
+        elif quality_metrics["authenticity_score"] < 65:
+            guidance.append(GuidanceItem(
+                level=GuidanceLevel.WARNING,
+                title="Improve Text Clarity",
+                message="Description has weak language quality signals.",
+                suggested_action="Reduce repeated words/letters and add concrete incident details."
+            ))
+
+        if quality_metrics["incident_alignment_score"] < 45:
+            guidance.append(GuidanceItem(
+                level=GuidanceLevel.CRITICAL,
+                title="Incident Mismatch Risk",
+                message="Description does not clearly match the selected incident type.",
+                suggested_action=f"Add terms specific to {incident_type} and explain the exact event."
+            ))
         
         return guidance
     
@@ -224,17 +257,28 @@ class SubmissionGuidance:
         self, 
         evidence_count: int, 
         has_live_capture: bool, 
-        is_offline: bool
+        is_offline: bool,
+        file_types: Optional[List[str]] = None,
+        incident_type: str = "Default",
     ) -> List[GuidanceItem]:
-        """Analyze evidence quality."""
+        """Analyze evidence quality for TrustBond and YOLO evidence pipelines."""
         guidance = []
+        metrics = self.evaluate_evidence_quality(
+            evidence_count=evidence_count,
+            has_live_capture=has_live_capture,
+            file_types=file_types,
+            incident_type=incident_type,
+        )
+        incident_data = self._get_incident_keywords(incident_type)
+        hints = incident_data.get("evidence_hints", [])
+        hint_text = ", ".join(hints[:4]) if hints else "scene, people, key objects"
         
         if evidence_count == 0:
             guidance.append(GuidanceItem(
                 level=GuidanceLevel.CRITICAL,
                 title="No Evidence Added",
                 message="Reports with evidence are 5x more likely to be verified.",
-                suggested_action="Add photos or videos of the incident location or evidence."
+                suggested_action=f"For {incident_type}, add media showing: {hint_text}."
             ))
         elif evidence_count < self.thresholds['ideal_evidence_count']:
             guidance.append(GuidanceItem(
@@ -257,8 +301,77 @@ class SubmissionGuidance:
                 message="Live photos are more trusted than gallery images.",
                 suggested_action="Take new photos instead of using existing images."
             ))
+
+        if metrics["yolo_coverage_score"] < 45 and evidence_count > 0:
+            guidance.append(GuidanceItem(
+                level=GuidanceLevel.WARNING,
+                title="Weak YOLO Coverage",
+                message="Current files may not provide clear visual signals for object/scene detection.",
+                suggested_action=(
+                    f"Add clearer photo/video for {incident_type} showing: {hint_text}. "
+                    "Keep lighting good and framing stable."
+                )
+            ))
+
+        if metrics["trustbond_evidence_score"] < 45 and evidence_count > 0:
+            guidance.append(GuidanceItem(
+                level=GuidanceLevel.WARNING,
+                title="Weak TrustBond Evidence Reliability",
+                message="Evidence source reliability is low (for example gallery-only evidence).",
+                suggested_action="Capture live media at scene and keep GPS/time metadata available."
+            ))
         
         return guidance
+
+    def evaluate_evidence_quality(
+        self,
+        *,
+        evidence_count: int,
+        has_live_capture: bool,
+        file_types: Optional[List[str]] = None,
+        incident_type: str = "Default",
+    ) -> Dict[str, float]:
+        """Estimate evidence quality with separate TrustBond and YOLO support signals."""
+        types = [str(t).strip().lower() for t in (file_types or []) if str(t).strip()]
+        image_types = {"photo", "image", "jpg", "jpeg", "png", "webp"}
+        video_types = {"video", "mp4", "mov", "avi", "mkv", "3gp"}
+        audio_types = {"audio", "mp3", "wav", "m4a", "aac", "ogg"}
+
+        images = sum(1 for t in types if t in image_types)
+        videos = sum(1 for t in types if t in video_types)
+        audios = sum(1 for t in types if t in audio_types)
+
+        if not types and evidence_count > 0:
+            # When types are unavailable, assume generic media.
+            images = evidence_count
+
+        trustbond_score = min(100.0, evidence_count * 28.0)
+        if has_live_capture:
+            trustbond_score += 22.0
+        trustbond_score = max(0.0, min(100.0, trustbond_score))
+
+        # YOLO is strongest on image/video content; audio contributes little to object/scene detection.
+        yolo_score = min(100.0, (images * 35.0) + (videos * 30.0) + (audios * 5.0))
+        if images == 0 and videos == 0 and evidence_count > 0:
+            yolo_score = min(yolo_score, 30.0)
+        yolo_score = max(0.0, min(100.0, yolo_score))
+
+        # Incident-aware media preference: some incidents are usually better supported by specific media mixes.
+        incident_lower = (incident_type or "").strip().lower()
+        prefers_video = any(k in incident_lower for k in ["traffic", "suspicious", "assault", "harassment"])
+        prefers_photo = any(k in incident_lower for k in ["theft", "vandalism", "drug", "fraud"])
+        if evidence_count > 0:
+            if prefers_video and videos == 0:
+                yolo_score = max(0.0, yolo_score - 10.0)
+            if prefers_photo and images == 0:
+                yolo_score = max(0.0, yolo_score - 10.0)
+
+        overall = max(0.0, min(100.0, (trustbond_score * 0.45) + (yolo_score * 0.55)))
+        return {
+            "overall_score": round(overall, 2),
+            "trustbond_evidence_score": round(trustbond_score, 2),
+            "yolo_coverage_score": round(yolo_score, 2),
+        }
     
     def _analyze_location(
         self, 
@@ -346,14 +459,13 @@ class SubmissionGuidance:
         if device_trust_score:
             trustbond_score = (trustbond_score + device_trust_score) / 2
         
-        # Natural Language estimation
-        word_count = len(description.split())
-        nl_score = min(50.0, word_count * 2)  # 2 points per word, max 50
-        
-        # Bonus for incident-specific keywords
-        incident_keywords = self._get_incident_keywords(incident_type)
-        keyword_matches = sum(1 for kw in incident_keywords if kw.lower() in description.lower())
-        nl_score += min(20.0, keyword_matches * 5)
+        # Natural Language estimation (advanced quality + incident alignment)
+        quality_metrics = self.evaluate_description_quality(description, incident_type)
+        nl_score = (
+            quality_metrics["authenticity_score"] * 0.55
+            + quality_metrics["incident_alignment_score"] * 0.45
+        )
+        nl_score = max(0.0, min(100.0, nl_score))
         
         # Volo estimation (evidence)
         volo_score = None
@@ -369,12 +481,12 @@ class SubmissionGuidance:
         
         # Calculate weighted total
         if is_offline and evidence_count == 0:
-            # Offline mode with no evidence - redistribute Volo weight
+            # No evidence policy: 50% TrustBond + 50% Natural Language.
             weights = {
-                'trustbond': 0.467,
-                'natural_language': 0.367, 
+                'trustbond': 0.5,
+                'natural_language': 0.5,
                 'volo': 0.0,
-                'base': 0.167
+                'base': 0.0
             }
         else:
             weights = self.model_weights
@@ -459,33 +571,60 @@ class SubmissionGuidance:
         
         return guidance
     
-    def _get_incident_keywords(self, incident_type: str) -> List[str]:
+    def _get_incident_keywords(self, incident_type: str) -> Dict[str, List[str]]:
         """Get relevant keywords for incident type."""
         keyword_map = {
+            # Exact DB incident types
             "Assault": {
                 "required": ["person", "location", "time"],
                 "recommended": ["weapon", "attacked", "injured", "description"],
                 "evidence_hints": ["weapon", "injury", "location", "people"]
+            },
+            "Domestic Violence": {
+                "required": ["person", "location", "time"],
+                "recommended": ["partner", "family", "threat", "injury", "weapon"],
+                "evidence_hints": ["injury", "damage", "location", "people"]
+            },
+            "Drug Activity": {
+                "required": ["drugs", "location", "time"],
+                "recommended": ["selling", "using", "packaging", "person", "vehicle"],
+                "evidence_hints": ["drugs", "packaging", "location", "people"]
+            },
+            "Fraud/Scam": {
+                "required": ["person", "location", "time"],
+                "recommended": ["money", "phone", "transfer", "message", "account"],
+                "evidence_hints": ["phone", "message", "receipt", "location"]
+            },
+            "Harassment": {
+                "required": ["person", "location", "time"],
+                "recommended": ["threat", "stalk", "message", "witness", "description"],
+                "evidence_hints": ["messages", "audio", "location", "people"]
+            },
+            "Suspicious Activity": {
+                "required": ["person", "location", "time"],
+                "recommended": ["behavior", "vehicle", "object", "movement", "description"],
+                "evidence_hints": ["person", "vehicle", "object", "location"]
             },
             "Theft": {
                 "required": ["stolen", "property", "location", "time"],
                 "recommended": ["thief", "value", "belongings", "description"],
                 "evidence_hints": ["stolen", "property", "thief", "location"]
             },
+            "Traffic Incident": {
+                "required": ["vehicle", "location", "time"],
+                "recommended": ["collision", "plate", "injury", "road", "damage"],
+                "evidence_hints": ["vehicle", "road", "damage", "location"]
+            },
             "Vandalism": {
                 "required": ["damaged", "property", "location", "time"],
                 "recommended": ["broken", "destroyed", "graffiti", "description"],
                 "evidence_hints": ["damage", "property", "vandalism", "location"]
             },
+            # Compatibility aliases for old labels
             "Drugs": {
                 "required": ["drugs", "location", "time"],
                 "recommended": ["using", "selling", "packaging", "people", "description"],
                 "evidence_hints": ["drugs", "packaging", "location", "people"]
-            },
-            "Fire": {
-                "required": ["fire", "location", "time"],
-                "recommended": ["burning", "smoke", "flames", "building", "injured", "description"],
-                "evidence_hints": ["fire", "damage", "smoke", "location"]
             },
             "Accident": {
                 "required": ["accident", "location", "time"],
@@ -498,8 +637,118 @@ class SubmissionGuidance:
                 "evidence_hints": ["location", "people", "evidence"]
             }
         }
-        
-        return keyword_map.get(incident_type, keyword_map["Default"])
+
+        raw = (incident_type or "").strip()
+        if raw in keyword_map:
+            return keyword_map[raw]
+
+        lowered = raw.lower()
+        alias_map = {
+            "domestic violence": "Domestic Violence",
+            "drug activity": "Drug Activity",
+            "fraud/scam": "Fraud/Scam",
+            "fraud": "Fraud/Scam",
+            "scam": "Fraud/Scam",
+            "harassment": "Harassment",
+            "suspicious activity": "Suspicious Activity",
+            "traffic incident": "Traffic Incident",
+            "theft": "Theft",
+            "vandalism": "Vandalism",
+            "assault": "Assault",
+            "drugs": "Drug Activity",
+            "accident": "Traffic Incident",
+        }
+        canonical = alias_map.get(lowered)
+        if canonical and canonical in keyword_map:
+            return keyword_map[canonical]
+
+        return keyword_map["Default"]
+
+    def evaluate_description_quality(self, description: str, incident_type: str) -> Dict[str, float]:
+        """
+        Advanced text-quality estimate for guidance:
+        - authenticity_score: repetition/noise/gibberish resistance
+        - incident_alignment_score: semantic or keyword alignment to incident type
+        """
+        text = (description or "").strip()
+        if not text:
+            return {
+                "quality_score": 0.0,
+                "authenticity_score": 0.0,
+                "incident_alignment_score": 0.0,
+            }
+
+        tokens = re.findall(r"[a-zA-Z]{2,}", text.lower())
+        token_count = len(tokens)
+        unique_ratio = (len(set(tokens)) / token_count) if token_count else 0.0
+        max_repeat_ratio = (max(Counter(tokens).values()) / token_count) if token_count else 1.0
+        repeated_char_runs = len(re.findall(r"(.)\1{3,}", text.lower()))
+        vowel_light_tokens = sum(1 for t in tokens if not re.search(r"[aeiou]", t))
+        vowel_light_ratio = (vowel_light_tokens / token_count) if token_count else 1.0
+        long_token_ratio = (sum(1 for t in tokens if len(t) > 12) / token_count) if token_count else 1.0
+
+        length_score = min(1.0, max(0.0, len(text) / 180.0))
+        structure_score = min(1.0, max(0.0, token_count / 35.0))
+        diversity_score = min(1.0, unique_ratio / 0.75) if unique_ratio < 0.75 else 1.0
+
+        penalty = 0.0
+        penalty += min(0.45, max(0.0, max_repeat_ratio - 0.14) * 2.4)
+        penalty += min(0.25, repeated_char_runs * 0.06)
+        penalty += min(0.30, max(0.0, vowel_light_ratio - 0.40) * 0.8)
+        penalty += min(0.20, max(0.0, long_token_ratio - 0.35) * 0.7)
+
+        authenticity = ((length_score * 0.3) + (structure_score * 0.35) + (diversity_score * 0.35) - penalty) * 100.0
+        authenticity = max(0.0, min(100.0, authenticity))
+
+        incident_alignment = self._incident_alignment_score(text, incident_type)
+        quality_score = max(0.0, min(100.0, (authenticity * 0.6) + (incident_alignment * 0.4)))
+
+        return {
+            "quality_score": round(quality_score, 2),
+            "authenticity_score": round(authenticity, 2),
+            "incident_alignment_score": round(incident_alignment, 2),
+        }
+
+    def _incident_alignment_score(self, description: str, incident_type: str) -> float:
+        incident_data = self._get_incident_keywords(incident_type)
+        required = incident_data.get("required", [])
+        recommended = incident_data.get("recommended", [])
+        desc_lower = (description or "").lower()
+
+        if not required and not recommended:
+            return 50.0
+
+        required_hits = sum(1 for kw in required if kw.lower() in desc_lower)
+        recommended_hits = sum(1 for kw in recommended if kw.lower() in desc_lower)
+        required_ratio = (required_hits / len(required)) if required else 0.0
+        recommended_ratio = (recommended_hits / len(recommended)) if recommended else 0.0
+        keyword_score = ((required_ratio * 0.7) + (recommended_ratio * 0.3)) * 100.0
+
+        model = self._get_semantic_model()
+        if model is None:
+            return max(0.0, min(100.0, keyword_score))
+
+        try:
+            from sentence_transformers import util
+            incident_text = " ".join([incident_type] + required + recommended).strip()
+            emb = model.encode([description, incident_text], convert_to_tensor=True, normalize_embeddings=True)
+            semantic_score = float(util.cos_sim(emb[0], emb[1]).item()) * 100.0
+            return max(0.0, min(100.0, (keyword_score * 0.45) + (semantic_score * 0.55)))
+        except Exception:
+            return max(0.0, min(100.0, keyword_score))
+
+    def _get_semantic_model(self):
+        if self._semantic_model is not None:
+            return self._semantic_model
+        if self._semantic_model_unavailable:
+            return None
+        try:
+            from app.core.model_manager import ensure_sentence_transformer_model
+            self._semantic_model = ensure_sentence_transformer_model("all-MiniLM-L6-v2")
+            return self._semantic_model
+        except Exception:
+            self._semantic_model_unavailable = True
+            return None
     
     def _init_description_rules(self) -> Dict[str, Any]:
         """Initialize description validation rules."""

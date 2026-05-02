@@ -1,4 +1,4 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, field_validator
 from uuid import UUID
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -19,7 +19,7 @@ class ReportCreate(BaseModel):
     device_id: Optional[UUID] = None
     device_hash: Optional[str] = None
     incident_type_id: int
-    description: Optional[str] = None
+    description: str
     latitude: Decimal
 
     longitude: Decimal
@@ -47,6 +47,14 @@ class ReportCreate(BaseModel):
         if not self.device_id and not (self.device_hash and str(self.device_hash).strip()):
             raise ValueError("Either device_id or device_hash is required")
         return self
+
+    @field_validator("description")
+    @classmethod
+    def require_description(cls, v: str) -> str:
+        text = (v or "").strip()
+        if not text:
+            raise ValueError("Description is required")
+        return text
 
 
 class CommunityVoteRequest(BaseModel):

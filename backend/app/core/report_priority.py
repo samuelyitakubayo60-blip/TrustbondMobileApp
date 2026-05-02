@@ -204,7 +204,15 @@ def _incident_description_mismatch(report: Report, db: Optional[Session]) -> boo
     }
     own = keywords.get(type_name)
     if not own:
-        return False
+        # Generic fallback for any incident type not explicitly listed above.
+        stopwords = {"incident", "activity", "case", "report", "event", "type", "and", "or"}
+        derived = {
+            tok for tok in re.findall(r"[a-z]{4,}", type_name)
+            if tok not in stopwords
+        }
+        if not derived:
+            return False
+        return not any(k in description for k in derived)
 
     own_hits = any(k in description for k in own)
     # If user chose a known type but the description contains no related signal,

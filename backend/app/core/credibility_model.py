@@ -310,8 +310,10 @@ def _build_feature_row(
     # Basic network_type – if the reports table has a column, use it; otherwise default to "mobile"
     network_type = getattr(report, "network_type", None) or "mobile"
 
-    # Whether we have at least one live-capture evidence – for now we approximate with "evidence_count > 0"
-    has_live_capture = 1 if evidence_count > 0 else 0
+    # Clamp evidence count to avoid accidental negative/None-derived evidence credit.
+    safe_evidence_count = max(0, int(evidence_count or 0))
+    # Whether we have at least one live-capture evidence – for now we approximate with count > 0.
+    has_live_capture = 1 if safe_evidence_count > 0 else 0
 
     # Rule-engine status already computed on the report
     rule_status = getattr(report, "rule_status", None)
@@ -350,7 +352,7 @@ def _build_feature_row(
         elif col == "was_stationary":
             row[col] = was_stationary
         elif col == "evidence_count":
-            row[col] = evidence_count
+            row[col] = safe_evidence_count
         elif col == "has_live_capture":
             row[col] = has_live_capture
         elif col == "time_of_day":
@@ -419,10 +421,11 @@ def _build_feature_row(
 def _compute_trust_factors(db: Session, report: Report, device: Device, evidence_count: int, prob_real: float) -> Dict[str, Any]:
     """Calculate granular heuristics explaining the report's credibility."""
     factors: Dict[str, Any] = {}
+    safe_evidence_count = max(0, int(evidence_count or 0))
     
     # 1. Evidence Presence Score (0-100)
     # NLP owns text quality; TrustBond only contributes non-textual heuristics.
-    ev_score = min(100.0, evidence_count * 50.0)  # Up to 100 points for 2+ evidence files
+    ev_score = min(100.0, safe_evidence_count * 50.0)  # Up to 100 points for 2+ evidence files
     content_score = ev_score
     factors["content_score"] = round(content_score, 1)
 
@@ -666,14 +669,20 @@ def update_device_ml_aggregates(
         
         # Location diversity from recent reports (distinct villages / recent reports)
         recent_reports = (
-            db.query(Report.village_location_id, Report.reported_at)
+            db.query(
+                Report.village_location_id,
+                Report.reported_at,
+                Report.latitude,
+                Report.longitude,
+                Report.gps_accuracy,
+            )
             .filter(Report.device_id == device.device_id)
             .order_by(Report.reported_at.desc())
             .limit(window)
             .all()
         )
         total_recent = len(recent_reports)
-        distinct_villages = len({v for (v, _) in recent_reports if v is not None})
+        distinct_villages = len({r[0] for r in recent_reports if r[0] is not None})
         location_diversity = (distinct_villages / total_recent) if total_recent > 0 else 0.0
         
         # Time-based decay: older negative impacts fade over time
@@ -740,15 +749,23 @@ def update_device_ml_aggregates(
         if hasattr(device, "is_blacklisted"):
             should_blacklist = False
             reason = None
-            if fake_rate >= 0.6 and total_preds >= 5:
-                should_blacklist = True
-                reason = "ml_high_fake_rate"
-            elif ml_avg is not None and float(ml_avg) < 20 and total_preds >= 5:
-                should_blacklist = True
-                reason = "ml_low_trust_average"
-            elif spam_signal >= 10:
-                should_blacklist = True
-                reason = "high_spam_signal"
+            min_reports_for_blacklist = 5
+            min_preds_for_blacklist = 5
+            # Prevent first/early submissions from ending in an automatic "banned-like" UI state.
+            if total_reports >= min_reports_for_blacklist:
+                if fake_rate >= 0.7 and total_preds >= min_preds_for_blacklist:
+                    should_blacklist = True
+                    reason = "ml_high_fake_rate"
+                elif (
+                    ml_avg is not None
+                    and float(ml_avg) < 15
+                    and total_preds >= min_preds_for_blacklist
+                ):
+                    should_blacklist = True
+                    reason = "ml_low_trust_average"
+                elif spam_signal >= 12:
+                    should_blacklist = True
+                    reason = "high_spam_signal"
 
             device.is_blacklisted = bool(should_blacklist)
             if hasattr(device, "blacklist_reason"):
@@ -774,7 +791,31 @@ def update_device_ml_aggregates(
             "behavior_score": round(behavior_score, 2),
             "spam_signal": int(spam_signal),
             "location_diversity": round(location_diversity, 4),
+            "location_quality_score": round(float(location_score) * 100.0, 2),
         }
+        # Persist compact location history for Device Trust UI consistency analysis.
+        location_history = []
+        for _, reported_at, lat, lon, gps_acc in recent_reports[:20]:
+            try:
+                if lat is None or lon is None:
+                    continue
+                location_history.append(
+                    {
+                        "latitude": float(lat),
+                        "longitude": float(lon),
+                        "gps_accuracy": float(gps_acc) if gps_acc is not None else None,
+                        "reported_at": reported_at.isoformat() if reported_at else None,
+                    }
+                )
+            except Exception:
+                continue
+        meta["location_history"] = location_history
+        if location_history:
+            last = location_history[0]
+            meta["last_latitude"] = last.get("latitude")
+            meta["last_longitude"] = last.get("longitude")
+            meta["last_gps_accuracy_m"] = last.get("gps_accuracy")
+            meta["last_location_timestamp"] = last.get("reported_at")
         meta["trust_formula"] = {
             "weights": _json_safe(weights),
             "computed_score": round(blended, 2),

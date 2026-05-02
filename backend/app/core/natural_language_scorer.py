@@ -226,10 +226,32 @@ class NaturalLanguageScorer:
                 relevant_keywords.update(keywords)
         
         if not relevant_keywords:
-            # No specific keywords found, give neutral score
-            score = 50.0
-            metadata["keyword_match_type"] = "no_specific_keywords"
-            metadata["matched_keywords"] = []
+            # Generic fallback for any incident type not explicitly in keyword_mappings.
+            # Derive lightweight keywords from incident name tokens so new DB incident types
+            # still get some consistency signal.
+            stopwords = {"incident", "activity", "case", "report", "event", "type", "and", "or"}
+            derived = {
+                tok for tok in re.findall(r"[a-z]{4,}", incident_type_lower)
+                if tok not in stopwords
+            }
+            if not derived:
+                score = 50.0
+                metadata["keyword_match_type"] = "no_specific_keywords"
+                metadata["matched_keywords"] = []
+                return score, metadata
+
+            matched_keywords = [kw for kw in derived if kw in description_lower]
+            if matched_keywords:
+                score = 62.0
+            else:
+                score = 42.0
+            metadata.update({
+                "keyword_match_type": "derived_from_incident_name",
+                "matched_keywords": matched_keywords,
+                "available_keywords": list(derived),
+                "match_count": len(matched_keywords),
+                "keyword_score": score,
+            })
             return score, metadata
         
         # Count matches

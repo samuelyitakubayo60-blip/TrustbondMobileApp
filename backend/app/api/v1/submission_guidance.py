@@ -19,6 +19,7 @@ class GuidanceRequest(BaseModel):
     description: str = Field(..., min_length=1, max_length=1000)
     incident_type: str = Field(..., min_length=1, max_length=100)
     evidence_count: int = Field(default=0, ge=0, le=10)
+    file_types: List[str] = Field(default_factory=list)
     gps_accuracy: Optional[float] = Field(default=None, ge=0, le=1000)
     movement_speed: Optional[float] = Field(default=None, ge=0, le=100)
     device_id: Optional[str] = Field(default=None)
@@ -61,6 +62,7 @@ class DescriptionValidationResponse(BaseModel):
 
 class EvidenceValidationRequest(BaseModel):
     evidence_count: int = Field(default=0, ge=0, le=10)
+    incident_type: str = Field(default="Default", min_length=1, max_length=100)
     has_live_capture: bool = Field(default=False)
     file_types: List[str] = Field(default_factory=list)
 
@@ -92,6 +94,7 @@ def analyze_submission(
             description=request.description,
             incident_type=request.incident_type,
             evidence_count=request.evidence_count,
+            file_types=request.file_types,
             gps_accuracy=request.gps_accuracy,
             movement_speed=request.movement_speed,
             device_trust_score=device_trust_score,
@@ -153,19 +156,35 @@ def validate_description(request: DescriptionValidationRequest):
         desc_guidance = [item for item in guidance_items if "description" in item.title.lower() or "detail" in item.title.lower()]
         
         word_count = len(request.description.split())
-        quality_score = min(100.0, word_count * 2)  # Simple scoring
+        quality_metrics = submission_guidance.evaluate_description_quality(
+            request.description,
+            request.incident_type,
+        )
+        quality_score = float(quality_metrics.get("quality_score", 0.0))
         
         # Check for incident-specific keywords
         incident_keywords = submission_guidance._get_incident_keywords(request.incident_type)
-        found_keywords = [kw for kw in incident_keywords if kw.lower() in request.description.lower()]
-        missing_keywords = [kw for kw in incident_keywords[:5] if kw.lower() not in request.description.lower()]
+        required_keywords = incident_keywords.get("required", [])
+        recommended_keywords = incident_keywords.get("recommended", [])
+        found_keywords = [
+            kw for kw in (required_keywords + recommended_keywords)
+            if kw.lower() in request.description.lower()
+        ]
+        missing_keywords = [
+            kw for kw in required_keywords if kw.lower() not in request.description.lower()
+        ]
         
         suggestions = []
         for item in desc_guidance:
             if item.suggested_action:
                 suggestions.append(item.suggested_action)
         
-        is_valid = word_count >= 15 and len(found_keywords) >= 1
+        is_valid = (
+            word_count >= 15
+            and quality_metrics.get("authenticity_score", 0.0) >= 45.0
+            and quality_metrics.get("incident_alignment_score", 0.0) >= 40.0
+            and len(found_keywords) >= 1
+        )
         
         return DescriptionValidationResponse(
             is_valid=is_valid,
@@ -185,19 +204,32 @@ def validate_evidence(request: EvidenceValidationRequest):
     Lightweight for offline use.
     """
     try:
-        guidance_items, _ = submission_guidance.analyze_submission_quality(
+        metrics = submission_guidance.evaluate_evidence_quality(
             evidence_count=request.evidence_count,
+            has_live_capture=request.has_live_capture,
+            file_types=request.file_types,
+            incident_type=request.incident_type,
+        )
+        guidance_items, _ = submission_guidance.analyze_submission_quality(
+            description="evidence provided",
+            incident_type=request.incident_type,
+            evidence_count=request.evidence_count,
+            file_types=request.file_types,
             has_live_capture=request.has_live_capture,
             is_offline=True
         )
         
         # Extract evidence-specific guidance
-        evidence_guidance = [item for item in guidance_items if "evidence" in item.title.lower() or "photo" in item.title.lower()]
+        evidence_guidance = [
+            item for item in guidance_items
+            if any(
+                token in item.title.lower()
+                for token in ["evidence", "photo", "yolo", "trustbond", "camera", "coverage"]
+            )
+        ]
         
         ideal_count = 3
-        quality_score = min(100.0, request.evidence_count * 25)
-        if request.has_live_capture:
-            quality_score += 10
+        quality_score = float(metrics.get("overall_score", 0.0))
         
         is_sufficient = request.evidence_count >= 1
         
