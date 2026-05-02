@@ -81,6 +81,11 @@ const cleanAiNarrative = (text) => {
     .trim();
 };
 
+const prettyFactorName = (key) =>
+  String(key || "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
 const renderDecisionPatternChips = (patterns, explanations) => {
   if (!Array.isArray(patterns) || patterns.length === 0) return null;
   const patternTone = (pattern) => {
@@ -2377,84 +2382,155 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   <div
                     style={{ display: "flex", flexDirection: "column", gap: 6 }}
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                        Content score
-                      </span>
-                      <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                        {trustFactors.content_score ?? "—"}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                        Location score
-                      </span>
-                      <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                        {trustFactors.location_score ?? "—"}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                        Cluster score
-                      </span>
-                      <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                        {trustFactors.cluster_score ?? "—"}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                        User behavior score
-                      </span>
-                      <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                        {trustFactors.user_behavior_score ?? "—"}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                        Community net votes
-                      </span>
-                      <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                        {trustFactors.community_net_votes ?? "—"}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                        Coordination penalty
-                      </span>
-                      <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                        {trustFactors.coordination_penalty ?? "—"}
-                      </span>
-                    </div>
+                    {trustFactors.threshold_band && (
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          padding: "6px 8px",
+                          borderRadius: 6,
+                          background: "var(--surface2)",
+                          border: "1px solid var(--border2)",
+                        }}
+                      >
+                        <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                          Threshold band
+                        </span>
+                        <span style={{ fontSize: "11px", fontWeight: 800 }}>
+                          {String(trustFactors.threshold_band).replaceAll("_", " ")}
+                        </span>
+                      </div>
+                    )}
+                    {typeof trustFactors.total_score !== "undefined" && (
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          padding: "6px 8px",
+                          borderRadius: 6,
+                          background: "var(--surface2)",
+                          border: "1px solid var(--border2)",
+                        }}
+                      >
+                        <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                          Total score
+                        </span>
+                        <span style={{ fontSize: "11px", fontWeight: 800 }}>
+                          {Number(trustFactors.total_score).toFixed(2)} / {Number(trustFactors.max_score ?? 100).toFixed(0)}
+                        </span>
+                      </div>
+                    )}
+                    {trustFactors.factors &&
+                      typeof trustFactors.factors === "object" &&
+                      Object.keys(trustFactors.factors).length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                          {Object.entries(trustFactors.factors).map(([key, value]) => {
+                            const pts = Number(value?.points_awarded ?? 0);
+                            const maxPts = Number(value?.max_points ?? 0);
+                            return (
+                              <div
+                                key={key}
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                }}
+                                title={value?.detail || ""}
+                              >
+                                <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                                  {prettyFactorName(key)}
+                                </span>
+                                <span style={{ fontSize: "11px", fontWeight: 800 }}>
+                                  {pts.toFixed(2)} / {maxPts.toFixed(0)}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    {(!trustFactors.factors ||
+                      typeof trustFactors.factors !== "object" ||
+                      Object.keys(trustFactors.factors).length === 0) && (
+                      <>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                            Content score
+                          </span>
+                          <span style={{ fontSize: "11px", fontWeight: 800 }}>
+                            {trustFactors.content_score ?? "—"}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                            Location score
+                          </span>
+                          <span style={{ fontSize: "11px", fontWeight: 800 }}>
+                            {trustFactors.location_score ?? "—"}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                            Cluster score
+                          </span>
+                          <span style={{ fontSize: "11px", fontWeight: 800 }}>
+                            {trustFactors.cluster_score ?? "—"}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                            User behavior score
+                          </span>
+                          <span style={{ fontSize: "11px", fontWeight: 800 }}>
+                            {trustFactors.user_behavior_score ?? "—"}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                            Community net votes
+                          </span>
+                          <span style={{ fontSize: "11px", fontWeight: 800 }}>
+                            {trustFactors.community_net_votes ?? "—"}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                            Coordination penalty
+                          </span>
+                          <span style={{ fontSize: "11px", fontWeight: 800 }}>
+                            {trustFactors.coordination_penalty ?? "—"}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div style={{ fontSize: "10px", color: "var(--muted)" }}>
