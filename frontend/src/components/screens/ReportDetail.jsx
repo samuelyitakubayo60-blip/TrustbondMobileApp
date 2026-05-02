@@ -58,6 +58,29 @@ const friendlyPredictionLabel = (label) => {
   return map[key] || key.replace(/_/g, " ");
 };
 
+const cleanAiNarrative = (text) => {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  const stopMarkers = [
+    "Decision patterns:",
+    "Pattern explanations:",
+    "AI scoring breakdown:",
+    "ML label:",
+    "Rule status:",
+    "Semantic similarity",
+  ];
+  let cleaned = raw;
+  for (const marker of stopMarkers) {
+    const idx = cleaned.indexOf(marker);
+    if (idx >= 0) cleaned = cleaned.slice(0, idx).trim();
+  }
+  return cleaned
+    .replace(/^AI verification result:\s*/i, "")
+    .replace(/^Report context:\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 const renderDecisionPatternChips = (patterns, explanations) => {
   if (!Array.isArray(patterns) || patterns.length === 0) return null;
   const patternTone = (pattern) => {
@@ -1021,7 +1044,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 {report.ai_verification_reason && (
                   <div>
                     <strong>AI Decision Reason:</strong>{" "}
-                    <span>{report.ai_verification_reason}</span>
+                    <span>{cleanAiNarrative(report.ai_verification_reason)}</span>
                   </div>
                 )}
                 {Array.isArray(report.decision_patterns) &&
@@ -1039,7 +1062,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 {report.ai_evidence_description && (
                   <div>
                     <strong>AI Evidence Summary:</strong>{" "}
-                    <span>{report.ai_evidence_description}</span>
+                    <span>{cleanAiNarrative(report.ai_evidence_description)}</span>
                   </div>
                 )}
               </div>

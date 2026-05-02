@@ -24,6 +24,29 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   ReportDetailItem? _report;
   bool _loading = true;
 
+  String _cleanAiNarrative(String text) {
+    var cleaned = text.trim();
+    if (cleaned.isEmpty) return '';
+    const markers = [
+      'Decision patterns:',
+      'Pattern explanations:',
+      'AI scoring breakdown:',
+      'ML label:',
+      'Rule status:',
+      'Semantic similarity',
+    ];
+    for (final marker in markers) {
+      final i = cleaned.indexOf(marker);
+      if (i >= 0) {
+        cleaned = cleaned.substring(0, i).trim();
+      }
+    }
+    cleaned = cleaned.replaceFirst(RegExp(r'^AI verification result:\s*', caseSensitive: false), '');
+    cleaned = cleaned.replaceFirst(RegExp(r'^Report context:\s*', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return cleaned;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -251,8 +274,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   }
 
   Widget _buildAiAnalysisCard(ReportDetailItem r) {
-    final aiReason = (r.aiVerificationReason ?? '').trim();
-    final aiSummary = (r.aiEvidenceDescription ?? '').trim();
+    final aiReason = _cleanAiNarrative(r.aiVerificationReason ?? '');
+    final aiSummary = _cleanAiNarrative(r.aiEvidenceDescription ?? '');
     final patterns = r.decisionPatterns;
     final explanations = r.decisionPatternExplanations;
 
