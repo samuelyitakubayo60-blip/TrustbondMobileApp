@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/guidance_service.dart';
+import '../config/theme.dart';
 
 class GuidanceCard extends StatelessWidget {
   final GuidanceItem item;
@@ -13,52 +14,66 @@ class GuidanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color cardColor;
-    Color textColor;
+    Color tone;
+    Color iconBg;
     IconData iconData;
     
     switch (item.level) {
       case 'critical':
-        cardColor = Colors.red.shade50;
-        textColor = Colors.red.shade900;
+        tone = AppColors.danger;
+        iconBg = AppColors.danger.withValues(alpha: 0.2);
         iconData = Icons.error;
         break;
       case 'warning':
-        cardColor = Colors.orange.shade50;
-        textColor = Colors.orange.shade900;
+        tone = AppColors.warn;
+        iconBg = AppColors.warn.withValues(alpha: 0.2);
         iconData = Icons.warning;
         break;
       case 'info':
-        cardColor = Colors.blue.shade50;
-        textColor = Colors.blue.shade900;
+        tone = AppColors.accent2;
+        iconBg = AppColors.accent2.withValues(alpha: 0.2);
         iconData = Icons.info;
         break;
       case 'success':
-        cardColor = Colors.green.shade50;
-        textColor = Colors.green.shade900;
+        tone = AppColors.ok;
+        iconBg = AppColors.ok.withValues(alpha: 0.2);
         iconData = Icons.check_circle;
         break;
       default:
-        cardColor = Colors.grey.shade50;
-        textColor = Colors.grey.shade900;
+        tone = AppColors.muted;
+        iconBg = AppColors.surface3;
         iconData = Icons.info;
     }
 
-    return Card(
-      color: cardColor,
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: InkWell(
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: tone.withValues(alpha: 0.45)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                iconData,
-                color: textColor,
-                size: 20,
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  iconData,
+                  color: tone,
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -68,7 +83,7 @@ class GuidanceCard extends StatelessWidget {
                     Text(
                       item.title,
                       style: TextStyle(
-                        color: textColor,
+                        color: AppColors.text,
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                       ),
@@ -76,8 +91,8 @@ class GuidanceCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       item.message,
-                      style: TextStyle(
-                        color: textColor,
+                      style: const TextStyle(
+                        color: AppColors.muted,
                         fontSize: 12,
                       ),
                     ),
@@ -86,13 +101,13 @@ class GuidanceCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: textColor.withOpacity(0.1),
+                          color: tone.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           '💡 ${item.suggestedAction}',
                           style: TextStyle(
-                            color: textColor,
+                            color: tone,
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                           ),
@@ -105,12 +120,13 @@ class GuidanceCard extends StatelessWidget {
               if (item.actionable)
                 Icon(
                   Icons.chevron_right,
-                  color: textColor,
+                  color: AppColors.muted,
                   size: 16,
                 ),
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -127,6 +143,7 @@ class TrustScoreDisplay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      color: AppColors.card,
       margin: const EdgeInsets.all(16),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -178,7 +195,7 @@ class TrustScoreDisplay extends StatelessWidget {
                       Text(
                         '/ 100',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey.shade600,
+                          color: AppColors.muted,
                         ),
                       ),
                     ],
@@ -196,7 +213,7 @@ class TrustScoreDisplay extends StatelessWidget {
                           child: CircularProgressIndicator(
                             value: trustEstimate.totalScore / 100,
                             strokeWidth: 8,
-                            backgroundColor: Colors.grey.shade200,
+                            backgroundColor: AppColors.surface3,
                             valueColor: AlwaysStoppedAnimation<Color>(
                               _getScoreColor(trustEstimate.totalScore),
                             ),
@@ -224,8 +241,8 @@ class TrustScoreDisplay extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: trustEstimate.willBeVerified 
-                    ? Colors.green.shade50 
-                    : Colors.orange.shade50,
+                    ? AppColors.ok.withValues(alpha: 0.12)
+                    : AppColors.warn.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -233,8 +250,8 @@ class TrustScoreDisplay extends StatelessWidget {
                   Icon(
                     trustEstimate.willBeVerified ? Icons.verified : Icons.pending,
                     color: trustEstimate.willBeVerified 
-                        ? Colors.green.shade700 
-                        : Colors.orange.shade700,
+                        ? AppColors.ok
+                        : AppColors.warn,
                     size: 20,
                   ),
                   const SizedBox(width: 8),
@@ -243,8 +260,8 @@ class TrustScoreDisplay extends StatelessWidget {
                       'Verification Probability: ${trustEstimate.verificationProbability}',
                       style: TextStyle(
                         color: trustEstimate.willBeVerified 
-                            ? Colors.green.shade700 
-                            : Colors.orange.shade700,
+                            ? AppColors.ok
+                            : AppColors.warn,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -259,7 +276,7 @@ class TrustScoreDisplay extends StatelessWidget {
             Text(
               'Contributing Models: ${trustEstimate.contributingModels}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey.shade600,
+                color: AppColors.muted,
               ),
             ),
           ],
@@ -269,23 +286,23 @@ class TrustScoreDisplay extends StatelessWidget {
   }
 
   Color _getScoreColor(double score) {
-    if (score >= 70) return Colors.green;
-    if (score >= 45) return Colors.orange;
-    return Colors.red;
+    if (score >= 70) return AppColors.ok;
+    if (score >= 45) return AppColors.warn;
+    return AppColors.danger;
   }
 
   Color _getConfidenceColor() {
     switch (trustEstimate.confidence) {
       case 'high_confidence':
-        return Colors.green;
+        return AppColors.ok;
       case 'medium_confidence':
-        return Colors.orange;
+        return AppColors.warn;
       case 'low_confidence':
-        return Colors.red;
+        return AppColors.danger;
       case 'reject':
-        return Colors.red.shade900;
+        return AppColors.danger;
       default:
-        return Colors.grey;
+        return AppColors.muted;
     }
   }
 }
@@ -322,7 +339,7 @@ class DescriptionQualityIndicator extends StatelessWidget {
                     const SizedBox(width: 8),
                     Icon(
                       validation.isValid ? Icons.check_circle : Icons.warning,
-                      color: validation.isValid ? Colors.green : Colors.orange,
+                      color: validation.isValid ? AppColors.ok : AppColors.warn,
                       size: 16,
                     ),
                   ],
@@ -330,7 +347,7 @@ class DescriptionQualityIndicator extends StatelessWidget {
                 const SizedBox(height: 4),
                 LinearProgressIndicator(
                   value: validation.qualityScore / 100,
-                  backgroundColor: Colors.grey.shade200,
+                  backgroundColor: AppColors.surface3,
                   valueColor: AlwaysStoppedAnimation<Color>(
                     _getQualityColor(validation.qualityScore),
                   ),
@@ -343,15 +360,16 @@ class DescriptionQualityIndicator extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
+              color: AppColors.surface2,
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border),
             ),
             child: Text(
               '${validation.wordCount} words',
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: Colors.grey.shade700,
+                color: AppColors.text,
               ),
             ),
           ),
@@ -361,9 +379,9 @@ class DescriptionQualityIndicator extends StatelessWidget {
   }
 
   Color _getQualityColor(double score) {
-    if (score >= 70) return Colors.green;
-    if (score >= 40) return Colors.orange;
-    return Colors.red;
+    if (score >= 70) return AppColors.ok;
+    if (score >= 40) return AppColors.warn;
+    return AppColors.danger;
   }
 }
 
@@ -399,7 +417,7 @@ class EvidenceQualityIndicator extends StatelessWidget {
                     const SizedBox(width: 8),
                     Icon(
                       validation.isSufficient ? Icons.check_circle : Icons.warning,
-                      color: validation.isSufficient ? Colors.green : Colors.orange,
+                      color: validation.isSufficient ? AppColors.ok : AppColors.warn,
                       size: 16,
                     ),
                   ],
@@ -407,7 +425,7 @@ class EvidenceQualityIndicator extends StatelessWidget {
                 const SizedBox(height: 4),
                 LinearProgressIndicator(
                   value: validation.qualityScore / 100,
-                  backgroundColor: Colors.grey.shade200,
+                  backgroundColor: AppColors.surface3,
                   valueColor: AlwaysStoppedAnimation<Color>(
                     _getQualityColor(validation.qualityScore),
                   ),

@@ -117,7 +117,11 @@ class SubmissionGuidance:
         # Estimate trust score
         trust_estimate = self._estimate_trust_score(
             description, incident_type, evidence_count, 
-            gps_accuracy, device_trust_score, has_live_capture, is_offline
+            gps_accuracy,
+            device_trust_score,
+            has_live_capture,
+            is_offline,
+            file_types=file_types,
         )
         
         # Add trust score guidance
@@ -441,7 +445,8 @@ class SubmissionGuidance:
         gps_accuracy: Optional[float],
         device_trust_score: Optional[float],
         has_live_capture: bool,
-        is_offline: bool
+        is_offline: bool,
+        file_types: Optional[List[str]] = None,
     ) -> TrustScoreEstimate:
         """Estimate trust score (offline capable)."""
         
@@ -467,12 +472,19 @@ class SubmissionGuidance:
         )
         nl_score = max(0.0, min(100.0, nl_score))
         
-        # Volo estimation (evidence)
+        # Evidence/VOLO estimation from advanced evidence metrics
+        evidence_metrics = self.evaluate_evidence_quality(
+            evidence_count=evidence_count,
+            has_live_capture=has_live_capture,
+            file_types=file_types,
+            incident_type=incident_type,
+        )
         volo_score = None
         if evidence_count > 0:
-            volo_score = min(80.0, evidence_count * 25)
-            if has_live_capture:
-                volo_score += 10
+            volo_score = float(evidence_metrics.get("yolo_coverage_score", 0.0))
+            # Blend in trustbond-evidence reliability so file validation contributes to final estimate.
+            trustbond_file_reliability = float(evidence_metrics.get("trustbond_evidence_score", 0.0))
+            volo_score = max(0.0, min(100.0, (volo_score * 0.75) + (trustbond_file_reliability * 0.25)))
         else:
             volo_score = 0.0
         
@@ -497,6 +509,12 @@ class SubmissionGuidance:
             (volo_score or 0) * weights['volo'] +
             base_score * weights['base']
         )
+
+        # Soft gates to reflect pass/fail direction from detailed checks in guidance.
+        if quality_metrics.get("authenticity_score", 0.0) < 45 or quality_metrics.get("incident_alignment_score", 0.0) < 40:
+            total_score = min(total_score, 59.0)  # keep below medium confidence until text quality is improved
+        if evidence_count > 0 and float(evidence_metrics.get("yolo_coverage_score", 0.0)) < 35:
+            total_score = min(total_score, 69.0)  # evidence exists but weak model-usable quality
         
         # Determine contributing models
         contributing = 1  # Base always contributes
