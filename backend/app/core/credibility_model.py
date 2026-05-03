@@ -731,7 +731,7 @@ def update_device_ml_aggregates(
             weights=weights,
         )
 
-        # Clamp 0..100 and persist
+        # Clamp 0..100 before smoothing
         blended = max(0.0, min(100.0, blended))
         logger.warning(f"  New calculated score: {blended}")
         
@@ -740,6 +740,18 @@ def update_device_ml_aggregates(
         if ml_avg is not None and ml_avg >= 80.0 and blended < current_score - 20.0:
             logger.warning(f"  OVERRIDING: Preventing dramatic drop after high-trust report")
             blended = max(blended, current_score - 5.0)  # Allow small drop but not dramatic
+
+        # Step limiter: never allow large trust swings in a single recompute.
+        # This prevents one rejected/pending report from collapsing device trust.
+        max_increase_step = 2.5
+        max_decrease_step = 3.0
+        delta = blended - current_score
+        if delta > max_increase_step:
+            blended = current_score + max_increase_step
+        elif delta < -max_decrease_step:
+            blended = current_score - max_decrease_step
+
+        blended = max(0.0, min(100.0, blended))
         
         if hasattr(device, "device_trust_score"):
             device.device_trust_score = Decimal(f"{blended:.2f}")
@@ -749,21 +761,21 @@ def update_device_ml_aggregates(
         if hasattr(device, "is_blacklisted"):
             should_blacklist = False
             reason = None
-            min_reports_for_blacklist = 5
-            min_preds_for_blacklist = 5
+            min_reports_for_blacklist = 8
+            min_preds_for_blacklist = 8
             # Prevent first/early submissions from ending in an automatic "banned-like" UI state.
             if total_reports >= min_reports_for_blacklist:
-                if fake_rate >= 0.7 and total_preds >= min_preds_for_blacklist:
+                if fake_rate >= 0.8 and total_preds >= min_preds_for_blacklist:
                     should_blacklist = True
                     reason = "ml_high_fake_rate"
                 elif (
                     ml_avg is not None
-                    and float(ml_avg) < 15
+                    and float(ml_avg) < 10
                     and total_preds >= min_preds_for_blacklist
                 ):
                     should_blacklist = True
                     reason = "ml_low_trust_average"
-                elif spam_signal >= 12:
+                elif spam_signal >= 15:
                     should_blacklist = True
                     reason = "high_spam_signal"
 

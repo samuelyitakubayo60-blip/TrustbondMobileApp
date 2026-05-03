@@ -3184,11 +3184,12 @@ def add_review(
             db.add(new_ml)
             print(f"Created new ML prediction based on police confirmation: trust_score={max_trust_score}%, label=likely_real")  # Debug log
         
-        # Update device trust score based on successful human confirmation
+        # Update device trust score based on successful human confirmation.
+        # Keep step small to avoid over-inflating trust from a single review.
         if hasattr(report, "device") and report.device and hasattr(report.device, "device_trust_score"):
             current_device_score = float(report.device.device_trust_score) if report.device.device_trust_score else 50.0
-            # Increase device trust score but cap at 100
-            new_device_score = min(100.0, current_device_score + 5.0)
+            # Increase by a small bounded step.
+            new_device_score = min(100.0, current_device_score + 2.0)
             report.device.device_trust_score = Decimal(str(new_device_score))
             print(f"Updated device trust score: {current_device_score:.1f}% → {new_device_score:.1f}%")  # Debug log
         
@@ -3246,11 +3247,12 @@ def add_review(
             db.add(new_ml)
             print(f"Created new ML prediction based on police rejection: trust_score={min_trust_score}%, label=fake")  # Debug log
         
-        # Update device trust score based on human rejection
+        # Update device trust score based on human rejection.
+        # Keep reduction small to avoid dangerous one-shot collapses.
         if hasattr(report, "device") and report.device and hasattr(report.device, "device_trust_score"):
             current_device_score = float(report.device.device_trust_score) if report.device.device_trust_score else 50.0
-            # Decrease device trust score but don't go below 0
-            new_device_score = max(0.0, current_device_score - 10.0)
+            # Decrease by a small bounded step.
+            new_device_score = max(0.0, current_device_score - 3.0)
             report.device.device_trust_score = Decimal(str(new_device_score))
             print(f"Updated device trust score: {current_device_score:.1f}% → {new_device_score:.1f}%")  # Debug log
         
@@ -5619,7 +5621,7 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         community_votes=community_votes,
     )
     
-    # Get device metadata and calculate device trust score
+    # Get device metadata and stored device trust stats
     device_metadata = None
     device_trust_score = None
     total_reports = None
@@ -5627,35 +5629,13 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
     
     if report.device:
         device_metadata = report.device.metadata_json or {}
-        
-        # Get basic stats from device metadata
-        total_reports = device_metadata.get("total_reports", 0)
-        confirmed_reports = device_metadata.get("confirmed_reports", 0)
-        
-        # Calculate device trust score based on confirmed reports vs total reports
-        if total_reports and total_reports > 0:
-            # Device trust score = (confirmed_reports / total_reports) * 100
-            # But cap at 100% and handle cases where confirmed_reports > total_reports
-            if confirmed_reports and confirmed_reports > 0:
-                # Ensure confirmed_reports doesn't exceed total_reports for calculation
-                effective_confirmed = min(confirmed_reports, total_reports)
-                device_trust_score = (effective_confirmed / total_reports) * 100
-                # Cap at 100%
-                device_trust_score = min(100, device_trust_score)
-            else:
-                # For new devices with no confirmed reports, give a baseline score
-                # More reports = higher baseline trust (up to 50% max)
-                device_trust_score = min(50, total_reports * 10)
-        else:
-            device_trust_score = 0
-            
-        # Use confirmed_reports as trusted_reports for display
-        trusted_reports = confirmed_reports
-        
-        # Also check if device_trust_score is explicitly stored and use that if available
-        stored_device_trust_score = device_metadata.get("device_trust_score")
-        if stored_device_trust_score is not None:
-            device_trust_score = float(stored_device_trust_score)
+        device_trust_score = (
+            float(report.device.device_trust_score)
+            if getattr(report.device, "device_trust_score", None) is not None
+            else None
+        )
+        total_reports = getattr(report.device, "total_reports", None)
+        trusted_reports = getattr(report.device, "trusted_reports", None)
     
     # Build evidence files response
     evidence_files_response = [
