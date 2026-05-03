@@ -57,8 +57,9 @@ class MobileVerificationService {
       hasWarnings = true;
     }
 
-    // 2. Evidence source validation
-    final sourceResult = await _validateEvidenceSource(evidenceFiles);
+    // 2. Evidence source validation (uses per-file metadata, e.g. live capture)
+    final sourceResult =
+        await _validateEvidenceSource(evidenceFiles, evidenceMetadata);
     details['evidence_source'] = sourceResult;
     if (!sourceResult['all_valid']) {
       allChecksPassed = false;
@@ -150,8 +151,15 @@ class MobileVerificationService {
     return result;
   }
 
-  /// Validate evidence source (detect downloaded content)
-  Future<Map<String, dynamic>> _validateEvidenceSource(List<File> evidenceFiles) async {
+  /// Validate evidence source (detect downloaded / third-party saved content).
+  ///
+  /// Note: Live photos are often copied into the app temp directory (`.../cache/...`),
+  /// which must NOT be treated as "downloaded". Use [evidenceMetadata] `isLiveCapture`
+  /// and TrustBond sanitize filename pattern `tb_*.jpg` to avoid false positives.
+  Future<Map<String, dynamic>> _validateEvidenceSource(
+    List<File> evidenceFiles,
+    List<Map<String, dynamic>> evidenceMetadata,
+  ) async {
     final result = <String, dynamic>{
       'all_valid': true,
       'files': [],
@@ -159,30 +167,56 @@ class MobileVerificationService {
 
     for (int i = 0; i < evidenceFiles.length; i++) {
       final file = evidenceFiles[i];
+      final meta = i < evidenceMetadata.length ? evidenceMetadata[i] : {};
+      final isLiveCapture = meta['isLiveCapture'] == true;
+      final baseName = file.path.split('/').last.toLowerCase();
+      final isTrustBondSanitized =
+          RegExp(r'^tb_\d+\.jpg$').hasMatch(baseName);
+
       final fileResult = <String, dynamic>{
         'file_index': i,
         'file_name': file.path.split('/').last,
         'is_downloaded': false,
         'is_screenshot': false,
         'valid': true,
+        'is_live_capture': isLiveCapture,
       };
 
       try {
-        // Check file extension and path for indicators of downloaded content
-        String fileName = file.path.toLowerCase();
-        
-        // Check for common download indicators
-        if (fileName.contains('download') || 
-            fileName.contains('save') ||
-            fileName.contains('cache') ||
-            fileName.contains('temp')) {
+        final pathLower = file.path.toLowerCase();
+
+        // Strong third-party / download-folder signals only (not generic "cache"/"temp").
+        final suspiciousThirdParty = [
+          'whatsapp',
+          'telegram',
+          'instagram',
+          'facebook',
+          'twitter',
+          'tiktok',
+          '/download/',
+          '\\download\\',
+          'download_manager',
+          'saved from',
+          'forwarded',
+        ];
+        final looksThirdParty =
+            suspiciousThirdParty.any((s) => pathLower.contains(s));
+
+        if (!isLiveCapture &&
+            !isTrustBondSanitized &&
+            looksThirdParty) {
           fileResult['is_downloaded'] = true;
           fileResult['valid'] = false;
           result['all_valid'] = false;
         }
 
-        // For images, check if it's a screenshot
-        if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png')) {
+        // Screenshot check in source validation is redundant with tampering pass;
+        // skip for live capture and our sanitized temp JPEGs (EXIF often stripped).
+        if (!isLiveCapture &&
+            !isTrustBondSanitized &&
+            (pathLower.endsWith('.jpg') ||
+                pathLower.endsWith('.jpeg') ||
+                pathLower.endsWith('.png'))) {
           final isScreenshot = await _detectScreenshot(file);
           if (isScreenshot) {
             fileResult['is_screenshot'] = true;
@@ -191,13 +225,14 @@ class MobileVerificationService {
           }
         }
 
-        // Check file creation time vs current time
-        DateTime fileCreated = await file.lastModified();
-        DateTime now = DateTime.now();
-        Duration timeDiff = now.difference(fileCreated);
-        
-        // If file was created more than 12 hours ago, it might be old content
-        if (timeDiff.inHours > 12) {
+        final fileCreated = await file.lastModified();
+        final now = DateTime.now();
+        final timeDiff = now.difference(fileCreated);
+
+        // Fresh captures (e.g. just written by sanitize) should never fail this.
+        if (!isLiveCapture &&
+            !isTrustBondSanitized &&
+            timeDiff.inHours > 12) {
           fileResult['old_file'] = true;
           fileResult['valid'] = false;
           result['all_valid'] = false;
@@ -281,31 +316,32 @@ class MobileVerificationService {
       
       if (image == null) return false;
 
-      // Common screenshot dimensions
-      final commonScreenshotResolutions = [
-        [1920, 1080], [1366, 768], [1536, 864], [1440, 900],
-        [1280, 720], [1600, 900], [2560, 1440], [1920, 1200],
-        // Mobile resolutions
-        [1080, 1920], [1080, 2340], [1080, 2400], [1125, 2436],
-        [1242, 2688], [1170, 2532], [1284, 2778],
+      // Desktop / monitor resolutions only — phone camera photos often match
+      // "mobile screenshot" sizes; treating those as screenshots causes massive false positives.
+      final desktopScreenshotResolutions = [
+        [1920, 1080],
+        [1366, 768],
+        [1536, 864],
+        [1440, 900],
+        [1280, 720],
+        [1600, 900],
+        [2560, 1440],
+        [1920, 1200],
       ];
 
-      // Check if resolution matches common screenshot sizes
-      for (final resolution in commonScreenshotResolutions) {
+      for (final resolution in desktopScreenshotResolutions) {
         if ((image.width == resolution[0] && image.height == resolution[1]) ||
             (image.height == resolution[0] && image.width == resolution[1])) {
           return true;
         }
       }
 
-      // Check EXIF data for screenshot indicators
       final exifData = await readExifFromBytes(bytes);
+      // Re-encoded / pipeline-stripped JPEGs often have no EXIF — do not assume screenshot.
       if (exifData.isEmpty) {
-        // No EXIF data is common for screenshots
-        return true;
+        return false;
       }
 
-      // Check for software that creates screenshots
       final software = exifData['Image Software'];
       if (software != null && software.toString().toLowerCase().contains('screenshot')) {
         return true;

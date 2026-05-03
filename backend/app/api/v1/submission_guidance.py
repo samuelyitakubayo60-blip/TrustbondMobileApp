@@ -161,6 +161,8 @@ def validate_description(request: DescriptionValidationRequest):
             request.incident_type,
         )
         quality_score = float(quality_metrics.get("quality_score", 0.0))
+        hard_gates = quality_metrics.get("hard_gates", []) if isinstance(quality_metrics.get("hard_gates"), list) else []
+        reason_codes = quality_metrics.get("reason_codes", []) if isinstance(quality_metrics.get("reason_codes"), list) else []
         
         # Check for incident-specific keywords
         incident_keywords = submission_guidance._get_incident_keywords(request.incident_type)
@@ -184,7 +186,12 @@ def validate_description(request: DescriptionValidationRequest):
             and quality_metrics.get("authenticity_score", 0.0) >= 45.0
             and quality_metrics.get("incident_alignment_score", 0.0) >= 40.0
             and len(found_keywords) >= 1
+            and not hard_gates
+            and quality_metrics.get("quality_score", 0.0) >= 70.0
+            and str(quality_metrics.get("quality_band", "")) == "pass_quality"
         )
+        if reason_codes:
+            suggestions.extend([f"Validation signal: {code}" for code in reason_codes[:3]])
         
         return DescriptionValidationResponse(
             is_valid=is_valid,

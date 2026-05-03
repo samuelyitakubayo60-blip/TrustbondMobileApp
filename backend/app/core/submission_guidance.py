@@ -682,7 +682,7 @@ class SubmissionGuidance:
 
         return keyword_map["Default"]
 
-    def evaluate_description_quality(self, description: str, incident_type: str) -> Dict[str, float]:
+    def evaluate_description_quality(self, description: str, incident_type: str) -> Dict[str, Any]:
         """
         Advanced text-quality estimate for guidance:
         - authenticity_score: repetition/noise/gibberish resistance
@@ -694,37 +694,133 @@ class SubmissionGuidance:
                 "quality_score": 0.0,
                 "authenticity_score": 0.0,
                 "incident_alignment_score": 0.0,
+                "score_breakdown": {},
+                "reason_codes": ["EMPTY_OR_MINIMAL_TEXT"],
+                "hard_gates": ["EMPTY_OR_MINIMAL_TEXT"],
+                "quality_band": "reject_quality",
             }
 
-        tokens = re.findall(r"[a-zA-Z]{2,}", text.lower())
+        text_lower = text.lower()
+        tokens = re.findall(r"[a-zA-Z]{2,}", text_lower)
         token_count = len(tokens)
+        word_like_tokens = re.findall(r"[a-zA-Z]+", text_lower)
+        word_like_count = len(word_like_tokens)
         unique_ratio = (len(set(tokens)) / token_count) if token_count else 0.0
         max_repeat_ratio = (max(Counter(tokens).values()) / token_count) if token_count else 1.0
-        repeated_char_runs = len(re.findall(r"(.)\1{3,}", text.lower()))
+        repeated_char_runs = len(re.findall(r"(.)\1{3,}", text_lower))
+        repeated_token_loops = len(re.findall(r"\b(\w+)\s+\1\b", text_lower))
         vowel_light_tokens = sum(1 for t in tokens if not re.search(r"[aeiou]", t))
         vowel_light_ratio = (vowel_light_tokens / token_count) if token_count else 1.0
         long_token_ratio = (sum(1 for t in tokens if len(t) > 12) / token_count) if token_count else 1.0
+        non_word_chars = len(re.findall(r"[^a-zA-Z0-9\s]", text))
+        non_word_ratio = (non_word_chars / max(1, len(text)))
+        alphabetic_ratio = (sum(1 for ch in text if ch.isalpha()) / max(1, len(text)))
 
-        length_score = min(1.0, max(0.0, len(text) / 180.0))
-        structure_score = min(1.0, max(0.0, token_count / 35.0))
-        diversity_score = min(1.0, unique_ratio / 0.75) if unique_ratio < 0.75 else 1.0
+        # Core rubric components (0-100)
+        meaningful_validity = 100.0
+        meaningful_validity -= min(35.0, max(0.0, (max_repeat_ratio - 0.14) * 180.0))
+        meaningful_validity -= min(22.0, repeated_char_runs * 5.0)
+        meaningful_validity -= min(18.0, repeated_token_loops * 4.0)
+        meaningful_validity -= min(20.0, max(0.0, vowel_light_ratio - 0.40) * 65.0)
+        meaningful_validity -= min(12.0, max(0.0, long_token_ratio - 0.35) * 45.0)
+        meaningful_validity -= min(10.0, max(0.0, non_word_ratio - 0.18) * 70.0)
+        meaningful_validity = max(0.0, min(100.0, meaningful_validity))
 
-        penalty = 0.0
-        penalty += min(0.45, max(0.0, max_repeat_ratio - 0.14) * 2.4)
-        penalty += min(0.25, repeated_char_runs * 0.06)
-        penalty += min(0.30, max(0.0, vowel_light_ratio - 0.40) * 0.8)
-        penalty += min(0.20, max(0.0, long_token_ratio - 0.35) * 0.7)
-
-        authenticity = ((length_score * 0.3) + (structure_score * 0.35) + (diversity_score * 0.35) - penalty) * 100.0
-        authenticity = max(0.0, min(100.0, authenticity))
+        length_score = min(1.0, max(0.0, len(text) / 220.0))
+        structure_score = min(1.0, max(0.0, token_count / 40.0))
+        diversity_score = min(1.0, unique_ratio / 0.78) if unique_ratio < 0.78 else 1.0
+        coherence = ((length_score * 0.35) + (structure_score * 0.35) + (diversity_score * 0.30)) * 100.0
+        coherence = max(0.0, min(100.0, coherence))
 
         incident_alignment = self._incident_alignment_score(text, incident_type)
-        quality_score = max(0.0, min(100.0, (authenticity * 0.6) + (incident_alignment * 0.4)))
+
+        # Event completeness: what, where, when, actor/object hints
+        has_where = bool(re.search(r"\b(near|at|on|in|around|street|road|market|sector|cell|village|station)\b", text_lower))
+        has_when = bool(re.search(r"\b(today|tonight|yesterday|morning|afternoon|evening|night|\d{1,2}:\d{2})\b", text_lower))
+        has_actor = bool(re.search(r"\b(man|woman|group|person|people|boys|girls|suspect|driver|rider)\b", text_lower))
+        has_action = bool(re.search(r"\b(stole|snatched|attacked|hit|threatened|damaged|broke|fought|selling|crashed|harassing|vandalized|scamming)\b", text_lower))
+        completeness_parts = sum([has_where, has_when, has_actor, has_action])
+        strong_structure = completeness_parts >= 3
+        event_completeness = min(100.0, completeness_parts * 25.0)
+
+        specificity = min(100.0, (min(word_like_count, 45) / 45.0) * 100.0)
+        if unique_ratio < 0.45:
+            specificity *= 0.75
+        if alphabetic_ratio < 0.45:
+            specificity *= 0.7
+        specificity = max(0.0, min(100.0, specificity))
+
+        # Weighted 100-point rubric
+        quality_score = (
+            meaningful_validity * 0.25
+            + coherence * 0.20
+            + incident_alignment * 0.20
+            + event_completeness * 0.20
+            + specificity * 0.15
+        )
+
+        reason_codes: List[str] = []
+        hard_gates: List[str] = []
+
+        # Hard gates + caps
+        if token_count < 4 or len(text) < 16:
+            hard_gates.append("EMPTY_OR_MINIMAL_TEXT")
+            reason_codes.append("INSUFFICIENT_EVENT_DETAILS")
+            quality_score = min(quality_score, 30.0)
+
+        if (
+            max_repeat_ratio >= 0.55
+            or repeated_char_runs >= 5
+            or repeated_token_loops >= 5
+            or (vowel_light_ratio >= 0.75 and token_count >= 6)
+        ):
+            hard_gates.append("NON_MEANINGFUL_TOKENS")
+            reason_codes.append("NON_MEANINGFUL_TOKENS")
+            quality_score = min(quality_score, 25.0)
+
+        if max_repeat_ratio >= 0.35 or repeated_token_loops >= 3:
+            reason_codes.append("REPETITIVE_SPAM_PATTERN")
+            quality_score = min(quality_score, 35.0)
+
+        if incident_alignment < 22.0 and not (strong_structure and "NON_MEANINGFUL_TOKENS" not in hard_gates):
+            hard_gates.append("INCIDENT_TEXT_CONTRADICTION")
+            reason_codes.append("INCIDENT_TEXT_MISMATCH")
+            quality_score = min(quality_score, 40.0)
+        elif incident_alignment < 45.0:
+            reason_codes.append("INCIDENT_TEXT_MISMATCH")
+
+        if coherence < 45.0:
+            reason_codes.append("LOW_TEXT_COHERENCE")
+        if event_completeness < 50.0:
+            reason_codes.append("INSUFFICIENT_EVENT_DETAILS")
+        if meaningful_validity >= 70 and incident_alignment >= 55 and coherence >= 55:
+            reason_codes.append("TEXT_QUALITY_PASSED")
+
+        quality_score = max(0.0, min(100.0, quality_score))
+        if quality_score >= 70.0:
+            quality_band = "pass_quality"
+        elif quality_score >= 50.0:
+            quality_band = "review_quality"
+        else:
+            quality_band = "reject_quality"
+
+        authenticity = (meaningful_validity * 0.6) + (coherence * 0.4)
+        authenticity = max(0.0, min(100.0, authenticity))
 
         return {
             "quality_score": round(quality_score, 2),
             "authenticity_score": round(authenticity, 2),
             "incident_alignment_score": round(incident_alignment, 2),
+            "score_breakdown": {
+                "meaningful_validity": round(meaningful_validity, 2),
+                "coherence": round(coherence, 2),
+                "incident_relevance": round(incident_alignment, 2),
+                "event_completeness": round(event_completeness, 2),
+                "specificity": round(specificity, 2),
+            },
+            "reason_codes": sorted(set(reason_codes)),
+            "hard_gates": sorted(set(hard_gates)),
+            "quality_band": quality_band,
         }
 
     def _incident_alignment_score(self, description: str, incident_type: str) -> float:
