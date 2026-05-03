@@ -1,4 +1,5 @@
 import logging
+import json
 from typing import Annotated, Optional, List, Tuple, Dict, Any
 from decimal import Decimal
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form, Query, status, Request
@@ -78,6 +79,8 @@ _SEMANTIC_MODEL = None
 _SEMANTIC_MODEL_UNAVAILABLE = False
 _LLM_CLIENT = None
 _LLM_UNAVAILABLE = False
+_LOCAL_NARRATOR = None
+_LOCAL_NARRATOR_UNAVAILABLE = False
 _SEMANTIC_MODEL_CACHE_DIR = (
     Path(__file__).resolve().parents[3] / "models" / "sentence_transformers"
 )
@@ -126,6 +129,41 @@ def _get_llm_client():
         return None
 
 
+def _get_local_narrator():
+    """Lazy-load local narrative pipeline for offline/no-key operation."""
+    global _LOCAL_NARRATOR, _LOCAL_NARRATOR_UNAVAILABLE
+    if _LOCAL_NARRATOR is not None:
+        return _LOCAL_NARRATOR
+    if _LOCAL_NARRATOR_UNAVAILABLE or not settings.llm_narrative_enabled:
+        return None
+    if not settings.llm_use_local_fallback:
+        return None
+    try:
+        from app.core.model_manager import ensure_local_narrative_pipeline
+
+        _LOCAL_NARRATOR = ensure_local_narrative_pipeline(settings.llm_local_model)
+        return _LOCAL_NARRATOR
+    except Exception as exc:
+        logger.warning("Local narrator unavailable: %s", exc)
+        _LOCAL_NARRATOR_UNAVAILABLE = True
+        return None
+
+
+def _generate_with_local_narrator(prompt: str, *, max_chars: int = 3000) -> Optional[str]:
+    generator = _get_local_narrator()
+    if generator is None:
+        return None
+    try:
+        out = generator(prompt, max_new_tokens=280, do_sample=True, temperature=0.5)
+        if isinstance(out, list) and out:
+            text = str(out[0].get("generated_text", "")).strip()
+            if text:
+                return text[:max_chars]
+    except Exception as exc:
+        logger.warning("Local narrator generation failed: %s", exc)
+    return None
+
+
 def _naturalize_ai_text(
     *,
     text_kind: str,
@@ -136,6 +174,13 @@ def _naturalize_ai_text(
     client = _get_llm_client()
     fallback = (structured_text or "").strip()
     if client is None or not fallback:
+        if fallback:
+            local_prompt = (
+                f"Rewrite this {text_kind} in clear, human language. Keep facts unchanged.\n\n{fallback}"
+            )
+            local_text = _generate_with_local_narrator(local_prompt, max_chars=3000)
+            if local_text:
+                return local_text
         return fallback
     include_lines = "\n".join(f"- {x}" for x in (must_include or []) if str(x).strip())
     prompt = (
@@ -167,6 +212,108 @@ def _naturalize_ai_text(
     return fallback
 
 
+def _extract_json_object(raw_text: str) -> Optional[Dict[str, Any]]:
+    """Best-effort JSON object extraction from model output."""
+    text = (raw_text or "").strip()
+    if not text:
+        return None
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end < start:
+        return None
+    try:
+        parsed = json.loads(text[start : end + 1])
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        return None
+
+
+def _looks_template_like(text: str) -> bool:
+    """Detect repetitive/template-like phrasing to trigger fallback."""
+    t = (text or "").lower()
+    boilerplate_hits = 0
+    for marker in [
+        "incident type considered",
+        "reporter description considered",
+        "rule status:",
+        "ml label:",
+        "decision patterns:",
+        "pattern explanations:",
+        "report context:",
+    ]:
+        if marker in t:
+            boilerplate_hits += 1
+    return boilerplate_hits >= 4
+
+
+def _generate_grounded_narrative(
+    *,
+    text_kind: str,
+    snapshot: Dict[str, Any],
+    fallback_text: str,
+) -> str:
+    """Generate human narrative from structured model snapshot."""
+    client = _get_llm_client()
+    fallback = (fallback_text or "").strip()
+    if not fallback or not isinstance(snapshot, dict):
+        return fallback
+
+    snapshot_json = json.dumps(snapshot, ensure_ascii=True)
+    prompt = (
+        "Use ONLY the JSON facts below to write a human-like verification narrative.\n"
+        "Do not invent details. Do not copy template phrases.\n"
+        "Return JSON only with keys:\n"
+        "narrative_summary (2-4 sentences), decision_explanation (array of 2-4 bullets), "
+        "uncertainty_note (1 sentence), recommended_next_step (1 sentence).\n\n"
+        "INPUT JSON:\n"
+        f"{snapshot_json}"
+    )
+    try:
+        raw = ""
+        if client is not None:
+            response = client.chat.completions.create(
+                model=settings.llm_model,
+                messages=[
+                    {"role": "system", "content": "You write clear, natural, evidence-grounded public safety analysis."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.35,
+                max_tokens=settings.llm_max_tokens,
+                timeout=settings.llm_timeout_seconds,
+            )
+            raw = ((response.choices or [None])[0].message.content or "").strip() if response else ""
+        else:
+            # Local model fallback: we still ask for JSON so parsing path stays consistent.
+            local_raw = _generate_with_local_narrator(prompt, max_chars=3200)
+            raw = (local_raw or "").strip()
+        payload = _extract_json_object(raw)
+        if not payload:
+            return fallback
+        summary = str(payload.get("narrative_summary", "")).strip()
+        bullets = payload.get("decision_explanation") if isinstance(payload.get("decision_explanation"), list) else []
+        uncertainty = str(payload.get("uncertainty_note", "")).strip()
+        next_step = str(payload.get("recommended_next_step", "")).strip()
+        bullet_text = "; ".join(str(b).strip() for b in bullets if str(b).strip())[:1400]
+        out_parts = [summary]
+        if bullet_text:
+            out_parts.append(f"Why this decision: {bullet_text}.")
+        if uncertainty:
+            out_parts.append(f"Uncertainty: {uncertainty}")
+        if next_step:
+            out_parts.append(f"Next step: {next_step}")
+        candidate = " ".join(p for p in out_parts if p).strip()[:3000]
+        if not candidate or _looks_template_like(candidate):
+            return fallback
+        return candidate
+    except Exception as exc:
+        logger.warning("Grounded narrative generation failed (%s): %s", text_kind, exc)
+        return fallback
+
+
 def warmup_narrative_models_on_startup() -> None:
     """
     Warm-up narrative components on startup (YOLO-like operational behavior).
@@ -182,18 +329,23 @@ def warmup_narrative_models_on_startup() -> None:
 
     try:
         client = _get_llm_client()
-        if client is None:
-            logger.info("LLM narrative warm-up skipped (client unavailable)")
-            return
-        # Minimal readiness ping to force connection/auth/model validation at startup.
-        client.chat.completions.create(
-            model=settings.llm_model,
-            messages=[{"role": "user", "content": "ok"}],
-            temperature=0,
-            max_tokens=4,
-            timeout=settings.llm_timeout_seconds,
-        )
-        logger.info("LLM narrative warm-up complete")
+        if client is not None:
+            # Minimal readiness ping to force connection/auth/model validation at startup.
+            client.chat.completions.create(
+                model=settings.llm_model,
+                messages=[{"role": "user", "content": "ok"}],
+                temperature=0,
+                max_tokens=4,
+                timeout=settings.llm_timeout_seconds,
+            )
+            logger.info("Remote LLM narrative warm-up complete")
+        else:
+            local_gen = _get_local_narrator()
+            if local_gen is not None:
+                _generate_with_local_narrator("Summarize: startup check", max_chars=64)
+                logger.info("Local LLM narrative warm-up complete")
+            else:
+                logger.info("LLM narrative warm-up skipped (no remote/local model available)")
     except Exception as exc:
         logger.warning("LLM narrative warm-up failed: %s", exc)
 
@@ -282,6 +434,114 @@ def _semantic_alignment_check(
     }
 
 
+def _build_ai_analysis_snapshot(
+    *,
+    verification_status: Optional[str],
+    rule_status: Optional[str],
+    is_flagged: Optional[bool],
+    flag_reason: Optional[str],
+    ml_prediction_label: Optional[str],
+    trust_score: Optional[float],
+    semantic_alignment: Optional[Dict[str, Any]],
+    incident_type_name: Optional[str],
+    reporter_description: Optional[str],
+    context_tags: Optional[List[str]],
+    unified_validation: Optional[Dict[str, Any]],
+    scorecard: Optional[Dict[str, Any]] = None,
+    evidence_validations: Optional[List[Dict[str, Any]]] = None,
+    evidence_file_count: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Build structured, model-grounded snapshot for narrative generation."""
+    model_breakdown = (
+        unified_validation.get("model_breakdown", {})
+        if isinstance(unified_validation, dict) and isinstance(unified_validation.get("model_breakdown"), dict)
+        else {}
+    )
+    rules_triggered: List[Dict[str, Any]] = []
+    if flag_reason:
+        rules_triggered.append(
+            {
+                "code": str(flag_reason).upper().replace("-", "_").replace(" ", "_"),
+                "severity": "high" if (rule_status or "").lower() == "rejected" else "medium",
+                "explanation": str(flag_reason),
+            }
+        )
+    hard_gates = []
+    if (rule_status or "").lower() == "rejected":
+        hard_gates.append("RULE_REJECTED")
+    if is_flagged:
+        hard_gates.append("RULE_FLAGGED")
+
+    evidence_count = evidence_file_count
+    if evidence_count is None:
+        evidence_count = len(evidence_validations or [])
+
+    return {
+        "incident_type": (incident_type_name or "").strip(),
+        "reporter_description": (reporter_description or "").strip(),
+        "context_tags": [str(t).strip() for t in (context_tags or []) if str(t).strip()],
+        "final_decision": {
+            "status": (verification_status or "pending").lower(),
+            "rule_status": (rule_status or "unknown").lower(),
+            "is_flagged": bool(is_flagged),
+            "trust_score": float(trust_score) if trust_score is not None else None,
+            "label": (ml_prediction_label or "").strip().lower() or None,
+            "threshold_band": (
+                scorecard.get("threshold_band")
+                if isinstance(scorecard, dict)
+                else None
+            ),
+        },
+        "model_signals": {
+            "natural_language": {
+                "description_evidence_similarity": (
+                    semantic_alignment.get("description_evidence_similarity")
+                    if isinstance(semantic_alignment, dict)
+                    else None
+                ),
+                "incident_evidence_similarity": (
+                    semantic_alignment.get("incident_evidence_similarity")
+                    if isinstance(semantic_alignment, dict)
+                    else None
+                ),
+                "description_incident_similarity": (
+                    semantic_alignment.get("description_incident_similarity")
+                    if isinstance(semantic_alignment, dict)
+                    else None
+                ),
+                "mismatch": (
+                    bool(semantic_alignment.get("mismatch"))
+                    if isinstance(semantic_alignment, dict)
+                    else None
+                ),
+                "breakdown": model_breakdown.get("natural_language", {}),
+            },
+            "trustbond": model_breakdown.get("trustbond", {}),
+            "evidence_ai": {
+                "has_evidence": bool(evidence_count and evidence_count > 0),
+                "evidence_count": int(evidence_count or 0),
+                "breakdown": model_breakdown.get("volo", {}),
+            },
+            "base": model_breakdown.get("base", {}),
+        },
+        "rules": {
+            "triggered": rules_triggered,
+            "hard_gates": hard_gates,
+        },
+        "scorecard": scorecard if isinstance(scorecard, dict) else {},
+    }
+
+
+def _persist_ai_analysis_snapshot(report: Report, snapshot: Dict[str, Any]) -> None:
+    """Persist structured AI analysis for auditability and future regeneration."""
+    if not isinstance(snapshot, dict):
+        return
+    existing = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
+    fv = dict(existing)
+    fv["ai_analysis_snapshot"] = _json_safe(snapshot)
+    report.feature_vector = _json_safe(fv)
+
+
 def _compose_ai_evidence_description(
     evidence_validations: List[Dict[str, Any]],
     *,
@@ -290,6 +550,8 @@ def _compose_ai_evidence_description(
     context_tags: Optional[List[str]] = None,
     evidence_file_count: Optional[int] = None,
     evidence_media_types: Optional[List[str]] = None,
+    unified_validation: Optional[Dict[str, Any]] = None,
+    scorecard: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Generate a short, human-readable AI summary of uploaded evidence + report context."""
     incident_label = (incident_type_name or "incident").strip() or "incident"
@@ -317,10 +579,30 @@ def _compose_ai_evidence_description(
             if tags_text:
                 parts.append(f"Context tags: {tags_text}.")
             fallback_text = " ".join(parts)[:2000]
-            return _naturalize_ai_text(
+            snapshot = _build_ai_analysis_snapshot(
+                verification_status=None,
+                rule_status=None,
+                is_flagged=None,
+                flag_reason=None,
+                ml_prediction_label=None,
+                trust_score=None,
+                semantic_alignment=None,
+                incident_type_name=incident_type_name,
+                reporter_description=reporter_description,
+                context_tags=context_tags,
+                unified_validation=unified_validation,
+                scorecard=scorecard,
+                evidence_validations=evidence_validations,
+                evidence_file_count=evidence_file_count,
+            )
+            return _generate_grounded_narrative(
                 text_kind="evidence summary",
-                structured_text=fallback_text,
-                must_include=[incident_label, desc_excerpt, tags_text or "", media_text],
+                snapshot=snapshot,
+                fallback_text=_naturalize_ai_text(
+                    text_kind="evidence summary",
+                    structured_text=fallback_text,
+                    must_include=[incident_label, desc_excerpt, tags_text or "", media_text],
+                ),
             )
         parts = [
             f"Report context: {incident_label}.",
@@ -331,10 +613,30 @@ def _compose_ai_evidence_description(
         if tags_text:
             parts.append(f"Context tags: {tags_text}.")
         fallback_text = " ".join(parts)[:2000]
-        return _naturalize_ai_text(
+        snapshot = _build_ai_analysis_snapshot(
+            verification_status=None,
+            rule_status=None,
+            is_flagged=None,
+            flag_reason=None,
+            ml_prediction_label=None,
+            trust_score=None,
+            semantic_alignment=None,
+            incident_type_name=incident_type_name,
+            reporter_description=reporter_description,
+            context_tags=context_tags,
+            unified_validation=unified_validation,
+            scorecard=scorecard,
+            evidence_validations=evidence_validations,
+            evidence_file_count=evidence_file_count,
+        )
+        return _generate_grounded_narrative(
             text_kind="evidence summary",
-            structured_text=fallback_text,
-            must_include=[incident_label, desc_excerpt, tags_text or "no context tags"],
+            snapshot=snapshot,
+            fallback_text=_naturalize_ai_text(
+                text_kind="evidence summary",
+                structured_text=fallback_text,
+                must_include=[incident_label, desc_excerpt, tags_text or "no context tags"],
+            ),
         )
 
     media_types: List[str] = []
@@ -381,10 +683,30 @@ def _compose_ai_evidence_description(
     if tags_text:
         parts.append(f"Context tags: {tags_text}.")
     fallback_text = " ".join(parts)[:2000]
-    return _naturalize_ai_text(
+    snapshot = _build_ai_analysis_snapshot(
+        verification_status=None,
+        rule_status=None,
+        is_flagged=None,
+        flag_reason=None,
+        ml_prediction_label=None,
+        trust_score=None,
+        semantic_alignment=None,
+        incident_type_name=incident_type_name,
+        reporter_description=reporter_description,
+        context_tags=context_tags,
+        unified_validation=unified_validation,
+        scorecard=scorecard,
+        evidence_validations=evidence_validations,
+        evidence_file_count=evidence_file_count,
+    )
+    return _generate_grounded_narrative(
         text_kind="evidence summary",
-        structured_text=fallback_text,
-        must_include=[incident_label, object_text, media_text, desc_excerpt],
+        snapshot=snapshot,
+        fallback_text=_naturalize_ai_text(
+            text_kind="evidence summary",
+            structured_text=fallback_text,
+            must_include=[incident_label, object_text, media_text, desc_excerpt],
+        ),
     )
 
 
@@ -402,6 +724,7 @@ def _compose_ai_verification_reason(
     context_tags: Optional[List[str]] = None,
     reviewer_note: Optional[str] = None,
     unified_validation: Optional[Dict[str, Any]] = None,
+    scorecard: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Generate an audit-friendly reason for AI confirmation/flag/rejection."""
     status = (verification_status or "pending").lower()
@@ -677,7 +1000,7 @@ def _compose_ai_verification_reason(
     if pattern_explanations:
         parts.append(f"Pattern explanations: {'; '.join(pattern_explanations)}.")
     fallback_text = " ".join(parts)[:3000]
-    return _naturalize_ai_text(
+    naturalized = _naturalize_ai_text(
         text_kind="verification reason",
         structured_text=fallback_text,
         must_include=[
@@ -689,6 +1012,37 @@ def _compose_ai_verification_reason(
             f"decision_patterns: {', '.join(pattern_codes) if pattern_codes else 'none'}",
         ],
     )
+    snapshot = _build_ai_analysis_snapshot(
+        verification_status=verification_status,
+        rule_status=rule_status,
+        is_flagged=is_flagged,
+        flag_reason=flag_reason,
+        ml_prediction_label=ml_prediction_label,
+        trust_score=trust_score,
+        semantic_alignment=semantic_alignment,
+        incident_type_name=incident_type_name,
+        reporter_description=reporter_description,
+        context_tags=context_tags,
+        unified_validation=unified_validation,
+        scorecard=scorecard,
+    )
+    grounded = _generate_grounded_narrative(
+        text_kind="verification reason",
+        snapshot=snapshot,
+        fallback_text=naturalized,
+    )
+    decision_line = (
+        f"Decision patterns: {', '.join(pattern_codes)}."
+        if pattern_codes
+        else "Decision patterns: NONE."
+    )
+    explanation_line = (
+        f"Pattern explanations: {'; '.join(pattern_explanations)}."
+        if pattern_explanations
+        else "Pattern explanations: NONE."
+    )
+    composed = f"{grounded}\n{decision_line}\n{explanation_line}".strip()
+    return composed[:3000]
 
 
 def _extract_decision_patterns(ai_verification_reason: Optional[str]) -> List[str]:
@@ -2804,7 +3158,34 @@ def create_report(
             reporter_description=report.description,
             context_tags=list(getattr(report, "context_tags", None) or []),
             unified_validation=unified_validation_data,
+            scorecard=scorecard,
         )
+        report.ai_evidence_description = _compose_ai_evidence_description(
+            evidence_validations,
+            incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
+            reporter_description=report.description,
+            context_tags=list(getattr(report, "context_tags", None) or []),
+            evidence_file_count=len(evidence_validations),
+            unified_validation=unified_validation_data,
+            scorecard=scorecard,
+        )
+        snapshot = _build_ai_analysis_snapshot(
+            verification_status=report.verification_status,
+            rule_status=report.rule_status,
+            is_flagged=report.is_flagged,
+            flag_reason=report.flag_reason,
+            ml_prediction_label=ai_label,
+            trust_score=ai_trust_score,
+            semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
+            incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
+            reporter_description=report.description,
+            context_tags=list(getattr(report, "context_tags", None) or []),
+            unified_validation=unified_validation_data,
+            scorecard=scorecard,
+            evidence_validations=evidence_validations,
+            evidence_file_count=len(evidence_validations),
+        )
+        _persist_ai_analysis_snapshot(report, snapshot)
 
         # Device aggregates (best-effort; doesn't block submission).
         try:
@@ -3283,6 +3664,18 @@ def add_review(
     ai_label = getattr(ml_prediction_tmp, "prediction_label", None)
     ai_trust_score, ai_label = _rule_adjusted_trust_label(report, ai_trust_score, ai_label)
     _persist_adjusted_ml_prediction(db, ml_prediction_tmp, ai_trust_score, ai_label)
+    scorecard_now = (
+        report.feature_vector.get("threshold_scorecard")
+        if isinstance(getattr(report, "feature_vector", None), dict)
+        and isinstance(report.feature_vector.get("threshold_scorecard"), dict)
+        else None
+    )
+    unified_now = (
+        report.feature_vector.get("unified_validation")
+        if isinstance(getattr(report, "feature_vector", None), dict)
+        and isinstance(report.feature_vector.get("unified_validation"), dict)
+        else None
+    )
     report.ai_verification_reason = _compose_ai_verification_reason(
         verification_status=report.verification_status,
         rule_status=report.rule_status,
@@ -3295,7 +3688,31 @@ def add_review(
         reporter_description=report.description,
         context_tags=list(getattr(report, "context_tags", None) or []),
         reviewer_note=body.review_note,
+        unified_validation=unified_now,
+        scorecard=scorecard_now,
     )
+    snapshot = _build_ai_analysis_snapshot(
+        verification_status=report.verification_status,
+        rule_status=report.rule_status,
+        is_flagged=report.is_flagged,
+        flag_reason=report.flag_reason,
+        ml_prediction_label=ai_label,
+        trust_score=ai_trust_score,
+        semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
+        incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
+        reporter_description=report.description,
+        context_tags=list(getattr(report, "context_tags", None) or []),
+        unified_validation=unified_now,
+        scorecard=scorecard_now,
+        evidence_validations=(
+            report.feature_vector.get("evidence_validations")
+            if isinstance(getattr(report, "feature_vector", None), dict)
+            and isinstance(report.feature_vector.get("evidence_validations"), list)
+            else []
+        ),
+        evidence_file_count=len(getattr(report, "evidence_files", []) or []),
+    )
+    _persist_ai_analysis_snapshot(report, snapshot)
 
     existing_review = (
         db.query(PoliceReview)
@@ -4250,6 +4667,9 @@ async def upload_evidence(
             incident_type_name=getattr(getattr(report_after, "incident_type", None), "type_name", None),
             reporter_description=report_after.description,
             context_tags=list(getattr(report_after, "context_tags", None) or []),
+            evidence_file_count=len(validations_after),
+            unified_validation=unified_validation_data,
+            scorecard=scorecard_after,
         )
         ai_trust_score = (
             float(ml_prediction.trust_score)
@@ -4271,7 +4691,25 @@ async def upload_evidence(
             reporter_description=report_after.description,
             context_tags=list(getattr(report_after, "context_tags", None) or []),
             unified_validation=unified_validation_data,
+            scorecard=scorecard_after,
         )
+        snapshot_after = _build_ai_analysis_snapshot(
+            verification_status=report_after.verification_status,
+            rule_status=report_after.rule_status,
+            is_flagged=report_after.is_flagged,
+            flag_reason=report_after.flag_reason,
+            ml_prediction_label=ai_label,
+            trust_score=ai_trust_score,
+            semantic_alignment=semantic_after if isinstance(semantic_after, dict) else None,
+            incident_type_name=getattr(getattr(report_after, "incident_type", None), "type_name", None),
+            reporter_description=report_after.description,
+            context_tags=list(getattr(report_after, "context_tags", None) or []),
+            unified_validation=unified_validation_data,
+            scorecard=scorecard_after,
+            evidence_validations=validations_after,
+            evidence_file_count=len(validations_after),
+        )
+        _persist_ai_analysis_snapshot(report_after, snapshot_after)
         db.commit()
     
     await manager.broadcast({"type": "refresh_data", "entity": "report", "action": "evidence_added"})

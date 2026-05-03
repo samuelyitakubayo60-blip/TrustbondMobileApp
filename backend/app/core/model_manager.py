@@ -174,3 +174,29 @@ def ensure_yolo_model(model_name: str = "yolov8n.pt"):
     except Exception as e:
         logger.error(f"Failed to load YOLO model: {e}")
         raise
+
+
+def ensure_local_narrative_pipeline(model_name: str = "google/flan-t5-small"):
+    """
+    Ensure a local text-generation pipeline is downloaded and cached.
+    This provides narrative generation without external API keys.
+    """
+    try:
+        from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
+
+        manager = get_model_manager()
+        cache_dir = manager.cache_dir / "local_narrative" / model_name.replace("/", "--")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=str(cache_dir))
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_name, cache_dir=str(cache_dir))
+        generator = pipeline(
+            "text2text-generation",
+            model=model,
+            tokenizer=tokenizer,
+        )
+        logger.info("Local narrative model ready: %s (cache: %s)", model_name, cache_dir)
+        return generator
+    except Exception as e:
+        logger.error(f"Failed to load local narrative model: {e}")
+        raise

@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     llm_api_key: Optional[str] = None
     llm_base_url: Optional[str] = None
     llm_model: str = "gpt-4o-mini"
+    llm_use_local_fallback: bool = True
+    llm_local_model: str = "google/flan-t5-small"
     llm_timeout_seconds: int = 12
     llm_max_tokens: int = 420
 
