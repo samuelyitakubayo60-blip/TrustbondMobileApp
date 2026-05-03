@@ -173,15 +173,16 @@ def _naturalize_ai_text(
     """Rewrite structured AI text into natural, human-like narration."""
     client = _get_llm_client()
     fallback = (structured_text or "").strip()
-    if client is None or not fallback:
-        if fallback:
-            local_prompt = (
-                f"Rewrite this {text_kind} in clear, human language. Keep facts unchanged.\n\n{fallback}"
-            )
-            local_text = _generate_with_local_narrator(local_prompt, max_chars=3000)
-            if local_text:
-                return local_text
-        return fallback
+    if not fallback:
+        return f"{text_kind.title()} narrative unavailable."
+    if client is None:
+        local_prompt = (
+            f"Rewrite this {text_kind} in clear, human language. Keep facts unchanged.\n\n{fallback}"
+        )
+        local_text = _generate_with_local_narrator(local_prompt, max_chars=3000)
+        if local_text:
+            return local_text
+        return f"{text_kind.title()} narrative unavailable."
     include_lines = "\n".join(f"- {x}" for x in (must_include or []) if str(x).strip())
     prompt = (
         f"Rewrite this {text_kind} summary into natural, clear human language.\n"
@@ -209,7 +210,7 @@ def _naturalize_ai_text(
             return content[:3000]
     except Exception as exc:
         logger.warning("LLM narrative generation failed (%s): %s", text_kind, exc)
-    return fallback
+    return f"{text_kind.title()} narrative unavailable."
 
 
 def _extract_json_object(raw_text: str) -> Optional[Dict[str, Any]]:
@@ -258,9 +259,8 @@ def _generate_grounded_narrative(
 ) -> str:
     """Generate human narrative from structured model snapshot."""
     client = _get_llm_client()
-    fallback = (fallback_text or "").strip()
-    if not fallback or not isinstance(snapshot, dict):
-        return fallback
+    if not isinstance(snapshot, dict):
+        return f"{text_kind.title()} narrative unavailable."
 
     snapshot_json = json.dumps(snapshot, ensure_ascii=True)
     prompt = (
@@ -292,7 +292,7 @@ def _generate_grounded_narrative(
             raw = (local_raw or "").strip()
         payload = _extract_json_object(raw)
         if not payload:
-            return fallback
+            return f"{text_kind.title()} narrative unavailable."
         summary = str(payload.get("narrative_summary", "")).strip()
         bullets = payload.get("decision_explanation") if isinstance(payload.get("decision_explanation"), list) else []
         uncertainty = str(payload.get("uncertainty_note", "")).strip()
@@ -307,11 +307,11 @@ def _generate_grounded_narrative(
             out_parts.append(f"Next step: {next_step}")
         candidate = " ".join(p for p in out_parts if p).strip()[:3000]
         if not candidate or _looks_template_like(candidate):
-            return fallback
+            return f"{text_kind.title()} narrative unavailable."
         return candidate
     except Exception as exc:
         logger.warning("Grounded narrative generation failed (%s): %s", text_kind, exc)
-        return fallback
+        return f"{text_kind.title()} narrative unavailable."
 
 
 def warmup_narrative_models_on_startup() -> None:
