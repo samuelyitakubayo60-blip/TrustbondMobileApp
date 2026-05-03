@@ -13,8 +13,9 @@ shapely
 pillow
 cloudinary
 email-validator
+requests
 scikit-learn
-xgboost 
+xgboost
 joblib
 pandas
 websockets
@@ -25,5 +26,4 @@ numpy
 python-dotenv
 ultralytics
 sentence-transformers
-pytesseract
-transformers
+openai-whisper

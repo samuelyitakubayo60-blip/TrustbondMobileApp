@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -20,6 +21,8 @@ from app.models.system_config import SystemConfig
 ROOT = Path(__file__).resolve().parents[2] / "musanze"
 MODEL_PATH = ROOT / "TrustBond.joblib"
 META_PATH = ROOT / "TrustBond.json"
+
+logger = logging.getLogger(__name__)
 
 _MODEL = None
 _META: Optional[Dict[str, Any]] = None
@@ -500,6 +503,55 @@ def _compute_trust_factors(db: Session, report: Report, device: Device, evidence
     return factors
 
 
+def compute_trustbond_credibility_inference(
+    db: Session,
+    report: Any,
+    device: Any,
+    evidence_count: int,
+) -> Optional[Dict[str, Any]]:
+    """
+    Run the same XGBoost credibility path as submit-time TrustBond, without persisting
+    predictions (for draft / submission-guidance preview).
+    """
+    try:
+        model, meta = _load_model_and_meta()
+        if model is None or meta is None:
+            return None
+
+        feature_columns = meta.get("feature_columns", [])
+        if not feature_columns:
+            return None
+
+        row = _build_feature_row(report, device, evidence_count, feature_columns)
+        X = pd.DataFrame([row], columns=feature_columns)
+
+        proba = model.predict_proba(X)[0]
+        prob_real = float(proba[1])
+        credibility_score = prob_real * 100.0
+
+        factors = _compute_trust_factors(db, report, device, evidence_count, prob_real)
+
+        coord_penalty = float(factors.get("coordination_penalty", 0.0) or 0.0)
+        if coord_penalty > 0:
+            credibility_score = max(0.0, credibility_score - (coord_penalty * 0.5))
+
+        community_net = factors.get("community_net_votes", 0)
+        if community_net > 0:
+            credibility_score = min(100.0, credibility_score + (community_net * 5.0))
+        elif community_net < 0:
+            credibility_score = max(0.0, credibility_score + (community_net * 10.0))
+
+        return {
+            "credibility_score": float(credibility_score),
+            "prob_real": prob_real,
+            "model_version": meta.get("model_version", "report_credibility_xgb_v1"),
+            "factors": factors,
+        }
+    except Exception as exc:
+        logger.warning("TrustBond credibility preview failed: %s", exc, exc_info=True)
+        return None
+
+
 def score_report_credibility(
     db: Session,
     report: Report,
@@ -600,16 +652,28 @@ def update_device_ml_aggregates(
     - device.metadata_json (stores ML breakdown + last update timestamps)
     """
     try:
-        # Pull recent final predictions for reports submitted by this device
+        # Prefer rule-adjusted canonical rows (is_final=True) so device trust follows
+        # the same score shown after unified aggregation + gates, not raw XGBoost-only rows.
         preds = (
             db.query(MLPrediction)
             .join(Report, MLPrediction.report_id == Report.report_id)
             .filter(Report.device_id == device.device_id)
             .filter(MLPrediction.trust_score.isnot(None))
+            .filter(MLPrediction.is_final.is_(True))
             .order_by(MLPrediction.evaluated_at.desc().nullslast())
             .limit(window)
             .all()
         )
+        if not preds:
+            preds = (
+                db.query(MLPrediction)
+                .join(Report, MLPrediction.report_id == Report.report_id)
+                .filter(Report.device_id == device.device_id)
+                .filter(MLPrediction.trust_score.isnot(None))
+                .order_by(MLPrediction.evaluated_at.desc().nullslast())
+                .limit(window)
+                .all()
+            )
 
         ml_scores: list[float] = []
         confs: list[float] = []

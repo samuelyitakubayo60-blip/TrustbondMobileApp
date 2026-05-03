@@ -9,6 +9,10 @@ def main() -> None:
     """
     Simple Cloudinary connectivity test.
     Uses credentials from app.config.Settings (which loads .env).
+
+    Production evidence uploads use the same triple credential check as the API
+    (`cloudinary_cloud_name`, `cloudinary_api_key`, `cloudinary_api_secret`) and
+    store files under folder ``trustbond/evidence`` (see reports.upload_evidence).
     """
 
     if not (
@@ -37,6 +41,7 @@ def main() -> None:
 
     upload_result = cloudinary.uploader.upload(
         demo_url,
+        folder="trustbond/evidence",
         public_id="trustbond_demo_shoes",
     )
     secure_url = upload_result.get("secure_url") or upload_result.get("url")

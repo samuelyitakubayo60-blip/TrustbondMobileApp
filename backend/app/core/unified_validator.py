@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 
 from .trust_aggregator import aggregate_trust_scores, AggregatedTrust, TrustBand
 from .natural_language_scorer import analyze_description_quality, NLAnalysisResult
-from .volo_scorer import analyze_evidence_content, VoloAnalysisResult
+from .volo_scorer import (
+    analyze_evidence_audio_content,
+    analyze_evidence_content,
+    analyze_evidence_video_content,
+    VoloAnalysisResult,
+)
 from .credibility_model import score_report_credibility
 from .trust_thresholds import trust_thresholds
 from app.models.report import Report
@@ -104,19 +109,44 @@ class UnifiedValidator:
         # 3. Run Volo model (evidence analysis) - only if evidence exists
         if evidence_files:
             for evidence_file in evidence_files:
-                if evidence_file.file_url and evidence_file.file_type in ['photo', 'video']:
-                    try:
-                        incident_type_name = report.incident_type.type_name if report.incident_type else ""
-                        
+                if not evidence_file.file_url:
+                    continue
+                ft = (evidence_file.file_type or "").strip().lower()
+                if ft not in ("photo", "video", "audio"):
+                    continue
+                try:
+                    incident_type_name = report.incident_type.type_name if report.incident_type else ""
+
+                    if ft == "photo":
                         volo_result = analyze_evidence_content(
                             image_url=evidence_file.file_url,
-                            incident_type_name=incident_type_name
+                            incident_type_name=incident_type_name,
                         )
-                        volo_results.append(volo_result)
-                        logger.info(f"Volo score for evidence {evidence_file.evidence_id}: {volo_result.overall_score:.2f}")
-                        
-                    except Exception as exc:
-                        logger.warning(f"Volo analysis failed for evidence {evidence_file.evidence_id}: {exc}")
+                    elif ft == "video":
+                        volo_result = analyze_evidence_video_content(
+                            video_url=evidence_file.file_url,
+                            incident_type_name=incident_type_name,
+                        )
+                    else:
+                        volo_result = analyze_evidence_audio_content(
+                            audio_url=evidence_file.file_url,
+                            incident_type_name=incident_type_name,
+                        )
+
+                    volo_results.append(volo_result)
+                    logger.info(
+                        "Volo score for evidence %s (%s): %.2f",
+                        evidence_file.evidence_id,
+                        ft,
+                        volo_result.overall_score,
+                    )
+
+                except Exception as exc:
+                    logger.warning(
+                        "Volo analysis failed for evidence %s: %s",
+                        evidence_file.evidence_id,
+                        exc,
+                    )
         
         # Calculate average Volo score if multiple pieces of evidence
         volo_score = None

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.submission_guidance import submission_guidance, GuidanceLevel, TrustScoreEstimate
+from app.core.draft_report_evaluation import preview_trust_estimate_online
 from app.models.device import Device
 
 router = APIRouter(prefix="/submission-guidance", tags=["submission-guidance"])
@@ -88,8 +89,22 @@ def analyze_submission(
             device = db.query(Device).filter(Device.device_id == request.device_id).first()
             if device:
                 device_trust_score = float(device.device_trust_score)
-        
-        # Analyze submission
+
+        trust_preview: Optional[TrustScoreEstimate] = None
+        if not request.is_offline:
+            trust_preview = preview_trust_estimate_online(
+                db,
+                description=request.description,
+                incident_type=request.incident_type,
+                evidence_count=request.evidence_count,
+                file_types=request.file_types,
+                gps_accuracy=request.gps_accuracy,
+                movement_speed=request.movement_speed,
+                device_id=request.device_id,
+                has_live_capture=request.has_live_capture,
+            )
+
+        # Analyze submission (online: trust band matches unified aggregator + XGBoost inference)
         guidance_items, trust_estimate = submission_guidance.analyze_submission_quality(
             description=request.description,
             incident_type=request.incident_type,
@@ -99,7 +114,8 @@ def analyze_submission(
             movement_speed=request.movement_speed,
             device_trust_score=device_trust_score,
             has_live_capture=request.has_live_capture,
-            is_offline=request.is_offline
+            is_offline=request.is_offline,
+            trust_estimate_override=trust_preview,
         )
         
         # Convert to response format

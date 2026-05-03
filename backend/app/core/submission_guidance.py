@@ -81,11 +81,15 @@ class SubmissionGuidance:
         movement_speed: Optional[float] = None,
         device_trust_score: Optional[float] = None,
         has_live_capture: bool = False,
-        is_offline: bool = True
+        is_offline: bool = True,
+        trust_estimate_override: Optional[TrustScoreEstimate] = None,
     ) -> Tuple[List[GuidanceItem], TrustScoreEstimate]:
         """
         Analyze submission quality and provide guidance.
         Works offline and online.
+
+        When trust_estimate_override is set (e.g. server-side unified preview), it replaces
+        the lightweight offline trust estimate so UI scores match submit-time aggregation.
         """
         guidance_items = []
         
@@ -114,15 +118,18 @@ class SubmissionGuidance:
             device_guidance = self._analyze_device_trust(device_trust_score)
             guidance_items.extend(device_guidance)
         
-        # Estimate trust score
-        trust_estimate = self._estimate_trust_score(
-            description, incident_type, evidence_count, 
-            gps_accuracy,
-            device_trust_score,
-            has_live_capture,
-            is_offline,
-            file_types=file_types,
-        )
+        # Estimate trust score (or use server preview aligned with reports pipeline)
+        if trust_estimate_override is not None:
+            trust_estimate = trust_estimate_override
+        else:
+            trust_estimate = self._estimate_trust_score(
+                description, incident_type, evidence_count,
+                gps_accuracy,
+                device_trust_score,
+                has_live_capture,
+                is_offline,
+                file_types=file_types,
+            )
         
         # Add trust score guidance
         score_guidance = self._generate_trust_score_guidance(trust_estimate)

@@ -558,18 +558,43 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   }
 
   Widget _buildTimeline(ReportDetailItem r) {
-    final validated = r.ruleStatus != 'pending';
-    // Backend uses rule_status values like "passed" for auto-verified reports.
-    // Treat "passed" as verified in the mobile timeline.
-    final verified = r.ruleStatus == 'passed' ||
-        r.ruleStatus == 'confirmed' ||
-        r.ruleStatus == 'verified' ||
-        r.ruleStatus == 'trusted';
+    final rs = r.ruleStatus.toLowerCase();
+    final vs = (r.verificationStatus ?? '').toLowerCase();
+    final st = (r.status ?? '').toLowerCase();
+
+    final validated = rs != 'pending';
+
+    // AI lifecycle is driven by verification_status / status on the API.
+    // rule_status alone can stay e.g. "flagged" or "passed" while verification is already "verified".
+    final terminalRejected =
+        rs == 'rejected' || vs == 'rejected' || st == 'rejected';
+    final aiPositive = vs == 'verified' ||
+        st == 'verified' ||
+        rs == 'passed' ||
+        rs == 'confirmed' ||
+        rs == 'verified' ||
+        rs == 'trusted';
+
+    final String aiSub;
+    final bool aiDone;
+    if (terminalRejected) {
+      aiSub = 'Rejected';
+      aiDone = true;
+    } else if (aiPositive) {
+      aiSub = 'Verified';
+      aiDone = true;
+    } else if (vs == 'under_review') {
+      aiSub = 'Under review';
+      aiDone = false;
+    } else {
+      aiSub = 'Pending';
+      aiDone = false;
+    }
 
     final steps = [
       _Step('Submitted', _formatDate(r.reportedAt), true, true),
       _Step('Rule Validation', validated ? 'Complete' : 'Processing...', validated, !validated),
-      _Step('AI Verification', verified ? 'Verified' : 'Pending', verified, !verified && validated),
+      _Step('AI Verification', aiSub, aiDone, !aiDone && validated),
       _Step('Police Review', 'Waiting', false, false),
     ];
 

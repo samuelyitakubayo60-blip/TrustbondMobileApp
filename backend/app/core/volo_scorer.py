@@ -7,12 +7,35 @@ Outputs only scores - no decision making.
 from typing import Dict, Any, Optional, Tuple, List
 from dataclasses import dataclass
 import logging
+import os
+import tempfile
 import numpy as np
 from datetime import datetime, timezone
 
 from .trust_thresholds import trust_thresholds
 
 logger = logging.getLogger(__name__)
+
+_WHISPER_MODEL = None
+_WHISPER_UNAVAILABLE = False
+
+
+def _get_whisper_model_optional():
+    """Optional speech-to-text (tiny model). Skips cleanly if openai-whisper is not installed."""
+    global _WHISPER_MODEL, _WHISPER_UNAVAILABLE
+    if _WHISPER_UNAVAILABLE:
+        return None
+    if _WHISPER_MODEL is not None:
+        return _WHISPER_MODEL
+    try:
+        import whisper
+
+        _WHISPER_MODEL = whisper.load_model("tiny")
+        return _WHISPER_MODEL
+    except Exception as exc:
+        logger.info("Whisper optional dependency unavailable: %s", exc)
+        _WHISPER_UNAVAILABLE = True
+        return None
 
 @dataclass
 class VoloAnalysisResult:
@@ -166,47 +189,387 @@ class VoloScorer:
         
         return analysis
     
-    def _detect_objects(self, image: np.ndarray) -> List[str]:
-        """Detect objects using YOLO model."""
+    _YOLO_RELEVANT_CLASSES = {
+        0: "person",
+        67: "cell phone",
+        24: "handbag",
+        28: "backpack",
+        39: "bottle",
+        42: "knife",
+        76: "scissors",
+        91: "baseball bat",
+        101: "knife",
+        62: "laptop",
+        84: "handbag",
+        3: "motorcycle",
+        1: "bicycle",
+    }
+
+    def _detect_objects_list(self, image: np.ndarray) -> List[str]:
+        """YOLO labels for each detection (allows counting people per frame)."""
         model = self._get_yolo_model()
         if model is None:
             return []
-        
         try:
             results = model(image, verbose=False)
-            
-            # Map COCO classes to TrustBond relevant objects
-            relevant_classes = {
-                0: 'person',
-                67: 'cell phone',
-                24: 'handbag',
-                28: 'backpack',
-                39: 'bottle',
-                42: 'knife',
-                76: 'scissors',
-                91: 'baseball bat',
-                101: 'knife',
-                62: 'laptop',
-                84: 'handbag',
-                3: 'motorcycle',
-                1: 'bicycle'
-            }
-            
-            detected_objects = []
+            detected_objects: List[str] = []
             for result in results:
-                if hasattr(result, 'boxes') and result.boxes is not None:
+                if hasattr(result, "boxes") and result.boxes is not None:
                     boxes = result.boxes
-                    if hasattr(boxes, 'cls'):
+                    if hasattr(boxes, "cls"):
                         for cls in boxes.cls:
                             class_id = int(cls.item())
-                            if class_id in relevant_classes:
-                                detected_objects.append(relevant_classes[class_id])
-            
-            return list(set(detected_objects))  # Remove duplicates
-            
+                            if class_id in self._YOLO_RELEVANT_CLASSES:
+                                detected_objects.append(self._YOLO_RELEVANT_CLASSES[class_id])
+            return detected_objects
         except Exception as exc:
-            logger.warning(f"Object detection failed: {exc}")
+            logger.warning("Object detection failed: %s", exc)
             return []
+
+    def _detect_objects(self, image: np.ndarray) -> List[str]:
+        """Detect objects using YOLO model (unique labels)."""
+        return list(set(self._detect_objects_list(image)))
+
+    def detect_objects_from_image_bytes(self, image_bytes: bytes) -> List[str]:
+        """Run YOLO on raw image bytes (JPEG/PNG) without an HTTP round-trip."""
+        import cv2
+
+        arr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if img is None:
+            return []
+        return self._detect_objects(img)
+
+    def analyze_video_bytes(self, video_bytes: bytes, max_frames: int = 12) -> Dict[str, Any]:
+        """Sample video frames, run YOLO + motion proxy; works from raw upload bytes."""
+        import cv2
+
+        tmp_path = None
+        try:
+            fd, tmp_path = tempfile.mkstemp(suffix=".mp4")
+            os.write(fd, video_bytes)
+            os.close(fd)
+            fd = -1
+
+            cap = cv2.VideoCapture(tmp_path)
+            if not cap.isOpened():
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+                return {"error": "could_not_open_video", "bytes": len(video_bytes)}
+
+            frame_count_raw = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+
+            # Some codecs report 0 frames; use a large placeholder only for index spacing.
+            n_frames = frame_count_raw if frame_count_raw > 0 else 100000
+
+            target = max_frames
+            indices: List[int] = []
+            if n_frames <= target:
+                indices = list(range(min(n_frames, target)))
+            else:
+                step = max(1, n_frames // target)
+                indices = [min(n_frames - 1, i * step) for i in range(target)]
+
+            prev_small: Optional[np.ndarray] = None
+            motion_vals: List[float] = []
+            blur_vals: List[float] = []
+            brightness_vals: List[float] = []
+            all_labels: List[str] = []
+            max_persons_frame = 0
+            frames_read = 0
+
+            for idx in indices:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    continue
+                frames_read += 1
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                lap = cv2.Laplacian(gray, cv2.CV_64F).var()
+                blur_vals.append(float(lap))
+                brightness_vals.append(float(np.mean(gray) / 255.0))
+
+                labels = self._detect_objects_list(frame)
+                all_labels.extend(labels)
+                max_persons_frame = max(max_persons_frame, labels.count("person"))
+
+                small = cv2.resize(gray, (64, 48))
+                if prev_small is not None:
+                    motion_vals.append(
+                        float(np.mean(np.abs(small.astype(np.float64) - prev_small.astype(np.float64))))
+                    )
+                prev_small = small
+
+            cap.release()
+
+            unique_objects = sorted(set(all_labels))
+            duration_guess = None
+            if fps > 0 and frame_count_raw > 0:
+                duration_guess = frame_count_raw / fps
+
+            return {
+                "bytes": len(video_bytes),
+                "width": width,
+                "height": height,
+                "frame_count_reported": frame_count_raw,
+                "fps": fps,
+                "duration_guess_seconds": duration_guess,
+                "frames_sampled": frames_read,
+                "blur_score_avg": float(np.mean(blur_vals)) if blur_vals else 0.0,
+                "brightness_avg": float(np.mean(brightness_vals)) if brightness_vals else 0.5,
+                "motion_mean": float(np.mean(motion_vals)) if motion_vals else 0.0,
+                "detected_objects": unique_objects,
+                "max_persons_in_frame": max_persons_frame,
+                "person_detections_total": all_labels.count("person"),
+            }
+        except Exception as exc:
+            logger.warning("Video analysis failed: %s", exc)
+            return {"error": str(exc), "bytes": len(video_bytes)}
+        finally:
+            if tmp_path and os.path.isfile(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
+    def analyze_audio_bytes(self, audio_bytes: bytes, suffix: str = ".m4a") -> Dict[str, Any]:
+        """Duration (ffprobe), optional Whisper transcript, simple WAV energy."""
+        import struct
+        import subprocess
+
+        tmp_path = None
+        try:
+            fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+            os.write(fd, audio_bytes)
+            os.close(fd)
+
+            duration_seconds: Optional[float] = None
+            try:
+                proc = subprocess.run(
+                    [
+                        "ffprobe",
+                        "-v",
+                        "error",
+                        "-show_entries",
+                        "format=duration",
+                        "-of",
+                        "default=noprint_wrappers=1:nokey=1",
+                        tmp_path,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                if proc.returncode == 0 and proc.stdout.strip():
+                    duration_seconds = float(proc.stdout.strip())
+            except Exception:
+                pass
+
+            transcript: Optional[str] = None
+            wm = _get_whisper_model_optional()
+            if wm is not None:
+                try:
+                    out = wm.transcribe(tmp_path)
+                    transcript = (out.get("text") or "").strip()
+                except Exception as exc:
+                    logger.warning("Whisper transcribe failed: %s", exc)
+
+            rms_energy: Optional[float] = None
+            if suffix.lower().endswith(".wav"):
+                try:
+                    import wave
+
+                    with wave.open(tmp_path, "rb") as wf:
+                        n = wf.getnframes()
+                        raw = wf.readframes(min(n, 320_000))
+                        if wf.getsampwidth() == 2 and raw:
+                            samples = struct.unpack(f"<{len(raw) // 2}h", raw)
+                            rms_energy = float(
+                                np.sqrt(np.mean(np.square(np.array(samples, dtype=np.float64))))
+                            )
+                except Exception:
+                    pass
+
+            return {
+                "bytes": len(audio_bytes),
+                "duration_seconds": duration_seconds,
+                "transcript": transcript,
+                "rms_energy": rms_energy,
+            }
+        except Exception as exc:
+            logger.warning("Audio analysis failed: %s", exc)
+            return {"error": str(exc), "bytes": len(audio_bytes)}
+        finally:
+            if tmp_path and os.path.isfile(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
+    def analyze_evidence_video_from_url(
+        self,
+        video_url: str,
+        incident_type_name: str = "",
+        expected_objects: Optional[List[str]] = None,
+    ) -> VoloAnalysisResult:
+        """Download video from URL (e.g. Cloudinary), analyze sampled frames."""
+        try:
+            import requests
+
+            resp = requests.get(video_url, timeout=120)
+            resp.raise_for_status()
+            meta = self.analyze_video_bytes(resp.content)
+            if meta.get("error"):
+                return self._create_empty_result(str(meta.get("error")))
+
+            blur_avg = float(meta.get("blur_score_avg") or 0.0)
+            bright_avg = float(meta.get("brightness_avg") or 0.5)
+            min_blur = self.thresholds.config.EVIDENCE_MIN_BLUR_SCORE
+            image_analysis: Dict[str, Any] = {
+                "width": int(meta.get("width") or 0),
+                "height": int(meta.get("height") or 0),
+                "channels": 3,
+                "file_size": int(meta.get("bytes") or len(resp.content)),
+                "blur_score": blur_avg,
+                "is_blurry": blur_avg < min_blur,
+                "brightness": bright_avg,
+                "brightness_valid": 0.15 <= bright_avg <= 0.92,
+                "detected_objects": list(meta.get("detected_objects") or []),
+                "pil_image": None,
+                "cv_image": None,
+            }
+
+            authenticity_score, authenticity_metadata = self._analyze_evidence_authenticity(
+                image_analysis, incident_type_name
+            )
+            detection_score, detection_metadata = self._analyze_object_detection(
+                image_analysis, expected_objects
+            )
+            quality_score, quality_metadata = self._analyze_image_quality(image_analysis)
+
+            motion_mean = float(meta.get("motion_mean") or 0.0)
+            if motion_mean > 2.0:
+                authenticity_score = min(100.0, authenticity_score + 5.0)
+
+            overall_score = (
+                authenticity_score * 0.4 + detection_score * 0.4 + quality_score * 0.2
+            )
+            confidence = self._calculate_confidence(
+                authenticity_metadata, detection_metadata, quality_metadata
+            )
+
+            metadata = {
+                "video_url": video_url,
+                "incident_type": incident_type_name,
+                "authenticity_analysis": authenticity_metadata,
+                "detection_analysis": detection_metadata,
+                "quality_analysis": quality_metadata,
+                "video_analysis": meta,
+                "analyzed_at": datetime.now(timezone.utc).isoformat(),
+                "analysis_kind": "video_frames",
+            }
+
+            return VoloAnalysisResult(
+                evidence_authenticity_score=authenticity_score,
+                object_detection_score=detection_score,
+                image_quality_score=quality_score,
+                overall_score=overall_score,
+                confidence=confidence,
+                metadata=metadata,
+            )
+        except Exception as exc:
+            logger.error("Video URL evidence analysis failed: %s", exc)
+            return self._create_empty_result(f"Analysis failed: {exc}")
+
+    def analyze_evidence_audio_from_url(
+        self,
+        audio_url: str,
+        incident_type_name: str = "",
+        expected_objects: Optional[List[str]] = None,
+    ) -> VoloAnalysisResult:
+        """Download audio from URL; duration + optional transcript-based scoring."""
+        del expected_objects  # reserved for future keyword mapping
+        try:
+            import requests
+            from urllib.parse import urlparse
+
+            path = urlparse(audio_url).path
+            ext = ".m4a"
+            for candidate in (".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"):
+                if path.lower().endswith(candidate):
+                    ext = candidate
+                    break
+
+            resp = requests.get(audio_url, timeout=120)
+            resp.raise_for_status()
+            meta = self.analyze_audio_bytes(resp.content, suffix=ext)
+            if meta.get("error"):
+                return self._create_empty_result(str(meta.get("error")))
+
+            transcript = (meta.get("transcript") or "").strip()
+            dur = float(meta.get("duration_seconds") or 0.0)
+
+            authenticity = 45.0 + min(25.0, dur * 3.0)
+            if transcript:
+                authenticity += min(25.0, len(transcript) / 8.0)
+            authenticity = max(0.0, min(100.0, authenticity))
+
+            detection_score = 30.0
+            if transcript:
+                detection_score += min(55.0, len(transcript) / 5.0)
+            detection_score = max(0.0, min(100.0, detection_score))
+
+            quality_score = 45.0
+            if dur > 0.5:
+                quality_score += 20.0
+            if meta.get("rms_energy"):
+                quality_score += 10.0
+            if transcript:
+                quality_score += min(15.0, len(transcript) / 20.0)
+            quality_score = max(0.0, min(100.0, quality_score))
+
+            overall_score = authenticity * 0.35 + detection_score * 0.35 + quality_score * 0.3
+            confidence = 0.55
+            if transcript:
+                confidence += 0.15
+            if dur > 2.0:
+                confidence += 0.1
+            confidence = max(0.3, min(1.0, confidence))
+
+            detection_metadata = {
+                "detected_objects": [],
+                "expected_objects": [],
+                "final_detection_score": detection_score,
+                "transcript_excerpt": transcript[:500],
+            }
+
+            metadata = {
+                "audio_url": audio_url,
+                "incident_type": incident_type_name,
+                "authenticity_analysis": {"final_authenticity_score": authenticity},
+                "detection_analysis": detection_metadata,
+                "quality_analysis": {"final_quality_score": quality_score},
+                "audio_analysis": meta,
+                "analyzed_at": datetime.now(timezone.utc).isoformat(),
+                "analysis_kind": "audio",
+            }
+
+            return VoloAnalysisResult(
+                evidence_authenticity_score=authenticity,
+                object_detection_score=detection_score,
+                image_quality_score=quality_score,
+                overall_score=overall_score,
+                confidence=confidence,
+                metadata=metadata,
+            )
+        except Exception as exc:
+            logger.error("Audio URL evidence analysis failed: %s", exc)
+            return self._create_empty_result(f"Analysis failed: {exc}")
     
     def _analyze_evidence_authenticity(
         self,
@@ -455,4 +818,30 @@ def analyze_evidence_content(
         image_url=image_url,
         incident_type_name=incident_type_name,
         expected_objects=expected_objects
+    )
+
+
+def analyze_evidence_video_content(
+    video_url: str,
+    incident_type_name: str = "",
+    expected_objects: Optional[List[str]] = None,
+) -> VoloAnalysisResult:
+    """Analyze video evidence via sampled frames + YOLO."""
+    return volo_scorer.analyze_evidence_video_from_url(
+        video_url=video_url,
+        incident_type_name=incident_type_name,
+        expected_objects=expected_objects,
+    )
+
+
+def analyze_evidence_audio_content(
+    audio_url: str,
+    incident_type_name: str = "",
+    expected_objects: Optional[List[str]] = None,
+) -> VoloAnalysisResult:
+    """Analyze audio evidence (duration + optional Whisper transcript)."""
+    return volo_scorer.analyze_evidence_audio_from_url(
+        audio_url=audio_url,
+        incident_type_name=incident_type_name,
+        expected_objects=expected_objects,
     )

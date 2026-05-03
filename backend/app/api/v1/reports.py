@@ -22,7 +22,7 @@ from PIL.ExifTags import TAGS, GPSTAGS
 from app.config import settings
 from app.database import get_db, SessionLocal
 from app.models.report import Report
-from app.models.evidence_file import EvidenceFile
+from app.models.evidence_file import EvidenceFile, EvidenceQuality
 from app.models.hotspot import Hotspot, hotspot_reports_table
 from app.models.device import Device
 from app.models.incident_type import IncidentType
@@ -1259,8 +1259,10 @@ def _persist_adjusted_ml_prediction(
         if new_label and new_label != old_label:
             ml_prediction.prediction_label = new_label
             changed = True
-    if changed:
-        db.add(ml_prediction)
+    # Canonical per-report score for device trust rollup (after unified + rule gates).
+    if hasattr(ml_prediction, "is_final"):
+        ml_prediction.is_final = True
+    db.add(ml_prediction)
 
 
 def _compute_threshold_scorecard(
@@ -1591,6 +1593,9 @@ def _store_unified_validation_result(
         explanation = ml_prediction.explanation if isinstance(ml_prediction.explanation, dict) else {}
         explanation["unified_validation"] = unified_validation
         ml_prediction.explanation = _json_safe(explanation)
+        # Rule-adjusted score in _persist_adjusted_ml_prediction marks is_final=True.
+        if hasattr(ml_prediction, "is_final"):
+            ml_prediction.is_final = False
 
     return unified_validation
 
@@ -1704,13 +1709,6 @@ def _process_report_background(
             except Exception as fallback_e:
                 logger.error(f"Fallback scoring also failed for report {report_id}: {fallback_e}")
                 raise HTTPException(status_code=500, detail=f"ML scoring failed during report creation: {str(e)}")
-            
-        try:
-            update_device_ml_aggregates(db, device, window=30)
-            logger.info(f"Device ML aggregates updated for report {report_id}")
-        except Exception as e:
-            logger.error(f"Device ML aggregates update failed for report {report_id}: {e}")
-            # Non-critical, don't fail the whole request
         
         # 4. Apply rule-based verification (still needed for basic validation)
         try:
@@ -1745,6 +1743,20 @@ def _process_report_background(
             fv_bg["threshold_scorecard"] = scorecard_bg
             report.feature_vector = _json_safe(fv_bg)
             _apply_threshold_outcome(report, scorecard_bg)
+            ml_prediction_adj = resolve_ml_prediction_for_report(report)
+            ai_ts = (
+                float(ml_prediction_adj.trust_score)
+                if ml_prediction_adj and getattr(ml_prediction_adj, "trust_score", None) is not None
+                else None
+            )
+            ai_lbl = getattr(ml_prediction_adj, "prediction_label", None)
+            ai_ts, ai_lbl = _rule_adjusted_trust_label(report, ai_ts, ai_lbl)
+            _persist_adjusted_ml_prediction(db, ml_prediction_adj, ai_ts, ai_lbl)
+            try:
+                update_device_ml_aggregates(db, device, window=30)
+                logger.info("Device ML aggregates updated after final trust for report %s", report_id)
+            except Exception as agg_exc:
+                logger.error("Device ML aggregates update failed for report %s: %s", report_id, agg_exc)
         except Exception as e:
             logger.error(f"Threshold decision application failed for report {report_id}: {e}")
         
@@ -1902,67 +1914,173 @@ def assess_image_quality(image_bytes: bytes, blur_score: float, tamper_score: fl
         logger.error(f"Quality assessment failed: {e}")
         return "fair"  # Default medium quality
 
-def analyze_evidence_file(file_bytes: bytes, file_type: str) -> dict:
-    """Perform comprehensive AI analysis on evidence file."""
-    analysis = {
-        'blur_score': None,
-        'tamper_score': None,
-        'quality_label': None,
-        'ai_checked_at': datetime.now(timezone.utc),
-        'analysis_method': 'basic_cv'
+
+def _evidence_suffix(filename: Optional[str], default: str = ".bin") -> str:
+    if not filename or "." not in filename:
+        return default
+    return "." + filename.rsplit(".", 1)[-1].lower()
+
+
+def _coerce_evidence_quality(label: Optional[str]) -> EvidenceQuality:
+    """Map textual quality bands to DB enum (good / fair / poor)."""
+    x = (label or "fair").strip().lower()
+    if x in ("high", "good"):
+        return EvidenceQuality.good
+    if x in ("poor", "low"):
+        return EvidenceQuality.poor
+    return EvidenceQuality.fair
+
+
+def analyze_evidence_file(
+    file_bytes: bytes,
+    file_type: str,
+    filename: Optional[str] = None,
+) -> dict:
+    """Analyze uploaded evidence bytes: photo (CV + YOLO), video (frames + YOLO), audio (duration + optional ASR)."""
+    analysis: Dict[str, Any] = {
+        "blur_score": None,
+        "tamper_score": None,
+        "quality_label": None,
+        "ai_checked_at": datetime.now(timezone.utc),
+        "analysis_method": "basic_cv",
+        "detected_objects": [],
+        "transcript": None,
+        "duration_seconds": None,
+        "advanced_analysis": {},
+        "volo_confidence": None,
     }
-    
+
+    ft = (file_type or "").strip().lower()
+    is_photo = ft == "photo" or ft.startswith("image")
+
     try:
-        if file_type.startswith('image'):
-            # Image analysis
+        from app.core.volo_scorer import volo_scorer
+
+        if is_photo:
             blur_score, is_blurry = detect_blur(file_bytes)
             tamper_score, is_tampered = detect_tampering(file_bytes)
             quality_label = assess_image_quality(file_bytes, blur_score, tamper_score)
-            
-            analysis.update({
-                'blur_score': round(blur_score, 3),
-                'tamper_score': round(tamper_score, 3),
-                'quality_label': quality_label,
-                'is_blurry': is_blurry,
-                'is_tampered': is_tampered
-            })
-            
-        elif file_type.startswith('video'):
-            # Video analysis (basic for now)
-            analysis.update({
-                'blur_score': 75.0,  # Default good score for video
-                'tamper_score': 15.0,  # Low tamper risk for video
-                'quality_label': "medium",
-                'analysis_method': 'video_default'
-            })
-            
-        elif file_type.startswith('audio'):
-            # Audio analysis (basic for now)
-            analysis.update({
-                'blur_score': None,  # Not applicable for audio
-                'tamper_score': 10.0,  # Low tamper risk for audio
-                'quality_label': "medium",
-                'analysis_method': 'audio_default'
-            })
-            
+
+            detected: List[str] = []
+            try:
+                detected = volo_scorer.detect_objects_from_image_bytes(file_bytes)
+            except Exception as exc:
+                logger.warning("Photo object detection skipped: %s", exc)
+
+            analysis.update(
+                {
+                    "blur_score": round(blur_score, 3),
+                    "tamper_score": round(tamper_score, 3),
+                    "quality_label": quality_label,
+                    "is_blurry": is_blurry,
+                    "is_tampered": is_tampered,
+                    "detected_objects": detected,
+                    "analysis_method": "photo_cv_yolo",
+                    "advanced_analysis": {"photo": {"yolo_objects": detected}},
+                    "volo_confidence": 0.75 if detected else 0.55,
+                }
+            )
+
+        elif ft == "video":
+            vm = volo_scorer.analyze_video_bytes(file_bytes)
+            analysis["advanced_analysis"]["video"] = vm
+            if vm.get("error"):
+                analysis.update(
+                    {
+                        "blur_score": None,
+                        "tamper_score": 35.0,
+                        "quality_label": "fair",
+                        "analysis_method": "video_error",
+                        "analysis_error": vm.get("error"),
+                        "volo_confidence": 0.35,
+                    }
+                )
+            else:
+                blur_raw = float(vm.get("blur_score_avg") or 0.0)
+                blur_norm = min(100.0, max(0.0, blur_raw / 10.0))
+                motion = float(vm.get("motion_mean") or 0.0)
+                tamper_guess = max(5.0, min(85.0, 45.0 - min(25.0, motion)))
+                objs = list(vm.get("detected_objects") or [])
+                frames_done = int(vm.get("frames_sampled") or 0)
+
+                if frames_done == 0:
+                    ql = "low"
+                elif objs and motion > 1.0:
+                    ql = "high"
+                elif objs or motion > 0.5:
+                    ql = "medium"
+                else:
+                    ql = "fair"
+
+                dur = vm.get("duration_guess_seconds")
+                analysis.update(
+                    {
+                        "blur_score": round(blur_norm, 3),
+                        "tamper_score": round(tamper_guess, 3),
+                        "quality_label": ql,
+                        "analysis_method": "video_frames_yolo",
+                        "detected_objects": objs,
+                        "duration_seconds": int(dur) if dur is not None else None,
+                        "volo_confidence": 0.72 if objs else 0.5,
+                    }
+                )
+
+        elif ft == "audio":
+            sfx = _evidence_suffix(filename, ".m4a")
+            am = volo_scorer.analyze_audio_bytes(file_bytes, suffix=sfx)
+            analysis["advanced_analysis"]["audio"] = am
+            if am.get("error"):
+                analysis.update(
+                    {
+                        "tamper_score": 40.0,
+                        "quality_label": "fair",
+                        "analysis_method": "audio_error",
+                        "analysis_error": am.get("error"),
+                        "volo_confidence": 0.35,
+                    }
+                )
+            else:
+                transcript = (am.get("transcript") or "").strip()
+                dur = am.get("duration_seconds")
+                tamper_guess = 12.0 if transcript else 22.0
+                if dur and dur > 60:
+                    tamper_guess += 5
+                ql = "high" if transcript and len(transcript) > 40 else ("medium" if transcript else "fair")
+                analysis.update(
+                    {
+                        "tamper_score": round(tamper_guess, 3),
+                        "quality_label": ql,
+                        "analysis_method": "audio_ffprobe_whisper_optional",
+                        "transcript": transcript or None,
+                        "duration_seconds": int(dur) if dur is not None else None,
+                        "volo_confidence": 0.8 if transcript else 0.55,
+                    }
+                )
+
         else:
-            # Unknown file type
-            analysis.update({
-                'blur_score': None,
-                'tamper_score': 50.0,
-                'quality_label': "low",
-                'analysis_method': 'unknown'
-            })
-            
+            analysis.update(
+                {
+                    "blur_score": None,
+                    "tamper_score": 50.0,
+                    "quality_label": "low",
+                    "analysis_method": "unknown",
+                    "volo_confidence": 0.4,
+                }
+            )
+
     except Exception as e:
-        logger.error(f"Evidence analysis failed: {e}")
-        analysis.update({
-            'blur_score': None,
-            'tamper_score': 50.0,
-            'quality_label': "poor",
-            'analysis_error': str(e)
-        })
-    
+        logger.error("Evidence analysis failed: %s", e)
+        analysis.update(
+            {
+                "blur_score": None,
+                "tamper_score": 50.0,
+                "quality_label": "poor",
+                "analysis_error": str(e),
+                "analysis_method": analysis.get("analysis_method", "basic_cv") + "_failed",
+                "volo_confidence": 0.3,
+            }
+        )
+
     return analysis
 
 
@@ -2578,7 +2696,11 @@ cloudinary.config(
     secure=True,
 )
 
-_CLOUDINARY_ENABLED = bool(settings.cloudinary_cloud_name)
+_CLOUDINARY_ENABLED = bool(
+    settings.cloudinary_cloud_name
+    and settings.cloudinary_api_key
+    and settings.cloudinary_api_secret
+)
 
 
 def _extract_exif_metadata(image_bytes: bytes) -> tuple[Optional[float], Optional[float], Optional[datetime]]:
@@ -2781,16 +2903,20 @@ def create_report(
         village_id = get_village_location_id(db, lat_f, lon_f)
         village_info = get_village_location_info(db, lat_f, lon_f)
 
-        if not village_id or not village_info:
-            out_of_boundary = True
-            out_of_boundary_reason = (
-                f"out_of_musanze_boundary: ({lat_f:.4f}, {lon_f:.4f})"
-            )
+        # --- TEST ONLY: Musanze boundary rejection disabled (uncomment for production). ---
+        # if not village_id or not village_info:
+        #     out_of_boundary = True
+        #     out_of_boundary_reason = (
+        #         f"out_of_musanze_boundary: ({lat_f:.4f}, {lon_f:.4f})"
+        #     )
 
-        district_name = (village_info.get("district_name") or "").strip().lower()
-        if district_name and district_name != "musanze":
-            out_of_boundary = True
-            out_of_boundary_reason = f"out_of_musanze_boundary: district={district_name}"
+        district_name = ""
+        if village_info:
+            district_name = (village_info.get("district_name") or "").strip().lower()
+        # --- TEST ONLY: non-Musanze district rejection disabled (uncomment for production). ---
+        # if district_name and district_name != "musanze":
+        #     out_of_boundary = True
+        #     out_of_boundary_reason = f"out_of_musanze_boundary: district={district_name}"
     except (ValueError, TypeError) as e:
         raise HTTPException(status_code=400, detail=f"Invalid coordinates: {e}")
     except Exception as e:
@@ -2951,21 +3077,22 @@ def create_report(
         )
         db.add(evidence)
 
-    if out_of_boundary:
-        report.rule_status = "rejected"
-        report.status = "rejected"
-        report.verification_status = "rejected"
-        report.is_flagged = True
-        report.flag_reason = out_of_boundary_reason or "out_of_musanze_boundary"
+    # --- TEST ONLY: reject persist step disabled — restore `elif not evidence_metadata_list` when re-enabling boundary checks.
+    # if out_of_boundary:
+    #     report.rule_status = "rejected"
+    #     report.status = "rejected"
+    #     report.verification_status = "rejected"
+    #     report.is_flagged = True
+    #     report.flag_reason = out_of_boundary_reason or "out_of_musanze_boundary"
+    #
+    #     fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+    #     fv["boundary_status"] = "out_of_musanze"
+    #     fv["excluded_from_clustering"] = True
+    #     fv["boundary_reason"] = report.flag_reason
+    #     report.feature_vector = _json_safe(fv)
 
-        fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
-        fv["boundary_status"] = "out_of_musanze"
-        fv["excluded_from_clustering"] = True
-        fv["boundary_reason"] = report.flag_reason
-        report.feature_vector = _json_safe(fv)
-    
     # Text-only analysis for reports without evidence
-    elif not evidence_metadata_list:
+    if not evidence_metadata_list:
         # This report has no evidence files - perform text-only analysis + type-vs-description checks
         try:
             incident_type_row = (
@@ -3161,6 +3288,10 @@ def create_report(
         ai_label = getattr(ml_prediction_tmp, "prediction_label", None)
         ai_trust_score, ai_label = _rule_adjusted_trust_label(report, ai_trust_score, ai_label)
         _persist_adjusted_ml_prediction(db, ml_prediction_tmp, ai_trust_score, ai_label)
+        try:
+            update_device_ml_aggregates(db, device, window=30)
+        except Exception:
+            pass
         report.ai_verification_reason = _compose_ai_verification_reason(
             verification_status=report.verification_status,
             rule_status=report.rule_status,
@@ -3201,12 +3332,6 @@ def create_report(
             evidence_file_count=len(evidence_validations),
         )
         _persist_ai_analysis_snapshot(report, snapshot)
-
-        # Device aggregates (best-effort; doesn't block submission).
-        try:
-            update_device_ml_aggregates(db, device, window=30)
-        except Exception:
-            pass
     except Exception as e:
         logger.warning(f"AI-enhanced rules pipeline failed for report {report.report_id}: {e}")
 
@@ -4361,6 +4486,8 @@ async def upload_evidence(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
+    device: Optional[Device] = report.device
+
     device_id_uuid: Optional[UUID] = None
     if device_id is not None and device_id.strip():
         try:
@@ -4482,10 +4609,18 @@ async def upload_evidence(
     # Cloudinary upload if configured, otherwise save locally
     print(f"Cloudinary enabled: {_CLOUDINARY_ENABLED}")  # Debug log
     print(f"Cloudinary config - cloud_name: {settings.cloudinary_cloud_name}, api_key configured: {bool(settings.cloudinary_api_key)}")  # Debug log
+    cloudinary_public_id: Optional[str] = None
+    cloudinary_secure_url: Optional[str] = None
+
     if _CLOUDINARY_ENABLED:
-        upload_opts = {"folder": "trustbond/evidence"}
-        # Cloudinary uses resource_type="video" for both video and audio
-        if not is_image:
+        # Match test_cloudinary.py: folder + explicit resource_type so assets land predictably.
+        upload_opts: Dict[str, Any] = {"folder": "trustbond/evidence"}
+        if is_image:
+            upload_opts["resource_type"] = "image"
+        elif is_audio:
+            # Cloudinary stores many audio codecs under the video resource pipeline.
+            upload_opts["resource_type"] = "video"
+        else:
             upload_opts["resource_type"] = "video"
 
         try:
@@ -4496,13 +4631,15 @@ async def upload_evidence(
 
             upload_result = cloudinary.uploader.upload(file_obj, **upload_opts)
             file_url = upload_result.get("secure_url") or upload_result.get("url")
+            cloudinary_public_id = upload_result.get("public_id")
+            cloudinary_secure_url = file_url
         except Exception as e:
             # In production mode with Cloudinary configured, we do NOT write to local disk.
             # The mobile client may queue retries locally and resend later.
             print(f"[Cloudinary] upload error for report {report_id}: {e}")
             raise HTTPException(status_code=500, detail=f"Cloudinary upload failed: {e}")
     else:
-        # Dev mode without Cloudinary configured: save to local disk
+        # Dev mode without full Cloudinary credentials: save to local disk (see test_cloudinary.py for upload smoke test).
         safe_ext = file_ext or "bin"
         file_name = f"{uuid4()}.{safe_ext}"
         file_path = os.path.join(UPLOAD_DIR, file_name)
@@ -4532,7 +4669,7 @@ async def upload_evidence(
     # Perform AI analysis on evidence
     ai_analysis = None
     try:
-        ai_analysis = analyze_evidence_file(content, file_type)
+        ai_analysis = analyze_evidence_file(content, file_type, filename=file.filename)
         print(f"AI Analysis completed for evidence: {ai_analysis}")
     except Exception as e:
         print(f"AI Analysis failed for evidence: {e}")
@@ -4549,6 +4686,8 @@ async def upload_evidence(
         report_id=report.report_id,
         file_url=file_url,
         file_type=file_type,
+        file_size=len(content),
+        duration=ai_analysis.get("duration_seconds"),
         perceptual_hash=content_hash,
         media_latitude=final_lat,
         media_longitude=final_lon,
@@ -4556,8 +4695,10 @@ async def upload_evidence(
         is_live_capture=is_live_capture,
         blur_score=ai_analysis.get('blur_score'),
         tamper_score=ai_analysis.get('tamper_score'),
-        quality_label=ai_analysis.get('quality_label'),
+        quality_label=_coerce_evidence_quality(ai_analysis.get('quality_label')),
         ai_checked_at=ai_analysis.get('ai_checked_at'),
+        cloudinary_public_id=cloudinary_public_id,
+        cloudinary_url=cloudinary_secure_url,
     )
     db.add(evidence)
     db.commit()
@@ -4573,12 +4714,18 @@ async def upload_evidence(
             if isinstance(fv_existing.get("evidence_validations"), list):
                 current_validations = list(fv_existing.get("evidence_validations") or [])
 
-            # Evidence analysis removed - using unified validation only
+            transcript_excerpt = (ai_analysis.get("transcript") or "").strip()
             semantic_validation = {
                 "valid": True,
-                "confidence": 0.7,
+                "confidence": float(ai_analysis.get("volo_confidence") or 0.65),
                 "threshold_used": 0.6,
-                "issues": []
+                "issues": [],
+                "analysis_summary": {
+                    "media_type": file_type,
+                    "detected_objects": ai_analysis.get("detected_objects") or [],
+                    "extracted_text": transcript_excerpt[:500] if transcript_excerpt else None,
+                },
+                "advanced_analysis": ai_analysis.get("advanced_analysis") or {},
             }
 
             if semantic_validation:
@@ -4694,6 +4841,10 @@ async def upload_evidence(
         ai_label = getattr(ml_prediction, "prediction_label", None) if ml_prediction else None
         ai_trust_score, ai_label = _rule_adjusted_trust_label(report_after, ai_trust_score, ai_label)
         _persist_adjusted_ml_prediction(db, ml_prediction, ai_trust_score, ai_label)
+        try:
+            update_device_ml_aggregates(db, device, window=30)
+        except Exception:
+            pass
         report_after.ai_verification_reason = _compose_ai_verification_reason(
             verification_status=report_after.verification_status,
             rule_status=report_after.rule_status,
