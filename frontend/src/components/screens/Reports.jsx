@@ -400,6 +400,9 @@ const Reports = ({
             <tbody>
               {items.map((r, index) => {
                 const score = (() => {
+                  if (r.trust_score !== null && r.trust_score !== undefined) {
+                    return parseFloat(r.trust_score) || 0;
+                  }
                   if (r.ml_predictions && r.ml_predictions.length > 0) {
                     // Get the latest ML prediction
                     const latestPrediction = r.ml_predictions.reduce((latest, pred) => {

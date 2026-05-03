@@ -871,6 +871,43 @@ def _rule_adjusted_trust_label(
     return score, label
 
 
+def _persist_adjusted_ml_prediction(
+    db: Session,
+    ml_prediction: Optional[Any],
+    adjusted_trust_score: Optional[float],
+    adjusted_label: Optional[str],
+) -> None:
+    """Persist adjusted trust/label so API and DB stay aligned."""
+    if ml_prediction is None:
+        return
+    changed = False
+    if adjusted_trust_score is not None:
+        try:
+            new_score = float(adjusted_trust_score)
+            old_score = (
+                float(ml_prediction.trust_score)
+                if getattr(ml_prediction, "trust_score", None) is not None
+                else None
+            )
+            if old_score is None or abs(old_score - new_score) > 1e-6:
+                ml_prediction.trust_score = new_score
+                changed = True
+        except (TypeError, ValueError):
+            pass
+    if adjusted_label:
+        new_label = str(adjusted_label).strip().lower()
+        old_label = (
+            str(getattr(ml_prediction, "prediction_label", "")).strip().lower()
+            if getattr(ml_prediction, "prediction_label", None) is not None
+            else ""
+        )
+        if new_label and new_label != old_label:
+            ml_prediction.prediction_label = new_label
+            changed = True
+    if changed:
+        db.add(ml_prediction)
+
+
 def _compute_threshold_scorecard(
     report: Report,
     *,
@@ -2754,6 +2791,7 @@ def create_report(
         )
         ai_label = getattr(ml_prediction_tmp, "prediction_label", None)
         ai_trust_score, ai_label = _rule_adjusted_trust_label(report, ai_trust_score, ai_label)
+        _persist_adjusted_ml_prediction(db, ml_prediction_tmp, ai_trust_score, ai_label)
         report.ai_verification_reason = _compose_ai_verification_reason(
             verification_status=report.verification_status,
             rule_status=report.rule_status,
@@ -3242,6 +3280,7 @@ def add_review(
     )
     ai_label = getattr(ml_prediction_tmp, "prediction_label", None)
     ai_trust_score, ai_label = _rule_adjusted_trust_label(report, ai_trust_score, ai_label)
+    _persist_adjusted_ml_prediction(db, ml_prediction_tmp, ai_trust_score, ai_label)
     report.ai_verification_reason = _compose_ai_verification_reason(
         verification_status=report.verification_status,
         rule_status=report.rule_status,
@@ -4217,6 +4256,7 @@ async def upload_evidence(
         )
         ai_label = getattr(ml_prediction, "prediction_label", None) if ml_prediction else None
         ai_trust_score, ai_label = _rule_adjusted_trust_label(report_after, ai_trust_score, ai_label)
+        _persist_adjusted_ml_prediction(db, ml_prediction, ai_trust_score, ai_label)
         report_after.ai_verification_reason = _compose_ai_verification_reason(
             verification_status=report_after.verification_status,
             rule_status=report_after.rule_status,
@@ -5678,8 +5718,8 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         village_name=report.village_location.location_name if report.village_location else None,
         # Add ML predictions array for frontend
         ml_predictions=[{
-            'trust_score': float(ml_prediction.trust_score) if ml_prediction and ml_prediction.trust_score else None,
-            'prediction_label': ml_prediction.prediction_label if ml_prediction else None,
+            'trust_score': float(trust_score) if trust_score is not None else None,
+            'prediction_label': ml_prediction_label if ml_prediction_label else (ml_prediction.prediction_label if ml_prediction else None),
             'evaluated_at': ml_prediction.evaluated_at.isoformat() if ml_prediction and ml_prediction.evaluated_at else None
         }] if ml_prediction else [],
     )

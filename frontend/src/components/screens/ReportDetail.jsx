@@ -840,7 +840,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
   const deviceShort = report.device_id
     ? String(report.device_id).slice(0, 4)
     : "DEV";
-  const trustScore = report.trust_score ?? 0;
+  const trustScore = Number(report.trust_score ?? mlPrediction?.trust_score ?? 0);
   const trustFactors = report.trust_factors || {};
   const communityVotes = report.community_votes || { real: 0, false: 0, unknown: 0 };
   const realVotes = Number(communityVotes.real || 0);
@@ -2212,9 +2212,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                     color: "var(--success)",
                   }}
                 >
-                  {mlPrediction
-                    ? Math.round(mlPrediction.trust_score ?? 0)
-                    : "—"}
+                  {Math.round(trustScore || 0)}
                 </span>
               </div>
               <div className="prog-bar" style={{ marginBottom: "8px" }}>
@@ -2222,12 +2220,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   className="prog-fill"
                   style={{
                     width: `${
-                      mlPrediction
-                        ? Math.max(
-                            0,
-                            Math.min(100, mlPrediction.trust_score ?? 0),
-                          )
-                        : 0
+                      Math.max(0, Math.min(100, trustScore || 0))
                     }%`,
                     background: "var(--success)",
                   }}
