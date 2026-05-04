@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -25,6 +26,54 @@ META_PATH = ROOT / "TrustBond.json"
 logger = logging.getLogger(__name__)
 
 _MODEL = None
+
+
+def _device_live_report_counts(db: Session, device_id: Any) -> tuple[int, int, int]:
+    """
+    Return (total, verified_count, negative_outcome_count) from persisted reports.
+    Same semantics as the police device registry (verified vs rejected/flagged).
+    """
+    rows = (
+        db.query(Report.rule_status, Report.status, Report.verification_status)
+        .filter(Report.device_id == device_id)
+        .all()
+    )
+    total = len(rows)
+    verified = 0
+    negative = 0
+    for rule_status, status, verification_status in rows:
+        rs = str(rule_status or "").strip().lower()
+        st = str(status or "").strip().lower()
+        vs = str(verification_status or "").strip().lower()
+        if (
+            rs in {"confirmed", "verified", "trusted", "passed"}
+            or st in {"verified"}
+            or vs in {"verified"}
+        ):
+            verified += 1
+        if (
+            rs in {"flagged", "rejected", "false_report", "failed"}
+            or st in {"flagged", "rejected"}
+            or vs in {"rejected"}
+        ):
+            negative += 1
+    return total, verified, negative
+
+
+def _location_diversity_component(total_recent: int, distinct_villages: int) -> float:
+    """
+    Single stable village should not tank trust (honest local reporters).
+    Penalize only extreme scatter vs window size.
+    """
+    if total_recent <= 0:
+        return 0.5
+    if distinct_villages <= 1:
+        return 0.86
+    ratio = distinct_villages / float(total_recent)
+    capped = min(1.0, ratio * 4.0)
+    return float(max(0.58, min(1.0, 0.62 + 0.38 * math.sqrt(capped))))
+
+
 _META: Optional[Dict[str, Any]] = None
 
 def _json_safe(value: Any) -> Any:
@@ -189,7 +238,8 @@ def compute_trust_score(
     history_component = ((ml_avg if ml_avg is not None else 50.0) / 100.0)
     history_component = max(0.0, min(1.0, history_component))
     conf_component = max(0.0, min(1.0, confirmation_rate))
-    spam_component = 1.0 - max(0.0, min(1.0, spam_signal / 10.0))
+    # Softer than /10 (which zeroed the whole spam bucket after few flags).
+    spam_component = 1.0 - max(0.0, min(1.0, spam_signal / 22.0))
     diversity_component = max(0.0, min(1.0, location_diversity))
     location_quality_component = max(0.0, min(1.0, location_score))
 
@@ -710,23 +760,24 @@ def update_device_ml_aggregates(
         fake_rate = (dist["fake"] / total_preds) if total_preds else 0.0
         suspicious_rate = ((dist["suspicious"] + dist["uncertain"]) / total_preds) if total_preds else 0.0  # FIXED: Include uncertain
 
-        # Behavioral score: confirmation rate - spam penalty (0..100)
-        total_reports = float(getattr(device, "total_reports", 0) or 0)
-        trusted_reports = float(getattr(device, "trusted_reports", 0) or 0)
+        # Behavioral inputs: derive from actual Report rows (Device.* counters are often stale).
+        total_live, verified_live, negative_live = _device_live_report_counts(db, device.device_id)
+        total_reports = float(total_live)
+        trusted_reports = float(verified_live)
         spam_flags = float(getattr(device, "spam_flags", 0) or 0)
-        flagged_reports = float(getattr(device, "flagged_reports", 0) or 0)
+        flagged_reports = float(negative_live)
+        pending_n = max(0, total_live - verified_live - negative_live)
 
-        # Fix confirmation rate calculation - don't penalize new devices with pending reports
         if total_reports == 0:
-            confirm_rate = 0.5  # Neutral for new devices
+            confirm_rate = 0.5
         elif trusted_reports == 0 and total_reports == 1:
-            # Single report that's still pending - don't penalize heavily
-            confirm_rate = 0.4  # Slightly lower than neutral but not zero
+            confirm_rate = 0.4
         else:
-            confirm_rate = (trusted_reports / total_reports)
-        
+            # Pending / unknown outcomes count half toward neutral so pure backlog is not read as "all bad".
+            confirm_rate = (trusted_reports + 0.5 * float(pending_n)) / total_reports
+
         spam_signal = spam_flags + flagged_reports
-        
+
         # Improved behavior score calculation with recovery mechanisms
         # Base score from confirmation rate, but with floor to prevent death spiral
         base_score = confirm_rate * 100.0
@@ -747,7 +798,7 @@ def update_device_ml_aggregates(
         )
         total_recent = len(recent_reports)
         distinct_villages = len({r[0] for r in recent_reports if r[0] is not None})
-        location_diversity = (distinct_villages / total_recent) if total_recent > 0 else 0.0
+        location_diversity = _location_diversity_component(total_recent, distinct_villages)
         
         # Time-based decay: older negative impacts fade over time
         from datetime import datetime, timezone, timedelta
@@ -763,7 +814,6 @@ def update_device_ml_aggregates(
         # Apply spam penalty but less severe (was 2.5, now 1.5) with time decay
         spam_penalty = (spam_signal * 1.5) * decay_factor
         
-        # Add recovery bonus: new reports get some trust back
         recovery_bonus = min(20.0, total_reports * 0.5) if confirm_rate > 0 else 0.0
         
         # Calculate final behavior score with minimum floor
@@ -816,7 +866,14 @@ def update_device_ml_aggregates(
             blended = current_score - max_decrease_step
 
         blended = max(0.0, min(100.0, blended))
-        
+
+        if hasattr(device, "total_reports"):
+            device.total_reports = int(total_live)
+        if hasattr(device, "trusted_reports"):
+            device.trusted_reports = int(verified_live)
+        if hasattr(device, "flagged_reports"):
+            device.flagged_reports = int(negative_live)
+
         if hasattr(device, "device_trust_score"):
             device.device_trust_score = Decimal(f"{blended:.2f}")
 

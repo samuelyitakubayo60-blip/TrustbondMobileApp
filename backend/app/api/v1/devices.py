@@ -28,6 +28,58 @@ from app.core.village_lookup import get_village_location_info
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 
+def _report_time_sort_key(r: Report) -> datetime:
+    t = r.reported_at or getattr(r, "created_at", None)
+    if t is None:
+        return datetime(1970, 1, 1, tzinfo=timezone.utc)
+    if getattr(t, "tzinfo", None) is None:
+        return t.replace(tzinfo=timezone.utc)
+    return t
+
+
+def _location_consistency_from_reports(device_reports: List[Report]) -> Optional[dict]:
+    """
+    Movement / consistency metrics from submitted report GPS (chronological segments).
+    Mirrors dashboard heuristic: penalize long hops and average segment length.
+    """
+    pts: List[tuple[float, float]] = []
+    for r in sorted(device_reports, key=_report_time_sort_key):
+        lat = _safe_float(getattr(r, "latitude", None))
+        lon = _safe_float(getattr(r, "longitude", None))
+        if lat is None or lon is None:
+            continue
+        pts.append((lat, lon))
+    n = len(pts)
+    if n == 0:
+        return None
+    if n == 1:
+        return {
+            "consistency_score": 100,
+            "movement_radius_km": 0.0,
+            "location_count": 1,
+            "suspicious_jumps": 0,
+            "source": "reports",
+        }
+    total_distance = 0.0
+    max_seg = 0.0
+    suspicious = 0
+    for i in range(1, n):
+        seg = haversine_distance(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1])
+        total_distance += seg
+        max_seg = max(max_seg, seg)
+        if seg > 50.0:
+            suspicious += 1
+    avg = total_distance / (n - 1)
+    score = max(0.0, min(100.0, 100.0 - (avg * 2.0) - (suspicious * 20.0)))
+    return {
+        "consistency_score": int(round(score)),
+        "movement_radius_km": round(max_seg, 2),
+        "location_count": n,
+        "suspicious_jumps": suspicious,
+        "source": "reports",
+    }
+
+
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate distance between two points in kilometers"""
     R = 6371.0
@@ -326,7 +378,9 @@ def list_devices(
 
         hierarchy_parts = [name for name in [sector_name, cell_name, village_name] if name]
         last_location_hierarchy = " > ".join(hierarchy_parts) if hierarchy_parts else None
-        
+
+        loc_metrics = _location_consistency_from_reports(device_reports)
+
         # Get ML data from device metadata and latest predictions
         ml_avg_trust = None
         ml_fake_rate = None
@@ -400,9 +454,8 @@ def list_devices(
                 "last_latitude": last_latitude,
                 "last_longitude": last_longitude,
                 "last_location_hierarchy": last_location_hierarchy,
-                # Add location consistency analysis data
-                "location_consistency": None,
-                "movement_radius_km": None,
+                "location_consistency": loc_metrics,
+                "movement_radius_km": loc_metrics["movement_radius_km"] if loc_metrics else None,
             }
         )
     since_30d = datetime.now(timezone.utc) - timedelta(days=30)

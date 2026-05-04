@@ -851,8 +851,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
   const assignments = report.assignments || [];
   const hasCase = report.case_id; // Assuming case_id is available
   const locationHierarchy = [
-    report.incident_sector_name,
-    report.incident_cell_name,
+    report.incident_sector_name || report.sector_name,
+    report.incident_cell_name || report.cell_name,
     report.incident_village_name || report.village_name,
   ]
     .filter(Boolean)
@@ -2419,7 +2419,9 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                           {Object.entries(trustFactors.factors).map(([key, value]) => {
                             const pts = Number(value?.points_awarded ?? 0);
-                            const maxPts = Number(value?.max_points ?? 0);
+                            const maxPts = Number(
+                              value?.max_points ?? value?.weight ?? 0,
+                            );
                             return (
                               <div
                                 key={key}

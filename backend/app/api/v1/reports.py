@@ -1265,6 +1265,28 @@ def _persist_adjusted_ml_prediction(
     db.add(ml_prediction)
 
 
+def _admin_hierarchy_from_village_location(village_loc: Optional[Any]) -> tuple:
+    """
+    sector_name, cell_name, village_name from a Location row (village) using ORM parents.
+    Location model uses location_name (not village_name).
+    """
+    if not village_loc:
+        return None, None, None
+    village_name = getattr(village_loc, "location_name", None)
+    cell_name = None
+    sector_name = None
+    parent = getattr(village_loc, "parent", None)
+    if parent:
+        if getattr(parent, "location_type", None) == "cell":
+            cell_name = getattr(parent, "location_name", None)
+            gp = getattr(parent, "parent", None)
+            if gp and getattr(gp, "location_type", None) == "sector":
+                sector_name = getattr(gp, "location_name", None)
+        elif getattr(parent, "location_type", None) == "sector":
+            sector_name = getattr(parent, "location_name", None)
+    return sector_name, cell_name, village_name
+
+
 def _compute_threshold_scorecard(
     report: Report,
     *,
@@ -1312,6 +1334,9 @@ def _compute_threshold_scorecard(
 
     # Prefer unified model aggregation when available so no single model concludes on its own.
     if isinstance(unified_validation, dict):
+        from app.core.trust_thresholds import trust_thresholds
+
+        model_cap = float(trust_thresholds.config.MAX_CONTRIBUTIONS_PER_MODEL)
         model_breakdown = (
             unified_validation.get("model_breakdown")
             if isinstance(unified_validation.get("model_breakdown"), dict)
@@ -1333,8 +1358,16 @@ def _compute_threshold_scorecard(
                 continue
             contribution = float(model_data.get("contribution") or 0.0)
             raw_score = float(model_data.get("raw_score") or 0.0)
+            max_pts = model_cap
+            if model_name == "base":
+                max_pts = max(
+                    contribution,
+                    raw_score,
+                    10.0,
+                )
             factors[factor_name] = {
                 "weight": round(contribution, 2),
+                "max_points": round(max_pts, 2),
                 "signal": round(clamp01(raw_score / 100.0), 4),
                 "points_awarded": round(contribution, 2),
                 "model": model_name,
@@ -1342,6 +1375,7 @@ def _compute_threshold_scorecard(
             }
         factors["community_signal"] = {
             "weight": 0.0,
+            "max_points": 10.0,
             "signal": round(community_signal, 4),
             "points_awarded": 0.0,
             "model": "community",
@@ -1472,6 +1506,7 @@ def _compute_threshold_scorecard(
         total += points
         factors[name] = {
             "weight": weight,
+            "max_points": weight,
             "signal": round(signal, 4),
             "points_awarded": points,
         }
@@ -3978,7 +4013,9 @@ def get_report(
         .options(
             joinedload(Report.device),
             joinedload(Report.incident_type),
-            joinedload(Report.village_location),
+            joinedload(Report.village_location)
+            .joinedload(Location.parent)
+            .joinedload(Location.parent),
             joinedload(Report.evidence_files),
             joinedload(Report.police_reviews).joinedload(PoliceReview.police_user),
             joinedload(Report.assignments).joinedload(ReportAssignment.police_user).joinedload(PoliceUser.station),
@@ -6053,8 +6090,8 @@ def _build_report_detail_response(report: Report, db: Session) -> ReportDetailRe
     total_reports = getattr(report.device, "total_reports", None) if report.device else None
     trusted_reports = getattr(report.device, "trusted_reports", None) if report.device else None
 
-    # Get incident location info
-    incident_location_info = {}
+    # Get incident location info (requires db session — signature is get_village_location_info(db, lat, lon))
+    incident_location_info: Optional[Dict[str, Any]] = None
     incident_source = "reporter_only"
     if report.evidence_files and len(report.evidence_files) > 0:
         # Check if any evidence has location data
@@ -6064,22 +6101,29 @@ def _build_report_detail_response(report: Report, db: Session) -> ReportDetailRe
             # Use evidence location for incident location
             ef = evidence_with_location[0]
             try:
-                from app.core.village_lookup import get_village_location_info
-                incident_location_info = get_village_location_info(float(ef.media_latitude), float(ef.media_longitude))
+                incident_location_info = get_village_location_info(
+                    db, float(ef.media_latitude), float(ef.media_longitude)
+                )
             except Exception:
-                pass
+                incident_location_info = None
         else:
             incident_source = "reporter_only"
     else:
         incident_source = "reporter_only"
-    
-    # If no evidence location, use report location
+
+    # If no evidence location, use report GPS
     if not incident_location_info and report.latitude and report.longitude:
         try:
-            from app.core.village_lookup import get_village_location_info
-            incident_location_info = get_village_location_info(float(report.latitude), float(report.longitude))
+            incident_location_info = get_village_location_info(
+                db, float(report.latitude), float(report.longitude)
+            )
         except Exception:
-            pass
+            incident_location_info = None
+
+    ili = incident_location_info if isinstance(incident_location_info, dict) else {}
+    sec_rel, cell_rel, vill_rel = _admin_hierarchy_from_village_location(
+        getattr(report, "village_location", None)
+    )
 
     # Build assignments list
     assignment_list = []
@@ -6136,9 +6180,9 @@ def _build_report_detail_response(report: Report, db: Session) -> ReportDetailRe
         status=report.status,
         verification_status=report.verification_status,
         village_location_id=report.village_location_id,
-        village_name=getattr(report.village_location, "village_name", None) if report.village_location else None,
-        cell_name=getattr(getattr(report.village_location, "parent", None), "village_name", None) if report.village_location and report.village_location.parent else None,
-        sector_name=getattr(getattr(getattr(report.village_location, "parent", None), "parent", None), "village_name", None) if report.village_location and report.village_location.parent and report.village_location.parent.parent else None,
+        village_name=vill_rel or ili.get("village_name"),
+        cell_name=cell_rel or ili.get("cell_name"),
+        sector_name=sec_rel or ili.get("sector_name"),
         incident_type_name=report.incident_type.type_name if report.incident_type else None,
         trust_score=float(trust_score) if trust_score is not None else None,
         trust_factors=trust_factors,
@@ -6155,9 +6199,9 @@ def _build_report_detail_response(report: Report, db: Session) -> ReportDetailRe
         incident_latitude=float(report.latitude) if report.latitude is not None else None,
         incident_longitude=float(report.longitude) if report.longitude is not None else None,
         incident_location_source=incident_source,
-        incident_village_name=incident_location_info.get("village_name") if incident_location_info else None,
-        incident_cell_name=incident_location_info.get("cell_name") if incident_location_info else None,
-        incident_sector_name=incident_location_info.get("sector_name") if incident_location_info else None,
+        incident_village_name=ili.get("village_name") or vill_rel,
+        incident_cell_name=ili.get("cell_name") or cell_rel,
+        incident_sector_name=ili.get("sector_name") or sec_rel,
         evidence_files=[
             EvidenceFileResponse(
                 evidence_id=ef.evidence_id,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import api from '../../api/client';
 
 // Helper functions for location analysis
@@ -11,6 +11,28 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
     Math.sin(dLon/2) * Math.sin(dLon/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c;
+};
+
+/** Prefer API-computed metrics (from report GPS); fallback to device metadata history. */
+const resolveLocationAnalysis = (device) => {
+  const api = device?.location_consistency;
+  if (api && typeof api.consistency_score === 'number') {
+    return {
+      consistency_score: api.consistency_score,
+      movement_radius_km:
+        typeof api.movement_radius_km === 'number'
+          ? api.movement_radius_km
+          : Number(device?.movement_radius_km ?? 0),
+      location_count: api.location_count ?? 0,
+      suspicious_jumps: api.suspicious_jumps ?? 0,
+      avg_gps_accuracy:
+        device?.metadata_json?.last_gps_accuracy_m ??
+        device?.metadata?.last_gps_accuracy_m ??
+        null,
+    };
+  }
+  const metadata = device?.metadata_json || device?.metadata || {};
+  return analyzeLocationConsistency(metadata);
 };
 
 const analyzeLocationConsistency = (metadata) => {
@@ -124,6 +146,7 @@ const resolveLastLocation = (device) => {
 
 const DeviceTrust = ({ wsRefreshKey }) => {
   const [devices, setDevices] = useState([]);
+  const [deviceTotal, setDeviceTotal] = useState(0);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [trustLevel, setTrustLevel] = useState('all'); // all | high | medium | low
@@ -155,6 +178,9 @@ const DeviceTrust = ({ wsRefreshKey }) => {
       .then((res) => {
         if (!mounted) return;
         setDevices(res.items || []);
+        setDeviceTotal(
+          typeof res.total === 'number' ? res.total : (res.items || []).length,
+        );
         setStats(res.stats || null);
         setLoading(false);
       })
@@ -184,6 +210,23 @@ const DeviceTrust = ({ wsRefreshKey }) => {
   const medium = stats?.medium_trust ?? 0;
   const low = stats?.low_trust ?? 0;
   const banned = stats?.banned ?? 0;
+
+  const filteredDevices = useMemo(() => {
+    return devices.filter((d) => {
+      if (sectorFilter !== 'all') {
+        const sid = Number(sectorFilter);
+        if (!d.sector_location_id || d.sector_location_id !== sid) {
+          return false;
+        }
+      }
+      if (!search.trim()) return true;
+      const needle = search.trim().toLowerCase();
+      return (
+        (d.device_hash || '').toLowerCase().includes(needle) ||
+        (d.device_hash_short || '').toLowerCase().includes(needle)
+      );
+    });
+  }, [devices, sectorFilter, search]);
 
   const openProfile = async (deviceId) => {
     const dev = devices.find((d) => d.device_id === deviceId);
@@ -949,23 +992,7 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                 </tr>
               </thead>
               <tbody>
-                {[...devices]
-                  .filter((d) => {
-                    if (sectorFilter !== 'all') {
-                      const sid = Number(sectorFilter);
-                      if (!d.sector_location_id || d.sector_location_id !== sid) {
-                        return false;
-                      }
-                    }
-                    if (!search.trim()) return true;
-                    const needle = search.trim().toLowerCase();
-                    return (
-                      (d.device_hash || '').toLowerCase().includes(needle) ||
-                      (d.device_hash_short || '')
-                        .toLowerCase()
-                        .includes(needle)
-                    );
-                  })
+                {[...filteredDevices]
                   .sort((a, b) => {
                     const dir = sortDir === 'asc' ? 1 : -1;
                     const va = a[sortField];
@@ -1007,8 +1034,7 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                     const busy = Boolean(d._banBusy);
 
                     // Analyze location data
-                    const metadata = d.metadata_json || d.metadata || {};
-                    const locationAnalysis = analyzeLocationConsistency(metadata);
+                    const locationAnalysis = resolveLocationAnalysis(d);
                     const locationView = resolveLastLocation(d);
                     const locationScoreBadge = locationAnalysis.consistency_score === null
                       ? 'b-gray'
@@ -1235,8 +1261,7 @@ const DeviceTrust = ({ wsRefreshKey }) => {
             }}
           >
             <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-              Showing {devices.length} of{' '}
-              {stats?.active_30d ?? devices.length} devices
+              Showing {filteredDevices.length} visible · {deviceTotal} total in registry
             </div>
             <div className="pagination">
               <div className="page-btn">‹</div>
