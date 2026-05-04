@@ -593,7 +593,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     }
     final autoActive = validated && !automatedScreeningDone;
 
-    // Officer confirm/reject sets verified_by (and verified_at); older API rows may omit verified_by.
+    // Reporter API omits verified_by; use verified_at for “police review completed”.
     final policeHumanComplete =
         r.verifiedBy != null || r.verifiedAt != null;
     final closureWithoutPolice = terminalRejected && !policeHumanComplete;

@@ -3662,7 +3662,7 @@ def create_report(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to save report: {e}")
 
-    return _build_report_detail_response(report, db)
+    return _build_report_detail_response(report, db, for_police_viewer=False)
 
 
 @router.get("/", response_model=ReportListResponse)
@@ -4341,7 +4341,7 @@ def get_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     
-    return _build_report_detail_response(report, db)
+    return _build_report_detail_response(report, db, for_police_viewer=True)
 
 
 @router.get("/{report_id}/reviews", response_model=List[ReviewResponse])
@@ -6387,8 +6387,18 @@ def _automatic_incident_consolidation(db: Session, report: Report):
         # Don't fail the report creation if case creation fails
 
 
-def _build_report_detail_response(report: Report, db: Session) -> ReportDetailResponse:
-    """Build a ReportDetailResponse from a Report object."""
+def _build_report_detail_response(
+    report: Report,
+    db: Session,
+    *,
+    for_police_viewer: bool = False,
+) -> ReportDetailResponse:
+    """Build a ReportDetailResponse from a Report object.
+
+    When ``for_police_viewer`` is False (e.g. mobile submit response), strip fields that could
+    identify officers (``verified_by``, reviewer names, assignment officer PII) so anonymous
+    reporters cannot infer police identity from the payload.
+    """
     # Get ML prediction
     ml_prediction = resolve_ml_prediction_for_report(report)
     ml_trust_numeric = (
@@ -6464,42 +6474,55 @@ def _build_report_detail_response(report: Report, db: Session) -> ReportDetailRe
         getattr(report, "village_location", None)
     )
 
-    # Build assignments list
+    # Build assignments list (strip officer-identifying fields for reporter-facing payloads)
     assignment_list = []
-    if hasattr(report, 'assignments') and report.assignments:
+    if hasattr(report, "assignments") and report.assignments:
         for assignment in report.assignments:
-            assignment_list.append(AssignmentResponse(
-                assignment_id=assignment.assignment_id,
-                report_id=assignment.report_id,
-                police_user_id=assignment.police_user_id,
-                assigned_at=assignment.assigned_at,
-                assigned_by=assignment.assigned_by,
-                status=assignment.status,
-                notes=assignment.notes,
-                officer_name=getattr(assignment.police_user, 'full_name', None) if assignment.police_user else None,
-                officer_badge=getattr(assignment.police_user, 'badge_number', None) if assignment.police_user else None,
-                station_name=getattr(getattr(assignment.police_user, 'station', None), 'station_name', None) if assignment.police_user else None,
-            ))
+            if for_police_viewer and assignment.police_user:
+                pu = assignment.police_user
+                fn = (getattr(pu, "first_name", None) or "").strip()
+                ln = (getattr(pu, "last_name", None) or "").strip()
+                full = f"{fn} {ln}".strip()
+                off_name = full or getattr(pu, "badge_number", None)
+                pid = assignment.police_user_id
+            else:
+                off_name = None
+                pid = 0
+            assignment_list.append(
+                AssignmentResponse(
+                    assignment_id=assignment.assignment_id,
+                    report_id=assignment.report_id,
+                    police_user_id=pid,
+                    status=assignment.status,
+                    priority=assignment.priority,
+                    assignment_note=assignment.assignment_note,
+                    assigned_at=assignment.assigned_at,
+                    completed_at=assignment.completed_at,
+                    officer_name=off_name,
+                )
+            )
 
-    # Build reviews list
+    # Build reviews list (no reviewer identity for reporter-facing payloads)
     review_list = []
     if hasattr(report, 'police_reviews') and report.police_reviews:
         for review in report.police_reviews:
             reviewer_name = None
-            if review.police_user:
+            if for_police_viewer and review.police_user:
                 first_name = (getattr(review.police_user, "first_name", None) or "").strip()
                 last_name = (getattr(review.police_user, "last_name", None) or "").strip()
                 full_name = f"{first_name} {last_name}".strip()
                 reviewer_name = full_name or getattr(review.police_user, "badge_number", None)
-            review_list.append(ReviewResponse(
-                review_id=review.review_id,
-                report_id=review.report_id,
-                police_user_id=review.police_user_id,
-                decision=review.decision,
-                review_note=review.review_note,
-                reviewed_at=review.reviewed_at,
-                reviewer_name=reviewer_name,
-            ))
+            review_list.append(
+                ReviewResponse(
+                    review_id=review.review_id,
+                    report_id=review.report_id,
+                    police_user_id=review.police_user_id if for_police_viewer else 0,
+                    decision=review.decision,
+                    review_note=review.review_note,
+                    reviewed_at=review.reviewed_at,
+                    reviewer_name=reviewer_name,
+                )
+            )
 
     return ReportDetailResponse(
         report_id=report.report_id,
@@ -6539,7 +6562,9 @@ def _build_report_detail_response(report: Report, db: Session) -> ReportDetailRe
             getattr(report, "ai_verification_reason", None)
         ),
         verified_at=getattr(report, "verified_at", None),
-        verified_by=getattr(report, "verified_by", None),
+        verified_by=(
+            getattr(report, "verified_by", None) if for_police_viewer else None
+        ),
         incident_latitude=float(report.latitude) if report.latitude is not None else None,
         incident_longitude=float(report.longitude) if report.longitude is not None else None,
         incident_location_source=incident_source,
@@ -6579,7 +6604,11 @@ def _build_report_detail_response(report: Report, db: Session) -> ReportDetailRe
 
 
 def _build_report_response(report: Report, db: Session, request_device_id: Optional[str] = None) -> ReportResponse:
-    """Build a ReportResponse from a Report object."""
+    """Build a ReportResponse from a Report object.
+
+    When ``request_device_id`` is set (mobile listing the device's own reports), omit
+    ``verified_by`` so reporters cannot resolve officer identities from numeric ids.
+    """
     # Get ML prediction
     ml_prediction = resolve_ml_prediction_for_report(report)
     trust_score = (
@@ -6683,7 +6712,11 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
             getattr(report, "ai_verification_reason", None)
         ),
         verified_at=getattr(report, "verified_at", None),
-        verified_by=getattr(report, "verified_by", None),
+        verified_by=(
+            getattr(report, "verified_by", None)
+            if request_device_id is None
+            else None
+        ),
         # Add missing required fields
         device_id=str(report.device_id),
         latitude=float(report.latitude) if report.latitude else None,

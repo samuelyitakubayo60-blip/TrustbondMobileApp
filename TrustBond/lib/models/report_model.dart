@@ -47,7 +47,7 @@ class ReportListItem {
 
   final DateTime? verifiedAt;
 
-  /// Police user id when an officer recorded confirm/reject (API: verified_by).
+  /// Police user id (API: verified_by). Not sent to the mobile/reporter API for privacy.
   final int? verifiedBy;
 
   ReportListItem({
@@ -269,7 +269,7 @@ class ReportDetailItem {
 
   final DateTime? verifiedAt;
 
-  /// Police user id when an officer recorded confirm/reject (API: verified_by).
+  /// Police user id (API: verified_by). Not sent to the mobile/reporter API for privacy.
   final int? verifiedBy;
 
   final Map<String, int> communityVotes;
