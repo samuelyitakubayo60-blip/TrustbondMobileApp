@@ -39,7 +39,11 @@ class Settings(BaseSettings):
     llm_base_url: Optional[str] = None
     llm_model: str = "gpt-4o-mini"
     llm_use_local_fallback: bool = True
-    llm_local_model: str = "google/flan-t5-small"
+    # Hugging Face id or path, cached under backend/models/local_narrative/…
+    # Default: open instruct causal LM (~1.5B) — better prose than FLAN-T5-small; expect ~3–4GB disk and ~4–8GB RAM on CPU inference (more if GPU).
+    llm_local_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
+    # New tokens per local generate() call (512–1024 typical for 1.5B instruct; lower if OOM or slow on CPU).
+    llm_local_max_new_tokens: int = 768
     llm_timeout_seconds: int = 12
     llm_max_tokens: int = 420
 

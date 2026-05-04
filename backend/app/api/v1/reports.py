@@ -155,7 +155,8 @@ def _generate_with_local_narrator(prompt: str, *, max_chars: int = 3000) -> Opti
     if generator is None:
         return None
     try:
-        out = generator(prompt, max_new_tokens=280, do_sample=True, temperature=0.5)
+        max_nt = max(128, min(2048, int(getattr(settings, "llm_local_max_new_tokens", 768) or 768)))
+        out = generator(prompt, max_new_tokens=max_nt, do_sample=True, temperature=0.5)
         if isinstance(out, list) and out:
             text = str(out[0].get("generated_text", "")).strip()
             if text:
@@ -530,9 +531,15 @@ def _deterministic_ai_executive_summary(
     elif isinstance(nl.get("description_incident_similarity"), (int, float)):
         try:
             dis = float(nl["description_incident_similarity"])
-            sem_bits.append(
-                f"description vs incident-type similarity sits near {dis:.2f} on a 0–1 semantic scale."
-            )
+            if dis < 0.42:
+                sem_bits.append(
+                    "semantic similarity between the description and the selected incident expectations is weak "
+                    "(possible context mismatch)."
+                )
+            else:
+                sem_bits.append(
+                    f"description vs incident-type similarity sits near {dis:.2f} on a 0–1 semantic scale."
+                )
         except (TypeError, ValueError):
             pass
 
@@ -545,7 +552,7 @@ def _deterministic_ai_executive_summary(
         except (TypeError, ValueError):
             pass
     if label:
-        scoring.append(f"model label `{label}`")
+        scoring.append(f"model label {label}")
     scdig = snapshot.get("scorecard_digest") or {}
     if scdig.get("total_points") is not None:
         try:
@@ -553,7 +560,11 @@ def _deterministic_ai_executive_summary(
         except (TypeError, ValueError):
             pass
     if scdig.get("band"):
-        scoring.append(f"scorecard band `{scdig['band']}`")
+        band_s = str(scdig["band"]).replace("_", " ")
+        scoring.append(f"scorecard band {band_s}")
+    elif fd.get("threshold_band"):
+        band_s = str(fd["threshold_band"]).replace("_", " ")
+        scoring.append(f"scorecard band {band_s}")
 
     uni = snapshot.get("unified_validation_digest") or {}
     if uni.get("aggregated_score") is not None:
@@ -645,7 +656,8 @@ def _deterministic_ai_evidence_summary(snapshot: Dict[str, Any]) -> str:
     """Standalone evidence/context paragraph when narrative models are unavailable."""
     if not isinstance(snapshot, dict):
         return ""
-    incident = (snapshot.get("incident_type") or "this incident category").strip()
+    incident_raw = (snapshot.get("incident_type") or "").strip()
+    incident = " ".join(incident_raw.split()).title() if incident_raw else "Incident"
     desc = _truncate_for_narrative(snapshot.get("reporter_description"), 520)
     tags = snapshot.get("context_tags") or []
     tags_s = ", ".join(str(t).strip() for t in tags[:10] if str(t).strip())
@@ -990,7 +1002,12 @@ def _compose_ai_verification_reason(
 
     if flag_reason:
         raw_reason = str(flag_reason).strip().lower().replace("-", "_").replace(" ", "_")
+        raw_reason = raw_reason.strip("_").rstrip("._")
         reason_map = {
+            "description_appears_inconsistent_with_the_selected_incident_type": (
+                "CONTEXT_MISMATCH",
+                "report description does not align with incident-type expectations",
+            ),
             "description_evidence_mismatch": (
                 "CONTEXT_MISMATCH",
                 "report description does not align with evidence semantics",
@@ -1039,6 +1056,15 @@ def _compose_ai_verification_reason(
         mapped = reason_map.get(raw_reason)
         if mapped:
             _add_pattern(mapped[0], mapped[1])
+        elif (
+            "inconsistent" in str(flag_reason).lower()
+            and "incident" in str(flag_reason).lower()
+            and "description" in str(flag_reason).lower()
+        ):
+            _add_pattern(
+                "CONTEXT_MISMATCH",
+                "report description does not align with incident-type expectations",
+            )
         else:
             # Fallback pattern inference for free-text/legacy reasons.
             if "duplicate" in raw_reason:
@@ -1087,7 +1113,7 @@ def _compose_ai_verification_reason(
         if ml_prediction_label in {"fake", "suspicious"}:
             _add_pattern(
                 "LOW_TRUST_SCORE",
-                f"ML classified report as {ml_prediction_label} with low/uncertain credibility",
+                "automated credibility below auto-confirm threshold",
             )
         elif ml_prediction_label == "likely_real":
             _add_pattern(
@@ -1111,7 +1137,7 @@ def _compose_ai_verification_reason(
     elif rule_status == "flagged":
         _add_pattern(
             "RULE_FLAGGED",
-            "rule engine marked report for investigation",
+            "rule engine requested review",
         )
     elif rule_status == "passed":
         _add_pattern(

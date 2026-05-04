@@ -6,7 +6,7 @@ Handles downloading and caching of models like YOLO and sentence transformers.
 import os
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, List, Optional
 import requests
 import shutil
 from urllib.parse import urlparse
@@ -176,27 +176,175 @@ def ensure_yolo_model(model_name: str = "yolov8n.pt"):
         raise
 
 
-def ensure_local_narrative_pipeline(model_name: str = "google/flan-t5-small"):
+def _narrator_return(text: str) -> List[dict]:
+    """Match HuggingFace pipeline output shape expected by reports._generate_with_local_narrator."""
+    return [{"generated_text": (text or "").strip()}]
+
+
+def _build_seq2seq_narrator(model: Any, tokenizer: Any) -> Callable[..., List[dict]]:
+    """T5 / FLAN-T5 / BART-style: use generate() (pipeline task text2text-generation was removed in newer transformers)."""
+    import torch
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    model.eval()
+
+    def narrate(
+        prompt: str,
+        max_new_tokens: int = 280,
+        do_sample: bool = True,
+        temperature: float = 0.5,
+        **_kwargs: Any,
+    ) -> List[dict]:
+        enc = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
+        enc = {k: v.to(device) for k, v in enc.items()}
+        with torch.no_grad():
+            out_ids = model.generate(
+                **enc,
+                max_new_tokens=max_new_tokens,
+                do_sample=do_sample,
+                temperature=max(float(temperature), 1e-5),
+                top_p=0.92,
+            )
+        in_len = enc["input_ids"].shape[1]
+        gen_ids = out_ids[0][in_len:]
+        text = tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
+        return _narrator_return(text)
+
+    return narrate
+
+
+def _format_instruct_prompt(tokenizer: Any, user_text: str) -> str:
+    """Use chat template when the tokenizer defines one (Qwen/Llama/Mistral instruct checkpoints)."""
+    if getattr(tokenizer, "chat_template", None):
+        try:
+            messages = [{"role": "user", "content": user_text}]
+            return tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+        except Exception:
+            pass
+    return user_text
+
+
+def _build_causal_narrator(model: Any, tokenizer: Any) -> Callable[..., List[dict]]:
+    """Decoder-only (Llama, Qwen, GPT-2, …): causal LM generation."""
+    import torch
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    model.eval()
+    if getattr(tokenizer, "pad_token", None) is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    def narrate(
+        prompt: str,
+        max_new_tokens: int = 280,
+        do_sample: bool = True,
+        temperature: float = 0.5,
+        **_kwargs: Any,
+    ) -> List[dict]:
+        formatted = _format_instruct_prompt(tokenizer, prompt)
+        enc = tokenizer(formatted, return_tensors="pt", truncation=True, max_length=4096)
+        enc = {k: v.to(device) for k, v in enc.items()}
+        with torch.no_grad():
+            out_ids = model.generate(
+                **enc,
+                max_new_tokens=max_new_tokens,
+                do_sample=do_sample,
+                temperature=max(float(temperature), 1e-5),
+                top_p=0.92,
+                pad_token_id=getattr(tokenizer, "pad_token_id", None),
+                eos_token_id=getattr(tokenizer, "eos_token_id", None),
+            )
+        in_len = enc["input_ids"].shape[1]
+        gen_ids = out_ids[0][in_len:]
+        text = tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
+        return _narrator_return(text)
+
+    return narrate
+
+
+def ensure_local_narrative_pipeline(model_name: str = "Qwen/Qwen2.5-1.5B-Instruct"):
     """
-    Ensure a local text-generation pipeline is downloaded and cached.
-    This provides narrative generation without external API keys.
+    Download and return a callable that behaves like a HF pipeline for narrative text.
+
+    Newer ``transformers`` versions no longer register ``text2text-generation`` as a pipeline
+    task name; we load seq2seq or causal models explicitly and call ``generate()``, same as
+    typical offline inference (similar idea to bundling YOLO weights locally).
     """
     try:
-        from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
+        from transformers import (
+            AutoConfig,
+            AutoModelForCausalLM,
+            AutoModelForSeq2SeqLM,
+            AutoTokenizer,
+        )
 
         manager = get_model_manager()
         cache_dir = manager.cache_dir / "local_narrative" / model_name.replace("/", "--")
         cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_kw = {"cache_dir": str(cache_dir)}
 
-        tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=str(cache_dir))
-        model = AutoModelForSeq2SeqLM.from_pretrained(model_name, cache_dir=str(cache_dir))
-        generator = pipeline(
-            "text2text-generation",
-            model=model,
-            tokenizer=tokenizer,
+        config = AutoConfig.from_pretrained(model_name, **cache_kw)
+        model_type = (getattr(config, "model_type", "") or "").lower()
+        arch0 = ""
+        if getattr(config, "architectures", None) and isinstance(config.architectures, list):
+            arch0 = str(config.architectures[0] or "").lower()
+
+        seq2seq_types = {"t5", "mt5", "bart", "pegasus", "mbart", "marian", "led", "blenderbot"}
+        causal_types = {
+            "llama",
+            "mistral",
+            "qwen2",
+            "qwen3",
+            "gemma",
+            "gpt2",
+            "gpt_neo",
+            "gpt_neox",
+            "gptj",
+            "phi",
+            "phi3",
+            "opt",
+            "falcon",
+            "stablelm",
+        }
+
+        tokenizer = AutoTokenizer.from_pretrained(model_name, **cache_kw)
+
+        if model_type in seq2seq_types or any(a in arch0 for a in ("t5", "bart", "pegasus", "mbart", "marian")):
+            model = AutoModelForSeq2SeqLM.from_pretrained(model_name, **cache_kw)
+            narrator = _build_seq2seq_narrator(model, tokenizer)
+            logger.info(
+                "Local narrative model ready (seq2seq/generate): %s (cache: %s)",
+                model_name,
+                cache_dir,
+            )
+            return narrator
+
+        if model_type in causal_types or any(
+            a in arch0 for a in ("llama", "mistral", "qwen", "gemma", "gpt", "phi", "opt", "falcon")
+        ):
+            model = AutoModelForCausalLM.from_pretrained(model_name, **cache_kw)
+            narrator = _build_causal_narrator(model, tokenizer)
+            logger.info(
+                "Local narrative model ready (causal LM/generate): %s (cache: %s)",
+                model_name,
+                cache_dir,
+            )
+            return narrator
+
+        # Fallback: try seq2seq (many hub models still load as Seq2SeqLM even if model_type string varies)
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_name, **cache_kw)
+        narrator = _build_seq2seq_narrator(model, tokenizer)
+        logger.info(
+            "Local narrative model ready (seq2seq fallback): %s (cache: %s)",
+            model_name,
+            cache_dir,
         )
-        logger.info("Local narrative model ready: %s (cache: %s)", model_name, cache_dir)
-        return generator
+        return narrator
     except Exception as e:
         logger.error(f"Failed to load local narrative model: {e}")
         raise
