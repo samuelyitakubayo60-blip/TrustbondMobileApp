@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Numeric
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.database import Base
 
 
@@ -20,4 +20,7 @@ class MLPrediction(Base):
     model_type = Column(String(50))
     is_final = Column(Boolean, default=False)
 
-    report = relationship("Report", backref="ml_predictions")
+    report = relationship(
+        "Report",
+        backref=backref("ml_predictions", cascade="all, delete-orphan"),
+    )

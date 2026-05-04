@@ -4,9 +4,9 @@ from pydantic import BaseModel
 class MLPredictionResponse(BaseModel):
     prediction_id: str
     report_id: str
-    prediction_label: str  # likely_real, suspicious, fake
+    prediction_label: Optional[str] = None  # likely_real, suspicious, fake, … (null if not set)
     trust_score: Optional[float] = None
-    confidence: Optional[float] = None
+    confidence: Optional[float] = None  # omitted when saturated / non-informative
     model_version: Optional[str] = None
     evaluated_at: Optional[str] = None
     is_final: Optional[bool] = None

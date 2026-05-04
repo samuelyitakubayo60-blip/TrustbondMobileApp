@@ -29,6 +29,44 @@ def needs_police_review_clause():
     )
 
 
+def apply_rules_to_prediction_label(report: Any, raw_label: Optional[str]) -> Optional[str]:
+    """
+    Match list/detail APIs: categorical label reflects rule state (no numeric caps here).
+    """
+    label = (raw_label or "").strip().lower() or None
+    if label == "unknown":
+        label = None
+    rule_status = (getattr(report, "rule_status", None) or "").strip().lower()
+    is_flagged = bool(getattr(report, "is_flagged", False))
+    if rule_status == "rejected":
+        return "fake"
+    if rule_status == "flagged" or is_flagged:
+        if label in (None, "likely_real"):
+            return "suspicious"
+    return label
+
+
+def prediction_confidence_for_display(prediction: Any, raw_db_label: Optional[str]) -> Optional[float]:
+    """
+    MLPrediction.confidence is often max class probability (~1.0), which reads as
+    '100% sure' next to a modest trust score. Omit when it adds no information.
+    """
+    if prediction is None or getattr(prediction, "confidence", None) is None:
+        return None
+    try:
+        c = float(prediction.confidence)
+    except (TypeError, ValueError):
+        return None
+    if not (c == c):
+        return None
+    cleaned = (raw_db_label or "").strip().lower()
+    if cleaned in ("", "unknown", "none") and c >= 0.9:
+        return None
+    if c >= 0.995:
+        return None
+    return c
+
+
 def infer_prediction_label_from_trust_score(
     trust_score: float,
     *,

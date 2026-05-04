@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.database import Base
 
 
@@ -17,5 +17,8 @@ class ReportAssignment(Base):
     assigned_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True))
 
-    report = relationship("Report", backref="assignments")
+    report = relationship(
+        "Report",
+        backref=backref("assignments", cascade="all, delete-orphan"),
+    )
     police_user = relationship("PoliceUser", backref="assignments")

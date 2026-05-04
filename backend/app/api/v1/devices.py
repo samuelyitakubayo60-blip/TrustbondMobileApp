@@ -21,7 +21,12 @@ from app.schemas.ml import MLPredictionResponse, MLInsightResponse, DeviceMLStat
 from app.core.credibility_model import (
     get_report_prediction,
     get_home_insights,
-    get_device_ml_stats
+    get_device_ml_stats,
+)
+from app.core.report_review import (
+    apply_rules_to_prediction_label,
+    infer_prediction_label_from_trust_score,
+    prediction_confidence_for_display,
 )
 from app.core.village_lookup import get_village_location_info
 
@@ -615,18 +620,29 @@ async def get_report_prediction_endpoint(
 ):
     """Get ML prediction for a specific report"""
     try:
-        prediction = get_report_prediction(db, report_id, device_id)
-        
-        if not prediction:
+        report, prediction = get_report_prediction(db, report_id, device_id)
+
+        if not report or not prediction:
             raise HTTPException(status_code=404, detail="Report not found or no prediction available")
-        
+
+        raw_lbl = getattr(prediction, "prediction_label", None)
+        raw_str = str(raw_lbl).strip() if raw_lbl is not None else None
+        display_label = apply_rules_to_prediction_label(report, raw_str)
+        if not display_label and prediction.trust_score is not None:
+            try:
+                display_label = infer_prediction_label_from_trust_score(float(prediction.trust_score))
+            except (TypeError, ValueError):
+                display_label = None
+
+        display_confidence = prediction_confidence_for_display(prediction, raw_str)
+
         return MLPredictionResponse(
             prediction_id=str(prediction.prediction_id),
             report_id=str(prediction.report_id),
             trust_score=float(prediction.trust_score) if prediction.trust_score is not None else None,
-            prediction_label=prediction.prediction_label or "unknown",
+            prediction_label=display_label,
             model_version=prediction.model_version,
-            confidence=float(prediction.confidence) if prediction.confidence is not None else None,
+            confidence=display_confidence,
             evaluated_at=prediction.evaluated_at.isoformat() if prediction.evaluated_at else None,
             is_final=prediction.is_final,
             explanation=prediction.explanation,

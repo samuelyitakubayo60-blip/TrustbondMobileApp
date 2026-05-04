@@ -81,10 +81,14 @@ const cleanAiNarrative = (text) => {
     .trim();
 };
 
-const prettyFactorName = (key) =>
-  String(key || "")
+const prettyFactorName = (key) => {
+  if (key === "aggregation_adjustment") {
+    return "Policy / aggregation adjustment";
+  }
+  return String(key || "")
     .replaceAll("_", " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+};
 
 const renderDecisionPatternChips = (patterns, explanations) => {
   if (!Array.isArray(patterns) || patterns.length === 0) return null;
@@ -2202,7 +2206,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 }}
               >
                 <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                  Report Trust Score
+                  Report trust
                 </span>
                 <span
                   style={{
@@ -2226,6 +2230,18 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   }}
                 ></div>
               </div>
+              {report.trust_score_note ? (
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "var(--muted)",
+                    lineHeight: 1.35,
+                    marginTop: 6,
+                  }}
+                >
+                  {report.trust_score_note}
+                </div>
+              ) : null}
 
                             {mlLoading && (
                 <div
@@ -2247,9 +2263,23 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   }}
                 >
                   <div>
-                    Label: <strong>{mlPrediction.prediction_label}</strong> ·
-                    Confidence{" "}
-                    {Math.round(normalizePercent(mlPrediction.confidence) || 0)}%
+                    ML label:{" "}
+                    <strong title="From the stored classifier row, adjusted for flag/reject rules">
+                      {friendlyPredictionLabel(
+                        mlPrediction.prediction_label ?? report.ml_prediction_label,
+                      )}
+                    </strong>
+                    {normalizePercent(mlPrediction.confidence) != null ? (
+                      <>
+                        {" "}
+                        ·{" "}
+                        <span
+                          title="Max class probability from the model — not the same as report trust / scorecard total"
+                        >
+                          Model probability {Math.round(normalizePercent(mlPrediction.confidence))}%
+                        </span>
+                      </>
+                    ) : null}
                   </div>
                   <div>
                     {mlPrediction.evaluated_at &&
@@ -2367,9 +2397,21 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
 
               <div style={{ marginTop: 12 }}>
                 <div
-                  style={{ fontSize: "12px", fontWeight: 800, marginBottom: 8 }}
+                  style={{ fontSize: "12px", fontWeight: 800, marginBottom: 4 }}
                 >
-                  Credibility Breakdown
+                  Credibility breakdown
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "var(--muted)",
+                    marginBottom: 8,
+                    lineHeight: 1.35,
+                  }}
+                >
+                  Same total as report trust above: weighted signals (description, alignment,
+                  location, device, community). A policy row appears only if the total
+                  includes an adjustment not shown in the other lines.
                 </div>
                 {trustFactors && Object.keys(trustFactors).length > 0 ? (
                   <div
@@ -2422,6 +2464,9 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                             const maxPts = Number(
                               value?.max_points ?? value?.weight ?? 0,
                             );
+                            const ptsStr = pts.toFixed(2);
+                            const right =
+                              maxPts > 0 ? `${ptsStr} / ${maxPts.toFixed(0)}` : ptsStr;
                             return (
                               <div
                                 key={key}
@@ -2435,7 +2480,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                                   {prettyFactorName(key)}
                                 </span>
                                 <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                                  {pts.toFixed(2)} / {maxPts.toFixed(0)}
+                                  {right}
                                 </span>
                               </div>
                             );

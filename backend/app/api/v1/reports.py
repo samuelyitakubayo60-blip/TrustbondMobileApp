@@ -70,7 +70,7 @@ from app.core.hotspot_auto import (
 )
 from app.core.village_lookup import get_village_location_id, get_village_location_info
 from app.schemas.report import CommunityVoteRequest
-from sqlalchemy import text, or_, func, cast, String
+from sqlalchemy import text, or_, func, cast, String, delete
 from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -183,7 +183,8 @@ def _naturalize_ai_text(
         local_text = _generate_with_local_narrator(local_prompt, max_chars=3000)
         if local_text:
             return local_text
-        return f"{text_kind.title()} narrative unavailable."
+        # Without LLM/local model, preserve structured facts instead of a useless placeholder.
+        return fallback
     include_lines = "\n".join(f"- {x}" for x in (must_include or []) if str(x).strip())
     prompt = (
         f"Rewrite this {text_kind} summary into natural, clear human language.\n"
@@ -211,7 +212,7 @@ def _naturalize_ai_text(
             return content[:3000]
     except Exception as exc:
         logger.warning("LLM narrative generation failed (%s): %s", text_kind, exc)
-    return f"{text_kind.title()} narrative unavailable."
+    return fallback
 
 
 def _extract_json_object(raw_text: str) -> Optional[Dict[str, Any]]:
@@ -257,13 +258,17 @@ def _generate_grounded_narrative(
     text_kind: str,
     snapshot: Dict[str, Any],
     fallback_text: str,
+    deterministic_fallback: str = "",
 ) -> str:
     """Generate human narrative from structured model snapshot."""
     client = _get_llm_client()
     if not isinstance(snapshot, dict):
-        return f"{text_kind.title()} narrative unavailable."
+        return (deterministic_fallback or fallback_text or "").strip() or f"{text_kind.title()} narrative unavailable."
 
-    snapshot_json = json.dumps(snapshot, ensure_ascii=True)
+    try:
+        snapshot_json = json.dumps(snapshot, ensure_ascii=True, default=str)
+    except (TypeError, ValueError):
+        snapshot_json = json.dumps(_json_safe(snapshot), ensure_ascii=True)
     prompt = (
         "Use ONLY the JSON facts below to write a human-like verification narrative.\n"
         "Do not invent details. Do not copy template phrases.\n"
@@ -293,7 +298,7 @@ def _generate_grounded_narrative(
             raw = (local_raw or "").strip()
         payload = _extract_json_object(raw)
         if not payload:
-            return f"{text_kind.title()} narrative unavailable."
+            return (deterministic_fallback or fallback_text or "").strip() or f"{text_kind.title()} narrative unavailable."
         summary = str(payload.get("narrative_summary", "")).strip()
         bullets = payload.get("decision_explanation") if isinstance(payload.get("decision_explanation"), list) else []
         uncertainty = str(payload.get("uncertainty_note", "")).strip()
@@ -308,11 +313,11 @@ def _generate_grounded_narrative(
             out_parts.append(f"Next step: {next_step}")
         candidate = " ".join(p for p in out_parts if p).strip()[:3000]
         if not candidate or _looks_template_like(candidate):
-            return f"{text_kind.title()} narrative unavailable."
+            return (deterministic_fallback or fallback_text or "").strip() or f"{text_kind.title()} narrative unavailable."
         return candidate
     except Exception as exc:
         logger.warning("Grounded narrative generation failed (%s): %s", text_kind, exc)
-        return f"{text_kind.title()} narrative unavailable."
+        return (deterministic_fallback or fallback_text or "").strip() or f"{text_kind.title()} narrative unavailable."
 
 
 def warmup_narrative_models_on_startup() -> None:
@@ -435,6 +440,244 @@ def _semantic_alignment_check(
     }
 
 
+def _compact_snapshot_location(
+    latitude: Optional[Any] = None,
+    longitude: Optional[Any] = None,
+    gps_accuracy: Optional[Any] = None,
+    location_label: Optional[str] = None,
+) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    if location_label and str(location_label).strip():
+        out["label"] = str(location_label).strip()[:280]
+    if latitude is not None and longitude is not None:
+        try:
+            out["coordinates"] = f"{float(latitude):.5f}, {float(longitude):.5f}"
+        except (TypeError, ValueError):
+            pass
+    if gps_accuracy is not None:
+        try:
+            out["gps_accuracy_m"] = float(gps_accuracy)
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def _truncate_for_narrative(text: Optional[str], max_chars: int = 520) -> str:
+    s = " ".join((text or "").strip().split())
+    if len(s) <= max_chars:
+        return s
+    cut = s[: max_chars - 3].rsplit(" ", 1)[0].strip()
+    return (cut + "…") if cut else s[: max_chars]
+
+
+def _deterministic_ai_executive_summary(
+    snapshot: Dict[str, Any],
+    verification_status: str,
+    *,
+    pattern_codes: List[str],
+    pattern_explanations: Optional[List[str]] = None,
+) -> str:
+    """
+    Plain-language verdict when cloud LLMs are off or JSON narrative fails.
+    Mirrors snapshot facts — no hallucinated evidence.
+    """
+    if not isinstance(snapshot, dict):
+        return ""
+
+    incident = (snapshot.get("incident_type") or "the incident type they selected").strip()
+    fd = snapshot.get("final_decision") or {}
+    status = verification_status.strip().lower() if verification_status else "pending"
+    rule_rs = str(fd.get("rule_status") or "").lower().strip()
+
+    tags = snapshot.get("context_tags") or []
+    tags_s = ", ".join(str(t).strip() for t in tags[:10] if str(t).strip())
+
+    desc = _truncate_for_narrative(snapshot.get("reporter_description"), 560)
+
+    loc = snapshot.get("location") or {}
+    loc_bits: List[str] = []
+    if loc.get("label"):
+        loc_bits.append(f"administrative area: {loc['label']}")
+    if loc.get("coordinates"):
+        loc_bits.append(f"GPS {loc['coordinates']}")
+    if loc.get("gps_accuracy_m") is not None:
+        try:
+            loc_bits.append(f"GPS accuracy about {float(loc['gps_accuracy_m']):.0f} m")
+        except (TypeError, ValueError):
+            pass
+    loc_sentence = ("Location: " + "; ".join(loc_bits) + ".") if loc_bits else ""
+
+    evid = (snapshot.get("model_signals") or {}).get("evidence_ai") or {}
+    ec = int(evid.get("evidence_count") or 0)
+    if ec <= 0:
+        media_line = (
+            "No photo, video, or audio evidence was attached, so the decision leans on the written report, "
+            "metadata, and automated checks."
+        )
+    else:
+        media_line = (
+            f"{ec} evidence file(s) were analyzed where possible; objects and quality signals still need to "
+            f"agree with the narrative and incident type."
+        )
+
+    nl = (snapshot.get("model_signals") or {}).get("natural_language") or {}
+    sem_bits: List[str] = []
+    if nl.get("mismatch") is True:
+        sem_bits.append(
+            "semantic similarity between the description and the selected incident expectations is weak "
+            "(possible context mismatch)."
+        )
+    elif isinstance(nl.get("description_incident_similarity"), (int, float)):
+        try:
+            dis = float(nl["description_incident_similarity"])
+            sem_bits.append(
+                f"description vs incident-type similarity sits near {dis:.2f} on a 0–1 semantic scale."
+            )
+        except (TypeError, ValueError):
+            pass
+
+    ts = fd.get("trust_score")
+    label = fd.get("label")
+    scoring: List[str] = []
+    if ts is not None:
+        try:
+            scoring.append(f"automated credibility score ≈ {float(ts):.1f}/100")
+        except (TypeError, ValueError):
+            pass
+    if label:
+        scoring.append(f"model label `{label}`")
+    scdig = snapshot.get("scorecard_digest") or {}
+    if scdig.get("total_points") is not None:
+        try:
+            scoring.append(f"threshold scorecard total ≈ {float(scdig['total_points']):.1f}/100")
+        except (TypeError, ValueError):
+            pass
+    if scdig.get("band"):
+        scoring.append(f"scorecard band `{scdig['band']}`")
+
+    uni = snapshot.get("unified_validation_digest") or {}
+    if uni.get("aggregated_score") is not None:
+        try:
+            scoring.append(f"unified model blend ≈ {float(uni['aggregated_score']):.1f}/100")
+        except (TypeError, ValueError):
+            pass
+
+    trig = snapshot.get("rules") or {}
+    flagged_rules = trig.get("triggered") if isinstance(trig.get("triggered"), list) else []
+    prim = ""
+    if flagged_rules:
+        prim = str((flagged_rules[0] or {}).get("explanation") or "").strip()
+
+    p1_parts = [
+        f"The reporter submitted a {incident.lower()} report.",
+    ]
+    if desc:
+        p1_parts.append(f"In their words: {desc}")
+    elif not desc:
+        p1_parts.append("They did not provide a usable description.")
+
+    closing: List[str] = [loc_sentence, media_line]
+    if sem_bits:
+        closing.append(" ".join(sem_bits))
+    if scoring:
+        closing.append("Signals collected: " + "; ".join(scoring) + ".")
+    if prim:
+        closing.append(f"Primary automated flag motive: {prim}.")
+
+    if status == "verified":
+        conclusion = (
+            "Summary verdict: Automated checks support treating this submission as credible for now, "
+            "but policing policy and staffing still apply."
+        )
+    elif status == "rejected":
+        reason = prim or _snapshot_rule_fallback_explanation(snapshot)
+        conclusion = (
+            "Summary verdict: Automated validation concludes this submission should not proceed as a trusted report "
+            f"because {reason}"
+        ).strip()
+        if not reason.endswith("."):
+            conclusion += "."
+    else:
+        whys = []
+        for code in pattern_codes or []:
+            if code == "LOW_TRUST_SCORE":
+                whys.append("credibility stays below automatic confirmation thresholds")
+            elif code == "CONTEXT_MISMATCH":
+                whys.append("the wording does not line up cleanly with incident-type expectations")
+            elif code == "RULE_FLAGGED":
+                whys.append("rule checks requested manual scrutiny")
+            elif code == "FINAL_PENDING_REVIEW":
+                continue
+            elif code.startswith("RULE_"):
+                whys.append("rule engine emitted a cautious state")
+        if not whys and pattern_explanations:
+            whys.extend(
+                exp.split(": ", 1)[-1].strip().rstrip(".")
+                for exp in pattern_explanations[:3]
+                if exp and ":" in exp
+            )
+        if not whys:
+            whys.append("automated certainty is insufficient without human judgment")
+        conclusion = (
+            "Summary verdict: The system keeps this report open for officers because "
+            + ", ".join(dict.fromkeys(whys))
+            + "."
+        )
+
+    block_a = " ".join(p for p in p1_parts if p).strip()
+    block_b = " ".join(s for s in closing if s)
+    parts_out = [_truncate_for_narrative(block_a, 1200)]
+    if block_b:
+        parts_out.append(block_b[:1600])
+    parts_out.append(conclusion[:900])
+    return "\n\n".join(p.strip() for p in parts_out if p and p.strip())
+
+
+def _snapshot_rule_fallback_explanation(snapshot: Dict[str, Any]) -> str:
+    trig = snapshot.get("rules") or {}
+    flagged = trig.get("triggered") if isinstance(trig.get("triggered"), list) else []
+    if flagged:
+        return str((flagged[0] or {}).get("explanation") or "policy thresholds failed").strip()
+    return "policy or rule thresholds were not satisfied"
+
+
+def _deterministic_ai_evidence_summary(snapshot: Dict[str, Any]) -> str:
+    """Standalone evidence/context paragraph when narrative models are unavailable."""
+    if not isinstance(snapshot, dict):
+        return ""
+    incident = (snapshot.get("incident_type") or "this incident category").strip()
+    desc = _truncate_for_narrative(snapshot.get("reporter_description"), 520)
+    tags = snapshot.get("context_tags") or []
+    tags_s = ", ".join(str(t).strip() for t in tags[:10] if str(t).strip())
+
+    evid = (snapshot.get("model_signals") or {}).get("evidence_ai") or {}
+    ec = int(evid.get("evidence_count") or 0)
+
+    paras: List[str] = [f"Evidence summary ({incident}):"]
+
+    if ec <= 0:
+        paras.append(
+            "There is no uploaded media—only the textual report and contextual tags guided automated checks."
+        )
+    else:
+        paras.append(f"{ec} file(s) underwent content checks (blur, authenticity cues, detected objects where applicable).")
+
+    if desc:
+        paras.append(f"Reporter narrative: {desc}")
+
+    fd = snapshot.get("final_decision") or {}
+    if fd.get("trust_score") is not None:
+        try:
+            paras.append(f"Integrated credibility sits near {float(fd['trust_score']):.1f}/100.")
+        except (TypeError, ValueError):
+            pass
+
+    if tags_s:
+        paras.append(f"Tags emphasized in screening: {tags_s}.")
+
+    return "\n\n".join(paras)[:2000]
+
+
 def _build_ai_analysis_snapshot(
     *,
     verification_status: Optional[str],
@@ -451,6 +694,10 @@ def _build_ai_analysis_snapshot(
     scorecard: Optional[Dict[str, Any]] = None,
     evidence_validations: Optional[List[Dict[str, Any]]] = None,
     evidence_file_count: Optional[int] = None,
+    latitude: Optional[Any] = None,
+    longitude: Optional[Any] = None,
+    gps_accuracy: Optional[Any] = None,
+    location_label: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build structured, model-grounded snapshot for narrative generation."""
     model_breakdown = (
@@ -476,6 +723,33 @@ def _build_ai_analysis_snapshot(
     evidence_count = evidence_file_count
     if evidence_count is None:
         evidence_count = len(evidence_validations or [])
+
+    scdig: Dict[str, Any] = {}
+    if isinstance(scorecard, dict):
+        tsp = scorecard.get("total_score")
+        if tsp is not None:
+            try:
+                scdig["total_points"] = float(tsp)
+            except (TypeError, ValueError):
+                pass
+        if scorecard.get("threshold_band"):
+            scdig["band"] = scorecard.get("threshold_band")
+        hgsc = scorecard.get("hard_gates")
+        if isinstance(hgsc, list) and hgsc:
+            scdig["hard_gates"] = list(hgsc)[:14]
+
+    unidig: Dict[str, Any] = {}
+    if isinstance(unified_validation, dict):
+        agg = unified_validation.get("aggregated_score")
+        if agg is not None:
+            try:
+                unidig["aggregated_score"] = float(agg)
+            except (TypeError, ValueError):
+                pass
+        if unified_validation.get("trust_band"):
+            unidig["trust_band"] = unified_validation.get("trust_band")
+
+    loc_blob = _compact_snapshot_location(latitude, longitude, gps_accuracy, location_label)
 
     return {
         "incident_type": (incident_type_name or "").strip(),
@@ -530,6 +804,9 @@ def _build_ai_analysis_snapshot(
             "hard_gates": hard_gates,
         },
         "scorecard": scorecard if isinstance(scorecard, dict) else {},
+        "location": loc_blob,
+        "scorecard_digest": scdig,
+        "unified_validation_digest": unidig,
     }
 
 
@@ -553,8 +830,20 @@ def _compose_ai_evidence_description(
     evidence_media_types: Optional[List[str]] = None,
     unified_validation: Optional[Dict[str, Any]] = None,
     scorecard: Optional[Dict[str, Any]] = None,
+    verification_status: Optional[str] = None,
+    rule_status: Optional[str] = None,
+    is_flagged: Optional[bool] = None,
+    flag_reason: Optional[str] = None,
+    ml_prediction_label: Optional[str] = None,
+    trust_score: Optional[float] = None,
+    semantic_alignment: Optional[Dict[str, Any]] = None,
+    latitude: Optional[Any] = None,
+    longitude: Optional[Any] = None,
+    gps_accuracy: Optional[Any] = None,
+    location_label: Optional[str] = None,
 ) -> str:
-    """Generate a short, human-readable AI summary of uploaded evidence + report context."""
+    """Evidence + narrative context; prefers plain-language deterministic summary when models are unavailable."""
+
     incident_label = (incident_type_name or "incident").strip() or "incident"
     desc_excerpt = (reporter_description or "").strip()
     desc_excerpt = " ".join(desc_excerpt.split())
@@ -563,84 +852,69 @@ def _compose_ai_evidence_description(
     tags = [str(t).strip() for t in (context_tags or []) if str(t).strip()]
     tags_text = ", ".join(tags[:6]) if tags else None
 
-    if not evidence_validations:
-        media_types = [str(m).strip() for m in (evidence_media_types or []) if str(m).strip()]
-        media_text = ", ".join(sorted(set(media_types))) if media_types else "photo/video/audio"
-        if (evidence_file_count or 0) > 0:
-            parts = [
-                f"Report context: {incident_label}.",
-                (
-                    f"{evidence_file_count} evidence file(s) uploaded ({media_text}), "
-                    "but detailed AI evidence analysis is not available for this legacy record."
-                ),
-                "Verification therefore relies on reporter description, metadata checks, and available rule/ML signals.",
-            ]
-            if desc_excerpt:
-                parts.append(f"Reporter states: {desc_excerpt}.")
-            if tags_text:
-                parts.append(f"Context tags: {tags_text}.")
-            fallback_text = " ".join(parts)[:2000]
-            snapshot = _build_ai_analysis_snapshot(
-                verification_status=None,
-                rule_status=None,
-                is_flagged=None,
-                flag_reason=None,
-                ml_prediction_label=None,
-                trust_score=None,
-                semantic_alignment=None,
-                incident_type_name=incident_type_name,
-                reporter_description=reporter_description,
-                context_tags=context_tags,
-                unified_validation=unified_validation,
-                scorecard=scorecard,
-                evidence_validations=evidence_validations,
-                evidence_file_count=evidence_file_count,
-            )
-            return _generate_grounded_narrative(
-                text_kind="evidence summary",
-                snapshot=snapshot,
-                fallback_text=_naturalize_ai_text(
-                    text_kind="evidence summary",
-                    structured_text=fallback_text,
-                    must_include=[incident_label, desc_excerpt, tags_text or "", media_text],
-                ),
-            )
-        parts = [
-            f"Report context: {incident_label}.",
-            "No evidence files uploaded; verification relies on reporter description and metadata checks.",
-        ]
-        if desc_excerpt:
-            parts.append(f"Reporter states: {desc_excerpt}.")
-        if tags_text:
-            parts.append(f"Context tags: {tags_text}.")
-        fallback_text = " ".join(parts)[:2000]
-        snapshot = _build_ai_analysis_snapshot(
-            verification_status=None,
-            rule_status=None,
-            is_flagged=None,
-            flag_reason=None,
-            ml_prediction_label=None,
-            trust_score=None,
-            semantic_alignment=None,
+    def _snap(ec: Optional[int]) -> Dict[str, Any]:
+        ec_final = ec if ec is not None else len(evidence_validations or [])
+        return _build_ai_analysis_snapshot(
+            verification_status=verification_status or "pending",
+            rule_status=rule_status or "unknown",
+            is_flagged=bool(is_flagged) if is_flagged is not None else False,
+            flag_reason=flag_reason,
+            ml_prediction_label=ml_prediction_label,
+            trust_score=trust_score,
+            semantic_alignment=semantic_alignment,
             incident_type_name=incident_type_name,
             reporter_description=reporter_description,
             context_tags=context_tags,
             unified_validation=unified_validation,
             scorecard=scorecard,
             evidence_validations=evidence_validations,
-            evidence_file_count=evidence_file_count,
-        )
-        return _generate_grounded_narrative(
-            text_kind="evidence summary",
-            snapshot=snapshot,
-            fallback_text=_naturalize_ai_text(
-                text_kind="evidence summary",
-                structured_text=fallback_text,
-                must_include=[incident_label, desc_excerpt, tags_text or "no context tags"],
-            ),
+            evidence_file_count=ec_final,
+            latitude=latitude,
+            longitude=longitude,
+            gps_accuracy=gps_accuracy,
+            location_label=location_label,
         )
 
-    media_types: List[str] = []
+    def _finalize(snapshot: Dict[str, Any], fallback_chunks: List[str], must_include: List[str]) -> str:
+        det = _deterministic_ai_evidence_summary(snapshot)
+        enriched = "\n\n".join(c for c in [det.strip(), " ".join(fallback_chunks).strip()] if c).strip()
+        nat = _naturalize_ai_text(
+            text_kind="evidence summary",
+            structured_text=enriched or det,
+            must_include=[x for x in must_include if str(x).strip()],
+        ).strip()
+        g = (
+            _generate_grounded_narrative(
+                text_kind="evidence summary",
+                snapshot=snapshot,
+                fallback_text=nat or enriched or det,
+                deterministic_fallback=det,
+            )
+            or ""
+        ).strip()
+        chosen = det
+        if g and "narrative unavailable" not in g.lower() and not _looks_template_like(g):
+            chosen = g
+        return chosen[:2000]
+
+    if not evidence_validations:
+        media_types = [str(m).strip() for m in (evidence_media_types or []) if str(m).strip()]
+        media_text = ", ".join(sorted(set(media_types))) if media_types else "photo/video/audio"
+        if (evidence_file_count or 0) > 0:
+            fb = [
+                f"{evidence_file_count} evidence file(s) uploaded ({media_text}), detail trace missing for this revision.",
+                "Screening rested on textual context, sensors, metadata, and aggregated trust signals.",
+            ]
+            snapshot = _snap(evidence_file_count)
+            return _finalize(snapshot, fb, [incident_label, desc_excerpt, tags_text or "", media_text])
+        fb = [
+            "There are no uploads—only descriptive text anchors the authenticity review.",
+            "That increases reliance on linguistic consistency checks and corroborating device metadata.",
+        ]
+        snapshot = _snap(0)
+        return _finalize(snapshot, fb, [incident_label, desc_excerpt, tags_text or ""])
+
+    media_types_lv: List[str] = []
     object_counter: Dict[str, int] = {}
     quality_scores: List[float] = []
 
@@ -651,7 +925,7 @@ def _compose_ai_evidence_description(
 
         media_type = summary.get("media_type") or advanced.get("media_type")
         if isinstance(media_type, str) and media_type.strip():
-            media_types.append(media_type.strip())
+            media_types_lv.append(media_type.strip())
 
         for obj in summary.get("detected_objects") or []:
             key = str(obj).strip().lower()
@@ -666,49 +940,21 @@ def _compose_ai_evidence_description(
             pass
 
     top_objects = sorted(object_counter.items(), key=lambda x: x[1], reverse=True)[:5]
-    object_text = ", ".join(obj for obj, _ in top_objects) if top_objects else "no clear objects"
+    object_text = ", ".join(obj for obj, _ in top_objects) if top_objects else "no strong object cues yet"
     avg_quality = (sum(quality_scores) / len(quality_scores)) if quality_scores else None
-    media_text = ", ".join(sorted(set(media_types))) if media_types else "photo/video/audio"
+    media_text = ", ".join(sorted(set(media_types_lv))) if media_types_lv else "photo/video/audio"
 
-    quality_text = ""
+    quality_note = ""
     if avg_quality is not None:
-        quality_text = f" Average evidence quality score is {avg_quality:.2f}."
+        quality_note = f"Average AI quality meter for uploads: {avg_quality:.2f}."
 
-    parts = [
-        f"Report context: {incident_label}.",
-        f"AI analyzed {len(evidence_validations)} evidence file(s) ({media_text}).",
-        f"Most visible evidence cues: {object_text}.{quality_text}".strip(),
+    fb = [
+        f"{len(evidence_validations)} file(s) screened ({media_text}).",
+        f"Salient automated detections leaned toward {object_text}. {quality_note}".strip(),
+        "Investigators should reconcile these cues with the witness wording and map context.",
     ]
-    if desc_excerpt:
-        parts.append(f"Reporter states: {desc_excerpt}.")
-    if tags_text:
-        parts.append(f"Context tags: {tags_text}.")
-    fallback_text = " ".join(parts)[:2000]
-    snapshot = _build_ai_analysis_snapshot(
-        verification_status=None,
-        rule_status=None,
-        is_flagged=None,
-        flag_reason=None,
-        ml_prediction_label=None,
-        trust_score=None,
-        semantic_alignment=None,
-        incident_type_name=incident_type_name,
-        reporter_description=reporter_description,
-        context_tags=context_tags,
-        unified_validation=unified_validation,
-        scorecard=scorecard,
-        evidence_validations=evidence_validations,
-        evidence_file_count=evidence_file_count,
-    )
-    return _generate_grounded_narrative(
-        text_kind="evidence summary",
-        snapshot=snapshot,
-        fallback_text=_naturalize_ai_text(
-            text_kind="evidence summary",
-            structured_text=fallback_text,
-            must_include=[incident_label, object_text, media_text, desc_excerpt],
-        ),
-    )
+    snapshot = _snap(len(evidence_validations))
+    return _finalize(snapshot, fb, [incident_label, object_text, media_text, desc_excerpt])
 
 
 def _compose_ai_verification_reason(
@@ -726,38 +972,14 @@ def _compose_ai_verification_reason(
     reviewer_note: Optional[str] = None,
     unified_validation: Optional[Dict[str, Any]] = None,
     scorecard: Optional[Dict[str, Any]] = None,
+    latitude: Optional[Any] = None,
+    longitude: Optional[Any] = None,
+    gps_accuracy: Optional[Any] = None,
+    location_label: Optional[str] = None,
 ) -> str:
-    """Generate an audit-friendly reason for AI confirmation/flag/rejection."""
+    """Executive-style AI rationale grounded in structured signals (+ pattern footer for UI parsing)."""
     status = (verification_status or "pending").lower()
-    parts: List[str] = []
-    cause_parts: List[str] = []
     incident_label = (incident_type_name or "incident").strip() or "incident"
-    desc_excerpt = (reporter_description or "").strip()
-    desc_excerpt = " ".join(desc_excerpt.split())
-    if len(desc_excerpt) > 180:
-        desc_excerpt = f"{desc_excerpt[:177]}..."
-    tags = [str(t).strip() for t in (context_tags or []) if str(t).strip()]
-    tags_text = ", ".join(tags[:6]) if tags else None
-
-    if status == "verified":
-        parts.append("AI verification result: confirmed.")
-    elif status == "rejected":
-        parts.append("AI verification result: rejected.")
-    elif status == "under_review":
-        parts.append("AI verification result: pending human review.")
-    else:
-        parts.append("AI verification result: pending.")
-
-    parts.append(f"Incident type considered: {incident_label}.")
-    if desc_excerpt:
-        parts.append(f"Reporter description considered: {desc_excerpt}.")
-    if tags_text:
-        parts.append(f"Context tags considered: {tags_text}.")
-
-    if rule_status:
-        parts.append(f"Rule status: {rule_status}.")
-    if is_flagged:
-        parts.append("Report is flagged.")
     pattern_codes: List[str] = []
     pattern_explanations: List[str] = []
 
@@ -767,8 +989,6 @@ def _compose_ai_verification_reason(
             pattern_explanations.append(f"{code}: {explanation}")
 
     if flag_reason:
-        parts.append(f"Primary reason: {flag_reason}.")
-        cause_parts.append(f"rule trigger ({flag_reason})")
         raw_reason = str(flag_reason).strip().lower().replace("-", "_").replace(" ", "_")
         reason_map = {
             "description_evidence_mismatch": (
@@ -864,88 +1084,31 @@ def _compose_ai_verification_reason(
             else:
                 _add_pattern("RULE_TRIGGER", f"rule engine raised: {flag_reason}")
     if ml_prediction_label:
-        if trust_score is not None:
-            parts.append(f"ML label: {ml_prediction_label} (trust {trust_score:.2f}%).")
-        else:
-            parts.append(f"ML label: {ml_prediction_label}.")
         if ml_prediction_label in {"fake", "suspicious"}:
-            cause_parts.append(f"low-credibility ML outcome ({ml_prediction_label})")
             _add_pattern(
                 "LOW_TRUST_SCORE",
                 f"ML classified report as {ml_prediction_label} with low/uncertain credibility",
             )
         elif ml_prediction_label == "likely_real":
-            cause_parts.append("high-credibility ML outcome")
             _add_pattern(
                 "HIGH_TRUST_SCORE",
                 "ML credibility score supports authenticity",
             )
 
-    # Add transparent scoring breakdown if unified validation is available
-    if unified_validation:
-        model_breakdown = unified_validation.get("model_breakdown", {})
-        if model_breakdown:
-            parts.append("AI scoring breakdown:")
-            for model_name, model_data in model_breakdown.items():
-                raw_score = model_data.get("raw_score", 0)
-                contribution = model_data.get("contribution", 0)
-                is_valid = model_data.get("is_valid", False)
-                focus = model_data.get("metadata", {}).get("focus", "analysis")
-                
-                if model_name == "trustbond":
-                    if is_valid:
-                        parts.append(f"- Location & device validation: {raw_score:.1f}/100 (contribution: {contribution:.1f})")
-                    else:
-                        parts.append(f"- Location & device validation: {raw_score:.1f}/100 (below threshold - no contribution)")
-                elif model_name == "natural_language":
-                    if is_valid:
-                        parts.append(f"- Description quality & semantic analysis: {raw_score:.1f}/100 (contribution: {contribution:.1f})")
-                    else:
-                        parts.append(f"- Description quality & semantic analysis: {raw_score:.1f}/100 (below threshold - no contribution)")
-                elif model_name == "volo":
-                    if is_valid:
-                        parts.append(f"- Evidence quality & object detection: {raw_score:.1f}/100 (contribution: {contribution:.1f})")
-                    else:
-                        parts.append(f"- Evidence quality & object detection: {raw_score:.1f}/100 (below threshold - no contribution)")
-                elif model_name == "base":
-                    parts.append(f"- Base credibility score: {raw_score:.1f}/100")
-            
-            # Add trust band explanation
-            trust_band = unified_validation.get("trust_band", "")
-            aggregated_score = unified_validation.get("aggregated_score", 0)
-            if trust_band == "high_confidence":
-                parts.append(f"Overall trust score: {aggregated_score:.1f}/100 (high confidence - multiple validation models agree)")
-            elif trust_band == "medium_confidence":
-                parts.append(f"Overall trust score: {aggregated_score:.1f}/100 (medium confidence - some concerns detected)")
-            elif trust_band == "low_confidence":
-                parts.append(f"Overall trust score: {aggregated_score:.1f}/100 (low confidence - significant concerns require review)")
-            elif trust_band == "reject":
-                parts.append(f"Overall trust score: {aggregated_score:.1f}/100 (rejected - multiple validation failures)")
-
     if semantic_alignment:
-        de = semantic_alignment.get("description_evidence_similarity")
-        ie = semantic_alignment.get("incident_evidence_similarity")
         mismatch = semantic_alignment.get("mismatch")
-        if de is not None and ie is not None:
-            parts.append(
-                f"Semantic similarity (description-evidence={de}, incident-evidence={ie})."
-            )
         if mismatch is True:
-            parts.append("Semantic mismatch detected.")
-            cause_parts.append("description/evidence semantic mismatch")
             _add_pattern(
                 "CONTEXT_MISMATCH",
                 "semantic comparison shows mismatch between description, incident type, and evidence",
             )
 
     if rule_status == "rejected":
-        cause_parts.append("hard rule rejection")
         _add_pattern(
             "RULE_REJECTION",
             "rule engine produced a hard rejection state",
         )
     elif rule_status == "flagged":
-        cause_parts.append("rule-based flag")
         _add_pattern(
             "RULE_FLAGGED",
             "rule engine marked report for investigation",
@@ -958,61 +1121,18 @@ def _compose_ai_verification_reason(
 
     if status == "rejected":
         _add_pattern("FINAL_REJECTED", "final decision is rejected")
-        if cause_parts:
-            parts.append(f"Decision drivers: {', '.join(dict.fromkeys(cause_parts))}.")
-        else:
-            parts.append(
-                "Decision drivers: report failed policy/rule thresholds during verification."
-            )
     elif status in {"under_review", "pending"}:
         _add_pattern("FINAL_PENDING_REVIEW", "final decision is pending human review")
-        if cause_parts:
-            parts.append(
-                f"Review is pending because these signals need human confirmation: {', '.join(dict.fromkeys(cause_parts))}."
-            )
-        else:
-            parts.append(
-                "Review is pending because current signals are insufficient for automatic confirmation."
-            )
     elif status == "verified":
         _add_pattern("FINAL_CONFIRMED", "final decision is confirmed")
-        positive_signals: List[str] = []
-        if rule_status == "passed":
-            positive_signals.append("rule checks passed")
-        if semantic_alignment and semantic_alignment.get("mismatch") is False:
-            positive_signals.append("semantic alignment is acceptable")
-        if ml_prediction_label == "likely_real":
-            positive_signals.append("ML credibility is high")
-        if positive_signals:
-            parts.append(f"Decision drivers: {', '.join(positive_signals)}.")
-        else:
-            parts.append("Decision drivers: no blocking rule or semantic conflicts were found.")
 
     note = (reviewer_note or "").strip()
     if note:
-        parts.append(f"Reviewer note: {note}.")
         if status == "verified":
             _add_pattern("HUMAN_CONFIRMED", "police reviewer confirmed the report")
         elif status == "rejected":
             _add_pattern("HUMAN_REJECTION", "police reviewer rejected the report")
 
-    if pattern_codes:
-        parts.append(f"Decision patterns: {', '.join(pattern_codes)}.")
-    if pattern_explanations:
-        parts.append(f"Pattern explanations: {'; '.join(pattern_explanations)}.")
-    fallback_text = " ".join(parts)[:3000]
-    naturalized = _naturalize_ai_text(
-        text_kind="verification reason",
-        structured_text=fallback_text,
-        must_include=[
-            f"verification status: {status}",
-            f"incident: {incident_label}",
-            f"rule_status: {rule_status or 'unknown'}",
-            f"flag_reason: {flag_reason or 'none'}",
-            f"ml_label: {ml_prediction_label or 'none'}",
-            f"decision_patterns: {', '.join(pattern_codes) if pattern_codes else 'none'}",
-        ],
-    )
     snapshot = _build_ai_analysis_snapshot(
         verification_status=verification_status,
         rule_status=rule_status,
@@ -1026,11 +1146,34 @@ def _compose_ai_verification_reason(
         context_tags=context_tags,
         unified_validation=unified_validation,
         scorecard=scorecard,
+        latitude=latitude,
+        longitude=longitude,
+        gps_accuracy=gps_accuracy,
+        location_label=location_label,
+    )
+    deterministic_body = _deterministic_ai_executive_summary(
+        snapshot,
+        verification_status or "pending",
+        pattern_codes=list(pattern_codes),
+        pattern_explanations=list(pattern_explanations),
+    )
+    naturalized_prompt = (
+        deterministic_body + (f"\n\nOfficer review note (verbatim): {note}" if note else "")
+    ).strip()
+    naturalized = _naturalize_ai_text(
+        text_kind="verification decision summary",
+        structured_text=naturalized_prompt,
+        must_include=[
+            f"verification_status={status}",
+            f"incident={incident_label}",
+            f"patterns={','.join(pattern_codes) if pattern_codes else 'none'}",
+        ],
     )
     grounded = _generate_grounded_narrative(
         text_kind="verification reason",
         snapshot=snapshot,
-        fallback_text=naturalized,
+        fallback_text=naturalized.strip() if naturalized else deterministic_body,
+        deterministic_fallback=deterministic_body,
     )
     decision_line = (
         f"Decision patterns: {', '.join(pattern_codes)}."
@@ -1042,7 +1185,12 @@ def _compose_ai_verification_reason(
         if pattern_explanations
         else "Pattern explanations: NONE."
     )
-    composed = f"{grounded}\n{decision_line}\n{explanation_line}".strip()
+    chosen = (deterministic_body or "").strip()
+    g_clean = (grounded or "").strip()
+    if g_clean and "narrative unavailable" not in g_clean.lower() and not _looks_template_like(g_clean):
+        chosen = g_clean
+
+    composed = f"{chosen}\n{decision_line}\n{explanation_line}".strip()
     return composed[:3000]
 
 
@@ -1096,6 +1244,85 @@ def _extract_decision_pattern_explanations(ai_verification_reason: Optional[str]
     return parsed
 
 
+def _factors_with_reconciling_adjustment(
+    factors: Any,
+    total_score: Any,
+) -> Dict[str, Any]:
+    """
+    When unified trust applies a post-sum penalty (e.g. insufficient contributing models),
+    total_score can differ from the sum of factor rows. Inject a single adjustment row so
+    the dashboard numbers reconcile without implying a bug.
+    """
+    if not isinstance(factors, dict):
+        return {}
+    try:
+        total_f = float(total_score)
+    except (TypeError, ValueError):
+        return dict(factors)
+    skip = {"aggregation_adjustment", "_aggregation_adjustment"}
+    partial = 0.0
+    for k, v in factors.items():
+        if k in skip or not isinstance(v, dict):
+            continue
+        try:
+            partial += float(v.get("points_awarded") or 0.0)
+        except (TypeError, ValueError):
+            pass
+    adj = round(total_f - partial, 2)
+    fac = dict(factors)
+    if abs(adj) < 0.02:
+        return fac
+    fac["aggregation_adjustment"] = {
+        "weight": 0.0,
+        "max_points": 0.0,
+        "signal": 0.0,
+        "points_awarded": adj,
+        "model": "policy",
+        "is_valid": True,
+        "detail": "Combines model-count penalties and other unified-aggregation deltas so the rows sum to Total score.",
+    }
+    return fac
+
+
+def _headline_trust_score_from_factors(
+    trust_factors: Optional[Dict[str, Any]],
+    ml_fallback: Optional[float],
+) -> Optional[float]:
+    """Single number officers see: same as credibility breakdown total when scorecard exists."""
+    if isinstance(trust_factors, dict):
+        raw = trust_factors.get("total_score")
+        if raw is not None:
+            try:
+                v = float(raw)
+                if v == v:  # not NaN
+                    return max(0.0, min(100.0, v))
+            except (TypeError, ValueError):
+                pass
+    if ml_fallback is not None:
+        try:
+            v = float(ml_fallback)
+            if v == v:
+                return max(0.0, min(100.0, v))
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def _trust_score_display_note(report: Report, *, headline_matches_scorecard: bool) -> Optional[str]:
+    if headline_matches_scorecard:
+        rs = (getattr(report, "rule_status", None) or "").strip().lower()
+        flagged = bool(getattr(report, "is_flagged", False)) or rs == "flagged"
+        if flagged:
+            return (
+                "This total matches the credibility breakdown below. "
+                "The report is still flagged for human review—the ML label may read “suspicious” even when the scorecard is mid-range."
+            )
+        if rs == "rejected":
+            return "This total matches the credibility breakdown; the report is rejected on rules or gates—see status and flag reason."
+        return "This total matches the sum shown in the credibility breakdown (threshold scorecard)."
+    return None
+
+
 def _resolve_trust_factors(
     report: Report,
     ml_prediction: Optional[Any],
@@ -1111,13 +1338,17 @@ def _resolve_trust_factors(
     fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
     scorecard = fv.get("threshold_scorecard") if isinstance(fv.get("threshold_scorecard"), dict) else None
     if scorecard:
+        reconciled_factors = _factors_with_reconciling_adjustment(
+            scorecard.get("factors", {}),
+            scorecard.get("total_score"),
+        )
         out: Dict[str, Any] = {
             "scorecard_type": scorecard.get("scorecard_type"),
             "max_score": scorecard.get("max_score", 100.0),
             "total_score": scorecard.get("total_score"),
             "threshold_band": scorecard.get("threshold_band"),
             "hard_gates": scorecard.get("hard_gates", []),
-            "factors": scorecard.get("factors", {}),
+            "factors": reconciled_factors,
         }
         fac = out.get("factors", {}) if isinstance(out.get("factors"), dict) else {}
         # Compatibility keys expected by existing UI card.
@@ -1161,7 +1392,10 @@ def _resolve_trust_factors(
         "total_score": computed.get("total_score"),
         "threshold_band": computed.get("threshold_band"),
         "hard_gates": computed.get("hard_gates", []),
-        "factors": computed.get("factors", {}),
+        "factors": _factors_with_reconciling_adjustment(
+            computed.get("factors", {}),
+            computed.get("total_score"),
+        ),
     }
     fac = out.get("factors", {}) if isinstance(out.get("factors"), dict) else {}
     if "description_quality" in fac:
@@ -1198,8 +1432,9 @@ def _rule_adjusted_trust_label(
     ml_prediction_label: Optional[str],
 ) -> Tuple[Optional[float], Optional[str]]:
     """
-    Keep ML trust/label consistent with rule outcomes.
-    A flagged/rejected rule state must never appear as high-confidence verified ML.
+    Align the categorical ML label with rule outcomes only.
+    Numeric trust is not capped here—the API headline trust uses the credibility scorecard
+    total so it matches the breakdown; the stored ML row keeps the model aggregate for audit.
     """
     score = trust_score
     label = (ml_prediction_label or "").strip().lower() or None
@@ -1207,18 +1442,10 @@ def _rule_adjusted_trust_label(
     is_flagged = bool(getattr(report, "is_flagged", False))
 
     if rule_status == "rejected":
-        if score is None:
-            score = 20.0
-        else:
-            score = min(float(score), 20.0)
         label = "fake"
         return score, label
 
     if rule_status == "flagged" or is_flagged:
-        if score is None:
-            score = 49.0
-        else:
-            score = min(float(score), 49.0)
         if label in (None, "likely_real"):
             label = "suspicious"
         return score, label
@@ -1285,6 +1512,12 @@ def _admin_hierarchy_from_village_location(village_loc: Optional[Any]) -> tuple:
         elif getattr(parent, "location_type", None) == "sector":
             sector_name = getattr(parent, "location_name", None)
     return sector_name, cell_name, village_name
+
+
+def _human_location_chain_from_report(report: Report) -> Optional[str]:
+    sec, cell, vill = _admin_hierarchy_from_village_location(getattr(report, "village_location", None))
+    chain = [x for x in (sec, cell, vill) if x]
+    return " > ".join(chain) if chain else None
 
 
 def _compute_threshold_scorecard(
@@ -1966,6 +2199,16 @@ def _coerce_evidence_quality(label: Optional[str]) -> EvidenceQuality:
     return EvidenceQuality.fair
 
 
+def _scalar_float(value: Any) -> Optional[float]:
+    """Convert numpy / Decimal scalars to plain float for PostgreSQL bind params (avoids np.float64 → invalid SQL)."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def analyze_evidence_file(
     file_bytes: bytes,
     file_type: str,
@@ -2116,6 +2359,10 @@ def analyze_evidence_file(
             }
         )
 
+    analysis["blur_score"] = _scalar_float(analysis.get("blur_score"))
+    analysis["tamper_score"] = _scalar_float(analysis.get("tamper_score"))
+    if analysis.get("volo_confidence") is not None:
+        analysis["volo_confidence"] = _scalar_float(analysis.get("volo_confidence"))
     return analysis
 
 
@@ -3184,14 +3431,6 @@ def create_report(
     except Exception:
         pass
 
-    # Persist AI-generated evidence description for auditing and UI explainability.
-    report.ai_evidence_description = _compose_ai_evidence_description(
-        evidence_validations,
-        incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
-        reporter_description=report_data.description or report.description,
-        context_tags=list(getattr(report, "context_tags", None) or []),
-    )
-
     # Semantic consistency check (report text vs evidence meaning vs incident type)
     try:
         if evidence_validations:
@@ -3340,6 +3579,10 @@ def create_report(
             context_tags=list(getattr(report, "context_tags", None) or []),
             unified_validation=unified_validation_data,
             scorecard=scorecard,
+            latitude=getattr(report, "latitude", None),
+            longitude=getattr(report, "longitude", None),
+            gps_accuracy=getattr(report, "gps_accuracy", None),
+            location_label=_human_location_chain_from_report(report),
         )
         report.ai_evidence_description = _compose_ai_evidence_description(
             evidence_validations,
@@ -3349,6 +3592,17 @@ def create_report(
             evidence_file_count=len(evidence_validations),
             unified_validation=unified_validation_data,
             scorecard=scorecard,
+            verification_status=report.verification_status,
+            rule_status=report.rule_status,
+            is_flagged=report.is_flagged,
+            flag_reason=report.flag_reason,
+            ml_prediction_label=ai_label,
+            trust_score=ai_trust_score,
+            semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
+            latitude=getattr(report, "latitude", None),
+            longitude=getattr(report, "longitude", None),
+            gps_accuracy=getattr(report, "gps_accuracy", None),
+            location_label=_human_location_chain_from_report(report),
         )
         snapshot = _build_ai_analysis_snapshot(
             verification_status=report.verification_status,
@@ -3365,6 +3619,10 @@ def create_report(
             scorecard=scorecard,
             evidence_validations=evidence_validations,
             evidence_file_count=len(evidence_validations),
+            latitude=getattr(report, "latitude", None),
+            longitude=getattr(report, "longitude", None),
+            gps_accuracy=getattr(report, "gps_accuracy", None),
+            location_label=_human_location_chain_from_report(report),
         )
         _persist_ai_analysis_snapshot(report, snapshot)
     except Exception as e:
@@ -3865,6 +4123,36 @@ def add_review(
         reviewer_note=body.review_note,
         unified_validation=unified_now,
         scorecard=scorecard_now,
+        latitude=getattr(report, "latitude", None),
+        longitude=getattr(report, "longitude", None),
+        gps_accuracy=getattr(report, "gps_accuracy", None),
+        location_label=_human_location_chain_from_report(report),
+    )
+    validations_police = (
+        report.feature_vector.get("evidence_validations")
+        if isinstance(getattr(report, "feature_vector", None), dict)
+        and isinstance(report.feature_vector.get("evidence_validations"), list)
+        else []
+    )
+    report.ai_evidence_description = _compose_ai_evidence_description(
+        validations_police,
+        incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
+        reporter_description=report.description,
+        context_tags=list(getattr(report, "context_tags", None) or []),
+        evidence_file_count=len(validations_police),
+        unified_validation=unified_now,
+        scorecard=scorecard_now,
+        verification_status=report.verification_status,
+        rule_status=report.rule_status,
+        is_flagged=report.is_flagged,
+        flag_reason=report.flag_reason,
+        ml_prediction_label=ai_label,
+        trust_score=ai_trust_score,
+        semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
+        latitude=getattr(report, "latitude", None),
+        longitude=getattr(report, "longitude", None),
+        gps_accuracy=getattr(report, "gps_accuracy", None),
+        location_label=_human_location_chain_from_report(report),
     )
     snapshot = _build_ai_analysis_snapshot(
         verification_status=report.verification_status,
@@ -3879,13 +4167,12 @@ def add_review(
         context_tags=list(getattr(report, "context_tags", None) or []),
         unified_validation=unified_now,
         scorecard=scorecard_now,
-        evidence_validations=(
-            report.feature_vector.get("evidence_validations")
-            if isinstance(getattr(report, "feature_vector", None), dict)
-            and isinstance(report.feature_vector.get("evidence_validations"), list)
-            else []
-        ),
+        evidence_validations=validations_police,
         evidence_file_count=len(getattr(report, "evidence_files", []) or []),
+        latitude=getattr(report, "latitude", None),
+        longitude=getattr(report, "longitude", None),
+        gps_accuracy=getattr(report, "gps_accuracy", None),
+        location_label=_human_location_chain_from_report(report),
     )
     _persist_ai_analysis_snapshot(report, snapshot)
 
@@ -4730,8 +5017,8 @@ async def upload_evidence(
         media_longitude=final_lon,
         captured_at=final_captured_at,
         is_live_capture=is_live_capture,
-        blur_score=ai_analysis.get('blur_score'),
-        tamper_score=ai_analysis.get('tamper_score'),
+        blur_score=_scalar_float(ai_analysis.get("blur_score")),
+        tamper_score=_scalar_float(ai_analysis.get("tamper_score")),
         quality_label=_coerce_evidence_quality(ai_analysis.get('quality_label')),
         ai_checked_at=ai_analysis.get('ai_checked_at'),
         cloudinary_public_id=cloudinary_public_id,
@@ -4861,15 +5148,6 @@ async def upload_evidence(
         fv_after = report_after.feature_vector if isinstance(report_after.feature_vector, dict) else {}
         validations_after = fv_after.get("evidence_validations") if isinstance(fv_after.get("evidence_validations"), list) else []
         semantic_after = fv_after.get("semantic_alignment") if isinstance(fv_after.get("semantic_alignment"), dict) else None
-        report_after.ai_evidence_description = _compose_ai_evidence_description(
-            validations_after,
-            incident_type_name=getattr(getattr(report_after, "incident_type", None), "type_name", None),
-            reporter_description=report_after.description,
-            context_tags=list(getattr(report_after, "context_tags", None) or []),
-            evidence_file_count=len(validations_after),
-            unified_validation=unified_validation_data,
-            scorecard=scorecard_after,
-        )
         ai_trust_score = (
             float(ml_prediction.trust_score)
             if ml_prediction and getattr(ml_prediction, "trust_score", None) is not None
@@ -4882,6 +5160,27 @@ async def upload_evidence(
             update_device_ml_aggregates(db, device, window=30)
         except Exception:
             pass
+        loc_chain = _human_location_chain_from_report(report_after)
+        report_after.ai_evidence_description = _compose_ai_evidence_description(
+            validations_after,
+            incident_type_name=getattr(getattr(report_after, "incident_type", None), "type_name", None),
+            reporter_description=report_after.description,
+            context_tags=list(getattr(report_after, "context_tags", None) or []),
+            evidence_file_count=len(validations_after),
+            unified_validation=unified_validation_data,
+            scorecard=scorecard_after,
+            verification_status=report_after.verification_status,
+            rule_status=report_after.rule_status,
+            is_flagged=report_after.is_flagged,
+            flag_reason=report_after.flag_reason,
+            ml_prediction_label=ai_label,
+            trust_score=ai_trust_score,
+            semantic_alignment=semantic_after if isinstance(semantic_after, dict) else None,
+            latitude=getattr(report_after, "latitude", None),
+            longitude=getattr(report_after, "longitude", None),
+            gps_accuracy=getattr(report_after, "gps_accuracy", None),
+            location_label=loc_chain,
+        )
         report_after.ai_verification_reason = _compose_ai_verification_reason(
             verification_status=report_after.verification_status,
             rule_status=report_after.rule_status,
@@ -4895,6 +5194,10 @@ async def upload_evidence(
             context_tags=list(getattr(report_after, "context_tags", None) or []),
             unified_validation=unified_validation_data,
             scorecard=scorecard_after,
+            latitude=getattr(report_after, "latitude", None),
+            longitude=getattr(report_after, "longitude", None),
+            gps_accuracy=getattr(report_after, "gps_accuracy", None),
+            location_label=loc_chain,
         )
         snapshot_after = _build_ai_analysis_snapshot(
             verification_status=report_after.verification_status,
@@ -4911,6 +5214,10 @@ async def upload_evidence(
             scorecard=scorecard_after,
             evidence_validations=validations_after,
             evidence_file_count=len(validations_after),
+            latitude=getattr(report_after, "latitude", None),
+            longitude=getattr(report_after, "longitude", None),
+            gps_accuracy=getattr(report_after, "gps_accuracy", None),
+            location_label=loc_chain,
         )
         _persist_ai_analysis_snapshot(report_after, snapshot_after)
         db.commit()
@@ -5092,6 +5399,8 @@ def delete_report(
     if not is_authorized:
         raise HTTPException(status_code=403, detail="Not authorized to delete this report")
 
+    # Remove M2M hotspot links first (composite PK; DB does not cascade this table).
+    db.execute(delete(hotspot_reports_table).where(hotspot_reports_table.c.report_id == report.report_id))
     db.delete(report)
     db.commit()
     if background_tasks is not None:
@@ -6056,7 +6365,7 @@ def _build_report_detail_response(report: Report, db: Session) -> ReportDetailRe
     """Build a ReportDetailResponse from a Report object."""
     # Get ML prediction
     ml_prediction = resolve_ml_prediction_for_report(report)
-    trust_score = (
+    ml_trust_numeric = (
         float(ml_prediction.trust_score)
         if ml_prediction is not None and ml_prediction.trust_score is not None
         else None
@@ -6066,8 +6375,8 @@ def _build_report_detail_response(report: Report, db: Session) -> ReportDetailRe
         raw_label = getattr(ml_prediction, "prediction_label", None)
         if raw_label is not None and str(raw_label).strip():
             ml_prediction_label = str(raw_label).strip().lower()
-    trust_score, ml_prediction_label = _rule_adjusted_trust_label(
-        report, trust_score, ml_prediction_label
+    _, ml_prediction_label = _rule_adjusted_trust_label(
+        report, ml_trust_numeric, ml_prediction_label
     )
     community_votes = {"real": 0, "false": 0, "unknown": 0}
     user_vote = None
@@ -6082,6 +6391,10 @@ def _build_report_detail_response(report: Report, db: Session) -> ReportDetailRe
         evidence_count=len(getattr(report, "evidence_files", []) or []),
         community_votes=community_votes,
     )
+    trust_score = _headline_trust_score_from_factors(trust_factors, ml_trust_numeric)
+    headline_from_scorecard = isinstance(trust_factors, dict) and trust_factors.get(
+        "total_score"
+    ) is not None
     context_tags_list = getattr(report, "context_tags", None) or []
 
     # Get device metadata and trust score
@@ -6165,6 +6478,9 @@ def _build_report_detail_response(report: Report, db: Session) -> ReportDetailRe
     return ReportDetailResponse(
         report_id=report.report_id,
         report_number=getattr(report, "report_number", None),
+        trust_score_note=_trust_score_display_note(
+            report, headline_matches_scorecard=headline_from_scorecard
+        ),
         device_id=report.device_id,
         incident_type_id=report.incident_type_id,
         description=report.description,
@@ -6248,7 +6564,7 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         raw_label = getattr(ml_prediction, "prediction_label", None)
         if raw_label is not None and str(raw_label).strip():
             ml_prediction_label = str(raw_label).strip().lower()
-    trust_score, ml_prediction_label = _rule_adjusted_trust_label(
+    _, ml_prediction_label = _rule_adjusted_trust_label(
         report, trust_score, ml_prediction_label
     )
     community_votes = {"real": 0, "false": 0, "unknown": 0}
@@ -6268,6 +6584,7 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         evidence_count=len(getattr(report, "evidence_files", []) or []),
         community_votes=community_votes,
     )
+    trust_score = _headline_trust_score_from_factors(trust_factors, trust_score)
     
     # Get device metadata and stored device trust stats
     device_metadata = None

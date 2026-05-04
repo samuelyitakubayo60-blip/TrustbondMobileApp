@@ -962,30 +962,35 @@ def update_device_ml_aggregates(
 
 # API Functions for ML endpoints
 def get_report_prediction(db: Session, report_id: str, device_id: str):
-    """Get ML prediction for a specific report"""
+    """
+    Get (report, latest ML prediction) for a device-owned report.
+    Returns (None, None) if the report is missing or device mismatch.
+    """
     # Convert strings to UUID if needed
     from uuid import UUID
     try:
         report_uuid = UUID(report_id)
         device_uuid = UUID(device_id)
     except ValueError:
-        return None
-    
+        return None, None
+
     # Verify the report belongs to the device
     report = db.query(Report).filter(
         Report.report_id == report_uuid,
         Report.device_id == device_uuid
     ).first()
-    
+
     if not report:
-        return None
-    
-    # Get latest ML prediction
-    prediction = db.query(MLPrediction).filter(
-        MLPrediction.report_id == report_uuid
-    ).order_by(MLPrediction.evaluated_at.desc()).first()
-    
-    return prediction
+        return None, None
+
+    prediction = (
+        db.query(MLPrediction)
+        .filter(MLPrediction.report_id == report_uuid)
+        .order_by(MLPrediction.evaluated_at.desc())
+        .first()
+    )
+
+    return report, prediction
 
 
 def get_home_insights(db: Session):

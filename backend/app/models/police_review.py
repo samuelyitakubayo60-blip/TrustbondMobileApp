@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Numeric
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.database import Base
 
 
@@ -18,5 +18,8 @@ class PoliceReview(Base):
     confidence_level = Column(Numeric(5, 2))
     used_for_training = Column(Boolean, default=False)
 
-    report = relationship("Report", backref="police_reviews")
+    report = relationship(
+        "Report",
+        backref=backref("police_reviews", cascade="all, delete-orphan"),
+    )
     police_user = relationship("PoliceUser", backref="police_reviews")

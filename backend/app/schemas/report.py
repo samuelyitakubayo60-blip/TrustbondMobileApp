@@ -190,6 +190,8 @@ class ReviewCreate(BaseModel):
 
 class ReportDetailResponse(ReportResponse):
     """Report with evidence files, assignments, and reviews (for police dashboard)."""
+    trust_score_note: Optional[str] = None
+    """Explains how headline trust relates to the scorecard (e.g. flagged but mid-range score)."""
     incident_latitude: Optional[Decimal] = None
     incident_longitude: Optional[Decimal] = None
     incident_location_source: Optional[str] = None  # reporter_only | evidence_only | combined
