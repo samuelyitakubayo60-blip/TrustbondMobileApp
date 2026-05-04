@@ -396,9 +396,23 @@ def list_hotspots(
 
     query = query.order_by(Hotspot.detected_at.desc())
     if risk_level:
-        query = query.filter(Hotspot.risk_level == risk_level)
+        rl = risk_level.strip().lower()
+        aliases = {
+            "critical": ["critical", "high"],
+            "warning": ["active", "medium"],
+            "normal": ["emerging", "low_activity", "low"],
+            "high": ["high", "critical"],
+            "medium": ["medium", "active"],
+            "low": ["low", "low_activity", "emerging"],
+        }
+        allowed_levels = aliases.get(rl, [rl])
+        query = query.filter(Hotspot.risk_level.in_(allowed_levels))
     if time_window_hours is not None:
-        query = query.filter(Hotspot.time_window_hours == int(time_window_hours))
+        # Inclusive period semantics: selecting a larger window should include
+        # hotspots created in smaller DBSCAN windows as long as they were
+        # detected within the selected period.
+        period_cutoff = datetime.now(timezone.utc) - timedelta(hours=int(time_window_hours))
+        query = query.filter(Hotspot.detected_at >= period_cutoff)
     hotspots = query.limit(limit).all()
     
     responses = []

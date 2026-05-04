@@ -54,6 +54,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   List<Map<String, dynamic>> _publicAlerts = [];
   bool _loadingAlerts = false;
   int _hotspotTimeWindowHours = 24;
+  int _nearbyHotspotRadiusMeters = 3000;
 
   Timer? _hotspotRefreshTimer;
 
@@ -186,6 +187,8 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
           _userVillage = result.village;
           _locatingUser = false;
         });
+        // Re-query hotspots with nearby filter once accurate location is available.
+        _loadHotspots();
         _loadPublicAlerts();
       } else {
         if (mounted) setState(() => _locatingUser = false);
@@ -235,9 +238,16 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     setState(() => _loadingHotspots = true);
     try {
       debugPrint('Loading hotspots with time window: $_hotspotTimeWindowHours hours');
-      final hotspots = await _hotspotService.getAllHotspots(
-        timeWindowHours: _hotspotTimeWindowHours,
-      );
+      final hotspots = (_userLat != null && _userLng != null)
+          ? await _hotspotService.getNearbyHotspots(
+              lat: _userLat!,
+              lon: _userLng!,
+              radiusMeters: _nearbyHotspotRadiusMeters,
+              timeWindowHours: _hotspotTimeWindowHours,
+            )
+          : await _hotspotService.getAllHotspots(
+              timeWindowHours: _hotspotTimeWindowHours,
+            );
       debugPrint('Received ${hotspots.length} hotspots from service');
       
       final mapData = _mapData;
@@ -493,10 +503,16 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
 
   Color _getHotspotColor(String riskLevel) {
     switch (riskLevel.toLowerCase()) {
+      case 'critical':
       case 'high':
+      case 'active':
         return AppColors.danger;
+      case 'warning':
       case 'medium':
+      case 'emerging':
         return AppColors.warn;
+      case 'normal':
+      case 'low_activity':
       case 'low':
         return AppColors.ok;
       default:
@@ -590,6 +606,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
             _buildHeader(),
             _buildSectorFilters(),
             _buildHotspotPeriodFilters(),
+            _buildNearbyRadiusFilters(),
             Expanded(
               flex: 3,
               child: _buildMap(),
@@ -689,7 +706,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                   _loadingHotspots
                       ? 'Loading hotspots...'
                       : _mapData != null
-                      ? '${_mapData!.features.length} villages · ${_hotspots.length} hotspots · ${_formatHotspotWindow(_hotspotTimeWindowHours)}'
+                      ? '${_mapData!.features.length} villages · ${_hotspots.length} hotspots · ${_formatHotspotWindow(_hotspotTimeWindowHours)} · ${_userLat != null && _userLng != null ? 'near ${(_nearbyHotspotRadiusMeters / 1000).toStringAsFixed(0)}km' : 'district'}'
                           : 'Loading...',
                   style: const TextStyle(
                       fontSize: 10,
@@ -826,6 +843,58 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                   fontSize: 12,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                   color: selected ? AppColors.accent : AppColors.muted,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildNearbyRadiusFilters() {
+    const radii = <int>[1000, 3000, 5000];
+    final hasLocation = _userLat != null && _userLng != null;
+    return Container(
+      height: 34,
+      margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: radii.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final meters = radii[i];
+          final selected = meters == _nearbyHotspotRadiusMeters;
+          return GestureDetector(
+            onTap: !hasLocation
+                ? null
+                : () {
+                    if (selected) return;
+                    setState(() => _nearbyHotspotRadiusMeters = meters);
+                    _loadHotspots();
+                  },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: selected
+                    ? AppColors.accent2.withValues(alpha: 0.15)
+                    : AppColors.surface2,
+                border: Border.all(
+                  color: selected ? AppColors.accent2 : AppColors.border,
+                ),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                hasLocation
+                    ? 'Nearby ${(meters / 1000).toStringAsFixed(0)}km'
+                    : 'Enable GPS',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                  color: hasLocation
+                      ? (selected ? AppColors.accent2 : AppColors.muted)
+                      : AppColors.muted,
                 ),
               ),
             ),

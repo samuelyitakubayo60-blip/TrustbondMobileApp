@@ -1,5 +1,6 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from datetime import datetime, timezone, timedelta
+from math import atan2, cos, radians, sin, sqrt
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session, joinedload
@@ -21,11 +22,32 @@ def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
     return value.astimezone(timezone.utc)
 
 
+def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance between two points in meters."""
+    r = 6371000.0
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = (
+        sin(dlat / 2) ** 2
+        + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    )
+    return r * 2 * atan2(sqrt(a), sqrt(1 - a))
+
+
 @router.get("/", response_model=List[HotspotResponse])
 @router.get("", response_model=List[HotspotResponse])
 def list_public_hotspots(
     limit: int = Query(30, ge=1, le=200),
     risk_level: Optional[str] = Query(None),
+    lat: Optional[float] = Query(
+        None, ge=-90, le=90, description="User latitude for nearby filtering."
+    ),
+    lon: Optional[float] = Query(
+        None, ge=-180, le=180, description="User longitude for nearby filtering."
+    ),
+    radius_meters: int = Query(
+        3000, ge=200, le=20000, description="Nearby filter radius in meters."
+    ),
     time_window_hours: Optional[int] = Query(
         None,
         ge=1,
@@ -49,10 +71,48 @@ def list_public_hotspots(
     query = query.order_by(Hotspot.detected_at.desc())
     
     if risk_level:
-        query = query.filter(Hotspot.risk_level == risk_level)
+        rl = risk_level.strip().lower()
+        aliases = {
+            "critical": ["critical", "high"],
+            "warning": ["active", "medium"],
+            "normal": ["emerging", "low_activity", "low"],
+            "high": ["high", "critical"],
+            "medium": ["medium", "active"],
+            "low": ["low", "low_activity", "emerging"],
+        }
+        allowed_levels = aliases.get(rl, [rl])
+        query = query.filter(Hotspot.risk_level.in_(allowed_levels))
     if time_window_hours is not None:
-        query = query.filter(Hotspot.time_window_hours == int(time_window_hours))
-    hotspots = query.limit(limit).all()
+        # UX expectation: larger periods include smaller-period hotspots.
+        # So treat this as "detected within last N hours" rather than exact
+        # DBSCAN generation window equality.
+        period_cutoff = datetime.now(timezone.utc) - timedelta(hours=int(time_window_hours))
+        query = query.filter(Hotspot.detected_at >= period_cutoff)
+    hotspots = query.limit(500).all()
+    if (lat is None) != (lon is None):
+        raise HTTPException(
+            status_code=400,
+            detail="lat and lon must be provided together for nearby hotspot filtering.",
+        )
+
+    if lat is not None and lon is not None:
+        nearby: List[Tuple[Hotspot, float]] = []
+        for h in hotspots:
+            try:
+                d = _haversine_meters(
+                    float(lat),
+                    float(lon),
+                    float(h.center_lat),
+                    float(h.center_long),
+                )
+            except (TypeError, ValueError):
+                continue
+            if d <= float(radius_meters):
+                nearby.append((h, d))
+        nearby.sort(key=lambda item: (item[1], -int(item[0].incident_count or 0)))
+        hotspots = [h for h, _ in nearby[:limit]]
+    else:
+        hotspots = hotspots[:limit]
     return [
         HotspotResponse(
             hotspot_id=h.hotspot_id,

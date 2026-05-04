@@ -60,8 +60,8 @@ const formatTimeWindow = (hours) => {
 };
 
 const riskColor = (riskLevel) => {
-  if (riskLevel === "high") return "#f87171";
-  if (riskLevel === "medium") return "#fb923c";
+  if (riskLevel === "critical" || riskLevel === "high" || riskLevel === "active") return "#f87171";
+  if (riskLevel === "medium" || riskLevel === "warning" || riskLevel === "emerging") return "#fb923c";
   return "#34d399";
 };
 
@@ -112,9 +112,9 @@ const Hotspots = ({ wsRefreshKey }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [riskFilter, wsRefreshKey]);
 
-  const crit = hotspots.filter((h) => h.risk_level === "high").length;
-  const warn = hotspots.filter((h) => h.risk_level === "medium").length;
-  const normal = hotspots.filter((h) => h.risk_level === "low").length;
+  const crit = hotspots.filter((h) => ["critical", "high", "active"].includes((h.risk_level || "").toLowerCase())).length;
+  const warn = hotspots.filter((h) => ["medium", "warning", "emerging"].includes((h.risk_level || "").toLowerCase())).length;
+  const normal = hotspots.filter((h) => ["low", "low_activity", "normal"].includes((h.risk_level || "").toLowerCase())).length;
 
   const plottedHotspots = useMemo(
     () =>

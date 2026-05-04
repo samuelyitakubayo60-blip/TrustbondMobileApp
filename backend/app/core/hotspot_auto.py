@@ -20,7 +20,7 @@ from app.models.system_config import SystemConfig
 
 
 DEFAULT_TIME_WINDOW_HOURS = 24
-DEFAULT_MIN_INCIDENTS = 2
+DEFAULT_MIN_INCIDENTS = 3
 DEFAULT_RADIUS_METERS = 500
 DEFAULT_TRUST_MIN = 50.0
 
@@ -60,7 +60,8 @@ def get_hotspot_params_from_db(
                 mi = int(value)
     except Exception:
         pass
-    return tw, max(1, mi), max(50.0, rm)
+    # Hotspots should never be formed from fewer than 3 incidents.
+    return tw, max(3, mi), max(50.0, rm)
 
 
 def get_hotspot_trust_min_from_db(db: Session, default: float = DEFAULT_TRUST_MIN) -> float:
@@ -117,13 +118,23 @@ def _report_trust_score(report: Report) -> float:
 
 
 def _is_report_eligible(report: Report) -> bool:
-    """Exclude reports that are already rejected by rules/police workflow."""
+    """Only allow finalized verified reports into hotspot clustering."""
     status = (report.status or "").lower()
     verification = (report.verification_status or "").lower()
     rule_status = (report.rule_status or "").lower()
     if status == "rejected" or verification == "rejected" or rule_status == "rejected":
         return False
-    return True
+
+    # Verified by workflow status
+    if verification == "verified" or status == "verified":
+        return True
+
+    # Verified by explicit police confirmation
+    officer_confirmed = any(
+        (rv.decision or "").lower() == "confirmed"
+        for rv in (getattr(report, "police_reviews", None) or [])
+    )
+    return officer_confirmed
 
 
 def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
