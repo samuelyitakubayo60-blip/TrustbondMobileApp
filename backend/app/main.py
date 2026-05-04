@@ -1,3 +1,14 @@
+import os
+
+# Before any ultralytics import: writable config dir (Docker sets YOLO_CONFIG_DIR=/app/.ultralytics)
+if not os.environ.get("YOLO_CONFIG_DIR"):
+    _yolo_cfg = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".ultralytics"))
+    try:
+        os.makedirs(_yolo_cfg, exist_ok=True)
+        os.environ["YOLO_CONFIG_DIR"] = _yolo_cfg
+    except OSError:
+        pass
+
 from contextlib import asynccontextmanager
 from sqlalchemy import text
 from fastapi import FastAPI

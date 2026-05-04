@@ -2,6 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Ultralytics writes config here; /root/.config is often read-only on HF / minimal images
+RUN mkdir -p /app/.ultralytics
+ENV YOLO_CONFIG_DIR=/app/.ultralytics
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
