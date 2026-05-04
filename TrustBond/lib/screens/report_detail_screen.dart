@@ -564,38 +564,73 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
 
     final validated = rs != 'pending';
 
-    // AI lifecycle is driven by verification_status / status on the API.
-    // rule_status alone can stay e.g. "flagged" or "passed" while verification is already "verified".
+    // Hard rejections (rules / verification / status).
     final terminalRejected =
         rs == 'rejected' || vs == 'rejected' || st == 'rejected';
-    final aiPositive = vs == 'verified' ||
-        st == 'verified' ||
-        rs == 'passed' ||
-        rs == 'confirmed' ||
-        rs == 'verified' ||
-        rs == 'trusted';
 
-    final String aiSub;
-    final bool aiDone;
+    // Automated trust + rule screening is finished once rules ran and the
+    // pipeline produced a queue state or outcome (under_review means waiting
+    // on police, not ongoing "AI investigation").
+    final automatedScreeningDone = validated &&
+        (terminalRejected ||
+            vs == 'under_review' ||
+            vs == 'verified' ||
+            vs == 'rejected' ||
+            r.trustScore != null ||
+            (r.aiVerificationReason?.trim().isNotEmpty ?? false));
+
+    final String autoSub;
+    final bool autoDone;
     if (terminalRejected) {
-      aiSub = 'Rejected';
-      aiDone = true;
-    } else if (aiPositive) {
-      aiSub = 'Verified';
-      aiDone = true;
-    } else if (vs == 'under_review') {
-      aiSub = 'Under review';
-      aiDone = false;
+      autoSub = 'Not accepted';
+      autoDone = true;
+    } else if (automatedScreeningDone) {
+      autoSub = 'Complete';
+      autoDone = true;
     } else {
-      aiSub = 'Pending';
-      aiDone = false;
+      autoSub = 'Processing...';
+      autoDone = false;
+    }
+    final autoActive = validated && !automatedScreeningDone;
+
+    // Officer confirm/reject sets verified_by (and verified_at); older API rows may omit verified_by.
+    final policeHumanComplete =
+        r.verifiedBy != null || r.verifiedAt != null;
+    final closureWithoutPolice = terminalRejected && !policeHumanComplete;
+
+    final String policeSub;
+    final bool policeDone;
+    final bool policeActive;
+
+    if (policeHumanComplete) {
+      policeSub = 'Police review completed';
+      policeDone = true;
+      policeActive = false;
+    } else if (closureWithoutPolice) {
+      policeSub = 'Not required';
+      policeDone = true;
+      policeActive = false;
+    } else if (automatedScreeningDone && vs == 'under_review') {
+      policeSub = 'Pending review';
+      policeDone = false;
+      policeActive = true;
+    } else if (automatedScreeningDone &&
+        (vs == 'verified' || vs == 'rejected')) {
+      // Auto-resolved (e.g. score band) without an officer timestamp.
+      policeSub = vs == 'verified' ? 'Completed' : 'Closed';
+      policeDone = true;
+      policeActive = false;
+    } else {
+      policeSub = 'Waiting';
+      policeDone = false;
+      policeActive = false;
     }
 
     final steps = [
       _Step('Submitted', _formatDate(r.reportedAt), true, true),
       _Step('Rule Validation', validated ? 'Complete' : 'Processing...', validated, !validated),
-      _Step('AI Verification', aiSub, aiDone, !aiDone && validated),
-      _Step('Police Review', 'Waiting', false, false),
+      _Step('Automated screening', autoSub, autoDone, autoActive),
+      _Step('Police review', policeSub, policeDone, policeActive),
     ];
 
     return _card([

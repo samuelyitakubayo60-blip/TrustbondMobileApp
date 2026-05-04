@@ -122,14 +122,14 @@ class SubmissionGuidance:
         if trust_estimate_override is not None:
             trust_estimate = trust_estimate_override
         else:
-            trust_estimate = self._estimate_trust_score(
-                description, incident_type, evidence_count,
+        trust_estimate = self._estimate_trust_score(
+            description, incident_type, evidence_count, 
                 gps_accuracy,
                 device_trust_score,
                 has_live_capture,
                 is_offline,
                 file_types=file_types,
-            )
+        )
         
         # Add trust score guidance
         score_guidance = self._generate_trust_score_guidance(trust_estimate)
@@ -662,7 +662,7 @@ class SubmissionGuidance:
                 "evidence_hints": ["location", "people", "evidence"]
             }
         }
-
+        
         raw = (incident_type or "").strip()
         if raw in keyword_map:
             return keyword_map[raw]

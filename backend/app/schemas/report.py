@@ -99,6 +99,8 @@ class ReportResponse(BaseModel):
     decision_patterns: List[str] = []
     decision_pattern_explanations: Dict[str, str] = {}
     verified_at: Optional[datetime] = None
+    # Police officer who recorded the final review (null if never officer-verified).
+    verified_by: Optional[int] = None
     context_tags: list[str] = []
     app_version: Optional[str] = None
     network_type: Optional[str] = None

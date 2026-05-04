@@ -47,7 +47,8 @@ class ReportListItem {
 
   final DateTime? verifiedAt;
 
-
+  /// Police user id when an officer recorded confirm/reject (API: verified_by).
+  final int? verifiedBy;
 
   ReportListItem({
 
@@ -93,6 +94,8 @@ class ReportListItem {
 
     this.verifiedAt,
 
+    this.verifiedBy,
+
   });
 
 
@@ -132,6 +135,7 @@ class ReportListItem {
                     .map((k, v) => MapEntry(k.toString(), v.toString()))
                 : const {},
         verifiedAt: json['verified_at'] != null ? parseApiDateTimeToLocal(json['verified_at'] as String) : null,
+        verifiedBy: json['verified_by'] == null ? null : _intFromJson(json['verified_by']),
       );
     } catch (e) {
       debugPrint('Error parsing ReportListItem: $e');
@@ -265,6 +269,9 @@ class ReportDetailItem {
 
   final DateTime? verifiedAt;
 
+  /// Police user id when an officer recorded confirm/reject (API: verified_by).
+  final int? verifiedBy;
+
   final Map<String, int> communityVotes;
 
   final String? userVote;
@@ -316,6 +323,8 @@ class ReportDetailItem {
     this.decisionPatternExplanations = const {},
 
     this.verifiedAt,
+
+    this.verifiedBy,
 
     this.communityVotes = const {},
 
@@ -396,6 +405,8 @@ class ReportDetailItem {
               : const {},
 
       verifiedAt: json['verified_at'] != null ? parseApiDateTimeToLocal(json['verified_at'] as String) : null,
+
+      verifiedBy: json['verified_by'] == null ? null : _intFromJson(json['verified_by']),
 
       communityVotes: votes,
 

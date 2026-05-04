@@ -1,3 +1,4 @@
+import os
 from typing import Optional, List
 from pydantic_settings import BaseSettings
 
@@ -46,6 +47,10 @@ class Settings(BaseSettings):
     llm_local_max_new_tokens: int = 768
     llm_timeout_seconds: int = 12
     llm_max_tokens: int = 420
+
+    # Hugging Face Hub (optional). Set in .env as HF_TOKEN=... or hf_token=... for authenticated downloads
+    # and to avoid "unauthenticated requests" warnings from huggingface_hub / transformers.
+    hf_token: Optional[str] = None
 
     # Device anti-abuse guardrails for report creation.
     duplicate_report_time_window_seconds: int = 120
@@ -97,3 +102,17 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def _sync_hf_hub_token_to_environ() -> None:
+    tok = (
+        (getattr(settings, "hf_token", None) or "").strip()
+        or os.environ.get("HF_TOKEN", "").strip()
+        or os.environ.get("HUGGING_FACE_HUB_TOKEN", "").strip()
+    )
+    if tok:
+        os.environ.setdefault("HF_TOKEN", tok)
+        os.environ.setdefault("HUGGING_FACE_HUB_TOKEN", tok)
+
+
+_sync_hf_hub_token_to_environ()

@@ -151,14 +151,14 @@ class _ReportSuccessScreenState extends State<ReportSuccessScreen>
         ? [
             _TimelineStep('Saved on Device', 'Just now', true, true),
             _TimelineStep('Waiting for Signal', 'Pending', false, false),
-            _TimelineStep('AI Verification', 'Pending', false, false),
-            _TimelineStep('Police Review', 'Waiting', false, false),
+            _TimelineStep('Automated screening', 'Pending', false, false),
+            _TimelineStep('Police review', 'Waiting', false, false),
           ]
         : [
             _TimelineStep('Submitted', 'Just now', true, true),
             _TimelineStep('Server Validation', 'Processing', true, false),
-            _TimelineStep('AI Verification', 'Pending', false, false),
-            _TimelineStep('Police Review', 'Waiting', false, false),
+            _TimelineStep('Automated screening', 'Pending', false, false),
+            _TimelineStep('Police review', 'Waiting', false, false),
           ];
 
     return Container(

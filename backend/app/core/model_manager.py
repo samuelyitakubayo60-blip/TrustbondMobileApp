@@ -14,6 +14,12 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
+
+def _hf_hub_token() -> Optional[str]:
+    t = (os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or "").strip()
+    return t or None
+
+
 class ModelManager:
     """Manages automatic downloading and caching of ML models."""
     
@@ -83,12 +89,14 @@ class ModelManager:
         
         try:
             from sentence_transformers import SentenceTransformer
-            
+
+            st_kw: dict[str, Any] = {"cache_folder": str(model_cache_dir)}
+            _tok = _hf_hub_token()
+            if _tok:
+                st_kw["token"] = _tok
+
             # Download and cache the model using sentence-transformers' built-in caching
-            model = SentenceTransformer(
-                model_name,
-                cache_folder=str(model_cache_dir)
-            )
+            model = SentenceTransformer(model_name, **st_kw)
             
             # Test the model to ensure it's properly loaded
             test_embedding = model.encode("test")
@@ -136,10 +144,11 @@ def ensure_sentence_transformer_model(model_name: str = "all-MiniLM-L6-v2"):
     
     try:
         from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer(
-            model_name,
-            cache_folder=str(model_cache_dir)
-        )
+        st_kw: dict[str, Any] = {"cache_folder": str(model_cache_dir)}
+        _tok = _hf_hub_token()
+        if _tok:
+            st_kw["token"] = _tok
+        model = SentenceTransformer(model_name, **st_kw)
         return model
     except Exception as e:
         logger.error(f"Failed to load sentence transformer model: {e}")
@@ -287,6 +296,9 @@ def ensure_local_narrative_pipeline(model_name: str = "Qwen/Qwen2.5-1.5B-Instruc
         cache_dir = manager.cache_dir / "local_narrative" / model_name.replace("/", "--")
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_kw = {"cache_dir": str(cache_dir)}
+        _hub_tok = _hf_hub_token()
+        if _hub_tok:
+            cache_kw["token"] = _hub_tok
 
         config = AutoConfig.from_pretrained(model_name, **cache_kw)
         model_type = (getattr(config, "model_type", "") or "").lower()

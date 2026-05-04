@@ -6538,6 +6538,8 @@ def _build_report_detail_response(report: Report, db: Session) -> ReportDetailRe
         decision_pattern_explanations=_extract_decision_pattern_explanations(
             getattr(report, "ai_verification_reason", None)
         ),
+        verified_at=getattr(report, "verified_at", None),
+        verified_by=getattr(report, "verified_by", None),
         incident_latitude=float(report.latitude) if report.latitude is not None else None,
         incident_longitude=float(report.longitude) if report.longitude is not None else None,
         incident_location_source=incident_source,
@@ -6680,6 +6682,8 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         decision_pattern_explanations=_extract_decision_pattern_explanations(
             getattr(report, "ai_verification_reason", None)
         ),
+        verified_at=getattr(report, "verified_at", None),
+        verified_by=getattr(report, "verified_by", None),
         # Add missing required fields
         device_id=str(report.device_id),
         latitude=float(report.latitude) if report.latitude else None,
