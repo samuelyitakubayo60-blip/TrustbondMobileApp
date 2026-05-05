@@ -50,6 +50,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   final List<_EvidenceFile> _files = [];
   bool _submitting = false;
   String? _error;
+  String? _submitStatus;
   bool _isRecording = false;
   GuidanceResponse? _guidance;
   bool _guidanceLoading = false;
@@ -280,9 +281,16 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   }
 
   Future<void> _submit() async {
+    final networkType = await _statusService.getNetworkType();
+    final isOffline = (networkType ?? '').toLowerCase() == 'none' ||
+        (networkType ?? '').toLowerCase() == 'offline' ||
+        (networkType ?? '').trim().isEmpty;
     setState(() {
       _submitting = true;
       _error = null;
+      _submitStatus = isOffline
+          ? 'No internet detected. Saving offline and retrying...'
+          : 'Submitting online...';
     });
 
     try {
@@ -397,11 +405,13 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
     } catch (e) {
       setState(() {
         _error = 'Failed to submit report: ${e.toString()}';
+        _submitStatus = null;
       });
     } finally {
       if (mounted) {
         setState(() {
           _submitting = false;
+          _submitStatus = null;
         });
       }
     }
@@ -448,6 +458,31 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
                 ),
               ),
             ),
+            if (_submitStatus != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 6),
+                child: Row(
+                  children: [
+                    Icon(
+                      _submitStatus!.toLowerCase().contains('online')
+                          ? Icons.wifi
+                          : Icons.cloud_off,
+                      size: 14,
+                      color: AppColors.muted,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _submitStatus!,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             _buildSubmitButton(),
           ],
         ),
@@ -759,11 +794,28 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
                 borderRadius: BorderRadius.circular(14)),
           ),
           child: _submitting
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppColors.bg),
+              ? Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.bg,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      _submitStatus?.toLowerCase().contains('online') == true
+                          ? 'Submitting online...'
+                          : 'Saving offline...',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                 )
               : const Text('Submit Anonymously',
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),

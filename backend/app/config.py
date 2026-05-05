@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import Optional, List
 from pydantic_settings import BaseSettings
 
@@ -105,14 +106,24 @@ settings = Settings()
 
 
 def _sync_hf_hub_token_to_environ() -> None:
+    # Support common token variable names used across HF docs/CI platforms.
+    env_candidates = (
+        "HF_TOKEN",
+        "HUGGING_FACE_HUB_TOKEN",
+        "HUGGINGFACEHUB_API_TOKEN",
+        "HF_API_TOKEN",
+    )
     tok = (
         (getattr(settings, "hf_token", None) or "").strip()
-        or os.environ.get("HF_TOKEN", "").strip()
-        or os.environ.get("HUGGING_FACE_HUB_TOKEN", "").strip()
+        or next((os.environ.get(k, "").strip() for k in env_candidates if os.environ.get(k, "").strip()), "")
     )
     if tok:
-        os.environ.setdefault("HF_TOKEN", tok)
-        os.environ.setdefault("HUGGING_FACE_HUB_TOKEN", tok)
+        for k in env_candidates:
+            os.environ.setdefault(k, tok)
+    else:
+        # Keep startup logs clean when anonymous Hub access is intentional.
+        # (Model loading still works without a token, just with lower rate limits.)
+        logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
 
 _sync_hf_hub_token_to_environ()

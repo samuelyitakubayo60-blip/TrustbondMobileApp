@@ -71,7 +71,7 @@ from app.core.hotspot_auto import (
 from app.core.village_lookup import get_village_location_id, get_village_location_info
 from app.schemas.report import CommunityVoteRequest
 from sqlalchemy import text, or_, func, cast, String, delete
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -335,6 +335,12 @@ def warmup_narrative_models_on_startup() -> None:
         logger.warning("Semantic matcher warm-up failed: %s", exc)
 
     try:
+        logger.info(
+            "Narrative warm-up config: remote_model=%s, local_fallback=%s, local_model=%s",
+            settings.llm_model,
+            settings.llm_use_local_fallback,
+            settings.llm_local_model,
+        )
         client = _get_llm_client()
         if client is not None:
             # Minimal readiness ping to force connection/auth/model validation at startup.
@@ -347,10 +353,17 @@ def warmup_narrative_models_on_startup() -> None:
             )
             logger.info("Remote LLM narrative warm-up complete")
         else:
+            logger.info(
+                "Remote LLM unavailable; warming local narrative model: %s",
+                settings.llm_local_model,
+            )
             local_gen = _get_local_narrator()
             if local_gen is not None:
                 _generate_with_local_narrator("Summarize: startup check", max_chars=64)
-                logger.info("Local LLM narrative warm-up complete")
+                logger.info(
+                    "Local LLM narrative warm-up complete for model: %s",
+                    settings.llm_local_model,
+                )
             else:
                 logger.info("LLM narrative warm-up skipped (no remote/local model available)")
     except Exception as exc:
@@ -2097,6 +2110,14 @@ def _normalize_evidence_file_url(raw: str | None) -> str | None:
         return s
     return f"/uploads/evidence/{s}"
 
+
+def _absolute_evidence_url(raw: str | None) -> str | None:
+    """
+    Backward-compatible evidence URL resolver used by response builders.
+    Keep remote URLs as-is, normalize local paths, and avoid NameError crashes.
+    """
+    return _normalize_evidence_file_url(raw)
+
 # Evidence AI Analysis functions
 def detect_blur(image_bytes: bytes) -> tuple[float, bool]:
     """Detect image blur using Laplacian variance method."""
@@ -2977,20 +2998,27 @@ def _purge_outside_musanze_reports(db: Session, recompute_hotspots: bool = True)
 
 
 def _generate_report_number(db: Session) -> str:
-    """Generate next report number RPT-YYYY-NNNN."""
+    """Generate next report number RPT-YYYY-NNNN with low-lock fallback."""
     year = datetime.now(timezone.utc).strftime("%Y")
     prefix = f"RPT-{year}-"
-    row = db.execute(
-        text("""
-            SELECT COALESCE(MAX(
-                NULLIF(SUBSTRING(report_number FROM 'RPT-[0-9]{4}-([0-9]+)'), '')::INT
-            ), 0) + 1 AS next_num
-            FROM reports WHERE report_number LIKE :prefix
-        """),
-        {"prefix": f"{prefix}%"},
-    ).fetchone()
-    next_num = row[0] if row else 1
-    return f"{prefix}{next_num:04d}"
+    try:
+        # Keep this query cheap; under DB pressure, fallback to non-sequential id.
+        db.execute(text("SET LOCAL statement_timeout = 1200"))
+        row = db.execute(
+            text("""
+                SELECT COALESCE(MAX(
+                    NULLIF(SUBSTRING(report_number FROM 'RPT-[0-9]{4}-([0-9]+)'), '')::INT
+                ), 0) + 1 AS next_num
+                FROM reports WHERE report_number LIKE :prefix
+            """),
+            {"prefix": f"{prefix}%"},
+        ).fetchone()
+        next_num = row[0] if row else 1
+        return f"{prefix}{next_num:04d}"
+    except Exception:
+        # Fallback avoids blocking report creation if sequence lookup times out.
+        fast_suffix = datetime.now(timezone.utc).strftime("%m%d%H%M%S")
+        return f"{prefix}{fast_suffix}"
 
 UPLOAD_DIR = "uploads/evidence"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -3268,11 +3296,6 @@ def create_report(
         report.village_location_id = village_id
         report.location_id = village_id
     db.add(report)
-    try:
-        db.flush()  # Get report_id
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Report already exists")
 
     # Evidence processing with content analysis
     evidence_metadata_list = []
@@ -3658,6 +3681,25 @@ def create_report(
     try:
         db.commit()
         db.refresh(report)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Report already exists")
+    except OperationalError as e:
+        db.rollback()
+        msg = str(getattr(e, "orig", e)).lower()
+        if "statement timeout" in msg or "querycanceled" in msg:
+            # Idempotency safety: mobile may retry with the same report_id after a timeout.
+            # If insert actually made it through and only response path timed out, return it.
+            existing_after_timeout = (
+                db.query(Report).filter(Report.report_id == incoming_report_id).first()
+            )
+            if existing_after_timeout is not None:
+                return _build_report_detail_response(existing_after_timeout, db, for_police_viewer=False)
+            raise HTTPException(
+                status_code=503,
+                detail="Database is busy processing this report. Please retry.",
+            )
+        raise HTTPException(status_code=500, detail=f"Failed to save report: {e}")
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to save report: {e}")
@@ -4315,7 +4357,8 @@ def add_review(
 @router.get("/{report_id}", response_model=ReportDetailResponse)
 def get_report(
     report_id: UUID,
-    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    device_id: Optional[UUID] = Query(None, description="Device ID (mobile owner)."),
+    current_user: Annotated[Optional[PoliceUser], Depends(get_optional_user)] = None,
     db: Session = Depends(get_db),
 ):
     """Get a single report by ID."""
@@ -4340,7 +4383,17 @@ def get_report(
     
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
-    
+
+    # Mobile owner access path (no auth token) - must match report owner device_id.
+    if device_id is not None:
+        if str(report.device_id) != str(device_id):
+            raise HTTPException(status_code=401, detail="Unauthorized report access")
+        return _build_report_detail_response(report, db, for_police_viewer=False)
+
+    # Police/dashboard access path (auth required).
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     return _build_report_detail_response(report, db, for_police_viewer=True)
 
 
@@ -5452,7 +5505,8 @@ def _check_and_create_auto_case(report_id: str):
             return
         
         # Check if report is already in a case
-        from app.models.case_reports import case_reports_table
+        from app.models.case import CaseReport
+        case_reports_table = CaseReport.__table__
         existing_case = db.query(case_reports_table).filter(
             case_reports_table.c.report_id == report_id
         ).first()
@@ -5510,7 +5564,8 @@ def _try_add_to_existing_case(db: Session, report: Report, cluster_radius_km: fl
     """Try to add report to existing compatible case"""
     try:
         from app.models.case import Case
-        from app.models.case_reports import case_reports_table
+        from app.models.case import CaseReport
+        case_reports_table = CaseReport.__table__
         
         # Find existing cases with same incident type that are still open
         compatible_cases = db.query(Case).filter(
@@ -5597,7 +5652,8 @@ def _try_add_to_existing_case(db: Session, report: Report, cluster_radius_km: fl
 def _create_new_case_for_report(db: Session, report: Report, cluster_radius_km: float, min_reports_threshold: int):
     """Create new case for report if enough similar reports exist"""
     try:
-        from app.models.case_reports import case_reports_table
+        from app.models.case import CaseReport
+        case_reports_table = CaseReport.__table__
         
         # Strategy 1: Cluster by same village/location (preferred)
         if report.village_location_id:
@@ -5716,7 +5772,8 @@ def _auto_remove_rejected_report(report_id: str):
                 db.delete(ml_pred)
             
             # Remove case associations
-            from app.models.case_reports import case_reports_table
+            from app.models.case import CaseReport
+            case_reports_table = CaseReport.__table__
             db.execute(case_reports_table.delete().where(case_reports_table.c.report_id == report_id))
             
             # Finally remove the report

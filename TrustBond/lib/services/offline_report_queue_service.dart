@@ -79,6 +79,11 @@ class OfflineReportQueueService {
     final deviceHash = await _deviceService.getDeviceHash();
     final deviceId = await _deviceService.getDeviceId();
     final currentNetworkType = await _statusService.getNetworkType();
+    final onlineNow = await _hasInternet();
+    final networkTypeAtSubmit = (currentNetworkType != null &&
+            currentNetworkType.trim().isNotEmpty)
+        ? currentNetworkType
+        : (onlineNow ? 'online' : 'offline');
     final submittedAt = DateTime.now();
     final reportId = _generateUuidV4();
     final mediaItems = await _persistEvidenceFiles(
@@ -99,8 +104,7 @@ class OfflineReportQueueService {
       longitude: longitude,
       gpsAccuracy: gpsAccuracy,
       submittedAt: submittedAt.toIso8601String(),
-      networkTypeAtSubmit:
-          _isOfflineNetwork(currentNetworkType) ? 'Offline' : currentNetworkType!,
+      networkTypeAtSubmit: networkTypeAtSubmit,
       batteryLevel: batteryLevel,
       motionLevel: motionLevel,
       movementSpeed: movementSpeed,
@@ -118,12 +122,20 @@ class OfflineReportQueueService {
       lastError: null,
     );
 
+    // Prefer immediate online send. Queue only when offline or when immediate send fails.
+    if (onlineNow) {
+      final sentNow = await _trySendImmediately(queueItem);
+      if (sentNow) {
+        return OfflineSubmitResult(reportId: reportId, queuedOffline: false);
+      }
+    }
+
     final queue = await _loadQueue();
     queue.add(queueItem);
     await _saveQueue(queue);
     AppRefreshBus.notify('offline_queue_saved');
 
-    if (!_isOfflineNetwork(currentNetworkType)) {
+    if (onlineNow) {
       await syncNow(reason: 'submit');
       final remaining = await _findById(reportId);
       return OfflineSubmitResult(
@@ -300,6 +312,61 @@ class OfflineReportQueueService {
     return await _hasInternet();
   }
 
+  Future<bool> _trySendImmediately(OfflineReportQueueItem item) async {
+    String? resolvedDeviceId = item.deviceId;
+    bool createdThisAttempt = false;
+
+    try {
+      final response = await _api.submitReport(_reportPayload(item));
+      resolvedDeviceId = response['device_id']?.toString() ?? resolvedDeviceId;
+      createdThisAttempt = true;
+    } on ApiRequestException catch (e) {
+      if (e.statusCode == 409) {
+        resolvedDeviceId ??= await _deviceService.ensureDeviceId();
+      } else {
+        return false;
+      }
+    } catch (_) {
+      return false;
+    }
+
+    if (resolvedDeviceId == null || resolvedDeviceId.isEmpty) {
+      resolvedDeviceId = await _deviceService.ensureDeviceId();
+    }
+    if (resolvedDeviceId == null || resolvedDeviceId.isEmpty) {
+      return false;
+    }
+    final deviceId = resolvedDeviceId;
+
+    try {
+      final uploadFutures = item.mediaItems.map((media) async {
+        final mediaFile = File(media.localPath);
+        if (!await mediaFile.exists()) {
+          throw Exception('Queued media file is missing: ${media.localPath}');
+        }
+        return _api.uploadEvidence(
+          item.localReportId,
+          deviceId,
+          media.localPath,
+          mediaLatitude: item.latitude,
+          mediaLongitude: item.longitude,
+          capturedAt: DateTime.tryParse(media.capturedAt),
+          isLiveCapture: media.isLiveCapture,
+        );
+      });
+      await Future.wait(uploadFutures);
+      await _cleanupLocalFiles(item.localReportId);
+      return true;
+    } catch (_) {
+      if (createdThisAttempt) {
+        try {
+          await _api.deleteReport(item.localReportId, deviceId);
+        } catch (_) {}
+      }
+      return false;
+    }
+  }
+
   Future<bool> _handleSyncFailure(
     OfflineReportQueueItem item,
     String error,
@@ -458,13 +525,6 @@ class OfflineReportQueueService {
       if (jsonEncode(a[i].toJson()) != jsonEncode(b[i].toJson())) return false;
     }
     return true;
-  }
-
-  bool _isOfflineNetwork(String? networkType) {
-    return networkType == null ||
-        networkType.trim().isEmpty ||
-        networkType.toLowerCase() == 'none' ||
-        networkType.toLowerCase() == 'offline';
   }
 
   String _inferFileType(String path) {

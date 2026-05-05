@@ -295,10 +295,12 @@ def ensure_local_narrative_pipeline(model_name: str = "Qwen/Qwen2.5-1.5B-Instruc
         manager = get_model_manager()
         cache_dir = manager.cache_dir / "local_narrative" / model_name.replace("/", "--")
         cache_dir.mkdir(parents=True, exist_ok=True)
+        had_cached_files = any(cache_dir.rglob("*"))
         cache_kw = {"cache_dir": str(cache_dir)}
         _hub_tok = _hf_hub_token()
         if _hub_tok:
             cache_kw["token"] = _hub_tok
+        cache_state = "cache" if had_cached_files else "download"
 
         config = AutoConfig.from_pretrained(model_name, **cache_kw)
         model_type = (getattr(config, "model_type", "") or "").lower()
@@ -330,7 +332,8 @@ def ensure_local_narrative_pipeline(model_name: str = "Qwen/Qwen2.5-1.5B-Instruc
             model = AutoModelForSeq2SeqLM.from_pretrained(model_name, **cache_kw)
             narrator = _build_seq2seq_narrator(model, tokenizer)
             logger.info(
-                "Local narrative model ready (seq2seq/generate): %s (cache: %s)",
+                "Local narrative model ready (seq2seq/generate, source=%s): %s (cache: %s)",
+                cache_state,
                 model_name,
                 cache_dir,
             )
@@ -342,7 +345,8 @@ def ensure_local_narrative_pipeline(model_name: str = "Qwen/Qwen2.5-1.5B-Instruc
             model = AutoModelForCausalLM.from_pretrained(model_name, **cache_kw)
             narrator = _build_causal_narrator(model, tokenizer)
             logger.info(
-                "Local narrative model ready (causal LM/generate): %s (cache: %s)",
+                "Local narrative model ready (causal LM/generate, source=%s): %s (cache: %s)",
+                cache_state,
                 model_name,
                 cache_dir,
             )
@@ -352,7 +356,8 @@ def ensure_local_narrative_pipeline(model_name: str = "Qwen/Qwen2.5-1.5B-Instruc
         model = AutoModelForSeq2SeqLM.from_pretrained(model_name, **cache_kw)
         narrator = _build_seq2seq_narrator(model, tokenizer)
         logger.info(
-            "Local narrative model ready (seq2seq fallback): %s (cache: %s)",
+            "Local narrative model ready (seq2seq fallback, source=%s): %s (cache: %s)",
+            cache_state,
             model_name,
             cache_dir,
         )
