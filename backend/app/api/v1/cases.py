@@ -4,7 +4,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload, selectinload
-from sqlalchemy import or_, func
+from sqlalchemy import and_, or_, func
 
 from app.database import get_db
 from app.core.websocket import manager
@@ -53,46 +53,54 @@ def _supervisor_scope(current_user: PoliceUser, db: Session) -> tuple[int, set[i
     # Use the same logic as the reports API
     supervisor_station_id = getattr(current_user, "station_id", None)
     
-    sector_location_ids = set()
+    location_ids = set()
     if supervisor_station_id is not None:
-        # Get station to find its sector location(s)
+        # Get station to find configured coverage cells (or legacy sectors)
         from app.models.station import Station
+        from app.models.station_coverage import StationCoverageCell
         station = db.query(Station).filter(Station.station_id == supervisor_station_id).first()
         
         if station:
-            # Handle both primary and secondary sectors
-            sector_location_ids_list = []
-            
-            # Primary sector
-            if station.location_id:
-                sector_location_ids_list.append(station.location_id)
-            
-            # Secondary sector (if exists)
-            if station.sector2_id:
-                sector_location_ids_list.append(station.sector2_id)
-            
-            # Find all villages/cells in all sectors
-            for sector_location_id in sector_location_ids_list:
-                sector_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector_location_id,  # The sector itself
-                        Location.parent_location_id == sector_location_id,  # Direct children (cells)
-                        # Also get villages under cells in this sector
-                        Location.parent_location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id == sector_location_id
-                            ).subquery()
+            covered_cell_ids = {
+                int(row[0])
+                for row in db.query(StationCoverageCell.cell_location_id)
+                .filter(StationCoverageCell.station_id == station.station_id)
+                .all()
+            }
+            if covered_cell_ids:
+                village_rows = db.query(Location.location_id).filter(
+                    Location.location_type == "village",
+                    Location.parent_location_id.in_(covered_cell_ids),
+                ).all()
+                location_ids.update(int(row[0]) for row in village_rows)
+            else:
+                # Legacy fallback: expand sector fields to villages.
+                for sector_location_id in [sid for sid in [station.location_id, station.sector2_id] if sid]:
+                    sector_locations_query = db.query(Location.location_id).filter(
+                        or_(
+                            and_(
+                                Location.location_type == "village",
+                                Location.parent_location_id == sector_location_id,
+                            ),
+                            and_(
+                                Location.location_type == "village",
+                                Location.parent_location_id.in_(
+                                    db.query(Location.location_id).filter(
+                                        Location.location_type == "cell",
+                                        Location.parent_location_id == sector_location_id,
+                                    )
+                                ),
+                            ),
                         )
                     )
-                )
-                sector_location_ids.update({loc[0] for loc in sector_locations_query.all()})
+                    location_ids.update({int(loc[0]) for loc in sector_locations_query.all()})
     else:
         # Fallback to assigned_location_id if station_id is None
         assigned_location_id = getattr(current_user, "assigned_location_id", None)
         if assigned_location_id:
-            sector_location_ids = _all_location_ids_for_scope(db, assigned_location_id)
+            location_ids = _all_location_ids_for_scope(db, assigned_location_id)
     
-    return supervisor_station_id, sector_location_ids
+    return supervisor_station_id, location_ids
 
 
 def _report_in_supervisor_scope(report: Report, station_id: int, location_ids: set[int], db: Session) -> bool:

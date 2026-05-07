@@ -173,6 +173,7 @@ const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
             {stationOptions.map((st) => (
               <option key={st.station_id} value={st.station_id}>
                 {st.station_name}
+                {st.covered_cell_names?.length ? ` (${st.covered_cell_names.length} cells)` : ''}
               </option>
             ))}
           </select>

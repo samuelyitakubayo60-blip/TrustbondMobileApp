@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, Field
 from typing import Optional
 from datetime import datetime
 
@@ -15,6 +15,7 @@ class StationBase(BaseModel):
   phone_number: Optional[str] = None
   email: Optional[str] = None
   is_active: bool = True
+  covered_cell_ids: list[int] = Field(default_factory=list)
 
   @field_validator("phone_number")
   @classmethod
@@ -59,12 +60,14 @@ class StationUpdate(BaseModel):
   phone_number: Optional[str] = None
   email: Optional[str] = None
   is_active: Optional[bool] = None
+  covered_cell_ids: Optional[list[int]] = None
 
 
 class StationResponse(StationBase):
   station_id: int
   location_name: Optional[str] = None
   sector2_name: Optional[str] = None
+  covered_cell_names: list[str] = Field(default_factory=list)
   created_at: Optional[datetime] = None
   updated_at: Optional[datetime] = None
 

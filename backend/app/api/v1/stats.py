@@ -14,6 +14,7 @@ from app.models.report_assignment import ReportAssignment
 from app.models.device import Device
 from app.models.audit_log import AuditLog
 from app.models.station import Station
+from app.models.station_coverage import StationCoverageCell
 from app.models.location import Location
 from app.models.police_user import PoliceUser
 from app.api.v1.auth import get_current_user
@@ -22,6 +23,50 @@ from app.models.ml_prediction import MLPrediction
 from app.models.case import Case
 
 router = APIRouter(prefix="/stats", tags=["stats"])
+
+
+def _station_covered_village_ids(db: Session, station: Station) -> set[int]:
+    covered_cell_ids = {
+        int(row[0])
+        for row in db.query(StationCoverageCell.cell_location_id)
+        .filter(StationCoverageCell.station_id == station.station_id)
+        .all()
+    }
+    if covered_cell_ids:
+        return {
+            int(row[0])
+            for row in db.query(Location.location_id)
+            .filter(
+                Location.location_type == "village",
+                Location.parent_location_id.in_(covered_cell_ids),
+            )
+            .all()
+        }
+
+    # Legacy fallback
+    village_ids: set[int] = set()
+    for sector_location_id in [sid for sid in [station.location_id, station.sector2_id] if sid]:
+        rows = (
+            db.query(Location.location_id)
+            .filter(
+                or_(
+                    (Location.location_type == "village")
+                    & (Location.parent_location_id == sector_location_id),
+                    (Location.location_type == "village")
+                    & (
+                        Location.parent_location_id.in_(
+                            db.query(Location.location_id).filter(
+                                Location.location_type == "cell",
+                                Location.parent_location_id == sector_location_id,
+                            )
+                        )
+                    ),
+                )
+            )
+            .all()
+        )
+        village_ids.update(int(r[0]) for r in rows)
+    return village_ids
 
 
 @router.get("/station/{station_id}")
@@ -44,56 +89,18 @@ def get_station_stats(
     if not station:
         raise HTTPException(status_code=404, detail="Station not found")
     
-    # Build location filter for dual sectors
-    sector_location_ids = []
-    if station.location_id:
-        sector_location_id = station.location_id
-        sector_locations_query = db.query(Location.location_id).filter(
-            or_(
-                Location.location_id == sector_location_id,
-                Location.parent_location_id == sector_location_id,
-                Location.location_id.in_(
-                    db.query(Location.location_id).filter(
-                        Location.parent_location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id == sector_location_id
-                            )
-                        )
-                    )
-                )
-            )
-        )
-        sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
-    
-    if station.sector2_id:
-        sector2_location_id = station.sector2_id
-        sector2_locations_query = db.query(Location.location_id).filter(
-            or_(
-                Location.location_id == sector2_location_id,
-                Location.parent_location_id == sector2_location_id,
-                Location.location_id.in_(
-                    db.query(Location.location_id).filter(
-                        Location.parent_location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id == sector2_location_id
-                            )
-                        )
-                    )
-                )
-            )
-        )
-        sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
-    
-    sector_location_ids = list(set(sector_location_ids))
+    covered_village_ids = _station_covered_village_ids(db, station)
     
     # Reports for this station
-    station_report_filter = or_(
+    scope_filters = [
         Report.handling_station_id == station_id,
         Report.assignments.any(
             ReportAssignment.police_user.has(PoliceUser.station_id == station_id)
         ),
-        Report.village_location_id.in_(sector_location_ids) if sector_location_ids else False
-    )
+    ]
+    if covered_village_ids:
+        scope_filters.append(Report.village_location_id.in_(list(covered_village_ids)))
+    station_report_filter = or_(*scope_filters)
     
     # Total reports
     total_reports = db.query(func.count(Report.report_id)).filter(station_report_filter).scalar() or 0
@@ -215,68 +222,16 @@ def get_dashboard_stats(
             # Get station to find its sector location(s)
             station = db.query(Station).filter(Station.station_id == station_id).first()
             if station:
-                # Handle both primary and secondary sectors
-                sector_location_ids = []
-                
-                # Primary sector
-                if station.location_id:
-                    sector_location_id = station.location_id
-                    # Find all villages/cells in this sector
-                    sector_locations_query = db.query(Location.location_id).filter(
-                        or_(
-                            Location.location_id == sector_location_id,  # The sector itself
-                            Location.parent_location_id == sector_location_id,  # Direct children (cells)
-                            # Also get villages under cells in this sector
-                            Location.location_id.in_(
-                                db.query(Location.location_id).filter(
-                                    Location.parent_location_id.in_(
-                                        db.query(Location.location_id).filter(
-                                            Location.parent_location_id == sector_location_id
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                    sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
-                
-                # Secondary sector (if exists)
-                if station.sector2_id:
-                    sector2_location_id = station.sector2_id
-                    # Find all villages/cells in secondary sector
-                    sector2_locations_query = db.query(Location.location_id).filter(
-                        or_(
-                            Location.location_id == sector2_location_id,  # The sector itself
-                            Location.parent_location_id == sector2_location_id,  # Direct children (cells)
-                            # Also get villages under cells in this sector
-                            Location.location_id.in_(
-                                db.query(Location.location_id).filter(
-                                    Location.parent_location_id.in_(
-                                        db.query(Location.location_id).filter(
-                                            Location.parent_location_id == sector2_location_id
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                    sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
-                
-                # Remove duplicates
-                sector_location_ids = list(set(sector_location_ids))
-                
-                # Filter reports by location hierarchy (village_location_id in sector)
+                covered_village_ids = _station_covered_village_ids(db, station)
                 assigned_qs = (
                     db.query(Report.report_id)
-                    .filter(
-                        or_(
-                            Report.handling_station_id == station_id,
-                            Report.assignments.any(
-                                ReportAssignment.police_user.has(PoliceUser.station_id == station_id)
-                            ),
-                            Report.village_location_id.in_(sector_location_ids)
-                        )
-                    )
+                    .filter(or_(
+                        Report.handling_station_id == station_id,
+                        Report.assignments.any(
+                            ReportAssignment.police_user.has(PoliceUser.station_id == station_id)
+                        ),
+                        Report.village_location_id.in_(list(covered_village_ids)) if covered_village_ids else False,
+                    ))
                 ).distinct()
             else:
                 # Fallback: only station-based filtering

@@ -149,7 +149,7 @@ const Stations = ({ openModal, wsRefreshKey }) => {
                 <th>Code</th>
                 <th>Name</th>
                 <th>Type</th>
-                <th>Sector / Location</th>
+                <th>Coverage (cells)</th>
                 <th>Contact</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -165,12 +165,19 @@ const Stations = ({ openModal, wsRefreshKey }) => {
                   <td><strong>{s.station_name}</strong></td>
                   <td style={{ fontSize: '11px', color: 'var(--muted)' }}>{s.station_type}</td>
                   <td style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                    {s.location_name || '—'}
-                    {s.sector2_name && (
-                      <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>
-                        + {s.sector2_name}
-                      </div>
-                    )}
+                    {(s.covered_cell_names && s.covered_cell_names.length > 0)
+                      ? (
+                        <>
+                          <div style={{ fontWeight: 600, color: 'var(--text)' }}>
+                            {s.covered_cell_names.length} cell(s)
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>
+                            {s.covered_cell_names.slice(0, 3).join(', ')}
+                            {s.covered_cell_names.length > 3 ? '…' : ''}
+                          </div>
+                        </>
+                      )
+                      : '—'}
                   </td>
                   <td style={{ fontSize: '11px', color: 'var(--muted)' }}>
                     {s.phone_number || '—'}

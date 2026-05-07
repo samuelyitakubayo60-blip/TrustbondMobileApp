@@ -42,6 +42,9 @@ class OfflineReportQueueService {
   bool _isSyncing = false;
   DateTime? _lastSyncAt;
 
+  // Errors we can safely retry by queueing offline.
+  static const Set<int> _retryableHttpStatuses = {408, 409, 425, 429, 500, 502, 503, 504};
+
   Future<List<OfflineReportQueueItem>> getQueuedReports() async {
     final queue = await _loadQueue();
     final recovered = queue
@@ -124,9 +127,13 @@ class OfflineReportQueueService {
 
     // Prefer immediate online send. Queue only when offline or when immediate send fails.
     if (onlineNow) {
-      final sentNow = await _trySendImmediately(queueItem);
-      if (sentNow) {
+      final immediate = await _trySendImmediately(queueItem);
+      if (immediate.sent) {
         return OfflineSubmitResult(reportId: reportId, queuedOffline: false);
+      }
+      // Online + non-retryable API failure should not be disguised as offline queueing.
+      if (!immediate.shouldQueueOffline) {
+        throw Exception(immediate.errorMessage ?? 'Online report submission failed.');
       }
     }
 
@@ -298,10 +305,8 @@ class OfflineReportQueueService {
       // Wait for all uploads to complete (parallel execution)
       await Future.wait(uploadFutures);
     } catch (e) {
-      if (createdThisAttempt) {
-        try {
-          await _api.deleteReport(item.localReportId, deviceId);
-        } catch (_) {}
+      if (item.mediaItems.isNotEmpty) {
+        await _rollbackReportIfNoEvidence(item.localReportId, deviceId);
       }
       return _handleSyncFailure(item, e.toString());
     }
@@ -312,29 +317,39 @@ class OfflineReportQueueService {
     return await _hasInternet();
   }
 
-  Future<bool> _trySendImmediately(OfflineReportQueueItem item) async {
+  Future<_ImmediateSubmitOutcome> _trySendImmediately(OfflineReportQueueItem item) async {
     String? resolvedDeviceId = item.deviceId;
-    bool createdThisAttempt = false;
 
     try {
       final response = await _api.submitReport(_reportPayload(item));
       resolvedDeviceId = response['device_id']?.toString() ?? resolvedDeviceId;
-      createdThisAttempt = true;
     } on ApiRequestException catch (e) {
       if (e.statusCode == 409) {
         resolvedDeviceId ??= await _deviceService.ensureDeviceId();
       } else {
-        return false;
+        return _ImmediateSubmitOutcome(
+          sent: false,
+          shouldQueueOffline: _retryableHttpStatuses.contains(e.statusCode),
+          errorMessage: e.message,
+        );
       }
-    } catch (_) {
-      return false;
+    } catch (e) {
+      return _ImmediateSubmitOutcome(
+        sent: false,
+        shouldQueueOffline: true,
+        errorMessage: e.toString(),
+      );
     }
 
     if (resolvedDeviceId == null || resolvedDeviceId.isEmpty) {
       resolvedDeviceId = await _deviceService.ensureDeviceId();
     }
     if (resolvedDeviceId == null || resolvedDeviceId.isEmpty) {
-      return false;
+      return const _ImmediateSubmitOutcome(
+        sent: false,
+        shouldQueueOffline: true,
+        errorMessage: 'Could not resolve device ID for upload.',
+      );
     }
     final deviceId = resolvedDeviceId;
 
@@ -356,14 +371,40 @@ class OfflineReportQueueService {
       });
       await Future.wait(uploadFutures);
       await _cleanupLocalFiles(item.localReportId);
-      return true;
-    } catch (_) {
-      if (createdThisAttempt) {
-        try {
-          await _api.deleteReport(item.localReportId, deviceId);
-        } catch (_) {}
+      return const _ImmediateSubmitOutcome(sent: true, shouldQueueOffline: false);
+    } on EvidenceUploadException catch (e) {
+      if (item.mediaItems.isNotEmpty) {
+        await _rollbackReportIfNoEvidence(item.localReportId, deviceId);
       }
-      return false;
+      return _ImmediateSubmitOutcome(
+        sent: false,
+        shouldQueueOffline: _retryableHttpStatuses.contains(e.statusCode),
+        errorMessage: e.message,
+      );
+    } catch (e) {
+      if (item.mediaItems.isNotEmpty) {
+        await _rollbackReportIfNoEvidence(item.localReportId, deviceId);
+      }
+      return _ImmediateSubmitOutcome(
+        sent: false,
+        shouldQueueOffline: true,
+        errorMessage: e.toString(),
+      );
+    }
+  }
+
+  Future<void> _rollbackReportIfNoEvidence(String reportId, String deviceId) async {
+    try {
+      final report = await _api.getReport(reportId, deviceId);
+      final evidence = report['evidence_files'];
+      final hasEvidence = evidence is List && evidence.isNotEmpty;
+      // Atomic behavior for evidence-backed submissions:
+      // if report exists but evidence upload failed, remove report only when no evidence attached yet.
+      if (!hasEvidence) {
+        await _api.deleteReport(reportId, deviceId);
+      }
+    } catch (_) {
+      // Best-effort rollback only.
     }
   }
 
@@ -512,8 +553,22 @@ class OfflineReportQueueService {
   }
 
   Future<bool> _hasInternet() async {
-    final connectivity = await Connectivity().checkConnectivity();
-    return !connectivity.contains(ConnectivityResult.none);
+    try {
+      final connectivity = await Connectivity().checkConnectivity();
+      return _hasUsableConnectivity(connectivity);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _hasUsableConnectivity(dynamic connectivity) {
+    if (connectivity is ConnectivityResult) {
+      return connectivity != ConnectivityResult.none;
+    }
+    if (connectivity is Iterable) {
+      return connectivity.any((item) => item is ConnectivityResult && item != ConnectivityResult.none);
+    }
+    return false;
   }
 
   bool _sameQueue(
@@ -557,4 +612,16 @@ class OfflineReportQueueService {
   String _normalizeId(String value) {
     return value.trim().toLowerCase();
   }
+}
+
+class _ImmediateSubmitOutcome {
+  final bool sent;
+  final bool shouldQueueOffline;
+  final String? errorMessage;
+
+  const _ImmediateSubmitOutcome({
+    required this.sent,
+    required this.shouldQueueOffline,
+    this.errorMessage,
+  });
 }

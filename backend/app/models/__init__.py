@@ -16,6 +16,7 @@ from app.models.case import Case, CaseReport
 from app.models.user_session import UserSession
 from app.models.system_config import SystemConfig
 from app.models.station import Station
+from app.models.station_coverage import StationCoverageCell
 
 __all__ = [
     "Base",
@@ -37,4 +38,5 @@ __all__ = [
     "UserSession",
     "SystemConfig",
     "Station",
+    "StationCoverageCell",
 ]

@@ -268,6 +268,7 @@ const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
               {(stations || []).map((s) => (
                 <option key={s.station_id} value={s.station_id}>
                   {s.station_name}
+                  {s.covered_cell_names?.length ? ` (${s.covered_cell_names.length} cells)` : ''}
                 </option>
               ))}
             </select>
@@ -317,7 +318,7 @@ const NewCaseModal = ({ isOpen, onClose, onCreated, initialReportId }) => {
             >
               {availableReports.length === 0 && (
                 <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                  No unassigned reports found for this sector.
+                  No unassigned reports found for this station.
                 </div>
               )}
               {(availableReports || []).map((r) => (

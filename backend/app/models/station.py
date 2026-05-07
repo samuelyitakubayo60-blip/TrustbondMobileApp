@@ -25,4 +25,10 @@ class Station(Base):
 
     location = relationship("Location", backref="stations", foreign_keys=[location_id])
     sector2 = relationship("Location", foreign_keys=[sector2_id])
+    coverage_cells = relationship(
+        "StationCoverageCell",
+        back_populates="station",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 

@@ -18,6 +18,7 @@ from app.core.email import is_smtp_configured, send_new_user_credentials
 from app.database import get_db
 from app.models.police_user import PoliceUser
 from app.models.station import Station
+from app.models.station_coverage import StationCoverageCell
 from app.models.police_review import PoliceReview
 from app.models.report import Report
 from app.models.location import Location
@@ -36,6 +37,40 @@ from app.models.system_config import SystemConfig
 ROLE_BADGE_PREFIX = {"admin": "ADMIN", "officer": "Officer", "supervisor": "Supervisor"}
 
 router = APIRouter(prefix="/police-users", tags=["police-users"])
+
+
+def _derive_station_sector_id(db: Session, station: Station) -> Optional[int]:
+    # Prefer sector derived from configured covered cells.
+    covered_cell_ids = [
+        int(row[0])
+        for row in db.query(StationCoverageCell.cell_location_id)
+        .filter(StationCoverageCell.station_id == station.station_id)
+        .all()
+    ]
+    if covered_cell_ids:
+        sector_rows = (
+            db.query(Location.parent_location_id)
+            .filter(
+                Location.location_id.in_(covered_cell_ids),
+                Location.location_type == "cell",
+            )
+            .all()
+        )
+        sector_ids = sorted({int(r[0]) for r in sector_rows if r[0] is not None})
+        if sector_ids:
+            return sector_ids[0]
+
+    # Legacy fallback to station.location_id hierarchy.
+    if station.location_id:
+        station_loc = db.query(Location).filter(Location.location_id == station.location_id).first()
+        if station_loc and station_loc.location_type == "sector":
+            return station.location_id
+        while station_loc is not None and station_loc.location_type != "sector" and station_loc.parent_location_id:
+            station_loc = db.query(Location).filter(Location.location_id == station_loc.parent_location_id).first()
+        if station_loc and station_loc.location_type == "sector":
+            return station_loc.location_id
+        return station.location_id
+    return None
 
 
 class OfficerOption(BaseModel):
@@ -109,6 +144,10 @@ def list_sessions(
 def list_officer_options(
     db: Session = Depends(get_db),
     current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
+    station_id: Optional[int] = Query(
+        None,
+        description="Optional station_id to filter officers by station.",
+    ),
     location_id: Optional[int] = Query(
         None,
         description="Optional sector/cell/village location_id to filter officers by assigned location.",
@@ -134,6 +173,10 @@ def list_officer_options(
         # Don't filter by assigned_location_id for supervisors - they should see all officers in their station
     elif current_user.role == "officer":
         query = query.filter(PoliceUser.police_user_id == current_user.police_user_id)
+
+    if station_id is not None and current_user.role in {"admin", "supervisor"}:
+        # Admin can filter any station; supervisor is already restricted above.
+        query = query.filter(PoliceUser.station_id == station_id)
 
     derived_location_id = location_id
     if report_id is not None:
@@ -262,20 +305,9 @@ def create_police_user(
         if not station:
             raise HTTPException(status_code=400, detail="Invalid station_id")
         resolved_station_id = station.station_id
-        # Derive assigned_location_id from the station's location (must be sector level)
-        if station.location_id:
-            station_loc = db.query(Location).filter(Location.location_id == station.location_id).first()
-            if station_loc and station_loc.location_type == "sector":
-                resolved_location_id = station.location_id
-            else:
-                # Walk up the hierarchy to find the parent sector
-                while station_loc is not None and station_loc.location_type != "sector" and station_loc.parent_location_id:
-                    station_loc = db.query(Location).filter(Location.location_id == station_loc.parent_location_id).first()
-                if station_loc and station_loc.location_type == "sector":
-                    resolved_location_id = station_loc.location_id
-                else:
-                    # Fallback: use station location directly
-                    resolved_location_id = station.location_id
+        derived_sector_id = _derive_station_sector_id(db, station)
+        if derived_sector_id is not None:
+            resolved_location_id = derived_sector_id
 
 
     prefix = ROLE_BADGE_PREFIX.get(payload.role, "Officer")
@@ -419,20 +451,9 @@ def update_police_user(
             if not station:
                 raise HTTPException(status_code=400, detail="Invalid station_id")
             user.station_id = station.station_id
-            if station.location_id:
-                # Verify that the station location is at sector level
-                station_loc = db.query(Location).filter(Location.location_id == station.location_id).first()
-                if station_loc and station_loc.location_type == "sector":
-                    user.assigned_location_id = station.location_id
-                else:
-                    # If station location is not sector level, find its parent sector
-                    while station_loc is not None and station_loc.location_type != "sector" and station_loc.parent_location_id:
-                        station_loc = db.query(Location).filter(Location.location_id == station_loc.parent_location_id).first()
-                    if station_loc and station_loc.location_type == "sector":
-                        user.assigned_location_id = station_loc.location_id
-                    else:
-                        # Fallback: use station location but log warning
-                        user.assigned_location_id = station.location_id
+            derived_sector_id = _derive_station_sector_id(db, station)
+            if derived_sector_id is not None:
+                user.assigned_location_id = derived_sector_id
     if payload.is_active is not None:
         user.is_active = payload.is_active
     if payload.password is not None:

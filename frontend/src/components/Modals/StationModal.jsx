@@ -9,14 +9,13 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
       station_code: station?.station_code || '',
       station_name: station?.station_name || '',
       station_type: station?.station_type || 'station',
-      location_id: station?.location_id || '',
-      sector2_id: station?.sector2_id || '',
       latitude: station?.latitude ?? '',
       longitude: station?.longitude ?? '',
       address_text: station?.address_text || '',
       phone_number: station?.phone_number || '',
       email: station?.email || '',
       is_active: station?.is_active ?? true,
+      covered_cell_ids: station?.covered_cell_ids || [],
     }),
     [station]
   );
@@ -25,75 +24,43 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const [locations, setLocations] = useState([]);
-  const [sectorId, setSectorId] = useState(null);
-  const [cellId, setCellId] = useState(null);
-  const [villageId, setVillageId] = useState(null);
-  const [sector2Id, setSector2Id] = useState(null);
+  const [coverageOptions, setCoverageOptions] = useState([]);
+  const [selectedCellIds, setSelectedCellIds] = useState([]);
+  const [expandedSectorIds, setExpandedSectorIds] = useState(new Set());
 
-  // Load all locations once (sectors, cells, villages)
-  useEffect(() => {
-    let cancelled = false;
-    const loadLocations = async () => {
-      try {
-        const data = await api.get('/api/v1/locations/?limit=2000');
-        if (cancelled) return;
-        setLocations(data || []);
-      } catch {
-        if (cancelled) return;
-        setLocations([]);
-      }
-    };
-    loadLocations();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // When opening / station changes, derive sector/cell/village from station.location_id and sector2_id
+  // Load coverage options (sectors -> cells) and station selection
   useEffect(() => {
     setForm(initial);
     setError('');
     setSaving(false);
-
-    if (!station || !locations.length) {
-      setSectorId(null);
-      setCellId(null);
-      setVillageId(null);
-      setSector2Id(station?.sector2_id || null);
-      return;
-    }
-
-    // Handle primary sector
-    if (station.location_id) {
-      const villages = locations.filter((l) => l.location_type === 'village');
-      const cells = locations.filter((l) => l.location_type === 'cell');
-      const sectors = locations.filter((l) => l.location_type === 'sector');
-
-      const v = villages.find((l) => l.location_id === station.location_id);
-      if (v) {
-        setVillageId(v.location_id);
-
-        const c = cells.find((l) => l.location_id === v.parent_location_id);
-        if (c) {
-          setCellId(c.location_id);
-          const s = sectors.find((l) => l.location_id === c.parent_location_id);
-          if (s) setSectorId(s.location_id);
+    if (!isOpen) return;
+    let cancelled = false;
+    const loadOptions = async () => {
+      try {
+        const sid = station?.station_id ? `?station_id=${station.station_id}` : '';
+        const res = await api.get(`/api/v1/stations/coverage/options${sid}`);
+        if (cancelled) return;
+        setCoverageOptions(res?.items || []);
+        const selected = res?.selected_cell_ids || initial.covered_cell_ids || [];
+        setSelectedCellIds(Array.isArray(selected) ? selected : []);
+        // Expand sectors that contain selected cells
+        const selectedSet = new Set(selected);
+        const expanded = new Set();
+        for (const sec of (res?.items || [])) {
+          if ((sec.cells || []).some((c) => selectedSet.has(c.cell_id))) {
+            expanded.add(sec.sector_id);
+          }
         }
+        setExpandedSectorIds(expanded);
+      } catch (e) {
+        if (cancelled) return;
+        setCoverageOptions([]);
+        setSelectedCellIds(initial.covered_cell_ids || []);
       }
-    } else {
-      setSectorId(null);
-      setCellId(null);
-      setVillageId(null);
-    }
-
-    // Handle second sector (direct sector selection)
-    setSector2Id(station?.sector2_id || null);
-  }, [initial, isOpen, locations, station]);
-
-  const sectors = locations.filter((l) => l.location_type === 'sector');
-  const cells = locations.filter((l) => l.location_type === 'cell' && (!sectorId || l.parent_location_id === sectorId));
-  const villages = locations.filter((l) => l.location_type === 'village' && (!cellId || l.parent_location_id === cellId));
+    };
+    loadOptions();
+    return () => { cancelled = true; };
+  }, [initial, isOpen, station]);
 
   const handleChange = (field) => (e) => {
     if (field === 'is_active') {
@@ -130,43 +97,40 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSectorChange = (e) => {
-    const id = e.target.value ? Number(e.target.value) : null;
-    setSectorId(id);
-    setCellId(null);
-    setVillageId(null);
-    setForm((prev) => ({ ...prev, location_id: '', latitude: '', longitude: '' }));
+  const toggleSectorExpanded = (sectorId) => {
+    setExpandedSectorIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectorId)) next.delete(sectorId);
+      else next.add(sectorId);
+      return next;
+    });
   };
 
-  const handleCellChange = (e) => {
-    const id = e.target.value ? Number(e.target.value) : null;
-    setCellId(id);
-    setVillageId(null);
-    setForm((prev) => ({ ...prev, location_id: '', latitude: '', longitude: '' }));
+  const toggleCell = (cellId) => {
+    setSelectedCellIds((prev) => {
+      const set = new Set(prev);
+      if (set.has(cellId)) set.delete(cellId);
+      else set.add(cellId);
+      return Array.from(set);
+    });
   };
 
-  const handleVillageChange = (e) => {
-    const id = e.target.value ? Number(e.target.value) : null;
-    setVillageId(id);
-    if (!id) {
-      setForm((prev) => ({ ...prev, location_id: '', latitude: '', longitude: '' }));
-      return;
-    }
-    const v = locations.find((l) => l.location_id === id);
-    if (v) {
-      setForm((prev) => ({
-        ...prev,
-        location_id: v.location_id,
-        latitude: v.centroid_lat ?? '',
-        longitude: v.centroid_long ?? '',
-      }));
-    }
-  };
-
-  const handleSector2Change = (e) => {
-    const id = e.target.value ? Number(e.target.value) : null;
-    setSector2Id(id);
-    setForm((prev) => ({ ...prev, sector2_id: id || '' }));
+  const toggleAllCellsInSector = (sector) => {
+    const ids = (sector.cells || []).map((c) => c.cell_id);
+    setSelectedCellIds((prev) => {
+      const set = new Set(prev);
+      const allSelected = ids.length > 0 && ids.every((id) => set.has(id));
+      for (const id of ids) {
+        if (allSelected) set.delete(id);
+        else set.add(id);
+      }
+      return Array.from(set);
+    });
+    setExpandedSectorIds((prev) => {
+      const next = new Set(prev);
+      next.add(sector.sector_id);
+      return next;
+    });
   };
 
   const submit = async () => {
@@ -197,14 +161,13 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
       station_code: form.station_code.trim() || null,
       station_name: form.station_name.trim(),
       station_type: form.station_type.trim(),
-      location_id: form.location_id || null,
-      sector2_id: form.sector2_id || null,
       latitude: form.latitude ? Number(form.latitude) : null,
       longitude: form.longitude ? Number(form.longitude) : null,
       address_text: form.address_text.trim() || null,
       phone_number: form.phone_number.trim() || null,
       email: form.email.trim() || null,
       is_active: !!form.is_active,
+      covered_cell_ids: selectedCellIds.map(Number),
     };
     
     // Debug: Log the payload to see what's being sent
@@ -215,8 +178,8 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
       setError('Name is required.');
       return;
     }
-    if (!payload.location_id) {
-      setError('Please select sector, cell, and village.');
+    if (!payload.covered_cell_ids || payload.covered_cell_ids.length === 0) {
+      setError('Please select at least one covered cell.');
       return;
     }
 
@@ -275,82 +238,95 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
               <option value="post">Post</option>
             </select>
           </div>
-          <div className="input-group">
-            <div className="input-label">Sector</div>
-            <select className="select" value={sectorId || ''} onChange={handleSectorChange}>
-              <option value="">Select sector…</option>
-              {sectors.map((s) => (
-                <option key={s.location_id} value={s.location_id}>
-                  {s.location_name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="form-grid">
-          <div className="input-group">
-            <div className="input-label">Cell</div>
-            <select className="select" value={cellId || ''} onChange={handleCellChange} disabled={!sectorId}>
-              <option value="">Select cell…</option>
-              {cells.map((c) => (
-                <option key={c.location_id} value={c.location_id}>
-                  {c.location_name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="input-group">
-            <div className="input-label">Village</div>
-            <select className="select" value={villageId || ''} onChange={handleVillageChange} disabled={!cellId}>
-              <option value="">Select village…</option>
-              {villages.map((v) => (
-                <option key={v.location_id} value={v.location_id}>
-                  {v.location_name}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
 
         <div className="input-group">
           <div className="input-label">
-            Secondary Sector
+            Coverage (cells) *
             <span style={{ fontSize: '10px', color: 'var(--muted)', marginLeft: '4px' }}>
-              (optional – maximum 2 sectors per station)
+              (select one or many cells; sectors can be shared by cell)
             </span>
           </div>
-          <select className="select" value={sector2Id || ''} onChange={handleSector2Change}>
-            <option value="">No secondary sector…</option>
-            {sectors
-              .filter(s => s.location_id !== sectorId) // Don't allow same sector as primary
-              .map((s) => (
-                <option key={s.location_id} value={s.location_id}>
-                  {s.location_name}
-                </option>
-              ))}
-          </select>
+          <div style={{ border: '1px solid var(--border)', borderRadius: '6px', padding: '10px', maxHeight: '240px', overflowY: 'auto' }}>
+            {coverageOptions.length === 0 ? (
+              <div style={{ fontSize: '12px', color: 'var(--muted)' }}>Loading coverage options…</div>
+            ) : (
+              coverageOptions.map((sec) => {
+                const sectorExpanded = expandedSectorIds.has(sec.sector_id);
+                const cellIds = (sec.cells || []).map((c) => c.cell_id);
+                const selectedSet = new Set(selectedCellIds);
+                const selectedCount = cellIds.filter((id) => selectedSet.has(id)).length;
+                const allSelected = cellIds.length > 0 && selectedCount === cellIds.length;
+                return (
+                  <div key={sec.sector_id} style={{ marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <div
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+                        onClick={() => toggleSectorExpanded(sec.sector_id)}
+                      >
+                        <span style={{ width: '16px', textAlign: 'center', color: 'var(--muted)' }}>
+                          {sectorExpanded ? '▾' : '▸'}
+                        </span>
+                        <strong style={{ fontSize: '13px' }}>{sec.sector_name}</strong>
+                        {selectedCount > 0 && (
+                          <span className="badge b-blue" style={{ fontSize: '10px' }}>
+                            {selectedCount}/{cellIds.length}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => toggleAllCellsInSector(sec)}
+                        disabled={cellIds.length === 0}
+                      >
+                        {allSelected ? 'Unselect all' : 'Select all'}
+                      </button>
+                    </div>
+                    {sectorExpanded && (
+                      <div style={{ marginTop: '8px', paddingLeft: '24px', display: 'grid', gap: '6px' }}>
+                        {(sec.cells || []).length === 0 ? (
+                          <div style={{ fontSize: '12px', color: 'var(--muted)' }}>No cells</div>
+                        ) : (
+                          (sec.cells || []).map((c) => (
+                            <label key={c.cell_id} style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12px', color: 'var(--muted)' }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedSet.has(c.cell_id)}
+                                onChange={() => toggleCell(c.cell_id)}
+                              />
+                              <span style={{ color: 'var(--text)' }}>{c.cell_name}</span>
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
 
         <div className="form-grid">
           <div className="input-group">
-            <div className="input-label">Latitude (auto from village)</div>
+            <div className="input-label">Latitude</div>
             <input
               className="input"
               type="number"
               step="0.000001"
               value={form.latitude}
-              readOnly
+              onChange={handleChange('latitude')}
             />
           </div>
           <div className="input-group">
-            <div className="input-label">Longitude (auto from village)</div>
+            <div className="input-label">Longitude</div>
             <input
               className="input"
               type="number"
               step="0.000001"
               value={form.longitude}
-              readOnly
+              onChange={handleChange('longitude')}
             />
           </div>
         </div>

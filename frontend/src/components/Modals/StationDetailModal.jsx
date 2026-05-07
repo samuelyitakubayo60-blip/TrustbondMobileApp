@@ -108,17 +108,21 @@ const StationDetailModal = ({ isOpen, onClose, station }) => {
                 <div style={{ marginTop: '16px' }}>
                   <div className="input-label">Geographic Coverage</div>
                   <div style={{ fontSize: '14px', marginTop: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <strong>Primary Sector:</strong> {station.location_name || '—'}
-                    </div>
-                    {station.sector2_name && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <strong>Secondary Sector:</strong> {station.sector2_name}
-                      </div>
-                    )}
-                    {!station.sector2_name && (
+                    {(station.covered_cell_names && station.covered_cell_names.length > 0) ? (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                          <strong>Covered cells:</strong>
+                          <span className="badge b-blue" style={{ fontSize: '10px' }}>
+                            {station.covered_cell_names.length}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--muted)', lineHeight: 1.5 }}>
+                          {station.covered_cell_names.join(', ')}
+                        </div>
+                      </>
+                    ) : (
                       <div style={{ fontSize: '12px', color: 'var(--muted)', fontStyle: 'italic' }}>
-                        No secondary sector assigned
+                        No cell coverage configured yet.
                       </div>
                     )}
                   </div>

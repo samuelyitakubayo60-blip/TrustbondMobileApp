@@ -24,11 +24,35 @@ from app.models.report import Report
 from app.models.report_assignment import ReportAssignment
 from app.models.location import Location
 from app.models.station import Station
+from app.models.station_coverage import StationCoverageCell
 from app.models.incident_type import IncidentType
 from app.api.v1.auth import get_current_admin_or_supervisor, get_current_user
 from typing import Annotated
 
 router = APIRouter()
+
+
+def _station_covered_sector_ids(db: Session, station: Optional[Station]) -> List[int]:
+    if station is None:
+        return []
+    cell_rows = (
+        db.query(StationCoverageCell.cell_location_id)
+        .filter(StationCoverageCell.station_id == station.station_id)
+        .all()
+    )
+    cell_ids = [int(r[0]) for r in cell_rows]
+    if cell_ids:
+        sector_rows = (
+            db.query(Location.parent_location_id)
+            .filter(
+                Location.location_id.in_(cell_ids),
+                Location.location_type == "cell",
+            )
+            .all()
+        )
+        return sorted({int(r[0]) for r in sector_rows if r[0] is not None})
+    legacy = [sid for sid in [station.location_id, station.sector2_id] if sid]
+    return sorted({int(x) for x in legacy})
 
 # Helper functions for geographic calculations
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -373,10 +397,12 @@ def get_sector_performance(
             sectors_query = sectors_query.filter(Location.location_id == sector_id)
         sectors = sectors_query.all()
     else:
-        # Supervisor sees only sectors in their station
+        # Supervisor sees only sectors covered by their station (cell-based coverage).
+        station = db.query(Station).filter(Station.station_id == current_user.station_id).first()
+        supervisor_sector_ids = _station_covered_sector_ids(db, station)
         sectors_query = db.query(Location).filter(
             Location.location_type == "sector",
-            Location.parent_location_id == current_user.station_id
+            Location.location_id.in_(supervisor_sector_ids) if supervisor_sector_ids else False,
         )
         if sector_id:
             sectors_query = sectors_query.filter(Location.location_id == sector_id)
@@ -479,80 +505,13 @@ def get_station_performance(
             'debug_info': {'error': 'Station not found', 'station_id': current_user.station_id}
         }
     
-    # Get sectors within the station's jurisdiction (both primary and secondary)
-    station_location_ids = []
-    if station.location_id:
-        station_location_ids.append(station.location_id)
-    if station.sector2_id:
-        station_location_ids.append(station.sector2_id)
-    
-    # Debug: Get all locations to understand the hierarchy
-    all_locations = db.query(Location).all()
-    location_hierarchy = []
-    for loc in all_locations:
-        location_hierarchy.append({
-            'location_id': loc.location_id,
-            'location_name': loc.location_name,
-            'location_type': loc.location_type,
-            'parent_location_id': loc.parent_location_id
-        })
-    
-    # Get sectors that are either:
-    # 1. Direct children of any station location
-    # 2. The station locations themselves if they are sectors
-    sector_conditions = []
-    for station_location_id in station_location_ids:
-        sector_conditions.extend([
-            Location.parent_location_id == station_location_id,
-            Location.location_id == station_location_id
-        ])
-    
-    sectors_query = db.query(Location).filter(
-        Location.location_type == "sector",
-        or_(*sector_conditions)
-    )
-    
-    sectors = sectors_query.all()
-    
-    # If no sectors found, try different approaches
-    if not sectors:
-        # Try to find sectors under cells that are under any station location
-        cell_conditions = []
-        for station_location_id in station_location_ids:
-            cell_conditions.append(Location.parent_location_id == station_location_id)
-        
-        if cell_conditions:
-            cells_under_station = db.query(Location).filter(
-                Location.location_type == "cell",
-                or_(*cell_conditions)
-            ).all()
-            
-            if cells_under_station:
-                cell_ids = [cell.location_id for cell in cells_under_station]
-                sectors = db.query(Location).filter(
-                    Location.location_type == "sector",
-                    Location.parent_location_id.in_(cell_ids)
-                ).all()
-    
-    # If still no sectors, try to find villages directly under station
-    if not sectors:
-        # For supervisor, show village-level performance instead of sector
-        village_conditions = []
-        for station_location_id in station_location_ids:
-            village_conditions.extend([
-                Location.parent_location_id == station_location_id,
-                Location.parent_location_id.in_(
-                    db.query(Location.location_id).filter(
-                        Location.parent_location_id == station_location_id
-                    )
-                )
-            ])
-        
-        villages_query = db.query(Location).filter(
-            Location.location_type == "village",
-            or_(*village_conditions)
-        )
-        sectors = villages_query.all()  # Use sectors variable for compatibility
+    sector_ids = _station_covered_sector_ids(db, station)
+    sectors = []
+    if sector_ids:
+        sectors = db.query(Location).filter(
+            Location.location_type == "sector",
+            Location.location_id.in_(sector_ids),
+        ).all()
     
     performance_data = []
     
@@ -626,11 +585,10 @@ def get_station_performance(
         'station_name': station.station_name,
         'debug_info': {
             'station_id': current_user.station_id,
-            'station_location_ids': station_location_ids,
+            'covered_sector_ids': sector_ids,
             'sectors_found': len(sectors),
             'sector_names': [s.location_name for s in sectors],
-            'location_hierarchy': location_hierarchy,
-            'data_type': 'village' if not sectors and any(s.location_type == 'village' for s in sectors) else 'sector'
+            'data_type': 'sector'
         }
     }
 

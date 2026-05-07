@@ -28,6 +28,7 @@ from app.models.device import Device
 from app.models.incident_type import IncidentType
 from app.models.location import Location
 from app.models.station import Station
+from app.models.station_coverage import StationCoverageCell
 from app.schemas.report import (
     ReportCreate,
     ReportResponse,
@@ -70,7 +71,7 @@ from app.core.hotspot_auto import (
 )
 from app.core.village_lookup import get_village_location_id, get_village_location_info
 from app.schemas.report import CommunityVoteRequest
-from sqlalchemy import text, or_, func, cast, String, delete
+from sqlalchemy import text, and_, or_, func, cast, String, delete
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -1004,6 +1005,9 @@ def _compose_ai_verification_reason(
 ) -> str:
     """Executive-style AI rationale grounded in structured signals (+ pattern footer for UI parsing)."""
     status = (verification_status or "pending").lower()
+    rule_status_norm = (rule_status or "").strip().lower()
+    # Keep narrative final-state patterns aligned with enforcement.
+    effective_status = "rejected" if rule_status_norm == "rejected" else status
     incident_label = (incident_type_name or "incident").strip() or "incident"
     pattern_codes: List[str] = []
     pattern_explanations: List[str] = []
@@ -1142,34 +1146,34 @@ def _compose_ai_verification_reason(
                 "semantic comparison shows mismatch between description, incident type, and evidence",
             )
 
-    if rule_status == "rejected":
+    if rule_status_norm == "rejected":
         _add_pattern(
             "RULE_REJECTION",
             "rule engine produced a hard rejection state",
         )
-    elif rule_status == "flagged":
+    elif rule_status_norm == "flagged":
         _add_pattern(
             "RULE_FLAGGED",
             "rule engine requested review",
         )
-    elif rule_status == "passed":
+    elif rule_status_norm == "passed":
         _add_pattern(
             "RULES_PASSED",
             "rule checks passed without blocking violations",
         )
 
-    if status == "rejected":
+    if effective_status == "rejected":
         _add_pattern("FINAL_REJECTED", "final decision is rejected")
-    elif status in {"under_review", "pending"}:
+    elif effective_status in {"under_review", "pending"}:
         _add_pattern("FINAL_PENDING_REVIEW", "final decision is pending human review")
-    elif status == "verified":
+    elif effective_status == "verified":
         _add_pattern("FINAL_CONFIRMED", "final decision is confirmed")
 
     note = (reviewer_note or "").strip()
     if note:
-        if status == "verified":
+        if effective_status == "verified":
             _add_pattern("HUMAN_CONFIRMED", "police reviewer confirmed the report")
-        elif status == "rejected":
+        elif effective_status == "rejected":
             _add_pattern("HUMAN_REJECTION", "police reviewer rejected the report")
 
     snapshot = _build_ai_analysis_snapshot(
@@ -1203,7 +1207,7 @@ def _compose_ai_verification_reason(
         text_kind="verification decision summary",
         structured_text=naturalized_prompt,
         must_include=[
-            f"verification_status={status}",
+            f"verification_status={effective_status}",
             f"incident={incident_label}",
             f"patterns={','.join(pattern_codes) if pattern_codes else 'none'}",
         ],
@@ -1559,6 +1563,50 @@ def _human_location_chain_from_report(report: Report) -> Optional[str]:
     return " > ".join(chain) if chain else None
 
 
+def _station_covered_village_ids(db: Session, station: Optional[Station]) -> set[int]:
+    if station is None:
+        return set()
+    covered_cell_ids = {
+        int(row[0])
+        for row in db.query(StationCoverageCell.cell_location_id)
+        .filter(StationCoverageCell.station_id == station.station_id)
+        .all()
+    }
+    village_ids: set[int] = set()
+    if covered_cell_ids:
+        village_ids = {
+            int(row[0])
+            for row in db.query(Location.location_id)
+            .filter(
+                Location.location_type == "village",
+                Location.parent_location_id.in_(covered_cell_ids),
+            )
+            .all()
+        }
+        return village_ids
+
+    # Backward-compatibility fallback for legacy sector fields.
+    sector_ids = [sid for sid in [station.location_id, station.sector2_id] if sid]
+    for sector_location_id in sector_ids:
+        sector_locations_query = db.query(Location.location_id).filter(
+            or_(
+                Location.location_type == "village",
+                Location.parent_location_id.in_(
+                    db.query(Location.location_id).filter(
+                        Location.location_type == "cell",
+                        Location.parent_location_id == sector_location_id,
+                    )
+                ),
+                and_(
+                    Location.location_type == "village",
+                    Location.parent_location_id == sector_location_id,
+                ),
+            )
+        )
+        village_ids.update(int(row[0]) for row in sector_locations_query.all())
+    return village_ids
+
+
 def _compute_threshold_scorecard(
     report: Report,
     *,
@@ -1655,6 +1703,29 @@ def _compute_threshold_scorecard(
         }
 
         total = round(min(100.0, max(0.0, aggregated_score)), 2)
+        # For text-only submissions, aggressively dampen scores when language quality/context is weak.
+        if not has_evidence:
+            text_valid = bool(text_only.get("valid", True))
+            quality_band = str(text_only.get("quality_band") or "").strip().lower()
+            reason_codes = {
+                str(code).strip().upper()
+                for code in (text_only.get("reason_codes") or [])
+                if str(code).strip()
+            }
+            semantic_mismatch = bool(semantic.get("mismatch")) if isinstance(semantic, dict) else False
+            flag_reason_upper = (flag_reason or "").upper()
+            has_text_mismatch_flag = (
+                semantic_mismatch
+                or "MISMATCH" in flag_reason_upper
+                or "INCIDENT_TEXT_MISMATCH" in reason_codes
+                or "GIBBERISH" in reason_codes
+            )
+
+            if not text_valid or quality_band in {"reject_quality", "review_quality"}:
+                total = min(total, 55.0)
+            if has_text_mismatch_flag:
+                total = min(total, 49.0)
+
         if hard_gates:
             band = "hard_reject"
         elif not has_evidence:
@@ -1905,6 +1976,31 @@ def _store_unified_validation_result(
             ml_prediction.is_final = False
 
     return unified_validation
+
+
+def _friendly_rule_rejection_message(flag_reason: Optional[str]) -> str:
+    reason = (flag_reason or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if any(
+        key in reason
+        for key in (
+            "incident_text_mismatch",
+            "gibberish",
+            "unclear_description",
+            "text_only_validation_failed",
+        )
+    ):
+        return (
+            "Report rejected: the description appears unclear or non-meaningful for the selected incident type. "
+            "Please rewrite using clear words: what happened, where, when, who was involved, and any visible facts."
+        )
+    if "duplicate" in reason:
+        return "Report rejected: this appears to duplicate an existing incident submission."
+    if "out_of_musanze_boundary" in reason or "boundary" in reason:
+        return "Report rejected: the reported location is outside the supported operational area."
+    if "tamper" in reason:
+        return "Report rejected: evidence integrity checks indicate possible tampering."
+    return "Report rejected by rule-based validation."
+
 
 def _process_report_background(
     report_id: str,
@@ -3558,7 +3654,7 @@ def create_report(
                 status_code=400,
                 detail={
                     "error": "RULE_BASED_REJECTION",
-                    "message": "Report rejected by rule-based validation",
+                    "message": _friendly_rule_rejection_message(flag_reason),
                     "flag_reason": flag_reason or "anti_fraud_rules_violation",
                     "rule_status": rule_status
                 }
@@ -3802,69 +3898,21 @@ def list_reports(
                 detail="Supervisor station is not configured",
             )
         
-        # Get station to find its sector location(s)
+        # Get station to find its configured coverage cells (or legacy sectors)
         station = db.query(Station).filter(Station.station_id == supervisor_station_id).first()
         if station:
-            # Handle both primary and secondary sectors
-            sector_location_ids = []
-            
-            # Primary sector
-            if station.location_id:
-                sector_location_id = station.location_id
-                # Find all villages/cells in this sector
-                sector_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector_location_id,  # The sector itself
-                        Location.parent_location_id == sector_location_id,  # Direct children (cells)
-                        # Also get villages under cells in this sector
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
-            
-            # Secondary sector (if exists)
-            if station.sector2_id:
-                sector2_location_id = station.sector2_id
-                # Find all villages/cells in secondary sector
-                sector2_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector2_location_id,  # The sector itself
-                        Location.parent_location_id == sector2_location_id,  # Direct children (cells)
-                        # Also get villages under cells in this sector
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector2_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
-            
-            # Remove duplicates
-            sector_location_ids = list(set(sector_location_ids))
-            
-            # Filter reports by location hierarchy (village_location_id in sector) + station assignments
-            query = query.filter(
-                or_(
-                    Report.handling_station_id == supervisor_station_id,
-                    Report.assignments.any(
-                        ReportAssignment.police_user.has(PoliceUser.station_id == supervisor_station_id)
-                    ),
-                    Report.village_location_id.in_(sector_location_ids)
-                )
-            )
+            covered_village_ids = _station_covered_village_ids(db, station)
+
+            # Filter reports by station assignments + configured cell/village coverage
+            scope_filters = [
+                Report.handling_station_id == supervisor_station_id,
+                Report.assignments.any(
+                    ReportAssignment.police_user.has(PoliceUser.station_id == supervisor_station_id)
+                ),
+            ]
+            if covered_village_ids:
+                scope_filters.append(Report.village_location_id.in_(list(covered_village_ids)))
+            query = query.filter(or_(*scope_filters))
         else:
             # Fallback: only station-based filtering
             query = query.filter(

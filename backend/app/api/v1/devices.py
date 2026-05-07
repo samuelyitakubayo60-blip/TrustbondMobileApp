@@ -4,6 +4,7 @@ import math
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import IntegrityError
 from uuid import uuid4, UUID
 from datetime import datetime, timezone, timedelta
 from app.core.websocket import manager
@@ -152,9 +153,21 @@ def register_device(device_data: DeviceCreate, db: Session = Depends(get_db)):
         device_hash=device_data.device_hash,
     )
     db.add(new_device)
-    db.commit()
-    db.refresh(new_device)
-    return new_device
+    try:
+        db.commit()
+        db.refresh(new_device)
+        return new_device
+    except IntegrityError:
+        # Concurrency race: another request created the same device_hash first.
+        db.rollback()
+        existing = (
+            db.query(Device)
+            .filter(Device.device_hash == device_data.device_hash)
+            .first()
+        )
+        if existing:
+            return existing
+        raise
 
 
 @router.get("/profile/{device_hash}")
@@ -175,8 +188,21 @@ def get_device_profile(device_hash: str, db: Session = Depends(get_db)):
             device_hash=device_hash,
         )
         db.add(device)
-        db.commit()
-        db.refresh(device)
+        try:
+            db.commit()
+            db.refresh(device)
+        except IntegrityError:
+            db.rollback()
+            # Same race as /register endpoint.
+            existing = (
+                db.query(Device)
+                .filter(Device.device_hash == device_hash)
+                .first()
+            )
+            if existing:
+                device = existing
+            else:
+                raise
 
     # Aggregate report stats for this device.
     q = db.query(Report).filter(Report.device_id == device.device_id)
