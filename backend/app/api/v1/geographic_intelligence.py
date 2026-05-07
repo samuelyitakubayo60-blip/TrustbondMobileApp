@@ -51,8 +51,7 @@ def _station_covered_sector_ids(db: Session, station: Optional[Station]) -> List
             .all()
         )
         return sorted({int(r[0]) for r in sector_rows if r[0] is not None})
-    legacy = [sid for sid in [station.location_id, station.sector2_id] if sid]
-    return sorted({int(x) for x in legacy})
+    return []
 
 # Helper functions for geographic calculations
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

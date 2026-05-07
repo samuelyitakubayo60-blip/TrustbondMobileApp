@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.core.websocket import manager
 import asyncio
 from sqlalchemy import func
+from sqlalchemy.exc import ProgrammingError
 
 from app.database import get_db
 from app.models.station import Station
@@ -26,7 +27,8 @@ def _to_response(st: Station) -> StationResponse:
     covered_cells = sorted(
         [
             cc
-            for cc in (st.coverage_cells or [])
+            # Avoid lazy-loading if DB migration hasn't created the table yet.
+            for cc in (st.__dict__.get("coverage_cells") or [])
             if cc.cell_location is not None
         ],
         key=lambda cc: (cc.cell_location.location_name or "").lower(),
@@ -36,10 +38,6 @@ def _to_response(st: Station) -> StationResponse:
         station_code=st.station_code,
         station_name=st.station_name,
         station_type=st.station_type,
-        location_id=st.location_id,
-        location_name=st.location.location_name if st.location else None,
-        sector2_id=st.sector2_id,
-        sector2_name=st.sector2.location_name if st.sector2 else None,
         latitude=float(st.latitude) if st.latitude is not None else None,
         longitude=float(st.longitude) if st.longitude is not None else None,
         address_text=st.address_text,
@@ -132,12 +130,18 @@ def station_coverage_options(
     if station_id is not None:
         exists = db.query(Station.station_id).filter(Station.station_id == station_id).first()
         if exists:
-            selected_cell_ids = [
-                int(row[0])
-                for row in db.query(StationCoverageCell.cell_location_id)
-                .filter(StationCoverageCell.station_id == station_id)
-                .all()
-            ]
+            try:
+                selected_cell_ids = [
+                    int(row[0])
+                    for row in db.query(StationCoverageCell.cell_location_id)
+                    .filter(StationCoverageCell.station_id == station_id)
+                    .all()
+                ]
+            except ProgrammingError as e:
+                if "station_coverage_cells" in str(e).lower():
+                    selected_cell_ids = []
+                else:
+                    raise
 
     items = [
         {
@@ -161,11 +165,7 @@ def list_stations(
     only_active: bool = Query(False),
 ):
     """List police stations (read-only for officers)."""
-    q = db.query(Station).options(
-        joinedload(Station.location),
-        joinedload(Station.sector2),
-        selectinload(Station.coverage_cells).joinedload(StationCoverageCell.cell_location),
-    )
+    q = db.query(Station)
     if only_active:
         q = q.filter(Station.is_active == True)
     if search:
@@ -174,8 +174,18 @@ def list_stations(
             (Station.station_name.ilike(like))
             | (Station.station_code.ilike(like))
         )
-    total = q.count()
-    items = q.order_by(Station.station_name.asc()).all()
+    try:
+        q_cov = q.options(
+            selectinload(Station.coverage_cells).joinedload(StationCoverageCell.cell_location),
+        )
+        total = q_cov.count()
+        items = q_cov.order_by(Station.station_name.asc()).all()
+    except ProgrammingError as e:
+        if "station_coverage_cells" not in str(e).lower():
+            raise
+        # Table not migrated yet: still return stations without coverage details.
+        total = q.count()
+        items = q.order_by(Station.station_name.asc()).all()
     return StationListResponse(items=[_to_response(s) for s in items], total=total)
 
 
@@ -206,8 +216,6 @@ def create_station(
         station_code=code,
         station_name=payload.station_name.strip(),
         station_type=payload.station_type.strip(),
-        location_id=payload.location_id,
-        sector2_id=payload.sector2_id,
         latitude=payload.latitude,
         longitude=payload.longitude,
         address_text=payload.address_text,
@@ -235,11 +243,11 @@ def create_station(
             asyncio.run(manager.broadcast({"type": "refresh_data", "entity": "station"}))
     background_tasks.add_task(notify)
 
-    st = db.query(Station).options(
-        joinedload(Station.location),
-        joinedload(Station.sector2),
-        selectinload(Station.coverage_cells).joinedload(StationCoverageCell.cell_location),
-    ).get(st.station_id)
+    st = (
+        db.query(Station)
+        .options(selectinload(Station.coverage_cells).joinedload(StationCoverageCell.cell_location))
+        .get(st.station_id)
+    )
     return _to_response(st)
 
 
@@ -250,11 +258,14 @@ def get_station(
     db: Session = Depends(get_db),
 ):
     """Get one station by id."""
-    st = db.query(Station).options(
-        joinedload(Station.location),
-        joinedload(Station.sector2),
-        selectinload(Station.coverage_cells).joinedload(StationCoverageCell.cell_location),
-    ).get(station_id)
+    q = db.query(Station)
+    try:
+        q = q.options(selectinload(Station.coverage_cells).joinedload(StationCoverageCell.cell_location))
+        st = q.get(station_id)
+    except ProgrammingError as e:
+        if "station_coverage_cells" not in str(e).lower():
+            raise
+        st = q.get(station_id)
     if not st:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
     return _to_response(st)
@@ -290,10 +301,6 @@ def update_station(
         st.station_name = payload.station_name.strip()
     if payload.station_type is not None:
         st.station_type = payload.station_type.strip()
-    if payload.location_id is not None:
-        st.location_id = payload.location_id
-    if payload.sector2_id is not None:
-        st.sector2_id = payload.sector2_id
     if payload.latitude is not None:
         st.latitude = payload.latitude
     if payload.longitude is not None:
@@ -322,11 +329,11 @@ def update_station(
             asyncio.run(manager.broadcast({"type": "refresh_data", "entity": "station"}))
     background_tasks.add_task(notify)
 
-    st = db.query(Station).options(
-        joinedload(Station.location),
-        joinedload(Station.sector2),
-        selectinload(Station.coverage_cells).joinedload(StationCoverageCell.cell_location),
-    ).get(st.station_id)
+    st = (
+        db.query(Station)
+        .options(selectinload(Station.coverage_cells).joinedload(StationCoverageCell.cell_location))
+        .get(st.station_id)
+    )
     return _to_response(st)
 
 

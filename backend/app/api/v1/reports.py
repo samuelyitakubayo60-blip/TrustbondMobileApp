@@ -1572,39 +1572,16 @@ def _station_covered_village_ids(db: Session, station: Optional[Station]) -> set
         .filter(StationCoverageCell.station_id == station.station_id)
         .all()
     }
-    village_ids: set[int] = set()
-    if covered_cell_ids:
-        village_ids = {
-            int(row[0])
-            for row in db.query(Location.location_id)
-            .filter(
-                Location.location_type == "village",
-                Location.parent_location_id.in_(covered_cell_ids),
-            )
-            .all()
-        }
-        return village_ids
-
-    # Backward-compatibility fallback for legacy sector fields.
-    sector_ids = [sid for sid in [station.location_id, station.sector2_id] if sid]
-    for sector_location_id in sector_ids:
-        sector_locations_query = db.query(Location.location_id).filter(
-            or_(
-                Location.location_type == "village",
-                Location.parent_location_id.in_(
-                    db.query(Location.location_id).filter(
-                        Location.location_type == "cell",
-                        Location.parent_location_id == sector_location_id,
-                    )
-                ),
-                and_(
-                    Location.location_type == "village",
-                    Location.parent_location_id == sector_location_id,
-                ),
-            )
+    # Map station's covered cells → villages under those cells.
+    return {
+        int(row[0])
+        for row in db.query(Location.location_id)
+        .filter(
+            Location.location_type == "village",
+            Location.parent_location_id.in_(covered_cell_ids),
         )
-        village_ids.update(int(row[0]) for row in sector_locations_query.all())
-    return village_ids
+        .all()
+    } if covered_cell_ids else set()
 
 
 def _compute_threshold_scorecard(

@@ -42,31 +42,7 @@ def _station_covered_village_ids(db: Session, station: Station) -> set[int]:
             )
             .all()
         }
-
-    # Legacy fallback
-    village_ids: set[int] = set()
-    for sector_location_id in [sid for sid in [station.location_id, station.sector2_id] if sid]:
-        rows = (
-            db.query(Location.location_id)
-            .filter(
-                or_(
-                    (Location.location_type == "village")
-                    & (Location.parent_location_id == sector_location_id),
-                    (Location.location_type == "village")
-                    & (
-                        Location.parent_location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.location_type == "cell",
-                                Location.parent_location_id == sector_location_id,
-                            )
-                        )
-                    ),
-                )
-            )
-            .all()
-        )
-        village_ids.update(int(r[0]) for r in rows)
-    return village_ids
+    return set()
 
 
 @router.get("/station/{station_id}")

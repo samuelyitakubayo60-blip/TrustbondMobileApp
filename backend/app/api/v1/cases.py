@@ -73,27 +73,6 @@ def _supervisor_scope(current_user: PoliceUser, db: Session) -> tuple[int, set[i
                     Location.parent_location_id.in_(covered_cell_ids),
                 ).all()
                 location_ids.update(int(row[0]) for row in village_rows)
-            else:
-                # Legacy fallback: expand sector fields to villages.
-                for sector_location_id in [sid for sid in [station.location_id, station.sector2_id] if sid]:
-                    sector_locations_query = db.query(Location.location_id).filter(
-                        or_(
-                            and_(
-                                Location.location_type == "village",
-                                Location.parent_location_id == sector_location_id,
-                            ),
-                            and_(
-                                Location.location_type == "village",
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.location_type == "cell",
-                                        Location.parent_location_id == sector_location_id,
-                                    )
-                                ),
-                            ),
-                        )
-                    )
-                    location_ids.update({int(loc[0]) for loc in sector_locations_query.all()})
     else:
         # Fallback to assigned_location_id if station_id is None
         assigned_location_id = getattr(current_user, "assigned_location_id", None)
@@ -393,11 +372,30 @@ def list_available_reports_for_case(
             # Get the station's location to filter within the supervisor's sector
             from app.models.station import Station
             station = db.query(Station).filter(Station.station_id == station_id).first()
-            if station and station.location_id:
-                # Only show reports in this station's sector area
-                q = q.filter(Report.village_location_id.in_(_all_location_ids_for_scope(db, station.location_id)))
+            if station:
+                from app.models.station_coverage import StationCoverageCell
+                covered_cell_ids = {
+                    int(r[0])
+                    for r in db.query(StationCoverageCell.cell_location_id)
+                    .filter(StationCoverageCell.station_id == station.station_id)
+                    .all()
+                }
+                covered_village_ids = set()
+                if covered_cell_ids:
+                    covered_village_ids = {
+                        int(r[0])
+                        for r in db.query(Location.location_id)
+                        .filter(
+                            Location.location_type == "village",
+                            Location.parent_location_id.in_(covered_cell_ids),
+                        )
+                        .all()
+                    }
+                if covered_village_ids:
+                    q = q.filter(Report.village_location_id.in_(covered_village_ids))
+                else:
+                    q = q.filter(Report.handling_station_id == station_id)
             else:
-                # Fallback: filter by handling_station_id
                 q = q.filter(Report.handling_station_id == station_id)
         else:
             # For non-supervisors, use direct station filtering

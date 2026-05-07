@@ -30,6 +30,31 @@ from app.core.websocket import manager
 
 router = APIRouter(prefix="/hotspots", tags=["hotspots"])
 
+def _station_covered_village_ids(db: Session, station_id: int) -> List[int]:
+    """Return village ids covered by a station via station_coverage_cells."""
+    from app.models.station_coverage import StationCoverageCell
+    from app.models.location import Location
+
+    cell_rows = (
+        db.query(StationCoverageCell.cell_location_id)
+        .filter(StationCoverageCell.station_id == station_id)
+        .all()
+    )
+    cell_ids = [int(r[0]) for r in cell_rows if r and r[0] is not None]
+    if not cell_ids:
+        return []
+
+    village_rows = (
+        db.query(Location.location_id)
+        .filter(
+            Location.location_type == "village",
+            Location.parent_location_id.in_(cell_ids),
+        )
+        .all()
+    )
+    return sorted({int(r[0]) for r in village_rows if r and r[0] is not None})
+
+
 def _classify_hotspot(hotspot_score: float) -> str:
     """Classify hotspot based on trust-weighted DBSCAN score (0-100).
 
@@ -261,138 +286,28 @@ def list_hotspots(
         officer_station_id = getattr(current_user, "station_id", None)
         if officer_station_id is None:
             raise HTTPException(status_code=403, detail="Officer station is not configured")
-        
-        # Get station to find its sector location(s)
-        from app.models.station import Station
-        from app.models.location import Location
-        from sqlalchemy import or_
-        
-        station = db.query(Station).filter(Station.station_id == officer_station_id).first()
-        if station:
-            # Handle both primary and secondary sectors
-            sector_location_ids = []
-            
-            # Primary sector
-            if station.location_id:
-                sector_location_id = station.location_id
-                # Find all villages/cells in this sector
-                sector_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector_location_id,  # The sector itself
-                        Location.parent_location_id == sector_location_id,  # Direct children (cells)
-                        # Also get villages under cells in this sector
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
-            
-            # Secondary sector (if exists)
-            if station.sector2_id:
-                sector2_location_id = station.sector2_id
-                # Find all villages/cells in secondary sector
-                sector2_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector2_location_id,  # The sector itself
-                        Location.parent_location_id == sector2_location_id,  # Direct children (cells)
-                        # Also get villages under cells in this sector
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector2_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
-            
-            # Remove duplicates
-            sector_location_ids = list(set(sector_location_ids))
-            
-            # Filter hotspots to include reports from officer's station sector
+        covered_village_ids = _station_covered_village_ids(db, officer_station_id)
+        if covered_village_ids:
             query = (
                 query.join(Hotspot.reports)
-                .filter(Report.village_location_id.in_(sector_location_ids))
+                .filter(Report.village_location_id.in_(covered_village_ids))
                 .distinct()
             )
+        else:
+            query = query.filter(False)
     elif role == "supervisor":
         supervisor_station_id = getattr(current_user, "station_id", None)
         if supervisor_station_id is None:
             raise HTTPException(status_code=403, detail="Supervisor station is not configured")
-        
-        # Get station to find its sector location(s)
-        from app.models.station import Station
-        from app.models.location import Location
-        from sqlalchemy import or_
-        
-        station = db.query(Station).filter(Station.station_id == supervisor_station_id).first()
-        if station:
-            # Handle both primary and secondary sectors
-            sector_location_ids = []
-            
-            # Primary sector
-            if station.location_id:
-                sector_location_id = station.location_id
-                # Find all villages/cells in this sector
-                sector_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector_location_id,  # The sector itself
-                        Location.parent_location_id == sector_location_id,  # Direct children (cells)
-                        # Also get villages under cells in this sector
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
-            
-            # Secondary sector (if exists)
-            if station.sector2_id:
-                sector2_location_id = station.sector2_id
-                # Find all villages/cells in secondary sector
-                sector2_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector2_location_id,  # The sector itself
-                        Location.parent_location_id == sector2_location_id,  # Direct children (cells)
-                        # Also get villages under cells in this sector
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector2_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
-            
-            # Remove duplicates
-            sector_location_ids = list(set(sector_location_ids))
-            
-            # Filter hotspots to include reports from supervisor's sector
+        covered_village_ids = _station_covered_village_ids(db, supervisor_station_id)
+        if covered_village_ids:
             query = (
                 query.join(Hotspot.reports)
-                .filter(Report.village_location_id.in_(sector_location_ids))
+                .filter(Report.village_location_id.in_(covered_village_ids))
                 .distinct()
             )
+        else:
+            query = query.filter(False)
 
     query = query.order_by(Hotspot.detected_at.desc())
     if risk_level:
@@ -631,118 +546,28 @@ def get_daily_emergencies(
         officer_station_id = getattr(current_user, "station_id", None)
         if officer_station_id is None:
             raise HTTPException(status_code=403, detail="Officer station is not configured")
-        
-        from app.models.station import Station
-        from app.models.location import Location
-        from sqlalchemy import or_
-        
-        station = db.query(Station).filter(Station.station_id == officer_station_id).first()
-        if station:
-            sector_location_ids = []
-            
-            # Primary sector
-            if station.location_id:
-                sector_location_id = station.location_id
-                sector_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector_location_id,
-                        Location.parent_location_id == sector_location_id,
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
-            
-            # Secondary sector
-            if station.sector2_id:
-                sector2_location_id = station.sector2_id
-                sector2_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector2_location_id,
-                        Location.parent_location_id == sector2_location_id,
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector2_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
-            
-            sector_location_ids = list(set(sector_location_ids))
+        covered_village_ids = _station_covered_village_ids(db, officer_station_id)
+        if covered_village_ids:
             query = (
                 query.join(Hotspot.reports)
-                .filter(Report.village_location_id.in_(sector_location_ids))
+                .filter(Report.village_location_id.in_(covered_village_ids))
                 .distinct()
             )
+        else:
+            query = query.filter(False)
     elif role == "supervisor":
         supervisor_station_id = getattr(current_user, "station_id", None)
         if supervisor_station_id is None:
             raise HTTPException(status_code=403, detail="Supervisor station is not configured")
-        
-        from app.models.station import Station
-        from app.models.location import Location
-        from sqlalchemy import or_
-        
-        station = db.query(Station).filter(Station.station_id == supervisor_station_id).first()
-        if station:
-            sector_location_ids = []
-            
-            if station.location_id:
-                sector_location_id = station.location_id
-                sector_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector_location_id,
-                        Location.parent_location_id == sector_location_id,
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector_locations_query.all()])
-            
-            if station.sector2_id:
-                sector2_location_id = station.sector2_id
-                sector2_locations_query = db.query(Location.location_id).filter(
-                    or_(
-                        Location.location_id == sector2_location_id,
-                        Location.parent_location_id == sector2_location_id,
-                        Location.location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id.in_(
-                                    db.query(Location.location_id).filter(
-                                        Location.parent_location_id == sector2_location_id
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-                sector_location_ids.extend([loc[0] for loc in sector2_locations_query.all()])
-            
-            sector_location_ids = list(set(sector_location_ids))
+        covered_village_ids = _station_covered_village_ids(db, supervisor_station_id)
+        if covered_village_ids:
             query = (
                 query.join(Hotspot.reports)
-                .filter(Report.village_location_id.in_(sector_location_ids))
+                .filter(Report.village_location_id.in_(covered_village_ids))
                 .distinct()
             )
+        else:
+            query = query.filter(False)
     
     # Filter by minimum incident count for emergencies
     emergency_hotspots = []

@@ -59,17 +59,6 @@ def _derive_station_sector_id(db: Session, station: Station) -> Optional[int]:
         sector_ids = sorted({int(r[0]) for r in sector_rows if r[0] is not None})
         if sector_ids:
             return sector_ids[0]
-
-    # Legacy fallback to station.location_id hierarchy.
-    if station.location_id:
-        station_loc = db.query(Location).filter(Location.location_id == station.location_id).first()
-        if station_loc and station_loc.location_type == "sector":
-            return station.location_id
-        while station_loc is not None and station_loc.location_type != "sector" and station_loc.parent_location_id:
-            station_loc = db.query(Location).filter(Location.location_id == station_loc.parent_location_id).first()
-        if station_loc and station_loc.location_type == "sector":
-            return station_loc.location_id
-        return station.location_id
     return None
 
 
