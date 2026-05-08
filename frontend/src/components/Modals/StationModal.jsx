@@ -27,6 +27,12 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
   const [coverageOptions, setCoverageOptions] = useState([]);
   const [selectedCellIds, setSelectedCellIds] = useState([]);
   const [expandedSectorIds, setExpandedSectorIds] = useState(new Set());
+  const [locationSectorId, setLocationSectorId] = useState('');
+  const [locationCellId, setLocationCellId] = useState('');
+  const [locationVillageId, setLocationVillageId] = useState('');
+  const [locationVillageOptions, setLocationVillageOptions] = useState([]);
+  const [loadingVillageOptions, setLoadingVillageOptions] = useState(false);
+  const [autoFillAddressFromLocation, setAutoFillAddressFromLocation] = useState(true);
 
   // Load coverage options (sectors -> cells) and station selection
   useEffect(() => {
@@ -43,6 +49,11 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
         setCoverageOptions(res?.items || []);
         const selected = res?.selected_cell_ids || initial.covered_cell_ids || [];
         setSelectedCellIds(Array.isArray(selected) ? selected : []);
+        setLocationSectorId('');
+        setLocationCellId('');
+        setLocationVillageId('');
+        setLocationVillageOptions([]);
+        setAutoFillAddressFromLocation(true);
         // Expand sectors that contain selected cells
         const selectedSet = new Set(selected);
         const expanded = new Set();
@@ -61,6 +72,33 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
     loadOptions();
     return () => { cancelled = true; };
   }, [initial, isOpen, station]);
+
+  // Load villages whenever station-location cell changes.
+  useEffect(() => {
+    if (!isOpen || !locationCellId) {
+      setLocationVillageOptions([]);
+      setLocationVillageId('');
+      return;
+    }
+    let cancelled = false;
+    const loadVillages = async () => {
+      setLoadingVillageOptions(true);
+      try {
+        const res = await api.get(
+          `/api/v1/public/locations/?location_type=village&parent_id=${locationCellId}&limit=2000`
+        );
+        if (cancelled) return;
+        setLocationVillageOptions(Array.isArray(res) ? res : []);
+      } catch (_) {
+        if (cancelled) return;
+        setLocationVillageOptions([]);
+      } finally {
+        if (!cancelled) setLoadingVillageOptions(false);
+      }
+    };
+    loadVillages();
+    return () => { cancelled = true; };
+  }, [isOpen, locationCellId]);
 
   const handleChange = (field) => (e) => {
     if (field === 'is_active') {
@@ -133,6 +171,59 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
     });
   };
 
+  const locationSectorOptions = useMemo(
+    () => (coverageOptions || []).map((s) => ({ id: String(s.sector_id), name: s.sector_name, cells: s.cells || [] })),
+    [coverageOptions]
+  );
+
+  const locationCellOptions = useMemo(() => {
+    const sec = locationSectorOptions.find((s) => s.id === String(locationSectorId));
+    return sec ? sec.cells : [];
+  }, [locationSectorId, locationSectorOptions]);
+
+  const onLocationSectorChange = (e) => {
+    const sid = e.target.value;
+    setLocationSectorId(sid);
+    setLocationCellId('');
+    setLocationVillageId('');
+    setLocationVillageOptions([]);
+  };
+
+  const onLocationCellChange = (e) => {
+    const cid = e.target.value;
+    setLocationCellId(cid);
+    setLocationVillageId('');
+    setLocationVillageOptions([]);
+  };
+
+  const onLocationVillageChange = (e) => {
+    const vid = e.target.value;
+    setLocationVillageId(vid);
+    const village = locationVillageOptions.find((v) => String(v.location_id) === String(vid));
+    if (!village) return;
+    const lat = village.centroid_lat;
+    const lng = village.centroid_long;
+    if (lat != null && lng != null) {
+      setForm((prev) => ({
+        ...prev,
+        latitude: String(lat),
+        longitude: String(lng),
+      }));
+    }
+    if (autoFillAddressFromLocation) {
+      const sectorName = locationSectorOptions.find((s) => String(s.id) === String(locationSectorId))?.name || '';
+      const cellName = locationCellOptions.find((c) => String(c.cell_id) === String(locationCellId))?.cell_name || '';
+      const villageName = village.location_name || '';
+      const parts = [villageName, cellName, sectorName].filter(Boolean);
+      if (parts.length > 0) {
+        setForm((prev) => ({
+          ...prev,
+          address_text: parts.join(', '),
+        }));
+      }
+    }
+  };
+
   const submit = async () => {
     setError('');
     // Basic local validation for Rwandan phone numbers (optional)
@@ -170,10 +261,6 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
       covered_cell_ids: selectedCellIds.map(Number),
     };
     
-    // Debug: Log the payload to see what's being sent
-    console.log('Station payload being sent:', payload);
-    console.log('Form sector2_id value:', form.sector2_id);
-    console.log('Payload sector2_id value:', payload.sector2_id);
     if (!payload.station_name) {
       setError('Name is required.');
       return;
@@ -238,6 +325,65 @@ const StationModal = ({ isOpen, onClose, mode = 'add', station = null, onSaved }
               <option value="post">Post</option>
             </select>
           </div>
+        </div>
+
+        <div className="form-grid">
+          <div className="input-group">
+            <div className="input-label">Station Sector (for coordinates)</div>
+            <select className="select" value={locationSectorId} onChange={onLocationSectorChange}>
+              <option value="">Select sector…</option>
+              {locationSectorOptions.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="input-group">
+            <div className="input-label">Station Cell (for coordinates)</div>
+            <select
+              className="select"
+              value={locationCellId}
+              onChange={onLocationCellChange}
+              disabled={!locationSectorId}
+            >
+              <option value="">Select cell…</option>
+              {locationCellOptions.map((c) => (
+                <option key={c.cell_id} value={c.cell_id}>{c.cell_name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="input-group">
+          <div className="input-label">
+            Station Village (auto-fills coordinates)
+            <span style={{ fontSize: '10px', color: 'var(--muted)', marginLeft: '4px' }}>
+              (optional)
+            </span>
+          </div>
+          <select
+            className="select"
+            value={locationVillageId}
+            onChange={onLocationVillageChange}
+            disabled={!locationCellId}
+          >
+            <option value="">
+              {loadingVillageOptions ? 'Loading villages…' : 'Select village…'}
+            </option>
+            {locationVillageOptions.map((v) => (
+              <option key={v.location_id} value={v.location_id}>{v.location_name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="input-group" style={{ marginTop: '-4px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--muted)' }}>
+            <input
+              type="checkbox"
+              checked={autoFillAddressFromLocation}
+              onChange={(e) => setAutoFillAddressFromLocation(e.target.checked)}
+            />
+            Auto-fill address from selected village/cell/sector
+          </label>
         </div>
 
         <div className="input-group">

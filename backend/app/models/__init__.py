@@ -17,6 +17,9 @@ from app.models.user_session import UserSession
 from app.models.system_config import SystemConfig
 from app.models.station import Station
 from app.models.station_coverage import StationCoverageCell
+from app.models.local_leader import LocalLeader
+from app.models.local_leader_coverage import LocalLeaderCoverageLocation
+from app.models.local_leader_auth_code import LocalLeaderAuthCode
 
 __all__ = [
     "Base",
@@ -39,4 +42,7 @@ __all__ = [
     "SystemConfig",
     "Station",
     "StationCoverageCell",
+    "LocalLeader",
+    "LocalLeaderCoverageLocation",
+    "LocalLeaderAuthCode",
 ]

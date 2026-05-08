@@ -35,6 +35,12 @@ class Report(Base):
     verification_status = Column(String(20), default="pending")
     verified_by = Column(Integer, ForeignKey("police_users.police_user_id"))
     verified_at = Column(DateTime(timezone=True))
+
+    # Local leader community verification (separate from police verification)
+    leader_verification_status = Column(String(20), default="pending")  # pending | confirmed | rejected
+    leader_verified_by = Column(Integer, ForeignKey("local_leaders.local_leader_id"))
+    leader_verified_at = Column(DateTime(timezone=True))
+    leader_verification_note = Column(Text)
     feature_vector = Column(JSONB)
     ai_ready = Column(Boolean, default=False)
     features_extracted = Column(DateTime(timezone=True))

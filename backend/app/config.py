@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # and to avoid "unauthenticated requests" warnings from huggingface_hub / transformers.
     hf_token: Optional[str] = None
 
+    # eSMS Africa (OTP SMS)
+    esms_base_url: str = "https://sms.esmsafrica.io"
+    esms_token: Optional[str] = None
+    esms_timeout_seconds: int = 12
+
     # Device anti-abuse guardrails for report creation.
     duplicate_report_time_window_seconds: int = 120
     duplicate_report_radius_meters: int = 250

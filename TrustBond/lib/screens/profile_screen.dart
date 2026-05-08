@@ -12,6 +12,7 @@ import 'about_screen.dart';
 import 'help_faq_screen.dart';
 import 'privacy_security_screen.dart';
 import 'settings_screen.dart';
+import 'leader_login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -294,6 +295,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildMenuItems() {
     return Column(
       children: [
+        _menuItem(Icons.verified_user, 'Local Leader Login', () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const LeaderLoginScreen()),
+          );
+        }),
         _menuItem(Icons.security, 'Privacy & Security', () {
           Navigator.push(context,
               MaterialPageRoute(builder: (_) => const PrivacySecurityScreen()));

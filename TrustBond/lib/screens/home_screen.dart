@@ -195,8 +195,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   delegate: SliverChildListDelegate([
                     _buildTrustScoreCard(),
                     const SizedBox(height: 4),
-                    _buildMLOverviewCard(),
-                    const SizedBox(height: 4),
                     _buildStatsGrid(),
                     const SectionHeader('Safety Overview'),
                     _buildMapPreview(),
@@ -285,65 +283,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTrustScoreCard() {
-    if (_totalReports == 0) {
-      return Container(
-        padding: const EdgeInsets.all(15),
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.accent.withValues(alpha: 0.1),
-              AppColors.accent2.withValues(alpha: 0.05),
-            ],
-          ),
-          border: Border.all(color: AppColors.accent.withValues(alpha: 0.28)),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 62,
-              height: 62,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.accent.withValues(alpha: 0.12),
-                border: Border.all(color: AppColors.accent.withValues(alpha: 0.28)),
-              ),
-              child: const Icon(Icons.flag_outlined, color: AppColors.accent),
-            ),
-            const SizedBox(width: 14),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'START REPORTING',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.muted,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Start Reporting',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Submit your first report to build your trust score',
-                    style: TextStyle(fontSize: 10, color: AppColors.muted),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     return Container(
       padding: const EdgeInsets.all(15),
       margin: const EdgeInsets.only(bottom: 12),
@@ -394,7 +333,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$_totalReports reports · $_verifiedReports verified',
+                  '${_trustScore.toStringAsFixed(1)} / 100 · $_totalReports reports · $_verifiedReports verified',
                   style:
                       const TextStyle(fontSize: 10, color: AppColors.muted),
                 ),
@@ -403,149 +342,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildMLOverviewCard() {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.ok.withValues(alpha: 0.1),
-            AppColors.ok.withValues(alpha: 0.05),
-          ],
-        ),
-        border: Border.all(color: AppColors.ok.withValues(alpha: 0.28)),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: AppColors.ok.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.psychology,
-                  size: 16,
-                  color: AppColors.ok,
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Text(
-                'ML OVERVIEW',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.muted,
-                  letterSpacing: 0.8,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildMLMetric(
-                  'Analysis',
-                  'Active',
-                  AppColors.ok,
-                  Icons.analytics,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildMLMetric(
-                  'Status',
-                  _trustScore >= 70 ? 'High' : _trustScore >= 40 ? 'Good' : 'Low',
-                  _trustScore >= 70 ? AppColors.ok : _trustScore >= 40 ? AppColors.warn : AppColors.danger,
-                  Icons.verified,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildMLMetric(
-                  'Accuracy',
-                  '94%',
-                  AppColors.ok,
-                  Icons.trending_up,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.ok.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.ok.withValues(alpha: 0.2)),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.lightbulb_outline_rounded,
-                  size: 16,
-                  color: AppColors.ok,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _trustScore >= 70 
-                        ? 'Great job! Keep submitting accurate reports with evidence to maintain your high trust score.'
-                        : _trustScore >= 40
-                            ? 'Add clear photos/videos and detailed descriptions to your reports to increase your trust score.'
-                            : 'Submit quality reports with evidence and ensure accuracy to improve your trust score.',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.text,
-                      height: 1.3,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMLMetric(String label, String value, Color color, IconData icon) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 4),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 10,
-            color: AppColors.muted,
-          ),
-        ),
-      ],
     );
   }
 

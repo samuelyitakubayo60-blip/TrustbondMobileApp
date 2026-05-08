@@ -51,6 +51,9 @@ from app.api.v1 import (
     ws,
     geographic_intelligence,
     submission_guidance,
+    leader_auth,
+    leader_reports,
+    local_leaders_admin,
 )
 
 
@@ -230,6 +233,9 @@ app.include_router(public_alerts.router, prefix="/api/v1")
 app.include_router(ws.router, prefix="/api/v1")
 app.include_router(geographic_intelligence.router, prefix="/api/v1/geographic-intelligence")
 app.include_router(submission_guidance.router, prefix="/api/v1")
+app.include_router(leader_auth.router, prefix="/api/v1")
+app.include_router(leader_reports.router, prefix="/api/v1")
+app.include_router(local_leaders_admin.router, prefix="/api/v1")
 
 @app.get("/health")
 def health():

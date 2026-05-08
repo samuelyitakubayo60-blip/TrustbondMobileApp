@@ -12,6 +12,7 @@ import EnhancedGeographicIntelligence from "./components/screens/EnhancedGeograp
 import Users from "./components/screens/Users";
 import IncidentTypes from "./components/screens/IncidentTypes";
 import Stations from "./components/screens/Stations";
+import LocalLeaders from "./components/screens/LocalLeaders";
 import AuditLog from "./components/screens/AuditLog";
 import SystemConfig from "./components/screens/SystemConfig";
 import ActiveSessions from "./components/screens/ActiveSessions";
@@ -74,6 +75,8 @@ function App() {
         return "incident-types";
       case "/stations":
         return "stations";
+      case "/local-leaders":
+        return "local-leaders";
       case "/audit-log":
         return "audit-log";
       case "/system-config":
@@ -146,6 +149,8 @@ function App() {
         return "/incident-types";
       case "stations":
         return "/stations";
+      case "local-leaders":
+        return "/local-leaders";
       case "audit-log":
         return "/audit-log";
       case "system-config":
@@ -198,6 +203,8 @@ function App() {
         return "incident-types";
       case "/stations":
         return "stations";
+      case "/local-leaders":
+        return "local-leaders";
       case "/audit-log":
         return "audit-log";
       case "/system-config":
@@ -250,6 +257,7 @@ function App() {
     "device-trust": "Device Trust Management",
     users: "User Management",
     "incident-types": "Incident Types",
+    "local-leaders": "Local Leaders",
     "audit-log": "Audit Log",
     "system-config": "System Configuration",
     "change-password": "Change Password",
@@ -474,6 +482,14 @@ function App() {
               }
               openModal(name);
             }}
+          />
+        );
+      case "local-leaders":
+        return (
+          <LocalLeaders
+            goToScreen={goToScreen}
+            openModal={openModal}
+            wsRefreshKey={wsRefreshKey}
           />
         );
       case "audit-log":

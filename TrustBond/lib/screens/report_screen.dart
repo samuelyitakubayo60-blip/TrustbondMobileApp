@@ -12,6 +12,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:exif/exif.dart';
 
+import '../config/theme.dart';
 import '../services/api_service.dart';
 
 import '../services/device_service.dart';
@@ -83,6 +84,14 @@ class _ReportScreenState extends State<ReportScreen> {
   bool _isSubmitting = false;
 
   final List<EvidenceAttachment> _attachments = [];
+
+  void _removeAttachment(int index) {
+    if (index < 0 || index >= _attachments.length) return;
+    setState(() {
+      _attachments.removeAt(index);
+    });
+    _onEvidenceChanged();
+  }
 
   // Guidance state
   GuidanceResponse? _currentGuidance;
@@ -566,157 +575,65 @@ class _ReportScreenState extends State<ReportScreen> {
 
   }
 
-          if (image != null && mounted) {
-
-            setState(() {
-
-              // Gallery selection: try to extract EXIF capture time and GPS when available.
-              // If EXIF missing (common after edits / some share flows), we keep nulls and backend will treat as warning.
-              _attachments.add(EvidenceAttachment(
-
-                path: image.path,
-
-                isVideo: false,
-
-                capturedAt: null,
-                mediaLatitude: null,
-                mediaLongitude: null,
-                isLiveCapture: false,
-
-              ));
-
-            });
-
-            // Trigger guidance update
-            _onEvidenceChanged();
-
-            // Populate EXIF asynchronously (avoid blocking UI thread).
-            final exif = await _readImageExifForAttachment(image.path);
-            if (!mounted) return;
-            setState(() {
-              final idx = _attachments.lastIndexWhere((a) => a.path == image.path);
-              if (idx >= 0) {
-                final existing = _attachments[idx];
-                _attachments[idx] = EvidenceAttachment(
-                  path: existing.path,
-                  isVideo: existing.isVideo,
-                  capturedAt: exif.capturedAt ?? existing.capturedAt,
-                  mediaLatitude: exif.lat ?? existing.mediaLatitude,
-                  mediaLongitude: exif.lon ?? existing.mediaLongitude,
-                  isLiveCapture: existing.isLiveCapture,
-                  hasExif: exif.hasExif,
-                  exifParseError: exif.error,
-                );
-              }
-            });
-
-          }
-
-        } catch (e) {
+  Future<void> _showMediaOptions() async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
       context: context,
-
-      builder: (context) => SafeArea(
-
-        child: Column(
-
-          mainAxisSize: MainAxisSize.min,
-
-          children: [
-
-            if (_isMobileWithCamera) ...[
-
-              ListTile(
-
-                leading: const Icon(Icons.camera_alt),
-
-                title: const Text('Take Photo'),
-
-                onTap: () {
-
-                  Navigator.pop(context);
-
-                  _takePhoto();
-
-                },
-
-              ),
-
-              ListTile(
-
-                leading: const Icon(Icons.videocam),
-
-                title: const Text('Record Video'),
-
-                onTap: () {
-
-                  Navigator.pop(context);
-
-                  _recordVideo();
-
-                },
-
-              ),
-
-            ],
-
-            ListTile(
-
-              leading: const Icon(Icons.photo_library),
-
-              title: const Text('Pick Photo from Gallery'),
-
-              onTap: () {
-
-                Navigator.pop(context);
-
-                _pickImage();
-
-              },
-
-            ),
-
-            ListTile(
-
-              leading: const Icon(Icons.video_library),
-
-              title: const Text('Pick Video from Gallery'),
-
-              onTap: () {
-
-                Navigator.pop(context);
-
-                _pickVideo();
-
-              },
-
-            ),
-
-            if (!_isMobileWithCamera)
-
-              const Padding(
-
-                padding: EdgeInsets.all(16.0),
-
-                child: Text(
-
-                  'Camera options available on mobile devices',
-
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-
-                  textAlign: TextAlign.center,
-
-                ),
-
-              ),
-
-          ],
-
-        ),
-
+      backgroundColor: AppColors.bg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_isMobileWithCamera) ...[
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Take Photo'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _takePhoto();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.videocam),
+                title: const Text('Record Video'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _recordVideo();
+                },
+              ),
+            ],
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Pick Photo from Gallery'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickImage();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.video_library),
+              title: const Text('Pick Video from Gallery'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickVideo();
+              },
+            ),
+            if (!_isMobileWithCamera)
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Camera options available on mobile devices',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+          ],
+        ),
+      ),
     );
-
   }
 
 
@@ -1255,16 +1172,12 @@ class _ReportScreenState extends State<ReportScreen> {
               const SizedBox(height: 16),
 
               // Description quality indicator
-              if (_descriptionValidation != null) {
-                print('Rendering DescriptionQualityIndicator');
-                DescriptionQualityIndicator(validation: _descriptionValidation!);
-              }
+              if (_descriptionValidation != null)
+                DescriptionQualityIndicator(validation: _descriptionValidation!),
 
               // Trust score display
-              if (_currentGuidance != null) {
-                print('Rendering TrustScoreDisplay');
-                TrustScoreDisplay(trustEstimate: _currentGuidance!.trustEstimate);
-              }
+              if (_currentGuidance != null)
+                TrustScoreDisplay(trustEstimate: _currentGuidance!.trustEstimate),
 
               // Location quality indicator
               LocationQualityIndicator(

@@ -200,6 +200,7 @@ const Sidebar = ({
                   icon: "ni-it",
                 },
                 { id: "stations", idx: 10, label: "Stations", icon: "ni-st" },
+                { id: "local-leaders", idx: 16, label: "Local Leaders", icon: "ni-us" },
                 {
                   id: "system-config",
                   idx: 11,
