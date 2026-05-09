@@ -562,41 +562,56 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     final vs = (r.verificationStatus ?? '').toLowerCase();
     final st = (r.status ?? '').toLowerCase();
 
-    final validated = rs != 'pending';
-
     // Hard rejections (rules / verification / status).
     final terminalRejected =
         rs == 'rejected' || vs == 'rejected' || st == 'rejected';
 
-    // Automated trust + rule screening is finished once rules ran and the
-    // pipeline produced a queue state or outcome (under_review means waiting
-    // on police, not ongoing "AI investigation").
-    final automatedScreeningDone = validated &&
+    // API can lag rule_status behind verification/status. Align with
+    // ReportDetailItem.workflowStatus (verification_status ?? status ?? rule_status).
+    final hasDownstreamPipelineSignal = terminalRejected ||
+        vs == 'under_review' ||
+        vs == 'verified' ||
+        st == 'verified' ||
+        st == 'flagged' ||
+        r.trustScore != null ||
+        (r.aiVerificationReason?.trim().isNotEmpty ?? false) ||
+        (r.aiEvidenceDescription?.trim().isNotEmpty ?? false);
+
+    final ruleValidationComplete = rs != 'pending' || hasDownstreamPipelineSignal;
+
+    // Automated screening finishes only after rule phase is complete (or inferred)
+    // and we have an automated outcome or queue state.
+    final automatedScreeningDone = ruleValidationComplete &&
         (terminalRejected ||
             vs == 'under_review' ||
             vs == 'verified' ||
             vs == 'rejected' ||
+            st == 'verified' ||
+            st == 'flagged' ||
             r.trustScore != null ||
             (r.aiVerificationReason?.trim().isNotEmpty ?? false));
 
     final String autoSub;
     final bool autoDone;
-    if (terminalRejected) {
-      autoSub = 'Not accepted';
-      autoDone = true;
-    } else if (automatedScreeningDone) {
-      autoSub = 'Complete';
-      autoDone = true;
-    } else {
+    if (!automatedScreeningDone) {
       autoSub = 'Processing...';
       autoDone = false;
+    } else if (terminalRejected) {
+      autoSub = 'Not accepted';
+      autoDone = true;
+    } else {
+      autoSub = 'Complete';
+      autoDone = true;
     }
-    final autoActive = validated && !automatedScreeningDone;
+    final autoActive = ruleValidationComplete && !automatedScreeningDone;
 
     // Reporter API omits verified_by; use verified_at for “police review completed”.
     final policeHumanComplete =
         r.verifiedBy != null || r.verifiedAt != null;
-    final closureWithoutPolice = terminalRejected && !policeHumanComplete;
+    // If verification is still under_review, keep police active even when status/rejected disagree.
+    final closureWithoutPolice = terminalRejected &&
+        !policeHumanComplete &&
+        vs != 'under_review';
 
     final String policeSub;
     final bool policeDone;
@@ -628,7 +643,12 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
 
     final steps = [
       _Step('Submitted', _formatDate(r.reportedAt), true, true),
-      _Step('Rule Validation', validated ? 'Complete' : 'Processing...', validated, !validated),
+      _Step(
+        'Rule Validation',
+        ruleValidationComplete ? 'Complete' : 'Processing...',
+        ruleValidationComplete,
+        !ruleValidationComplete,
+      ),
       _Step('Automated screening', autoSub, autoDone, autoActive),
       _Step('Police review', policeSub, policeDone, policeActive),
     ];

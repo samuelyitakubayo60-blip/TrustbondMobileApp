@@ -2061,37 +2061,25 @@ def _process_report_background(
         except Exception as e:
             logger.warning(f"Location consistency validation failed: {e}")
         
-        # 3. Unified validation using all models (TrustBond, Natural Language, Volo)
-        unified_validation_data = None
-        try:
-            from app.core.unified_validator import validate_report_unified
-            
-            # Get evidence files for Volo analysis
-            evidence_files = db.query(EvidenceFile).filter(
-                EvidenceFile.report_id == report.report_id
-            ).all()
-            
-            # Perform unified validation
-            validation_result = validate_report_unified(
-                db=db,
-                report=report,
-                device=device,
-                evidence_files=evidence_files
-            )
-            unified_validation_data = _store_unified_validation_result(db, report, validation_result)
-            
-            logger.info(f"Unified validation completed for report {report_id} - Score: {validation_result.aggregated_trust.total_score:.2f}")
-            
-        except Exception as e:
-            logger.error(f"Unified validation failed for report {report_id}: {e}")
-            # Fallback to basic TrustBond scoring
-            try:
-                score_report_credibility(db, report, device, evidence_count)
-                logger.info(f"Fallback TrustBond scoring completed for report {report_id}")
-            except Exception as fallback_e:
-                logger.error(f"Fallback scoring also failed for report {report_id}: {fallback_e}")
-                raise HTTPException(status_code=500, detail=f"ML scoring failed during report creation: {str(e)}")
-        
+        # 3. Unified validation using all models (TrustBond, Natural Language, Volo) — no legacy fallback.
+        from app.core.unified_validator import validate_report_unified
+
+        evidence_files = db.query(EvidenceFile).filter(
+            EvidenceFile.report_id == report.report_id
+        ).all()
+        validation_result = validate_report_unified(
+            db=db,
+            report=report,
+            device=device,
+            evidence_files=evidence_files,
+        )
+        unified_validation_data = _store_unified_validation_result(db, report, validation_result)
+        logger.info(
+            "Unified validation completed for report %s - Score: %.2f",
+            report_id,
+            validation_result.aggregated_trust.total_score,
+        )
+
         # 4. Apply rule-based verification (still needed for basic validation)
         try:
             rule_status, is_flagged, flag_reason = apply_rule_based_status(
@@ -3619,21 +3607,13 @@ def create_report(
         from app.core.unified_validator import validate_report_unified
         from app.core.report_priority import apply_anti_fraud_rules, calculate_report_priority
 
-        unified_validation_data = None
-        try:
-            validation_result = validate_report_unified(
-                db=db,
-                report=report,
-                device=device,
-                evidence_files=list(getattr(report, "evidence_files", []) or []),
-            )
-            unified_validation_data = _store_unified_validation_result(db, report, validation_result)
-        except Exception as e:
-            logger.error(f"Unified validation failed during report creation for {report.report_id}: {e}")
-            try:
-                score_report_credibility(db, report, device, evidence_count)
-            except Exception as scoring_error:
-                logger.error(f"ML scoring failed during report creation for {report.report_id}: {scoring_error}")
+        validation_result = validate_report_unified(
+            db=db,
+            report=report,
+            device=device,
+            evidence_files=list(getattr(report, "evidence_files", []) or []),
+        )
+        unified_validation_data = _store_unified_validation_result(db, report, validation_result)
 
         ml_prediction_tmp = resolve_ml_prediction_for_report(report)
         rule_status, is_flagged, flag_reason = apply_anti_fraud_rules(
@@ -3764,8 +3744,18 @@ def create_report(
             location_label=_human_location_chain_from_report(report),
         )
         _persist_ai_analysis_snapshot(report, snapshot)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.warning(f"AI-enhanced rules pipeline failed for report {report.report_id}: {e}")
+        logger.exception(
+            "AI-enhanced rules pipeline failed for report %s (unified validation required; no TrustBond-only fallback)",
+            report.report_id,
+        )
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail="Report verification could not be completed. Please try again shortly.",
+        ) from e
 
     # Persist everything before responding
     try:
@@ -5219,20 +5209,16 @@ async def upload_evidence(
         evidence_count = db.query(EvidenceFile).filter(EvidenceFile.report_id == report_after.report_id).count()
         print(f"Re-applying AI-enhanced rules after evidence upload - evidence_count: {evidence_count}")  # Debug log
         
-        # Re-run unified validation so TrustBond/NL/VOLO only contribute signals.
-        unified_validation_data = None
-        try:
-            from app.core.unified_validator import validate_report_unified
+        # Re-run unified validation so TrustBond/NL/VOLO only contribute signals (no legacy fallback).
+        from app.core.unified_validator import validate_report_unified
 
-            validation_result = validate_report_unified(
-                db=db,
-                report=report_after,
-                device=device,
-                evidence_files=list(getattr(report_after, "evidence_files", []) or []),
-            )
-            unified_validation_data = _store_unified_validation_result(db, report_after, validation_result)
-        except Exception as e:
-            logger.error(f"Unified validation failed after evidence upload for {report_after.report_id}: {e}")
+        validation_result = validate_report_unified(
+            db=db,
+            report=report_after,
+            device=device,
+            evidence_files=list(getattr(report_after, "evidence_files", []) or []),
+        )
+        unified_validation_data = _store_unified_validation_result(db, report_after, validation_result)
 
         ml_prediction = resolve_ml_prediction_for_report(report_after)
         if ml_prediction is not None:

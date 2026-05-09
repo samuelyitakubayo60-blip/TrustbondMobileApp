@@ -21,41 +21,18 @@ if str(_backend_root) not in sys.path:
 from sqlalchemy import create_engine, text
 
 from app.config import settings
+from app.core.workflow_schema_extensions import (
+    DDL_STATEMENTS,
+    LEADER_VERIFIED_BACKFILL_SQL,
+)
 
 
 def main() -> None:
     engine = create_engine(settings.database_url, pool_pre_ping=True)
-    stmts = [
-        """
-        ALTER TABLE reports
-          ADD COLUMN IF NOT EXISTS submitted_by_local_leader_id INTEGER
-          REFERENCES local_leaders(local_leader_id) ON DELETE SET NULL;
-        """,
-        """
-        CREATE INDEX IF NOT EXISTS ix_reports_submitted_by_local_leader_id
-          ON reports (submitted_by_local_leader_id);
-        """,
-        """
-        ALTER TABLE cases ADD COLUMN IF NOT EXISTS special_assignment_unit VARCHAR(80);
-        ALTER TABLE cases ADD COLUMN IF NOT EXISTS rib_handed_over_at TIMESTAMPTZ;
-        ALTER TABLE cases ADD COLUMN IF NOT EXISTS rib_handover_summary TEXT;
-        """,
-        """
-        ALTER TABLE local_leaders ADD COLUMN IF NOT EXISTS fcm_device_token VARCHAR(512);
-        """,
-        """
-        ALTER TABLE incident_types ADD COLUMN IF NOT EXISTS default_special_assignment_unit VARCHAR(80);
-        """,
-        """
-        UPDATE reports
-        SET leader_verification_status = 'confirmed'
-        WHERE verification_status = 'verified'
-          AND (leader_verification_status IS NULL OR leader_verification_status = 'pending');
-        """,
-    ]
     with engine.begin() as conn:
-        for s in stmts:
+        for s in DDL_STATEMENTS:
             conn.execute(text(s))
+        conn.execute(text(LEADER_VERIFIED_BACKFILL_SQL))
 
 
 if __name__ == "__main__":

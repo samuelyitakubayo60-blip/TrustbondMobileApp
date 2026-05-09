@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import engine, Base
+from app.core.workflow_schema_extensions import apply_workflow_schema_ddl
 from app.models import (
     Device,
     IncidentType,
@@ -59,11 +60,21 @@ from app.api.v1 import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import logging
+
+    _log = logging.getLogger(__name__)
+
     # Create PostGIS extension first (required for geometry type)
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
         conn.commit()
-    
+
+    # Align DB with ORM (ADD COLUMN IF NOT EXISTS) so deploys don't 500 before manual migrations.
+    try:
+        apply_workflow_schema_ddl(engine)
+    except Exception as exc:
+        _log.warning("Workflow schema DDL ensure failed (check DB permissions): %s", exc)
+
     # Warm-up AI narrative/semantic components on startup (best-effort).
     try:
         from app.api.v1.reports import warmup_narrative_models_on_startup
