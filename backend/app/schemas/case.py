@@ -30,6 +30,7 @@ class CaseUpdate(BaseModel):
     special_assignment_unit: Optional[str] = None
     rib_handed_over_at: Optional[datetime] = None
     rib_handover_summary: Optional[str] = None
+    rib_handover_prerequisites_acknowledged: Optional[bool] = None
 
 
 class CaseResponse(BaseModel):
@@ -54,6 +55,7 @@ class CaseResponse(BaseModel):
     special_assignment_unit: Optional[str] = None
     rib_handed_over_at: Optional[datetime] = None
     rib_handover_summary: Optional[str] = None
+    rib_handover_prerequisites_acknowledged: Optional[bool] = None
     created_at: Optional[datetime] = None
     average_trust_score: Optional[Decimal] = None
 

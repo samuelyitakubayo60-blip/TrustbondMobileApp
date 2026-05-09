@@ -2,6 +2,12 @@ import React, { useEffect, useState, useCallback } from "react";
 import api from "../../api/client";
 import { formatLocalDate } from "../../utils/dateTime";
 import { useAuth } from "../../context/AuthContext";
+import {
+  formatTechnicalStatus,
+  formatCommunityConfirmation,
+  communityBadgeClass,
+  REPORT_QUEUE_PRESETS,
+} from "../../utils/reportOperationalLabels";
 
 const friendlyFlagReason = (reason) => {
   const m = {
@@ -50,8 +56,11 @@ const Reports = ({
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [queuePreset, setQueuePreset] = useState("none");
   const [incidentTypes, setIncidentTypes] = useState([]);
   const [locations, setLocations] = useState([]);
+
+  const queueConfig = REPORT_QUEUE_PRESETS[queuePreset] || REPORT_QUEUE_PRESETS.none;
 
   const loadFilters = () => {
     // Load incident types for Types dropdown
@@ -87,13 +96,20 @@ const Reports = ({
     }
 
     if (statusFilter !== "all") {
-      // Map UI labels to status values used by backend (using 'status' field now)
       let statusValue = null;
       if (statusFilter === "pending") statusValue = "pending";
       if (statusFilter === "verified") statusValue = "verified";
       if (statusFilter === "flagged") statusValue = "flagged";
-      if (statusValue) params.set("status", statusValue);
+      if (statusValue) params.set("report_status", statusValue);
     }
+
+    const qp = REPORT_QUEUE_PRESETS[queuePreset] || REPORT_QUEUE_PRESETS.none;
+    if (qp.leader_confirmation)
+      params.set("leader_confirmation", qp.leader_confirmation);
+    if (qp.verification_status_filter)
+      params.set("verification_status_filter", qp.verification_status_filter);
+    if (qp.verification_status_in)
+      params.set("verification_status_in", qp.verification_status_in);
     if (typeFilter !== "all") {
       params.set("incident_type_id", String(typeFilter));
     }
@@ -166,6 +182,7 @@ const Reports = ({
     fromDate,
     toDate,
     debouncedSearchText,
+    queuePreset,
   ]);
 
   // Reset offset when debounced search text changes
@@ -221,10 +238,22 @@ const Reports = ({
       <div className="page-header">
         <h2>Reports</h2>
         <p>
-          All citizen-submitted incident reports — filter, sort, and take
-          action.
+          Citizen submissions: <strong>technical screening</strong> (police
+          verification + AI/rules) runs in parallel with{" "}
+          <strong>community confirmation</strong> (local village/cell leader).
+          They are labelled separately below.
         </p>
       </div>
+
+      {queuePreset !== "none" ? (
+        <div className="alert alert-info" style={{ marginBottom: 14 }}>
+          <span className="alert-icon">i</span>
+          <div style={{ fontSize: "13px", lineHeight: 1.45 }}>
+            <strong>{queueConfig.label}</strong>
+            <div style={{ marginTop: 6 }}>{queueConfig.hint}</div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="stats-row">
         <div className="stat-card c-blue">
@@ -271,6 +300,23 @@ const Reports = ({
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
           />
+          <select
+            className="select"
+            value={queuePreset}
+            title="Operational queue presets filter the list only; police screening unchanged"
+            onChange={(e) => {
+              const v = e.target.value;
+              setQueuePreset(v);
+              setOffset(0);
+              setStatusFilter("all");
+            }}
+          >
+            {Object.entries(REPORT_QUEUE_PRESETS).map(([key, cfg]) => (
+              <option key={key} value={key}>
+                {cfg.label}
+              </option>
+            ))}
+          </select>
           <select
             className="select"
             value={statusFilter}
@@ -343,6 +389,8 @@ const Reports = ({
                 "incident_type",
                 "village",
                 "trust_score",
+                "technical_screening_summary",
+                "community_leader_summary",
                 "assignment_priority",
                 "rule_status",
                 "reported_at",
@@ -352,6 +400,8 @@ const Reports = ({
                 r.incident_type_name || "",
                 r.village_name || "",
                 r.trust_score ?? "",
+                formatTechnicalStatus(r),
+                formatCommunityConfirmation(r),
                 r.assignment_priority || "",
                 r.rule_status ?? "",
                 r.reported_at || "",
@@ -378,7 +428,7 @@ const Reports = ({
         </div>
 
         <div className="tbl-wrap">
-          <table style={{ minWidth: 1040 }}>
+          <table style={{ minWidth: 1180 }}>
             <thead>
               <tr>
                 <th>#</th>
@@ -392,7 +442,8 @@ const Reports = ({
                 <th style={{ minWidth: 110, whiteSpace: "nowrap" }}>
                   Priority
                 </th>
-                <th>Status</th>
+                <th style={{ minWidth: 150 }}>Technical (screening)</th>
+                <th style={{ minWidth: 150 }}>Community (leader)</th>
                 <th>Date</th>
                 <th>Action</th>
               </tr>
@@ -413,12 +464,12 @@ const Reports = ({
                   return 0;
                 })();
                 const width = Math.max(0, Math.min(100, Number(score)));
-                const status = r.status;
                 const assignmentPriority = (
                   r.assignment_priority || ""
                 ).toLowerCase();
                 const reportPriority = (r.priority || "").toLowerCase();
                 const shownPriority = assignmentPriority || reportPriority;
+                const vs = (r.verification_status || "").toLowerCase();
                 const rowNumber = offset + index + 1;
                 return (
                   <tr key={r.report_id}>
@@ -556,30 +607,46 @@ const Reports = ({
                         <span className="badge b-gray">—</span>
                       )}
                     </td>
-                    <td>
-                      <span
-                        className={`badge ${
-                          status === "pending" || status === "under_review"
-                            ? "b-orange"
-                            : status === "verified"
-                              ? "b-green"
-                              : "b-red"
-                        }`}
-                      >
-                        {status === "under_review" ? "pending" : status}
-                      </span>
-                      {r.flag_reason && (
-                        <div
-                          style={{
-                            marginTop: 4,
-                            fontSize: "10px",
-                            color: "var(--muted)",
-                            maxWidth: 220,
-                          }}
+                    <td style={{ verticalAlign: "top", fontSize: "11px" }}>
+                      {vs ? (
+                        <span
+                          className={`badge ${
+                            vs === "under_review" || vs === "pending"
+                              ? "b-orange"
+                              : vs === "verified"
+                                ? "b-green"
+                                : "b-red"
+                          }`}
+                          style={{ display: "inline-block", marginBottom: 6 }}
                         >
+                          {vs === "pending"
+                            ? "Verification: pending"
+                            : vs.replaceAll("_", " ")}
+                        </span>
+                      ) : (
+                        <span className="badge b-gray">{r.status || "—"}</span>
+                      )}
+                      {(r.rule_status || r.status) ? (
+                        <div style={{ marginTop: 4, color: "var(--muted)" }}>
+                          Rule: {String(r.rule_status || "—")}
+                        </div>
+                      ) : null}
+                      {r.flag_reason && (
+                        <div style={{ marginTop: 6, fontSize: "10px", color: "var(--muted)", maxWidth: 220 }}>
                           {friendlyFlagReason(r.flag_reason)}
                         </div>
                       )}
+                      <div style={{ marginTop: 8, fontSize: "10px", color: "var(--muted)" }}>
+                        {formatTechnicalStatus(r)}
+                      </div>
+                    </td>
+                    <td style={{ verticalAlign: "top", fontSize: "11px" }}>
+                      <span className={`badge ${communityBadgeClass(r)}`} style={{ display: "inline-block", marginBottom: 6 }}>
+                        {(r.leader_verification_status || "pending").replaceAll("_", " ") || "pending"}
+                      </span>
+                      <div style={{ color: "var(--muted)", lineHeight: 1.35 }}>
+                        {formatCommunityConfirmation(r)}
+                      </div>
                     </td>
                     <td style={{ fontSize: "10px", color: "var(--muted)" }}>
                       {formatLocalDate(r.reported_at)}
@@ -598,7 +665,7 @@ const Reports = ({
               {!items.length && !loading && (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={11}
                     style={{
                       fontSize: "12px",
                       color: "var(--muted)",
@@ -612,7 +679,7 @@ const Reports = ({
               {loading && (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={11}
                     style={{
                       fontSize: "12px",
                       color: "var(--muted)",

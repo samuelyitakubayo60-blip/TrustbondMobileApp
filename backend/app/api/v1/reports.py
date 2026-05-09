@@ -3813,6 +3813,18 @@ def list_reports(
     sector_location_id: Optional[UUID] = Query(None, description="Filter by sector location"),
     from_date: Optional[datetime] = Query(None, description="Filter reports from this date"),
     to_date: Optional[datetime] = Query(None, description="Filter reports to this date"),
+    verification_status_filter: Optional[str] = Query(
+        None,
+        description="Exact match against Report.verification_status (e.g. under_review)",
+    ),
+    verification_status_in: Optional[str] = Query(
+        None,
+        description="Comma-separated verification_status values (e.g. pending,under_review)",
+    ),
+    leader_confirmation: Optional[str] = Query(
+        None,
+        description="Community leader gate: pending (null,pending,''), confirmed, rejected",
+    ),
 ):
     """List reports.
 
@@ -3976,7 +3988,35 @@ def list_reports(
     
     if to_date is not None:
         query = query.filter(Report.reported_at <= to_date)
-    
+
+    if verification_status_filter:
+        vsf = verification_status_filter.strip().lower()
+        query = query.filter(Report.verification_status == vsf)
+
+    if verification_status_in:
+        parts = [
+            p.strip().lower()
+            for p in verification_status_in.split(",")
+            if p.strip()
+        ]
+        if parts:
+            query = query.filter(Report.verification_status.in_(parts))
+
+    if leader_confirmation:
+        lc = leader_confirmation.strip().lower()
+        if lc == "pending":
+            query = query.filter(
+                or_(
+                    Report.leader_verification_status.is_(None),
+                    Report.leader_verification_status == "",
+                    Report.leader_verification_status == "pending",
+                )
+            )
+        elif lc == "confirmed":
+            query = query.filter(Report.leader_verification_status == "confirmed")
+        elif lc == "rejected":
+            query = query.filter(Report.leader_verification_status == "rejected")
+
     total = query.count()
     reports = (
         query.order_by(Report.reported_at.desc())
@@ -6696,6 +6736,9 @@ def _build_report_detail_response(
         verified_by=(
             getattr(report, "verified_by", None) if for_police_viewer else None
         ),
+        leader_verification_status=getattr(report, "leader_verification_status", None),
+        leader_verified_at=getattr(report, "leader_verified_at", None),
+        submitted_by_local_leader_id=getattr(report, "submitted_by_local_leader_id", None),
         incident_latitude=float(report.latitude) if report.latitude is not None else None,
         incident_longitude=float(report.longitude) if report.longitude is not None else None,
         incident_location_source=incident_source,
@@ -6861,6 +6904,9 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
             'prediction_label': ml_prediction_label if ml_prediction_label else (ml_prediction.prediction_label if ml_prediction else None),
             'evaluated_at': ml_prediction.evaluated_at.isoformat() if ml_prediction and ml_prediction.evaluated_at else None
         }] if ml_prediction else [],
+        leader_verification_status=getattr(report, "leader_verification_status", None),
+        leader_verified_at=getattr(report, "leader_verified_at", None),
+        submitted_by_local_leader_id=getattr(report, "submitted_by_local_leader_id", None),
     )
 
 

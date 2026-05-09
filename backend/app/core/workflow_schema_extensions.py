@@ -23,6 +23,7 @@ DDL_STATEMENTS: tuple[str, ...] = (
     ALTER TABLE cases ADD COLUMN IF NOT EXISTS special_assignment_unit VARCHAR(80);
     ALTER TABLE cases ADD COLUMN IF NOT EXISTS rib_handed_over_at TIMESTAMPTZ;
     ALTER TABLE cases ADD COLUMN IF NOT EXISTS rib_handover_summary TEXT;
+    ALTER TABLE cases ADD COLUMN IF NOT EXISTS rib_handover_prerequisites_acknowledged BOOLEAN NOT NULL DEFAULT FALSE;
     """,
     """
     ALTER TABLE local_leaders ADD COLUMN IF NOT EXISTS fcm_device_token VARCHAR(512);

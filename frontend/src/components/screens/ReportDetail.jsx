@@ -2,6 +2,10 @@ import React, { useEffect, useState } from "react";
 import api from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { formatLocalDateTime } from "../../utils/dateTime";
+import {
+  formatTechnicalStatus,
+  formatCommunityConfirmation,
+} from "../../utils/reportOperationalLabels";
 
 const friendlyFlagReason = (reason) => {
   const m = {
@@ -2288,10 +2292,26 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 </div>
               )}
 
-              <div style={{ marginTop: 12, padding: "10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
-                <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>Status Summary</div>
-                <div style={{ fontSize: "11px", color: "var(--muted)" }}>
-                  {getVerificationStatus(report, mlPrediction)}
+              <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                <div style={{ padding: "10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
+                  <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 4 }}>Technical status (station / AI)</div>
+                  <div style={{ fontSize: "11px", color: "var(--muted)", marginBottom: 6 }}>
+                    {formatTechnicalStatus(report)}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--muted)" }}>
+                    {getVerificationStatus(report, mlPrediction)}
+                  </div>
+                </div>
+                <div style={{ padding: "10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
+                  <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>Community confirmation (local leader)</div>
+                  <div style={{ fontSize: "11px", color: "var(--muted)" }}>
+                    {formatCommunityConfirmation(report)}
+                  </div>
+                  {report.leader_verified_at ? (
+                    <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: 4 }}>
+                      Verified at {formatLocalDateTime(report.leader_verified_at)}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 

@@ -605,6 +605,12 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
           cluster&apos;s risk score (0-100) is weighted by the average Random
           Forest trust score of its constituent reports; low-trust reports
           reduce the hotspot score even if many are present.
+          <span style={{ display: 'block', marginTop: '0.65rem' }}>
+            Clustering only includes incidents that passed police verification (verified or
+            equivalent). When analytics gates are enabled in deployment (DPU lens), hotspots
+            also require community confirmation (local leader)—reports can exist in workflow
+            but stay off the map until those policies are satisfied.
+          </span>
         </div>
       </div>
 

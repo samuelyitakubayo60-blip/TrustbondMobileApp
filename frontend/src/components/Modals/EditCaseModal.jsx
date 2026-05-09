@@ -24,6 +24,7 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
   const [specialAssignmentUnit, setSpecialAssignmentUnit] = useState('');
   const [ribHandedOverLocal, setRibHandedOverLocal] = useState('');
   const [ribHandoverSummary, setRibHandoverSummary] = useState('');
+  const [ribHandoverPrepAck, setRibHandoverPrepAck] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -37,6 +38,7 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
     setSpecialAssignmentUnit(caseItem.special_assignment_unit || '');
     setRibHandedOverLocal(toDatetimeLocalValue(caseItem.rib_handed_over_at));
     setRibHandoverSummary(caseItem.rib_handover_summary || '');
+    setRibHandoverPrepAck(!!caseItem.rib_handover_prerequisites_acknowledged);
     setError('');
     setSaving(false);
   }, [isOpen, caseItem]);
@@ -118,6 +120,7 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
             rib_handed_over_at: ribHandedOverLocal
               ? new Date(ribHandedOverLocal).toISOString()
               : null,
+            rib_handover_prerequisites_acknowledged: ribHandoverPrepAck,
           }
         : {}),
     };
@@ -245,6 +248,27 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
                 placeholder="Notes on handover to RIB…"
               />
             </div>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+                marginTop: 8,
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={ribHandoverPrepAck}
+                onChange={(e) => setRibHandoverPrepAck(e.target.checked)}
+                style={{ marginTop: 2 }}
+              />
+              <span style={{ color: 'var(--text-dim)' }}>
+                Handover prerequisites met (manual checklist — for record keeping only;
+                does not change report verification or community confirmation)
+              </span>
+            </label>
           </>
         )}
 

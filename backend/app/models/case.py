@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, SmallInteger, String, Text, DateTime, ForeignKey, Numeric
+from sqlalchemy import Column, Integer, SmallInteger, String, Text, DateTime, ForeignKey, Numeric, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -28,6 +28,7 @@ class Case(Base):
     special_assignment_unit = Column(String(80))
     rib_handed_over_at = Column(DateTime(timezone=True))
     rib_handover_summary = Column(Text)
+    rib_handover_prerequisites_acknowledged = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

@@ -185,6 +185,9 @@ def _case_to_response(c: Case) -> CaseResponse:
         special_assignment_unit=getattr(c, "special_assignment_unit", None),
         rib_handed_over_at=getattr(c, "rib_handed_over_at", None),
         rib_handover_summary=getattr(c, "rib_handover_summary", None),
+        rib_handover_prerequisites_acknowledged=bool(
+            getattr(c, "rib_handover_prerequisites_acknowledged", False)
+        ),
         created_at=c.created_at,
         average_trust_score=avg_trust,
     )
@@ -224,6 +227,9 @@ def _report_to_response(r: Report, linked_case_id: Optional[UUID] = None) -> Rep
         is_flagged=r.is_flagged,
         flag_reason=r.flag_reason,
         verified_at=r.verified_at,
+        leader_verification_status=getattr(r, "leader_verification_status", None),
+        leader_verified_at=getattr(r, "leader_verified_at", None),
+        submitted_by_local_leader_id=getattr(r, "submitted_by_local_leader_id", None),
         context_tags=r.context_tags or [],
         app_version=r.app_version,
         network_type=r.network_type,
@@ -773,6 +779,10 @@ def update_case(
             case.rib_handover_summary = (payload.rib_handover_summary or "").strip() or None
         if payload.rib_handed_over_at is not None:
             case.rib_handed_over_at = payload.rib_handed_over_at
+        if payload.rib_handover_prerequisites_acknowledged is not None:
+            case.rib_handover_prerequisites_acknowledged = bool(
+                payload.rib_handover_prerequisites_acknowledged
+            )
     db.add(case)
     db.commit()
     db.refresh(case)

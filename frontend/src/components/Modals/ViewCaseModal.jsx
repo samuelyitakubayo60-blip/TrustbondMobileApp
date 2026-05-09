@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client';
 import { formatLocalDate, formatLocalDateTime, parseApiDate } from '../../utils/dateTime';
+import {
+  formatTechnicalStatus,
+  formatCommunityConfirmation,
+  communityBadgeClass,
+} from '../../utils/reportOperationalLabels';
 
 const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
   const [reports, setReports] = useState([]);
@@ -308,6 +313,14 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                 <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{caseItem.rib_handover_summary}</div>
               </div>
             )}
+            <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+              <div className="input-label">RIB handover prerequisites (IO checklist)</div>
+              <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>
+                {caseItem.rib_handover_prerequisites_acknowledged
+                  ? 'Acknowledged — manual record only (does not affect verification)'
+                  : 'Not recorded yet — officers can confirm in Edit case'}
+              </div>
+            </div>
           </div>
         )}
 
@@ -323,7 +336,8 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                     <th>Report</th>
                     <th>Type</th>
                     <th>Village</th>
-                    <th>Status</th>
+                    <th>Technical (screening)</th>
+                    <th>Community (leader)</th>
                     <th>Date</th>
                     <th>Actions</th>
                   </tr>
@@ -336,7 +350,14 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                       </td>
                       <td>{r.incident_type_name || '-'}</td>
                       <td>{r.village_name || '-'}</td>
-                      <td>{r.rule_status || r.status || '-'}</td>
+                      <td style={{ fontSize: 11, maxWidth: 180 }}>
+                        <span title={formatTechnicalStatus(r)}>{formatTechnicalStatus(r)}</span>
+                      </td>
+                      <td style={{ fontSize: 11, maxWidth: 180 }}>
+                        <span className={`badge ${communityBadgeClass(r)}`} title={formatCommunityConfirmation(r)}>
+                          {formatCommunityConfirmation(r)}
+                        </span>
+                      </td>
                       <td style={{ fontSize: 11 }}>{formatLocalDate(r.reported_at)}</td>
                       <td>
                         <button
@@ -352,7 +373,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                   ))}
                   {!reports.length && (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>
+                      <td colSpan={7} style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>
                         No reports linked to this case.
                       </td>
                     </tr>
