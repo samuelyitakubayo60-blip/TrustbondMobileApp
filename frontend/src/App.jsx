@@ -31,6 +31,7 @@ import NewCaseModal from "./components/Modals/NewCaseModal";
 import LinkCaseModal from "./components/Modals/LinkCaseModal";
 import StationModal from "./components/Modals/StationModal";
 import StationDetailModal from "./components/Modals/StationDetailModal";
+import LocalLeaderModal from "./components/Modals/LocalLeaderModal";
 import api from "./api/client";
 
 function App() {
@@ -100,6 +101,8 @@ function App() {
   const [selectedIncidentType, setSelectedIncidentType] = useState(null);
   const [selectedStation, setSelectedStation] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedLocalLeader, setSelectedLocalLeader] = useState(null);
+  const [localLeadersRefreshKey, setLocalLeadersRefreshKey] = useState(0);
   const [incidentTypesRefreshKey, setIncidentTypesRefreshKey] = useState(0);
   const [usersRefreshKey, setUsersRefreshKey] = useState(0);
   const [sidebarCounts, setSidebarCounts] = useState({
@@ -117,6 +120,8 @@ function App() {
     editStation: false,
     newCase: false,
     linkCase: false,
+    addLocalLeader: false,
+    editLocalLeader: false,
   });
   const [authScreen, setAuthScreen] = useState("login"); // login | forgot | reset
   const [resetEmail, setResetEmail] = useState("");
@@ -487,9 +492,16 @@ function App() {
       case "local-leaders":
         return (
           <LocalLeaders
-            goToScreen={goToScreen}
-            openModal={openModal}
             wsRefreshKey={wsRefreshKey}
+            refreshKey={localLeadersRefreshKey}
+            onAddLeader={() => {
+              setSelectedLocalLeader(null);
+              openModal("addLocalLeader");
+            }}
+            onEditLeader={(l) => {
+              setSelectedLocalLeader(l);
+              openModal("editLocalLeader");
+            }}
           />
         );
       case "audit-log":
@@ -700,6 +712,20 @@ function App() {
         isOpen={modals.viewStation}
         onClose={() => closeModal("viewStation")}
         station={selectedStation}
+      />
+      <LocalLeaderModal
+        isOpen={modals.addLocalLeader}
+        onClose={() => closeModal("addLocalLeader")}
+        mode="add"
+        leader={null}
+        onSaved={() => setLocalLeadersRefreshKey((k) => k + 1)}
+      />
+      <LocalLeaderModal
+        isOpen={modals.editLocalLeader}
+        onClose={() => closeModal("editLocalLeader")}
+        mode="edit"
+        leader={selectedLocalLeader}
+        onSaved={() => setLocalLeadersRefreshKey((k) => k + 1)}
       />
     </>
   );

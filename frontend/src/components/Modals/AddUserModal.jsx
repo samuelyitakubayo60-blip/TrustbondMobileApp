@@ -152,8 +152,8 @@ const AddUserModal = ({ isOpen, onClose, onSaved }) => {
                 onChange={handleChange("role")}
               >
                 <option value="officer">Officer</option>
-                <option value="supervisor">Supervisor</option>
-                <option value="admin">Admin</option>
+                <option value="supervisor">IO</option>
+                <option value="admin">DPC</option>
               </select>
             </div>
             <div className="input-group">

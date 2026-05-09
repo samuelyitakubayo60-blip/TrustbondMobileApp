@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { staffRoleLabel } from '../../utils/roleLabels';
 
 const PAGE_SIZE = 20;
 
@@ -155,7 +156,7 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
       {!isMobile && (
         <div className="page-header">
           <h2>User Management</h2>
-          <p>Manage police officers and admin accounts with role-based access control.</p>
+          <p>Manage officers, IOs, and DPC accounts with role-based access control.</p>
         </div>
       )}
 
@@ -165,11 +166,11 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
           <div className="stat-value sv-blue">{totalCount}</div>
         </div>
         <div className="stat-card c-orange">
-          <div className="stat-label">Admins</div>
+          <div className="stat-label">DPC</div>
           <div className="stat-value sv-orange">{admins}</div>
         </div>
         <div className="stat-card c-green">
-          <div className="stat-label">Supervisors</div>
+          <div className="stat-label">IO</div>
           <div className="stat-value sv-green">{supervisors}</div>
         </div>
         <div className="stat-card c-cyan">
@@ -206,8 +207,8 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
             }}
           >
             <option value="all">All Roles</option>
-            <option value="admin">Admin</option>
-            <option value="supervisor">Supervisor</option>
+            <option value="admin">DPC</option>
+            <option value="supervisor">IO</option>
             <option value="officer">Officer</option>
           </select>
           <select
@@ -277,7 +278,7 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
                   <td><span className={`badge ${u.role === 'admin' ? 'b-purple' : 'b-blue'}`}>{u.badge_number || `ID-${u.police_user_id}`}</span></td>
                   <td><strong>{u.first_name} {u.last_name}</strong></td>
                   <td style={{ fontSize: '10px' }}>{u.email}</td>
-                  <td><span className={`badge ${u.role === 'admin' ? 'b-red' : 'b-blue'}`}>{u.role}</span></td>
+                  <td><span className={`badge ${u.role === 'admin' ? 'b-red' : 'b-blue'}`}>{staffRoleLabel(u.role)}</span></td>
                   <td style={{ color: 'var(--muted)' }}>
                     {u.station_id && stationsById[u.station_id]
                       ? stationsById[u.station_id].station_name

@@ -14,6 +14,7 @@ pillow
 cloudinary
 email-validator
 requests
+google-auth
 scikit-learn
 xgboost
 joblib

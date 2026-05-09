@@ -11,6 +11,7 @@ const AddIncidentModal = ({ isOpen, onClose, mode = 'add', incidentType = null, 
       description: incidentType?.description ?? '',
       severity_weight: incidentType?.severity_weight ?? '1.0',
       is_active: incidentType?.is_active ?? true,
+      default_special_assignment_unit: incidentType?.default_special_assignment_unit ?? '',
     };
   }, [incidentType]);
 
@@ -18,6 +19,7 @@ const AddIncidentModal = ({ isOpen, onClose, mode = 'add', incidentType = null, 
   const [description, setDescription] = useState(initial.description);
   const [severity, setSeverity] = useState(String(initial.severity_weight ?? '1.0'));
   const [isActive, setIsActive] = useState(Boolean(initial.is_active));
+  const [defaultSpecialUnit, setDefaultSpecialUnit] = useState(initial.default_special_assignment_unit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -26,6 +28,7 @@ const AddIncidentModal = ({ isOpen, onClose, mode = 'add', incidentType = null, 
     setDescription(initial.description);
     setSeverity(String(initial.severity_weight ?? '1.0'));
     setIsActive(Boolean(initial.is_active));
+    setDefaultSpecialUnit(initial.default_special_assignment_unit ?? '');
     setError('');
     setSaving(false);
   }, [initial, isOpen]);
@@ -48,6 +51,7 @@ const AddIncidentModal = ({ isOpen, onClose, mode = 'add', incidentType = null, 
       description: description.trim() || null,
       severity_weight: sev,
       is_active: Boolean(isActive),
+      default_special_assignment_unit: defaultSpecialUnit.trim() || null,
     };
 
     setSaving(true);
@@ -118,6 +122,16 @@ const AddIncidentModal = ({ isOpen, onClose, mode = 'add', incidentType = null, 
           <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '3px' }}>
             1.0 = Low &nbsp;·&nbsp; 1.3–1.4 = High &nbsp;·&nbsp; 1.6–2.0 = Severe
           </div>
+        </div>
+
+        <div className="input-group">
+          <div className="input-label">Default special assignment unit (auto-cases)</div>
+          <input
+            className="input"
+            placeholder="Optional — applied when auto-creating cases from this type"
+            value={defaultSpecialUnit}
+            onChange={(e) => setDefaultSpecialUnit(e.target.value)}
+          />
         </div>
 
         <div className="input-group" style={{ marginTop: '4px' }}>

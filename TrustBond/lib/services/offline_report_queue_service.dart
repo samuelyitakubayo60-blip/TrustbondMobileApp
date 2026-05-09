@@ -258,12 +258,10 @@ class OfflineReportQueueService {
     AppRefreshBus.notify('offline_queue_syncing');
 
     String? resolvedDeviceId = item.deviceId;
-    bool createdThisAttempt = false;
 
     try {
       final response = await _api.submitReport(_reportPayload(item));
       resolvedDeviceId = response['device_id']?.toString() ?? resolvedDeviceId;
-      createdThisAttempt = true;
     } on ApiRequestException catch (e) {
       if (e.statusCode == 409) {
         resolvedDeviceId ??= await _deviceService.ensureDeviceId();

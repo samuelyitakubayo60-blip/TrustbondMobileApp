@@ -306,3 +306,47 @@ TrustBond
 </html>
 """
     return send_email(to_email, subject, body_plain, body_html)
+
+
+def send_leader_new_incident_email(
+    to_email: str,
+    leader_name: str,
+    report_number: str | None,
+    village_label: str | None,
+) -> tuple[bool, str | None]:
+    rn = report_number or "new"
+    loc = village_label or "your area"
+    subject = f"TrustBond — New incident report ({rn})"
+    body_plain = f"""Hello {leader_name},
+
+A new incident report was submitted in {loc} (report {rn}).
+
+Open the TrustBond Local Leader app to review and confirm or reject the incident.
+
+TrustBond
+"""
+    return send_email(to_email.strip(), subject, body_plain, None)
+
+
+def send_leader_otp_email(to_email: str, code: str, purpose: str) -> tuple[bool, str | None]:
+    """
+    purpose: 'login_otp' | 'password_setup'
+    """
+    to_email = (to_email or "").strip()
+    if purpose == "login_otp":
+        subject = "TrustBond — Login verification code"
+        body_plain = f"""Your TrustBond local leader login code is: {code}
+
+This code expires in 10 minutes. If you did not request it, ignore this email.
+
+TrustBond
+"""
+    else:
+        subject = "TrustBond — Password setup code"
+        body_plain = f"""Your TrustBond local leader password setup code is: {code}
+
+This code expires in 10 minutes.
+
+TrustBond
+"""
+    return send_email(to_email, subject, body_plain, None)

@@ -10,7 +10,7 @@ class LocalLeaderAuthCode(Base):
 
     local_leader_auth_code_id = Column(Integer, primary_key=True, autoincrement=True)
     local_leader_id = Column(Integer, ForeignKey("local_leaders.local_leader_id", ondelete="CASCADE"), nullable=False, index=True)
-    phone_number = Column(String(20), nullable=False, index=True)
+    phone_number = Column(String(20), nullable=True, index=True)
     code = Column(String(10), nullable=False)
     purpose = Column(String(30), nullable=False, default="password_setup")
     expires_at = Column(DateTime(timezone=True), nullable=False)

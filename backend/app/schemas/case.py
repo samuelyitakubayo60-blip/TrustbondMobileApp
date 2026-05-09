@@ -27,6 +27,9 @@ class CaseUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     outcome: Optional[str] = None
+    special_assignment_unit: Optional[str] = None
+    rib_handed_over_at: Optional[datetime] = None
+    rib_handover_summary: Optional[str] = None
 
 
 class CaseResponse(BaseModel):
@@ -48,6 +51,9 @@ class CaseResponse(BaseModel):
     opened_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
     outcome: Optional[str] = None
+    special_assignment_unit: Optional[str] = None
+    rib_handed_over_at: Optional[datetime] = None
+    rib_handover_summary: Optional[str] = None
     created_at: Optional[datetime] = None
     average_trust_score: Optional[Decimal] = None
 

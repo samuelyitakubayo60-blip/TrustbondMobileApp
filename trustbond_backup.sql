@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict OdFn0M8lrSW1C38VsdMCt5apDz8MbGoT51WZf8z84W1nnZUdPSBBql9aTRq4hRF
+\restrict wRpIRLjZTCwaMevJDMtaFAetobLwDAV8FUpPVNFycauXNRIuTXGxN5VRpdysja2
 
 -- Dumped from database version 18.3 (Debian 18.3-1.pgdg12+1)
 -- Dumped by pg_dump version 18.2
@@ -471,6 +471,46 @@ ALTER TABLE public.incident_types ALTER COLUMN incident_type_id ADD GENERATED AL
 
 
 --
+-- Name: local_leader_auth_codes; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+--
+
+CREATE TABLE public.local_leader_auth_codes (
+    local_leader_auth_code_id integer NOT NULL,
+    local_leader_id integer NOT NULL,
+    phone_number character varying(20) NOT NULL,
+    code character varying(10) NOT NULL,
+    purpose character varying(30) DEFAULT 'password_setup'::character varying NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.local_leader_auth_codes OWNER TO trustbond_z1r9_user;
+
+--
+-- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE; Schema: public; Owner: trustbond_z1r9_user
+--
+
+CREATE SEQUENCE public.local_leader_auth_codes_local_leader_auth_code_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.local_leader_auth_codes_local_leader_auth_code_id_seq OWNER TO trustbond_z1r9_user;
+
+--
+-- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: trustbond_z1r9_user
+--
+
+ALTER SEQUENCE public.local_leader_auth_codes_local_leader_auth_code_id_seq OWNED BY public.local_leader_auth_codes.local_leader_auth_code_id;
+
+
+--
 -- Name: local_leader_coverage_locations; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
 --
 
@@ -903,6 +943,13 @@ CREATE TABLE public.user_sessions (
 ALTER TABLE public.user_sessions OWNER TO trustbond_z1r9_user;
 
 --
+-- Name: local_leader_auth_codes local_leader_auth_code_id; Type: DEFAULT; Schema: public; Owner: trustbond_z1r9_user
+--
+
+ALTER TABLE ONLY public.local_leader_auth_codes ALTER COLUMN local_leader_auth_code_id SET DEFAULT nextval('public.local_leader_auth_codes_local_leader_auth_code_id_seq'::regclass);
+
+
+--
 -- Name: local_leader_coverage_locations local_leader_coverage_location_id; Type: DEFAULT; Schema: public; Owner: trustbond_z1r9_user
 --
 
@@ -1029,6 +1076,14 @@ COPY public.incident_types (incident_type_id, type_name, description, severity_w
 1	Theft	Stealing of property (e.g., phone, money, livestock).	1.20	\N	t	2026-03-02 11:21:05.80863
 9	Traffic Incident	Non-emergency road incident affecting safety.	1.00	\N	t	2026-03-02 11:21:05.80863
 3	Vandalism	Damage or destruction of public/private property.	1.10	\N	t	2026-03-02 11:21:05.80863
+\.
+
+
+--
+-- Data for Name: local_leader_auth_codes; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+--
+
+COPY public.local_leader_auth_codes (local_leader_auth_code_id, local_leader_id, phone_number, code, purpose, expires_at, used_at, created_at) FROM stdin;
 \.
 
 
@@ -1653,7 +1708,7 @@ c93b7462-ceec-4b3d-96e5-0f212b86fcb3	a278c066-a5dd-43bb-9d20-4ed14f0c8dce	26	con
 --
 
 COPY public.police_users (police_user_id, badge_number, first_name, middle_name, last_name, email, phone_number, password_hash, role, assigned_location_id, station_id, profile_picture_url, is_active, mfa_enabled, mfa_secret, last_login_at, last_password_change, created_at, updated_at) FROM stdin;
-1	ADMIN-001	System	\N	Admin	samuelyitakubayo60@gmail.com	\N	$pbkdf2-sha256$29000$wnivNcaYU2rNWetda23NGQ$3h/ogi2VqcpSft.oaWtKt7hJkkB1wM8q7MuwTAUbn7c	admin	89	\N	\N	t	f	\N	2026-05-07 16:51:11.201018	2026-03-02 11:22:05.021999	2026-03-02 11:22:05.021999	2026-05-07 16:51:11.031628
+1	ADMIN-001	System	\N	Admin	samuelyitakubayo60@gmail.com	\N	$pbkdf2-sha256$29000$wnivNcaYU2rNWetda23NGQ$3h/ogi2VqcpSft.oaWtKt7hJkkB1wM8q7MuwTAUbn7c	admin	89	\N	\N	t	f	\N	2026-05-08 04:27:52.876768	2026-03-02 11:22:05.021999	2026-03-02 11:22:05.021999	2026-05-08 04:27:52.742191
 28	Officer-002	OLIVIER	\N	Munyabugingo	munyabugingoolivier4@gmail.com	+25783813720	$pbkdf2-sha256$29000$gRDCOCdkrBWC8P4fw1gLwQ$infJxL8AALhHmJ6LkxgAofS8HitYITOAFSqT6iBaA6U	officer	1	7	\N	t	f	\N	2026-04-21 18:58:45.65309	2026-04-21 17:51:55.908443	2026-04-21 17:51:55.908443	2026-04-21 18:58:45.646579
 27	Supervisor-002	JANVIER	\N	Hakorimana	hakoj782@gmail.com	+250787724376	$pbkdf2-sha256$29000$CUEoRUiplVIq5dzbOydE6A$bE8mB0lICMztYG6trpMQIr9n23Oc/GVFpyzCmlOgzlY	supervisor	\N	\N	\N	t	f	\N	2026-04-25 18:15:34.161716	2026-04-21 17:32:35.922585	2026-04-21 17:32:35.922585	2026-04-25 18:15:34.152768
 6	Officer-001	Samuel	\N	Yitakubayo	samuelyitakubayo70@gmail.com	0781798011	$pbkdf2-sha256$29000$uRcCYIxxLkUopfReC4Gwdg$fibPN/TPuthW8Z/MPQCqRjVi1x1S1unp/iMjkzx9cgY	officer	8	6	\N	t	f	\N	2026-05-04 16:28:54.27143	2026-03-15 17:25:05.972992	2026-03-15 17:25:05.972992	2026-05-04 16:28:54.138404
@@ -1768,6 +1823,7 @@ f779334b-d8c3-4543-b68d-5ccaaa7e8c8b	1	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJz
 a997912e-8414-4123-9cfc-ffd1800cf7d5	1	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzc4MTAxMDQyfQ.HeLOy7QzVXhzx1bbkp5EjK2JX3nASaIXAWhuadt0eac	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36	10.16.1.102	2026-05-06 20:57:22.324898	2026-05-06 12:57:22.53406	\N
 ad77834c-81df-44df-a42a-bf82b033bcfe	1	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzc4MTU2MzE1fQ.FEJ-h9jzXyvs2IU19hG-btu9YkVwVi1tob_cQl9PeSQ	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36	10.16.35.80	2026-05-07 12:18:35.596563	2026-05-07 04:18:35.702128	\N
 bc8598d8-89cf-424f-adf0-91e5ab8c7a84	1	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzc4MjAxNDcxfQ.n4b0yxSiyFTA5LWaYhX_P6OhJUh_IHaj8VanydZJ-Aw	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36	10.16.29.107	2026-05-08 00:51:11.201018	2026-05-07 16:51:11.382615	\N
+3b7c93d5-ecc0-408c-8775-e8c46a44f51c	1	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzc4MjQzMjcyfQ.0hcyVYH052XRsad2NMkpXQ24bsLnQvQQWPdLaV3q0m4	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36	10.16.42.153	2026-05-08 12:27:52.876768	2026-05-08 04:27:52.992844	\N
 \.
 
 
@@ -1790,6 +1846,13 @@ SELECT pg_catalog.setval('public.hotspots_hotspot_id_seq', 128, true);
 --
 
 SELECT pg_catalog.setval('public.incident_types_incident_type_id_seq', 11, true);
+
+
+--
+-- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE SET; Schema: public; Owner: trustbond_z1r9_user
+--
+
+SELECT pg_catalog.setval('public.local_leader_auth_codes_local_leader_auth_code_id_seq', 1, false);
 
 
 --
@@ -1935,6 +1998,14 @@ ALTER TABLE ONLY public.incident_types
 
 ALTER TABLE ONLY public.incident_types
     ADD CONSTRAINT incident_types_type_name_key UNIQUE (type_name);
+
+
+--
+-- Name: local_leader_auth_codes local_leader_auth_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+--
+
+ALTER TABLE ONLY public.local_leader_auth_codes
+    ADD CONSTRAINT local_leader_auth_codes_pkey PRIMARY KEY (local_leader_auth_code_id);
 
 
 --
@@ -2359,6 +2430,20 @@ CREATE INDEX ix_audit_logs_sensitivity_level ON public.audit_logs USING btree (s
 
 
 --
+-- Name: ix_local_leader_auth_codes_local_leader_id; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+--
+
+CREATE INDEX ix_local_leader_auth_codes_local_leader_id ON public.local_leader_auth_codes USING btree (local_leader_id);
+
+
+--
+-- Name: ix_local_leader_auth_codes_phone_number; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+--
+
+CREATE INDEX ix_local_leader_auth_codes_phone_number ON public.local_leader_auth_codes USING btree (phone_number);
+
+
+--
 -- Name: ix_local_leader_coverage_locations_local_leader_id; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
 --
 
@@ -2531,6 +2616,14 @@ ALTER TABLE ONLY public.hotspot_reports
 
 ALTER TABLE ONLY public.hotspots
     ADD CONSTRAINT hotspots_incident_type_id_fkey FOREIGN KEY (incident_type_id) REFERENCES public.incident_types(incident_type_id);
+
+
+--
+-- Name: local_leader_auth_codes local_leader_auth_codes_local_leader_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+--
+
+ALTER TABLE ONLY public.local_leader_auth_codes
+    ADD CONSTRAINT local_leader_auth_codes_local_leader_id_fkey FOREIGN KEY (local_leader_id) REFERENCES public.local_leaders(local_leader_id) ON DELETE CASCADE;
 
 
 --
@@ -8494,5 +8587,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres GRANT ALL ON TABLES TO trustbond_z1r9
 -- PostgreSQL database dump complete
 --
 
-\unrestrict OdFn0M8lrSW1C38VsdMCt5apDz8MbGoT51WZf8z84W1nnZUdPSBBql9aTRq4hRF
+\unrestrict wRpIRLjZTCwaMevJDMtaFAetobLwDAV8FUpPVNFycauXNRIuTXGxN5VRpdysja2
 

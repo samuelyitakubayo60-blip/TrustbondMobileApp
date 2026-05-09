@@ -4,26 +4,43 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+# Only these roles are valid for local leaders.
+LEADER_ROLE_CHIEF_OF_VILLAGE = "chief_of_village"
+LEADER_ROLE_EXECUTIVE_OF_CELL = "executive_of_cell"
+VALID_LEADER_ROLES = frozenset({LEADER_ROLE_CHIEF_OF_VILLAGE, LEADER_ROLE_EXECUTIVE_OF_CELL})
+
+
 class LocalLeaderCreate(BaseModel):
     full_name: str
-    phone_number: str
-    email: Optional[str] = None
-    covered_location_ids: list[int] = Field(default_factory=list)
+    role: str = Field(..., description="chief_of_village | executive_of_cell")
+    email: str
+    phone_number: Optional[str] = None
+    covered_location_ids: list[int] = Field(
+        ...,
+        min_length=1,
+        max_length=1,
+        description="Exactly one location: a village (chief) or cell (executive)",
+    )
 
 
 class LocalLeaderUpdate(BaseModel):
     full_name: Optional[str] = None
+    role: Optional[str] = None
     phone_number: Optional[str] = None
     email: Optional[str] = None
     is_active: Optional[bool] = None
     password: Optional[str] = Field(default=None, min_length=6)
-    covered_location_ids: Optional[list[int]] = None
+    covered_location_ids: Optional[list[int]] = Field(
+        None,
+        description="If set, must contain exactly one village or cell matching role",
+    )
 
 
 class LocalLeaderResponse(BaseModel):
     local_leader_id: int
     full_name: str
-    phone_number: str
+    role: str
+    phone_number: Optional[str] = None
     email: Optional[str] = None
     is_active: bool
     covered_location_ids: list[int] = Field(default_factory=list)
@@ -36,14 +53,15 @@ class LocalLeaderResponse(BaseModel):
 
 
 class LocalLeaderLoginRequest(BaseModel):
-    phone_number: str
+    email: str
     password: str
 
 
 class LocalLeaderMeResponse(BaseModel):
     local_leader_id: int
     full_name: str
-    phone_number: str
+    role: str
+    phone_number: Optional[str] = None
     email: Optional[str] = None
     covered_location_ids: list[int] = Field(default_factory=list)
 
@@ -57,16 +75,19 @@ class LocalLeaderToken(BaseModel):
 
 
 class LocalLeaderRequestCodeRequest(BaseModel):
-    phone_number: str
+    email: str
 
 
 class LocalLeaderSetPasswordRequest(BaseModel):
-    phone_number: str
+    email: str
     code: str
     new_password: str = Field(..., min_length=6)
 
 
 class LocalLeaderVerifyLoginCodeRequest(BaseModel):
-    phone_number: str
+    email: str
     code: str
 
+
+class LocalLeaderFcmTokenRequest(BaseModel):
+    fcm_token: str = Field(..., min_length=10, max_length=512)

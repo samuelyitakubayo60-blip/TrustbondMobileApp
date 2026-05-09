@@ -53,10 +53,15 @@ class Settings(BaseSettings):
     # and to avoid "unauthenticated requests" warnings from huggingface_hub / transformers.
     hf_token: Optional[str] = None
 
-    # eSMS Africa (OTP SMS)
-    esms_base_url: str = "https://sms.esmsafrica.io"
-    esms_token: Optional[str] = None
-    esms_timeout_seconds: int = 12
+    # Local leader workflow: require community confirmation before DPU map analytics, hotspots, auto-cases.
+    require_leader_confirmation_for_workflow: bool = True
+    dpu_analytics_require_leader_confirmation: bool = True
+    notify_local_leaders_new_report_email: bool = True
+    # FCM HTTP v1: path to Firebase service account JSON (same project as the mobile app).
+    firebase_credentials_path: Optional[str] = None
+    # Optional override; defaults to project_id inside the JSON file.
+    firebase_project_id: Optional[str] = None
+    notify_local_leaders_new_report_fcm: bool = True
 
     # Device anti-abuse guardrails for report creation.
     duplicate_report_time_window_seconds: int = 120

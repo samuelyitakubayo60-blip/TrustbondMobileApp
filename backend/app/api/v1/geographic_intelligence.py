@@ -28,8 +28,14 @@ from app.models.station_coverage import StationCoverageCell
 from app.models.incident_type import IncidentType
 from app.api.v1.auth import get_current_admin_or_supervisor, get_current_user
 from typing import Annotated
+from app.core.leader_workflow import apply_leader_confirmed_filter_reports
 
 router = APIRouter()
+
+
+def _dpu_reports_query(query):
+    """Restrict analytics to community-confirmed incidents when workflow gate is on."""
+    return apply_leader_confirmed_filter_reports(query, Report)
 
 
 def _station_covered_sector_ids(db: Session, station: Optional[Station]) -> List[int]:
@@ -108,13 +114,15 @@ def get_heat_map(
     since = datetime.now(timezone.utc) - timedelta(hours=time_window_hours)
     
     # Base query for reports with location data
-    query = db.query(Report).filter(
-        Report.reported_at >= since,
-        Report.latitude.isnot(None),
-        Report.longitude.isnot(None),
-        Report.village_location_id.isnot(None)
+    query = _dpu_reports_query(
+        db.query(Report).filter(
+            Report.reported_at >= since,
+            Report.latitude.isnot(None),
+            Report.longitude.isnot(None),
+            Report.village_location_id.isnot(None),
+        )
     )
-    
+
     # Filter by sector if specified
     if sector_id:
         sector_bounds = get_sector_bounds(db, sector_id)
@@ -305,23 +313,25 @@ def get_coverage_analysis(
     
     for sector in sectors:
         # Get reports in this sector
-        sector_reports = db.query(Report).filter(
-            Report.reported_at >= since,
-            Report.village_location_id.in_(
-                db.query(Location.location_id).filter(
-                    or_(
-                        Location.parent_location_id == sector.location_id,
-                        Location.location_id == sector.location_id,
-                        Location.parent_location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id == sector.location_id
-                            )
+        sector_reports = _dpu_reports_query(
+            db.query(Report).filter(
+                Report.reported_at >= since,
+                Report.village_location_id.in_(
+                    db.query(Location.location_id).filter(
+                        or_(
+                            Location.parent_location_id == sector.location_id,
+                            Location.location_id == sector.location_id,
+                            Location.parent_location_id.in_(
+                                db.query(Location.location_id).filter(
+                                    Location.parent_location_id == sector.location_id
+                                )
+                            ),
                         )
                     )
-                )
+                ),
             )
         ).all()
-        
+
         # Calculate coverage metrics
         unique_devices = set(r.device_id for r in sector_reports)
         incident_types = defaultdict(int)
@@ -411,20 +421,22 @@ def get_sector_performance(
     
     for sector in sectors:
         # Get reports in this sector
-        sector_reports = db.query(Report).filter(
-            Report.reported_at >= since,
-            Report.village_location_id.in_(
-                db.query(Location.location_id).filter(
-                    or_(
-                        Location.parent_location_id == sector.location_id,
-                        Location.location_id == sector.location_id,
-                        Location.parent_location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id == sector.location_id
-                            )
+        sector_reports = _dpu_reports_query(
+            db.query(Report).filter(
+                Report.reported_at >= since,
+                Report.village_location_id.in_(
+                    db.query(Location.location_id).filter(
+                        or_(
+                            Location.parent_location_id == sector.location_id,
+                            Location.location_id == sector.location_id,
+                            Location.parent_location_id.in_(
+                                db.query(Location.location_id).filter(
+                                    Location.parent_location_id == sector.location_id
+                                )
+                            ),
                         )
                     )
-                )
+                ),
             )
         ).all()
         
@@ -516,20 +528,22 @@ def get_station_performance(
     
     for sector in sectors:
         # Get reports in this sector
-        sector_reports = db.query(Report).filter(
-            Report.reported_at >= since,
-            Report.village_location_id.in_(
-                db.query(Location.location_id).filter(
-                    or_(
-                        Location.parent_location_id == sector.location_id,
-                        Location.location_id == sector.location_id,
-                        Location.parent_location_id.in_(
-                            db.query(Location.location_id).filter(
-                                Location.parent_location_id == sector.location_id
-                            )
+        sector_reports = _dpu_reports_query(
+            db.query(Report).filter(
+                Report.reported_at >= since,
+                Report.village_location_id.in_(
+                    db.query(Location.location_id).filter(
+                        or_(
+                            Location.parent_location_id == sector.location_id,
+                            Location.location_id == sector.location_id,
+                            Location.parent_location_id.in_(
+                                db.query(Location.location_id).filter(
+                                    Location.parent_location_id == sector.location_id
+                                )
+                            ),
                         )
                     )
-                )
+                ),
             )
         ).all()
         
@@ -1063,12 +1077,14 @@ def get_geographic_clustering(
     since = datetime.now(timezone.utc) - timedelta(hours=time_window_hours)
     
     # Get recent reports with location data
-    reports_query = db.query(Report).filter(
-        Report.reported_at >= since,
-        Report.latitude.isnot(None),
-        Report.longitude.isnot(None)
+    reports_query = _dpu_reports_query(
+        db.query(Report).filter(
+            Report.reported_at >= since,
+            Report.latitude.isnot(None),
+            Report.longitude.isnot(None),
+        )
     )
-    
+
     if sector_id:
         sector_bounds = get_sector_bounds(db, sector_id)
         if sector_bounds:

@@ -182,6 +182,9 @@ def _case_to_response(c: Case) -> CaseResponse:
         opened_at=c.opened_at,
         closed_at=c.closed_at,
         outcome=c.outcome,
+        special_assignment_unit=getattr(c, "special_assignment_unit", None),
+        rib_handed_over_at=getattr(c, "rib_handed_over_at", None),
+        rib_handover_summary=getattr(c, "rib_handover_summary", None),
         created_at=c.created_at,
         average_trust_score=avg_trust,
     )
@@ -764,6 +767,12 @@ def update_case(
             case.description = payload.description
         if payload.outcome is not None:
             case.outcome = payload.outcome
+        if payload.special_assignment_unit is not None:
+            case.special_assignment_unit = (payload.special_assignment_unit or "").strip() or None
+        if payload.rib_handover_summary is not None:
+            case.rib_handover_summary = (payload.rib_handover_summary or "").strip() or None
+        if payload.rib_handed_over_at is not None:
+            case.rib_handed_over_at = payload.rib_handed_over_at
     db.add(case)
     db.commit()
     db.refresh(case)

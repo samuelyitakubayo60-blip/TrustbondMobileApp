@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'leader_service.dart';
+
 /// Handles Firebase Cloud Messaging and local notifications
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -48,6 +50,16 @@ class NotificationService {
       // Get FCM token
       _fcmToken = await _firebaseMessaging.getToken();
       debugPrint('FCM Token: $_fcmToken');
+
+      _firebaseMessaging.onTokenRefresh.listen((newToken) async {
+        _fcmToken = newToken;
+        try {
+          final lt = await LeaderService().getToken();
+          if (lt != null && newToken.isNotEmpty) {
+            await LeaderService().registerFcmToken(fcmToken: newToken);
+          }
+        } catch (_) {}
+      });
 
       // Initialize local notifications
       await _initializeLocalNotifications();

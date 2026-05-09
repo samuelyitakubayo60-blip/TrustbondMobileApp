@@ -9,10 +9,13 @@ class LocalLeader(Base):
 
     local_leader_id = Column(Integer, primary_key=True, autoincrement=True)
     full_name = Column(String(200), nullable=False)
-    phone_number = Column(String(20), unique=True, nullable=False, index=True)
+    # chief_of_village | executive_of_cell
+    role = Column(String(32), nullable=False, default="executive_of_cell")
+    phone_number = Column(String(20), unique=True, nullable=True, index=True)
     email = Column(String(255), unique=True, nullable=True, index=True)
     password_hash = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_login_at = Column(DateTime(timezone=True))
+    fcm_device_token = Column(String(512), nullable=True)
 

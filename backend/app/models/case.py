@@ -24,6 +24,10 @@ class Case(Base):
     opened_at = Column(DateTime(timezone=True), server_default=func.now())
     closed_at = Column(DateTime(timezone=True))
     outcome = Column(String(50))
+    # Operational tracking (e.g. quick_response, counter_terror, fire_rescue, rib)
+    special_assignment_unit = Column(String(80))
+    rib_handed_over_at = Column(DateTime(timezone=True))
+    rib_handover_summary = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

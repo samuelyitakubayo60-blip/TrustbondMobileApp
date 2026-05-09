@@ -42,6 +42,8 @@ from app.schemas.report import (
     ReviewCreate,
 )
 from app.models.police_user import PoliceUser
+from app.models.local_leader import LocalLeader
+from app.api.v1.leader_auth import get_optional_local_leader
 from app.models.report_assignment import ReportAssignment
 from app.models.police_review import PoliceReview
 from app.core.security import verify_password
@@ -3215,6 +3217,7 @@ def create_report(
     background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
+    submitting_leader: Annotated[Optional[LocalLeader], Depends(get_optional_local_leader)] = None,
 ):
     """Create a new report."""
     """Submit a new incident report. Device can be identified by device_id or device_hash (find-or-create)."""
@@ -3369,6 +3372,20 @@ def create_report(
         report.village_location_id = village_id
         report.location_id = village_id
     db.add(report)
+
+    if submitting_leader is not None:
+        if out_of_boundary or village_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Leader submissions must use a GPS location inside a recognized village in your coverage area.",
+            )
+        from app.core.leader_workflow import leader_covered_village_ids
+
+        if int(village_id) not in leader_covered_village_ids(db, submitting_leader.local_leader_id):
+            raise HTTPException(
+                status_code=403,
+                detail="This location is outside your assigned village or cell.",
+            )
 
     # Evidence processing with content analysis
     evidence_metadata_list = []
@@ -3752,6 +3769,12 @@ def create_report(
 
     # Persist everything before responding
     try:
+        if submitting_leader is not None:
+            now_ll = datetime.now(timezone.utc)
+            report.submitted_by_local_leader_id = submitting_leader.local_leader_id
+            report.leader_verification_status = "confirmed"
+            report.leader_verified_by = submitting_leader.local_leader_id
+            report.leader_verified_at = now_ll
         db.commit()
         db.refresh(report)
     except IntegrityError:
@@ -3776,6 +3799,11 @@ def create_report(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to save report: {e}")
+
+    if submitting_leader is None and report.village_location_id is not None:
+        from app.core.leader_notifications import notify_local_leaders_new_report_task
+
+        background_tasks.add_task(notify_local_leaders_new_report_task, str(report.report_id))
 
     return _build_report_detail_response(report, db, for_police_viewer=False)
 
@@ -5528,6 +5556,15 @@ def _check_and_create_auto_case(report_id: str):
                 getattr(report, "verification_status", None),
             )
             return
+
+        from app.core.leader_workflow import report_eligible_for_auto_case
+
+        if not report_eligible_for_auto_case(report):
+            logger.info(
+                "[AUTO_CASE] Skip report %s: awaiting local leader confirmation",
+                report_id,
+            )
+            return
         
         # Check if report is already in a case
         from app.models.case import CaseReport
@@ -5682,15 +5719,20 @@ def _create_new_case_for_report(db: Session, report: Report, cluster_radius_km: 
         
         # Strategy 1: Cluster by same village/location (preferred)
         if report.village_location_id:
-            village_reports = db.query(Report).filter(
+            vq = db.query(Report).filter(
                 Report.incident_type_id == report.incident_type_id,
                 Report.verification_status == "verified",
                 Report.village_location_id == report.village_location_id,
                 Report.report_id != report.report_id,
                 ~Report.report_id.in_(
                     db.query(case_reports_table.c.report_id).distinct()
-                )
-            ).all()
+                ),
+            )
+            from app.core.leader_workflow import leader_gate_enabled
+
+            if leader_gate_enabled():
+                vq = vq.filter(Report.leader_verification_status == "confirmed")
+            village_reports = vq.all()
             
             # Add the current report
             village_reports.insert(0, report)
@@ -5728,14 +5770,19 @@ def _create_new_case_for_report(db: Session, report: Report, cluster_radius_km: 
             return 6371 * c  # Returns distance in kilometers
         
         # Find nearby reports using GPS coordinates
-        nearby_reports = db.query(Report).filter(
+        nq = db.query(Report).filter(
             Report.incident_type_id == report.incident_type_id,
             Report.verification_status == "verified",
             Report.report_id != report.report_id,
             ~Report.report_id.in_(
                 db.query(case_reports_table.c.report_id).distinct()
-            )
-        ).all()
+            ),
+        )
+        from app.core.leader_workflow import leader_gate_enabled
+
+        if leader_gate_enabled():
+            nq = nq.filter(Report.leader_verification_status == "confirmed")
+        nearby_reports = nq.all()
         
         # Filter by geographic proximity
         clustered_reports = [report]
@@ -6200,7 +6247,17 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
         else:
             title = f"Incident Type {report.incident_type_id} case - Multiple Reports"
             description = f"Auto-generated case from {len(reports)} verified reports"
-        
+
+        itype = (
+            db.query(IncidentType)
+            .filter(IncidentType.incident_type_id == report.incident_type_id)
+            .first()
+        )
+        default_unit = None
+        if itype is not None:
+            raw_u = getattr(itype, "default_special_assignment_unit", None) or ""
+            default_unit = raw_u.strip() or None
+
         case = Case(
             case_id=uuid4(),
             case_number=case_number,
@@ -6216,7 +6273,8 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
             report_count=len(reports),
             location_id=report.location_id,
             latitude=case_lat,
-            longitude=case_lon
+            longitude=case_lon,
+            special_assignment_unit=default_unit,
         )
         
         db.add(case)
@@ -6337,13 +6395,18 @@ def _create_auto_cases(db: Session) -> Dict[str, int]:
         
         # Strategy 1: attach to existing open cases first, then cluster/create new.
         village_clusters = {}
-        verified_reports = db.query(Report).filter(
+        vq = db.query(Report).filter(
             Report.verification_status == 'verified',
             Report.status == 'verified',
             ~Report.report_id.in_(
                 db.query(case_reports_table.c.report_id).distinct()
-            )
-        ).all()
+            ),
+        )
+        from app.core.leader_workflow import leader_gate_enabled
+
+        if leader_gate_enabled():
+            vq = vq.filter(Report.leader_verification_status == "confirmed")
+        verified_reports = vq.all()
         
         logger.info(f"Found {len(verified_reports)} verified reports available for case creation")
 

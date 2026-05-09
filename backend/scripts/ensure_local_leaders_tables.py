@@ -21,7 +21,8 @@ def main() -> None:
     CREATE TABLE IF NOT EXISTS local_leaders (
         local_leader_id SERIAL PRIMARY KEY,
         full_name VARCHAR(200) NOT NULL,
-        phone_number VARCHAR(20) NOT NULL UNIQUE,
+        role VARCHAR(32) NOT NULL DEFAULT 'executive_of_cell',
+        phone_number VARCHAR(20) UNIQUE,
         email VARCHAR(255) UNIQUE,
         password_hash VARCHAR(255) NOT NULL,
         is_active BOOLEAN DEFAULT TRUE,
@@ -30,6 +31,11 @@ def main() -> None:
     );
     CREATE INDEX IF NOT EXISTS ix_local_leaders_phone_number ON local_leaders (phone_number);
     CREATE INDEX IF NOT EXISTS ix_local_leaders_email ON local_leaders (email);
+    """
+    migrate_local_leaders_cols = """
+    ALTER TABLE local_leaders ADD COLUMN IF NOT EXISTS role VARCHAR(32) NOT NULL DEFAULT 'executive_of_cell';
+    ALTER TABLE local_leaders ALTER COLUMN phone_number DROP NOT NULL;
+    ALTER TABLE local_leader_auth_codes ALTER COLUMN phone_number DROP NOT NULL;
     """
 
     create_coverage = """
@@ -49,7 +55,7 @@ def main() -> None:
     CREATE TABLE IF NOT EXISTS local_leader_auth_codes (
         local_leader_auth_code_id SERIAL PRIMARY KEY,
         local_leader_id INTEGER NOT NULL REFERENCES local_leaders(local_leader_id) ON DELETE CASCADE,
-        phone_number VARCHAR(20) NOT NULL,
+        phone_number VARCHAR(20),
         code VARCHAR(10) NOT NULL,
         purpose VARCHAR(30) NOT NULL DEFAULT 'password_setup',
         expires_at TIMESTAMPTZ NOT NULL,
@@ -93,6 +99,7 @@ def main() -> None:
         conn.execute(text(create_auth_codes))
         conn.execute(text(alter_reports))
         conn.execute(text(fk_reports))
+        conn.execute(text(migrate_local_leaders_cols))
 
         ok = conn.execute(text("SELECT to_regclass('local_leaders') IS NOT NULL AS ok;")).mappings().first()
         if not ok or not bool(ok.get("ok", False)):

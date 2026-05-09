@@ -17,6 +17,8 @@ from app.models.hotspot import Hotspot, hotspot_reports_table
 from app.models.location import Location
 from app.models.report import Report
 from app.models.system_config import SystemConfig
+from app.config import settings
+from app.core.leader_workflow import leader_gate_enabled, report_meets_leader_confirmation
 
 
 DEFAULT_TIME_WINDOW_HOURS = 24
@@ -125,16 +127,19 @@ def _is_report_eligible(report: Report) -> bool:
     if status == "rejected" or verification == "rejected" or rule_status == "rejected":
         return False
 
-    # Verified by workflow status
-    if verification == "verified" or status == "verified":
-        return True
-
-    # Verified by explicit police confirmation
     officer_confirmed = any(
         (rv.decision or "").lower() == "confirmed"
         for rv in (getattr(report, "police_reviews", None) or [])
     )
-    return officer_confirmed
+    police_ok = verification == "verified" or status == "verified" or officer_confirmed
+    if not police_ok:
+        return False
+
+    if leader_gate_enabled() and getattr(settings, "dpu_analytics_require_leader_confirmation", True):
+        if not report_meets_leader_confirmation(report):
+            return False
+
+    return True
 
 
 def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

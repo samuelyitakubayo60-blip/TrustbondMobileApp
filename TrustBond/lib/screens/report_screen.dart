@@ -16,6 +16,7 @@ import '../config/theme.dart';
 import '../services/api_service.dart';
 
 import '../services/device_service.dart';
+import '../services/leader_service.dart';
 
 import '../services/motion_service.dart';
 
@@ -43,7 +44,10 @@ bool get _isMobileWithCamera =>
 
 class ReportScreen extends StatefulWidget {
 
-  const ReportScreen({super.key});
+  const ReportScreen({super.key, this.localLeaderSubmit = false});
+
+  /// When true, sends local leader JWT so the report is auto-confirmed by community.
+  final bool localLeaderSubmit;
 
 
 
@@ -867,7 +871,14 @@ class _ReportScreenState extends State<ReportScreen> {
       final reportData = report.toJson();
       reportData.addAll(mobileVerification.toJson());
 
-      final result = await _apiService.submitReport(reportData);
+      String? leaderTok;
+      if (widget.localLeaderSubmit) {
+        leaderTok = await LeaderService().getToken();
+      }
+      final result = await _apiService.submitReport(
+        reportData,
+        leaderAccessToken: leaderTok,
+      );
 
       final reportId = result['report_id'] as String?;
 

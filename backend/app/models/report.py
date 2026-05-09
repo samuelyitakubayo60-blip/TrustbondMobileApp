@@ -41,6 +41,7 @@ class Report(Base):
     leader_verified_by = Column(Integer, ForeignKey("local_leaders.local_leader_id"))
     leader_verified_at = Column(DateTime(timezone=True))
     leader_verification_note = Column(Text)
+    submitted_by_local_leader_id = Column(Integer, ForeignKey("local_leaders.local_leader_id"))
     feature_vector = Column(JSONB)
     ai_ready = Column(Boolean, default=False)
     features_extracted = Column(DateTime(timezone=True))

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client';
-import { formatLocalDate, parseApiDate } from '../../utils/dateTime';
+import { formatLocalDate, formatLocalDateTime, parseApiDate } from '../../utils/dateTime';
 
 const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
   const [reports, setReports] = useState([]);
@@ -285,6 +285,31 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
             {caseItem.description || 'No description yet.'}
           </div>
         </div>
+
+        {(caseItem.special_assignment_unit ||
+          caseItem.rib_handed_over_at ||
+          caseItem.rib_handover_summary) && (
+          <div className="form-grid" style={{ marginBottom: 10 }}>
+            {caseItem.special_assignment_unit && (
+              <div className="input-group">
+                <div className="input-label">Special assignment unit</div>
+                <div style={{ fontSize: 13 }}>{caseItem.special_assignment_unit}</div>
+              </div>
+            )}
+            {caseItem.rib_handed_over_at && (
+              <div className="input-group">
+                <div className="input-label">RIB handed over</div>
+                <div style={{ fontSize: 13 }}>{formatLocalDateTime(caseItem.rib_handed_over_at)}</div>
+              </div>
+            )}
+            {caseItem.rib_handover_summary && (
+              <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                <div className="input-label">RIB handover summary</div>
+                <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{caseItem.rib_handover_summary}</div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="input-group">
           <div className="input-label">Linked Reports ({reports.length})</div>

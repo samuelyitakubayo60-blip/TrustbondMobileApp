@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Annotated, Optional
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
@@ -11,8 +12,8 @@ from app.database import get_db
 from app.models.location import Location
 from app.models.report import Report
 from app.models.local_leader import LocalLeader
-from app.models.local_leader_coverage import LocalLeaderCoverageLocation
 from app.api.v1.leader_auth import get_current_local_leader
+from app.core.leader_workflow import leader_covered_village_ids as _leader_covered_village_ids
 
 
 router = APIRouter(prefix="/leader", tags=["leader"])
@@ -46,38 +47,6 @@ class LeaderVerifyRequest(BaseModel):
     note: Optional[str] = None
 
 
-def _leader_covered_village_ids(db: Session, leader_id: int) -> set[int]:
-    # Coverage locations can include villages or cells. We normalize to villages.
-    covered_ids = {
-        int(r[0])
-        for r in db.query(LocalLeaderCoverageLocation.location_id)
-        .filter(LocalLeaderCoverageLocation.local_leader_id == leader_id)
-        .all()
-    }
-    if not covered_ids:
-        return set()
-
-    rows = db.query(Location.location_id, Location.location_type, Location.parent_location_id).filter(
-        Location.location_id.in_(covered_ids)
-    ).all()
-    village_ids: set[int] = set()
-    cell_ids: set[int] = set()
-    for loc_id, loc_type, parent_id in rows:
-        if loc_type == "village":
-            village_ids.add(int(loc_id))
-        elif loc_type == "cell":
-            cell_ids.add(int(loc_id))
-
-    if cell_ids:
-        vrows = db.query(Location.location_id).filter(
-            Location.location_type == "village",
-            Location.parent_location_id.in_(cell_ids),
-        ).all()
-        village_ids.update(int(r[0]) for r in vrows)
-
-    return village_ids
-
-
 @router.get("/reports", response_model=LeaderReportListResponse)
 def list_leader_reports(
     db: Session = Depends(get_db),
@@ -92,28 +61,36 @@ def list_leader_reports(
 
     q = (
         db.query(Report)
-        .options(joinedload(Report.incident_type), joinedload(Report.village_location))
+        .options(
+            joinedload(Report.incident_type),
+            joinedload(Report.village_location)
+            .joinedload(Location.parent)
+            .joinedload(Location.parent),
+        )
         .filter(Report.village_location_id.in_(covered_villages))
+        .order_by(Report.reported_at.desc())
     )
-
     if only_pending:
         q = q.filter((Report.leader_verification_status.is_(None)) | (Report.leader_verification_status == "pending"))
 
     total = q.count()
-    rows = (
-        q.order_by(Report.reported_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    rows = q.offset(offset).limit(limit).all()
 
     items: list[LeaderReportResponse] = []
     for r in rows:
+        vname = getattr(r.village_location, "location_name", None) if r.village_location else None
+        cell_name = None
+        sector_name = None
+        if r.village_location and r.village_location.parent:
+            cell_name = r.village_location.parent.location_name
+            if r.village_location.parent.parent:
+                sector_name = r.village_location.parent.parent.location_name
+
         items.append(
             LeaderReportResponse(
                 report_id=str(r.report_id),
                 incident_type_id=int(r.incident_type_id),
-                incident_type_name=getattr(r.incident_type, "incident_type_name", None),
+                incident_type_name=getattr(r.incident_type, "type_name", None) if r.incident_type else None,
                 description=r.description,
                 latitude=float(r.latitude),
                 longitude=float(r.longitude),
@@ -121,7 +98,9 @@ def list_leader_reports(
                 status=r.status,
                 verification_status=r.verification_status,
                 village_location_id=r.village_location_id,
-                village_name=getattr(r.village_location, "location_name", None) if r.village_location else None,
+                village_name=vname,
+                cell_name=cell_name,
+                sector_name=sector_name,
                 leader_verification_status=getattr(r, "leader_verification_status", None),
                 leader_verified_at=getattr(r, "leader_verified_at", None),
             )
@@ -134,6 +113,7 @@ def list_leader_reports(
 def verify_report(
     report_id: str,
     payload: LeaderVerifyRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_leader: Annotated[LocalLeader, Depends(get_current_local_leader)] = None,
 ):
@@ -145,7 +125,11 @@ def verify_report(
     if not covered_villages:
         raise HTTPException(status_code=403, detail="Leader coverage is not configured")
 
-    r = db.query(Report).filter(Report.report_id == report_id).first()
+    try:
+        rid = UUID(report_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Report not found")
+    r = db.query(Report).filter(Report.report_id == rid).first()
     if not r:
         raise HTTPException(status_code=404, detail="Report not found")
 
@@ -160,5 +144,12 @@ def verify_report(
     db.add(r)
     db.commit()
 
-    return {"message": "OK", "leader_verification_status": decision, "leader_verified_at": now.isoformat()}
+    if decision == "confirmed":
+        from app.api.v1.reports import run_auto_case_for_report
 
+        background_tasks.add_task(run_auto_case_for_report, str(r.report_id))
+    from app.api.v1.reports import run_hotspot_auto
+
+    background_tasks.add_task(run_hotspot_auto)
+
+    return {"message": "OK", "leader_verification_status": decision, "leader_verified_at": now.isoformat()}

@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { parseApiDate } from '../../utils/dateTime';
+
+function toDatetimeLocalValue(iso) {
+  const d = parseApiDate(iso);
+  if (!d) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
   const { user: me } = useAuth();
@@ -13,6 +21,9 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
   const [outcome, setOutcome] = useState(caseItem?.outcome || '');
   const [assignedToId, setAssignedToId] = useState(caseItem?.assigned_to_id || '');
   const [officers, setOfficers] = useState([]);
+  const [specialAssignmentUnit, setSpecialAssignmentUnit] = useState('');
+  const [ribHandedOverLocal, setRibHandedOverLocal] = useState('');
+  const [ribHandoverSummary, setRibHandoverSummary] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -23,6 +34,9 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
     setDescription(caseItem.description || '');
     setOutcome(caseItem.outcome || '');
     setAssignedToId(caseItem.assigned_to_id || '');
+    setSpecialAssignmentUnit(caseItem.special_assignment_unit || '');
+    setRibHandedOverLocal(toDatetimeLocalValue(caseItem.rib_handed_over_at));
+    setRibHandoverSummary(caseItem.rib_handover_summary || '');
     setError('');
     setSaving(false);
   }, [isOpen, caseItem]);
@@ -95,7 +109,17 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
       status,
       description,
       outcome,
-      ...(isAdminOrSupervisor ? { priority, assigned_to_id: assignedToId || null } : {}),
+      ...(isAdminOrSupervisor
+        ? {
+            priority,
+            assigned_to_id: assignedToId || null,
+            special_assignment_unit: specialAssignmentUnit.trim() || null,
+            rib_handover_summary: ribHandoverSummary.trim() || null,
+            rib_handed_over_at: ribHandedOverLocal
+              ? new Date(ribHandedOverLocal).toISOString()
+              : null,
+          }
+        : {}),
     };
     try {
       await api.patch(`/api/v1/cases/${caseItem.case_id}`, payload);
@@ -189,6 +213,40 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
             placeholder="Outcome (for closed cases)..."
           ></textarea>
         </div>
+
+        {isAdminOrSupervisor && (
+          <>
+            <div className="input-group">
+              <div className="input-label">Special assignment unit</div>
+              <input
+                className="input"
+                value={specialAssignmentUnit}
+                onChange={(e) => setSpecialAssignmentUnit(e.target.value)}
+                placeholder="e.g. RIB, traffic task force…"
+              />
+            </div>
+            <div className="form-grid" style={{ marginBottom: '12px' }}>
+              <div className="input-group">
+                <div className="input-label">RIB handover time</div>
+                <input
+                  className="input"
+                  type="datetime-local"
+                  value={ribHandedOverLocal}
+                  onChange={(e) => setRibHandedOverLocal(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="input-group">
+              <div className="input-label">RIB handover summary</div>
+              <textarea
+                rows="2"
+                value={ribHandoverSummary}
+                onChange={(e) => setRibHandoverSummary(e.target.value)}
+                placeholder="Notes on handover to RIB…"
+              />
+            </div>
+          </>
+        )}
 
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '10px' }}>
           <button className="btn btn-outline" onClick={onClose} disabled={saving}>

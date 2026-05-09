@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { staffRoleLabel } from "../../utils/roleLabels";
 
 const Sidebar = ({
   isOpen,
@@ -380,13 +381,7 @@ const Sidebar = ({
             <div className="user-name">
               {user ? `${user.first_name} ${user.last_name}` : "User"}
             </div>
-            <div className="user-role">
-              {role === "admin"
-                ? "Administrator"
-                : role === "supervisor"
-                  ? "Supervisor"
-                  : "Officer"}
-            </div>
+            <div className="user-role">{staffRoleLabel(role)}</div>
           </div>
         </div>
         <button type="button" className="sidebar-signout" onClick={onLogout}>

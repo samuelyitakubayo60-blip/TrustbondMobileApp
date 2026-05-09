@@ -180,10 +180,18 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> submitReport(Map<String, dynamic> reportData) async {
+  Future<Map<String, dynamic>> submitReport(
+    Map<String, dynamic> reportData, {
+    String? leaderAccessToken,
+  }) async {
+    final headers = Map<String, String>.from(_jsonHeaders);
+    final tok = (leaderAccessToken ?? '').trim();
+    if (tok.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $tok';
+    }
     final response = await _client.post(
       Uri.parse('${ApiConfig.reportsUrl}/'),
-      headers: _jsonHeaders,
+      headers: headers,
       body: jsonEncode(reportData),
     ).timeout(_timeout);
     

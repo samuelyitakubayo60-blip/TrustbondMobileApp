@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
-import 'device_service.dart';
 
 class GuidanceRequest {
   final String description;

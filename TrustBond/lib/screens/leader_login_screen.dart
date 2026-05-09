@@ -15,7 +15,7 @@ class LeaderLoginScreen extends StatefulWidget {
 
 class _LeaderLoginScreenState extends State<LeaderLoginScreen> {
   final _leader = LeaderService();
-  final _phoneCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
   final _otpCtrl = TextEditingController();
   bool _loading = false;
   bool _codeSent = false;
@@ -33,7 +33,7 @@ class _LeaderLoginScreenState extends State<LeaderLoginScreen> {
   @override
   void dispose() {
     _resendTimer?.cancel();
-    _phoneCtrl.dispose();
+    _emailCtrl.dispose();
     _otpCtrl.dispose();
     super.dispose();
   }
@@ -78,11 +78,11 @@ class _LeaderLoginScreenState extends State<LeaderLoginScreen> {
       _success = null;
     });
     try {
-      final retryAfter = await _leader.requestLoginCodeWithRetryAfter(phoneNumber: _phoneCtrl.text);
+      final retryAfter = await _leader.requestLoginCodeWithRetryAfter(email: _emailCtrl.text);
       if (!mounted) return;
       setState(() {
         _codeSent = true;
-        _success = 'OTP sent. Enter the code to continue.';
+        _success = 'Check your email for the OTP. Enter the code to continue.';
       });
       _startResendCountdown((retryAfter != null && retryAfter > 0) ? retryAfter : 30);
     } catch (e) {
@@ -100,7 +100,7 @@ class _LeaderLoginScreenState extends State<LeaderLoginScreen> {
       _success = null;
     });
     try {
-      await _leader.verifyLoginCode(phoneNumber: _phoneCtrl.text, code: _otpCtrl.text);
+      await _leader.verifyLoginCode(email: _emailCtrl.text, code: _otpCtrl.text);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const LeaderInboxScreen()),
@@ -132,11 +132,12 @@ class _LeaderLoginScreenState extends State<LeaderLoginScreen> {
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: _phoneCtrl,
-                keyboardType: TextInputType.phone,
+                controller: _emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
                 decoration: const InputDecoration(
-                  labelText: 'Phone number',
-                  hintText: 'e.g. +2507xxxxxxx',
+                  labelText: 'Email',
+                  hintText: 'your registered email',
                 ),
               ),
               const SizedBox(height: 12),

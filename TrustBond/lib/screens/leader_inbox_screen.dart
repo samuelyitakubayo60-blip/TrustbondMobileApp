@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
 import '../services/leader_service.dart';
+import '../services/notification_service.dart';
+import 'report_screen.dart';
 
 class LeaderInboxScreen extends StatefulWidget {
   const LeaderInboxScreen({super.key});
@@ -23,6 +26,18 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
     _load();
   }
 
+  Future<void> _syncLeaderPushToken() async {
+    if (defaultTargetPlatform == TargetPlatform.windows) return;
+    try {
+      final ns = NotificationService();
+      await ns.initialize();
+      final t = ns.fcmToken;
+      if (t != null && t.isNotEmpty) {
+        await _leader.registerFcmToken(fcmToken: t);
+      }
+    } catch (_) {}
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -40,6 +55,7 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
         _me = me;
         _items = items;
       });
+      await _syncLeaderPushToken();
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
@@ -67,6 +83,18 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
         title: const Text('Leader Inbox'),
         backgroundColor: AppColors.bg,
         actions: [
+          IconButton(
+            tooltip: 'Submit incident',
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const ReportScreen(localLeaderSubmit: true),
+                ),
+              );
+              if (mounted) _load();
+            },
+            icon: const Icon(Icons.add_circle_outline, color: AppColors.muted),
+          ),
           IconButton(
             tooltip: 'Logout',
             onPressed: () async {

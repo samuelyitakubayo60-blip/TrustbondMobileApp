@@ -11,4 +11,5 @@ class IncidentType(Base):
     description = Column(Text)
     severity_weight = Column(Numeric(3, 2), default=1.00)
     is_active = Column(Boolean, default=True)
+    default_special_assignment_unit = Column(String(80), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

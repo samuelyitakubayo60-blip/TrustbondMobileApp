@@ -19,12 +19,12 @@ class LeaderService {
 
   Future<void> logout() => _storage.delete(key: _tokenKey);
 
-  Future<void> login({required String phoneNumber, required String password}) async {
+  Future<void> login({required String email, required String password}) async {
     final res = await _client
         .post(
           Uri.parse('${ApiConfig.leaderAuthUrl}/login'),
           headers: const {'Content-Type': 'application/json'},
-          body: jsonEncode({'phone_number': phoneNumber.trim(), 'password': password}),
+          body: jsonEncode({'email': email.trim(), 'password': password}),
         )
         .timeout(_timeout);
 
@@ -47,12 +47,12 @@ class LeaderService {
     await _storage.write(key: _tokenKey, value: token);
   }
 
-  Future<void> requestLoginCode({required String phoneNumber}) async {
+  Future<void> requestLoginCode({required String email}) async {
     final res = await _client
         .post(
           Uri.parse('${ApiConfig.leaderAuthUrl}/request-login-code'),
           headers: const {'Content-Type': 'application/json'},
-          body: jsonEncode({'phone_number': phoneNumber.trim()}),
+          body: jsonEncode({'email': email.trim()}),
         )
         .timeout(_timeout);
     if (res.statusCode != 200) {
@@ -67,12 +67,12 @@ class LeaderService {
     }
   }
 
-  Future<int?> requestLoginCodeWithRetryAfter({required String phoneNumber}) async {
+  Future<int?> requestLoginCodeWithRetryAfter({required String email}) async {
     final res = await _client
         .post(
           Uri.parse('${ApiConfig.leaderAuthUrl}/request-login-code'),
           headers: const {'Content-Type': 'application/json'},
-          body: jsonEncode({'phone_number': phoneNumber.trim()}),
+          body: jsonEncode({'email': email.trim()}),
         )
         .timeout(_timeout);
     if (res.statusCode != 200) {
@@ -96,7 +96,7 @@ class LeaderService {
   }
 
   Future<void> verifyLoginCode({
-    required String phoneNumber,
+    required String email,
     required String code,
   }) async {
     final res = await _client
@@ -104,7 +104,7 @@ class LeaderService {
           Uri.parse('${ApiConfig.leaderAuthUrl}/verify-login-code'),
           headers: const {'Content-Type': 'application/json'},
           body: jsonEncode({
-            'phone_number': phoneNumber.trim(),
+            'email': email.trim(),
             'code': code.trim(),
           }),
         )
@@ -128,12 +128,12 @@ class LeaderService {
     await _storage.write(key: _tokenKey, value: token);
   }
 
-  Future<void> requestSetupCode({required String phoneNumber}) async {
+  Future<void> requestSetupCode({required String email}) async {
     final res = await _client
         .post(
           Uri.parse('${ApiConfig.leaderAuthUrl}/request-setup-code'),
           headers: const {'Content-Type': 'application/json'},
-          body: jsonEncode({'phone_number': phoneNumber.trim()}),
+          body: jsonEncode({'email': email.trim()}),
         )
         .timeout(_timeout);
     if (res.statusCode != 200) {
@@ -149,7 +149,7 @@ class LeaderService {
   }
 
   Future<void> setPassword({
-    required String phoneNumber,
+    required String email,
     required String code,
     required String newPassword,
   }) async {
@@ -158,7 +158,7 @@ class LeaderService {
           Uri.parse('${ApiConfig.leaderAuthUrl}/set-password'),
           headers: const {'Content-Type': 'application/json'},
           body: jsonEncode({
-            'phone_number': phoneNumber.trim(),
+            'email': email.trim(),
             'code': code.trim(),
             'new_password': newPassword,
           }),
@@ -166,6 +166,33 @@ class LeaderService {
         .timeout(_timeout);
     if (res.statusCode != 200) {
       String msg = 'Failed to set password (HTTP ${res.statusCode})';
+      try {
+        final decoded = jsonDecode(res.body);
+        if (decoded is Map && decoded['detail'] != null) {
+          msg = decoded['detail'].toString();
+        }
+      } catch (_) {}
+      throw Exception(msg);
+    }
+  }
+
+  Future<void> registerFcmToken({required String fcmToken}) async {
+    final token = await getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('Not logged in');
+    }
+    final res = await _client
+        .post(
+          Uri.parse('${ApiConfig.leaderAuthUrl}/register-fcm-token'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({'fcm_token': fcmToken}),
+        )
+        .timeout(_timeout);
+    if (res.statusCode != 200) {
+      String msg = 'Failed to register push token (HTTP ${res.statusCode})';
       try {
         final decoded = jsonDecode(res.body);
         if (decoded is Map && decoded['detail'] != null) {
@@ -246,4 +273,3 @@ class LeaderService {
     }
   }
 }
-

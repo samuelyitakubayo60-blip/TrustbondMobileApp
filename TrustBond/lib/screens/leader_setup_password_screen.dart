@@ -12,7 +12,7 @@ class LeaderSetupPasswordScreen extends StatefulWidget {
 
 class _LeaderSetupPasswordScreenState extends State<LeaderSetupPasswordScreen> {
   final _leader = LeaderService();
-  final _phoneCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
   final _codeCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
@@ -23,7 +23,7 @@ class _LeaderSetupPasswordScreenState extends State<LeaderSetupPasswordScreen> {
 
   @override
   void dispose() {
-    _phoneCtrl.dispose();
+    _emailCtrl.dispose();
     _codeCtrl.dispose();
     _passCtrl.dispose();
     _confirmCtrl.dispose();
@@ -37,10 +37,10 @@ class _LeaderSetupPasswordScreenState extends State<LeaderSetupPasswordScreen> {
       _success = null;
     });
     try {
-      await _leader.requestSetupCode(phoneNumber: _phoneCtrl.text);
+      await _leader.requestSetupCode(email: _emailCtrl.text);
       if (!mounted) return;
       setState(() {
-        _success = 'Setup code requested. Check your SMS from admin/system.';
+        _success = 'Setup code sent to your email. Check your inbox.';
       });
     } catch (e) {
       if (!mounted) return;
@@ -66,7 +66,7 @@ class _LeaderSetupPasswordScreenState extends State<LeaderSetupPasswordScreen> {
     });
     try {
       await _leader.setPassword(
-        phoneNumber: _phoneCtrl.text,
+        email: _emailCtrl.text,
         code: _codeCtrl.text,
         newPassword: _passCtrl.text,
       );
@@ -96,16 +96,17 @@ class _LeaderSetupPasswordScreenState extends State<LeaderSetupPasswordScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Use your phone number and setup code to create a private password.',
+                'Use your registered email and setup code to create a private password.',
                 style: TextStyle(color: AppColors.muted, fontSize: 12),
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: _phoneCtrl,
-                keyboardType: TextInputType.phone,
+                controller: _emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
                 decoration: const InputDecoration(
-                  labelText: 'Phone number',
-                  hintText: '+2507...',
+                  labelText: 'Email',
+                  hintText: 'same as in police dashboard',
                 ),
               ),
               const SizedBox(height: 10),

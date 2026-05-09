@@ -222,9 +222,9 @@ const EditUserModal = ({ isOpen, onClose, user, onSaved }) => {
             <div className="input-label">Role</div>
             {isAdmin ? (
               <select className="select" value={form.role} onChange={handleChange('role')}>
-                <option value="admin">Admin</option>
+                <option value="admin">DPC</option>
                 <option value="officer">Officer</option>
-                <option value="supervisor">Supervisor</option>
+                <option value="supervisor">IO</option>
               </select>
             ) : (
               <input className="input" value={user.role} disabled />
