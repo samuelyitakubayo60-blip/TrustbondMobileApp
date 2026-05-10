@@ -65,6 +65,21 @@ def send_email(to: str, subject: str, body_plain: str, body_html: str | None = N
         err = "SMTP connection timed out. Check SMTP settings/network or reduce SMTP_TIMEOUT_SECONDS."
         print(f"[Email] Send failed: {err}")
         return False, err
+    except OSError as e:
+        # Common in hosted environments that block outbound SMTP.
+        port = getattr(settings, "smtp_port", 587) or 587
+        host = settings.smtp_host or ""
+        if getattr(e, "errno", None) == 101:
+            err = (
+                f"Network is unreachable when connecting to SMTP server {host}:{port}. "
+                "This usually means outbound SMTP is blocked by the hosting provider/firewall. "
+                "Allow egress to the SMTP host/port or switch to an email HTTP API provider."
+            )
+            print(f"[Email] Send failed: {err}")
+            return False, err
+        err = str(e).strip() or "SMTP send failed (OS error)."
+        print(f"[Email] Send failed: {err}")
+        return False, err
     except Exception as e:
         err = str(e).strip()
         print(f"[Email] Send failed: {err}")

@@ -6041,11 +6041,14 @@ def _balance_workload_and_reassign(db: Session):
             
             # Broadcast changes to keep clients synchronized
             try:
+                import asyncio
                 from app.api.v1.ws import manager
-                background_tasks.add_task(
-                    manager.broadcast,
-                    {"type": "refresh_data", "entity": "case", "action": "reassigned"}
-                )
+                payload = {"type": "refresh_data", "entity": "case", "action": "reassigned"}
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(manager.broadcast(payload))
+                except RuntimeError:
+                    asyncio.run(manager.broadcast(payload))
             except Exception as broadcast_error:
                 print(f"Warning: Could not broadcast case reassignments: {broadcast_error}")
     
