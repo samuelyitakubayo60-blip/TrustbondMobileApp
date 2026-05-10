@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -10,10 +9,8 @@ import '../config/theme.dart';
 import '../services/device_status_service.dart';
 import '../services/motion_service.dart';
 import '../services/mobile_verification_service.dart';
-import '../services/guidance_service.dart';
 import '../services/app_refresh_bus.dart';
 import '../services/offline_report_queue_service.dart';
-import '../widgets/guidance_widgets.dart';
 import '../widgets/shared_widgets.dart';
 import 'report_success_screen.dart';
 
@@ -52,9 +49,6 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   String? _error;
   String? _submitStatus;
   bool _isRecording = false;
-  GuidanceResponse? _guidance;
-  bool _guidanceLoading = false;
-  Timer? _guidanceDebounce;
 
   Future<String> _sanitizePhotoPath(String sourcePath) async {
     try {
@@ -103,7 +97,6 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
       final sanitizedPath = await _sanitizePhotoPath(img.path);
       setState(() => _files
           .add(_EvidenceFile(path: sanitizedPath, type: 'photo', isLive: true)));
-      _scheduleGuidanceUpdate();
     }
   }
 
@@ -113,7 +106,6 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
     if (vid != null) {
       setState(() => _files
           .add(_EvidenceFile(path: vid.path, type: 'video', isLive: true)));
-      _scheduleGuidanceUpdate();
     }
   }
 
@@ -231,53 +223,10 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
     final sanitizedPath = await _sanitizePhotoPath(filePath);
     setState(() => _files
         .add(_EvidenceFile(path: sanitizedPath, type: fileType, isLive: isLiveCapture)));
-    _scheduleGuidanceUpdate();
   }
 
   void _removeFile(int index) {
     setState(() => _files.removeAt(index));
-    _scheduleGuidanceUpdate();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _scheduleGuidanceUpdate();
-  }
-
-  @override
-  void dispose() {
-    _guidanceDebounce?.cancel();
-    super.dispose();
-  }
-
-  void _scheduleGuidanceUpdate() {
-    _guidanceDebounce?.cancel();
-    _guidanceDebounce = Timer(const Duration(milliseconds: 700), () async {
-      if (!mounted) return;
-      setState(() => _guidanceLoading = true);
-      try {
-        final guidance = await GuidanceService.analyzeSubmission(
-          GuidanceRequest(
-            description: widget.description,
-            incidentType: widget.incidentTypeName,
-            evidenceCount: _files.length,
-            fileTypes: _files.map((f) => f.type).toList(growable: false),
-            gpsAccuracy: widget.gpsAccuracy,
-            hasLiveCapture: _files.any((f) => f.isLive),
-            isOffline: false,
-          ),
-        );
-        if (!mounted) return;
-        setState(() {
-          _guidance = guidance;
-          _guidanceLoading = false;
-        });
-      } catch (_) {
-        if (!mounted) return;
-        setState(() => _guidanceLoading = false);
-      }
-    });
   }
 
   Future<void> _submit() async {
@@ -441,8 +390,6 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
                             TextStyle(fontSize: 12, color: AppColors.muted)),
                     const SizedBox(height: 16),
                     _buildUploadArea(),
-                    const SizedBox(height: 12),
-                    _buildGuidanceSection(),
                     if (_files.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       _buildFileList(),
@@ -668,34 +615,6 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
             ),
           );
         }),
-      ],
-    );
-  }
-
-  Widget _buildGuidanceSection() {
-    if (_guidanceLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            SizedBox(width: 8),
-            Text('Analyzing evidence guidance...'),
-          ],
-        ),
-      );
-    }
-    if (_guidance == null) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TrustScoreDisplay(trustEstimate: _guidance!.trustEstimate),
-        ..._guidance!.criticalItems.take(2).map((item) => GuidanceCard(item: item)),
-        ..._guidance!.warningItems.take(2).map((item) => GuidanceCard(item: item)),
       ],
     );
   }

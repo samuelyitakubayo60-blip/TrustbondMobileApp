@@ -64,7 +64,7 @@ from app.core.report_review import (
     resolve_ml_prediction_for_report,
 )
 from app.core.credibility_model import score_report_credibility, update_device_ml_aggregates, _json_safe
-from app.core.submission_guidance import submission_guidance
+from app.core.natural_language_scorer import analyze_description_quality
 from app.core.audit import log_action
 from app.core.hotspot_auto import (
     create_hotspots_from_reports,
@@ -3500,54 +3500,33 @@ def create_report(
     #     fv["boundary_reason"] = report.flag_reason
     #     report.feature_vector = _json_safe(fv)
 
-    # Text-only analysis for reports without evidence
+    # Note: submission-guidance (mobile guidance) has been removed from the product.
+    # For text-only reports we keep the existing pipeline and record a lightweight NL analysis
+    # (no auto-reject here; rule engine + police review still apply).
     if not evidence_metadata_list:
-        # This report has no evidence files - perform text-only analysis + type-vs-description checks
         try:
             incident_type_row = (
                 db.query(IncidentType)
                 .filter(IncidentType.incident_type_id == report.incident_type_id)
                 .first()
             )
-            incident_type_name = incident_type_row.type_name if incident_type_row else "unknown"
-
-            quality_metrics = submission_guidance.evaluate_description_quality(
+            type_name = getattr(incident_type_row, "type_name", "") or "unknown"
+            type_desc = getattr(incident_type_row, "description", "") or ""
+            nl = analyze_description_quality(
                 report_data.description or report.description or "",
-                incident_type_name,
+                type_name,
+                type_desc,
             )
-            reason_codes = quality_metrics.get("reason_codes", []) if isinstance(quality_metrics.get("reason_codes"), list) else []
-            hard_gates = quality_metrics.get("hard_gates", []) if isinstance(quality_metrics.get("hard_gates"), list) else []
-            q_score = float(quality_metrics.get("quality_score", 0.0))
-            band = str(quality_metrics.get("quality_band", "reject_quality"))
-            text_valid = q_score >= 50.0 and not hard_gates
-            confidence = max(0.0, min(1.0, q_score / 100.0))
-            text_analysis = {
-                "valid": bool(text_valid),
-                "confidence": round(confidence, 3),
-                "threshold_used": 0.50,
-                "quality_score": round(q_score, 2),
-                "quality_band": band,
-                "reason_codes": reason_codes,
-                "hard_gates": hard_gates,
-                "breakdown": quality_metrics.get("score_breakdown", {}),
-                "issues": reason_codes,
-            }
             fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
-            fv["text_only_validation"] = text_analysis
+            fv["text_only_nl"] = {
+                "overall_score": float(getattr(nl, "overall_score", 0.0) or 0.0),
+                "confidence": float(getattr(nl, "confidence", 0.0) or 0.0),
+                "semantic_similarity": float(getattr(nl, "semantic_similarity_score", 0.0) or 0.0),
+                "description_quality": float(getattr(nl, "description_quality_score", 0.0) or 0.0),
+            }
             report.feature_vector = _json_safe(fv)
-
-            # Strict text-only policy:
-            # - anything below pass_quality is auto-rejected
-            if hard_gates or band in {"reject_quality", "review_quality"}:
-                if report.rule_status != "rejected":
-                    report.rule_status = "rejected"
-                    report.status = "rejected"
-                    report.verification_status = "rejected"
-                    report.is_flagged = True
-                    report.flag_reason = reason_codes[0] if reason_codes else "text_only_validation_failed"
-
         except Exception as e:
-            logger.error(f"Text-only analysis failed for report {report.report_id}: {e}")
+            logger.warning(f"Text-only NL analysis failed for report {report.report_id}: {e}")
 
     # Persist evidence validation summary on the report for auditability
     try:

@@ -1,7 +1,6 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 
 import 'dart:io';
-import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:flutter/foundation.dart'
@@ -20,13 +19,12 @@ import '../services/leader_service.dart';
 
 import '../services/motion_service.dart';
 
-import '../services/guidance_service.dart';
 
 import '../models/report_model.dart';
 
 import '../models/evidence_attachment.dart';
 
-import '../widgets/guidance_widgets.dart';
+import '../widgets/shared_widgets.dart';
 
 import 'package:trustbond/services/mobile_verification_service.dart';
 
@@ -94,15 +92,7 @@ class _ReportScreenState extends State<ReportScreen> {
     setState(() {
       _attachments.removeAt(index);
     });
-    _onEvidenceChanged();
   }
-
-  // Guidance state
-  GuidanceResponse? _currentGuidance;
-  DescriptionValidationResponse? _descriptionValidation;
-  EvidenceValidationResponse? _evidenceValidation;
-  bool _isLoadingGuidance = false;
-  Timer? _guidanceDebounceTimer;
 
   double? _exifToDouble(dynamic value) {
     // exif package may return Ratio / IfdRatios / num / String.
@@ -200,16 +190,6 @@ class _ReportScreenState extends State<ReportScreen> {
     _loadIncidentTypes();
     _getCurrentLocation();
     _registerDevice();
-
-    // Test guidance after a delay
-    Future.delayed(Duration(seconds: 3), () {
-      print('Testing guidance trigger after delay');
-      if (_selectedIncidentTypeId != null) {
-        _updateGuidance();
-      } else {
-        print('No incident type selected for test');
-      }
-    });
   }
 
   Future<void> _registerDevice() async {
@@ -336,9 +316,6 @@ class _ReportScreenState extends State<ReportScreen> {
 
         });
 
-        // Trigger guidance update
-        _onEvidenceChanged();
-
       }
 
     } catch (e) {
@@ -411,9 +388,6 @@ class _ReportScreenState extends State<ReportScreen> {
 
         });
 
-        // Trigger guidance update
-        _onEvidenceChanged();
-
       }
 
     } catch (e) {
@@ -466,9 +440,6 @@ class _ReportScreenState extends State<ReportScreen> {
           ));
 
         });
-
-        // Trigger guidance update
-        _onEvidenceChanged();
 
         // Populate EXIF asynchronously (avoid blocking UI thread).
         final exif = await _readImageExifForAttachment(image.path);
@@ -535,9 +506,6 @@ class _ReportScreenState extends State<ReportScreen> {
           ));
 
         });
-
-        // Trigger guidance update
-        _onEvidenceChanged();
 
         // Best-effort timestamp for videos
         try {
@@ -1034,8 +1002,6 @@ class _ReportScreenState extends State<ReportScreen> {
   @override
 
   Widget build(BuildContext context) {
-    print('Build called - _currentGuidance: ${_currentGuidance != null}, _descriptionValidation: ${_descriptionValidation != null}, _isLoadingGuidance: $_isLoadingGuidance');
-
     return Scaffold(
 
       body: SingleChildScrollView(
@@ -1087,10 +1053,6 @@ class _ReportScreenState extends State<ReportScreen> {
                           _selectedIncidentTypeId = value;
 
                         });
-
-                        // Trigger guidance update when incident type changes
-                        print('Incident type changed to: $value');
-                        _updateGuidance();
 
                       },
 
@@ -1166,8 +1128,6 @@ class _ReportScreenState extends State<ReportScreen> {
 
                 maxLines: 4,
 
-                onChanged: (_) => _onDescriptionChanged(),
-
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'Description is required - please provide details about the incident';
@@ -1181,14 +1141,6 @@ class _ReportScreenState extends State<ReportScreen> {
               ),
 
               const SizedBox(height: 16),
-
-              // Description quality indicator
-              if (_descriptionValidation != null)
-                DescriptionQualityIndicator(validation: _descriptionValidation!),
-
-              // Trust score display
-              if (_currentGuidance != null)
-                TrustScoreDisplay(trustEstimate: _currentGuidance!.trustEstimate),
 
               // Location quality indicator
               LocationQualityIndicator(
@@ -1227,33 +1179,6 @@ class _ReportScreenState extends State<ReportScreen> {
                 ),
 
               ),
-
-              // Evidence quality indicator
-              if (_evidenceValidation != null)
-                EvidenceQualityIndicator(validation: _evidenceValidation!),
-
-              // Guidance cards
-              if (_currentGuidance != null && _currentGuidance!.guidanceItems.isNotEmpty)
-                Column(
-                  children: [
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Suggestions for Better Report',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    const SizedBox(height: 8),
-                    // Show critical items first
-                    ..._currentGuidance!.criticalItems.map((item) => 
-                      GuidanceCard(item: item)
-                    ),
-                    // Show warning items
-                    ..._currentGuidance!.warningItems.take(3).map((item) => 
-                      GuidanceCard(item: item)
-                    ),
-                    // Show summary card
-                    GuidanceSummaryCard(guidance: _currentGuidance!),
-                  ],
-                ),
 
               if (_attachments.isNotEmpty) ...[
 
@@ -1443,143 +1368,11 @@ class _ReportScreenState extends State<ReportScreen> {
 
   }
 
-  void _onDescriptionChanged() {
-    // Trigger guidance update when description changes
-    print('Description changed: "${_descriptionController.text}"');
-    _updateGuidance();
-  }
-
-  void _onEvidenceChanged() {
-    // Trigger guidance update when evidence changes
-    _updateGuidance();
-  }
-
-  void _updateGuidance() async {
-    print('_updateGuidance called');
-    print('Selected incident type ID: $_selectedIncidentTypeId');
-    if (_selectedIncidentTypeId == null) {
-      print('No incident type selected, skipping guidance');
-      return;
-    }
-
-    // Cancel previous timer
-    _guidanceDebounceTimer?.cancel();
-
-    // Set loading state
-    setState(() {
-      _isLoadingGuidance = true;
-    });
-    print('Guidance loading state set to true');
-
-    // Debounce API call
-    _guidanceDebounceTimer = Timer(const Duration(milliseconds: 800), () async {
-      try {
-        final incidentType = _incidentTypes.firstWhere(
-          (type) => type['incident_type_id'] == _selectedIncidentTypeId,
-          orElse: () => {'type_name': 'Unknown'},
-        );
-
-        final request = GuidanceRequest(
-          description: _descriptionController.text,
-          incidentType: incidentType['type_name'],
-          evidenceCount: _attachments.length,
-          gpsAccuracy: _gpsAccuracy,
-          deviceId: _deviceId,
-          hasLiveCapture: _attachments.any((att) => att.isLiveCapture),
-          isOffline: false,
-        );
-
-        print('Calling GuidanceService.analyzeSubmission');
-        final guidance = await GuidanceService.analyzeSubmission(request);
-        print('Guidance API response received');
-        
-        if (mounted) {
-          setState(() {
-            _currentGuidance = guidance;
-            // Create validation responses from guidance items
-            _descriptionValidation = _createDescriptionValidationFromGuidance(guidance);
-            _evidenceValidation = _createEvidenceValidationFromGuidance(guidance);
-            _isLoadingGuidance = false;
-          });
-          print('Guidance state updated with API response');
-        }
-      } catch (e) {
-        print('Guidance API error: $e');
-        if (mounted) {
-          setState(() {
-            _isLoadingGuidance = false;
-          });
-          if (kDebugMode) {
-            debugPrint('Guidance API error: $e');
-          }
-        }
-      }
-    });
-  }
-
-  DescriptionValidationResponse? _createDescriptionValidationFromGuidance(GuidanceResponse guidance) {
-    // Find description-related guidance items
-    final descItems = guidance.guidanceItems.where((item) => 
-      item.title.toLowerCase().contains('description') ||
-      item.title.toLowerCase().contains('words') ||
-      item.message.toLowerCase().contains('words')
-    ).toList();
-
-    if (descItems.isEmpty) return null;
-
-    // Determine if description is valid (no critical items about description)
-    final isValid = !descItems.any((item) => item.level == 'critical');
-    
-    // Estimate word count from message
-    final wordCount = _descriptionController.text.split(' ').length;
-    
-    // Calculate quality score based on validation
-    double qualityScore = isValid ? 75.0 : 25.0;
-    if (wordCount >= 20) qualityScore += 15.0;
-    if (wordCount >= 30) qualityScore += 10.0;
-
-    return DescriptionValidationResponse(
-      isValid: isValid,
-      wordCount: wordCount,
-      qualityScore: qualityScore.clamp(0.0, 100.0),
-      suggestions: descItems.map((item) => item.suggestedAction ?? '').toList(),
-      missingKeywords: [],
-    );
-  }
-
-  EvidenceValidationResponse? _createEvidenceValidationFromGuidance(GuidanceResponse guidance) {
-    // Find evidence-related guidance items
-    final evidenceItems = guidance.guidanceItems.where((item) => 
-      item.title.toLowerCase().contains('evidence') ||
-      item.title.toLowerCase().contains('photo') ||
-      item.title.toLowerCase().contains('video')
-    ).toList();
-
-    if (evidenceItems.isEmpty) return null;
-
-    // Determine if evidence is sufficient
-    final isSufficient = !evidenceItems.any((item) => item.level == 'critical');
-    
-    // Calculate quality score
-    double qualityScore = isSufficient ? 60.0 : 20.0;
-    if (_attachments.isNotEmpty) qualityScore += 20.0;
-    if (_attachments.any((att) => att.isLiveCapture)) qualityScore += 20.0;
-
-    return EvidenceValidationResponse(
-      isSufficient: isSufficient,
-      qualityScore: qualityScore.clamp(0.0, 100.0),
-      suggestions: evidenceItems.map((item) => item.suggestedAction ?? '').toList(),
-      idealCount: 3,
-    );
-  }
-
   @override
 
   void dispose() {
 
     _descriptionController.dispose();
-
-    _guidanceDebounceTimer?.cancel();
 
     super.dispose();
 

@@ -499,6 +499,86 @@ class StatBox extends StatelessWidget {
   }
 }
 
+/// Simple GPS accuracy row for report forms.
+class LocationQualityIndicator extends StatelessWidget {
+  final double? gpsAccuracy;
+  final double? movementSpeed;
+
+  const LocationQualityIndicator({
+    super.key,
+    this.gpsAccuracy,
+    this.movementSpeed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (gpsAccuracy == null) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.red.shade50,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.location_off, color: Colors.red.shade700, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'No GPS signal',
+              style: TextStyle(
+                color: Colors.red.shade700,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final accuracyColor = _gpsAccuracyColor(gpsAccuracy!);
+    final accuracyText = '${gpsAccuracy!.toInt()}m';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Icon(Icons.location_on, color: accuracyColor, size: 20),
+          const SizedBox(width: 8),
+          Text(
+            'GPS: $accuracyText',
+            style: TextStyle(
+              color: accuracyColor,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+          if (movementSpeed != null && movementSpeed! > 5) ...[
+            const SizedBox(width: 16),
+            const Icon(Icons.directions_walk, color: Colors.orange, size: 16),
+            const SizedBox(width: 4),
+            const Text(
+              'Moving',
+              style: TextStyle(
+                color: Colors.orange,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Color _gpsAccuracyColor(double accuracy) {
+    if (accuracy <= 20) return Colors.green;
+    if (accuracy <= 50) return Colors.orange;
+    return Colors.red;
+  }
+}
+
 // ─── Shared helper functions (used by multiple screens) ─────────────────────
 
 /// Returns an emoji icon for the given incident type name.

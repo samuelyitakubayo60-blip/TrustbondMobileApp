@@ -8,7 +8,7 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-# Keep in sync with SQLAlchemy models (reports, cases, local_leaders, incident_types).
+# Keep in sync with SQLAlchemy models (reports, cases, local_leaders, local_leader_auth_codes, incident_types).
 DDL_STATEMENTS: tuple[str, ...] = (
     """
     ALTER TABLE reports
@@ -24,6 +24,13 @@ DDL_STATEMENTS: tuple[str, ...] = (
     ALTER TABLE cases ADD COLUMN IF NOT EXISTS rib_handed_over_at TIMESTAMPTZ;
     ALTER TABLE cases ADD COLUMN IF NOT EXISTS rib_handover_summary TEXT;
     ALTER TABLE cases ADD COLUMN IF NOT EXISTS rib_handover_prerequisites_acknowledged BOOLEAN NOT NULL DEFAULT FALSE;
+    """,
+    """
+    ALTER TABLE local_leaders ADD COLUMN IF NOT EXISTS role VARCHAR(32) NOT NULL DEFAULT 'executive_of_cell';
+    ALTER TABLE local_leaders ALTER COLUMN phone_number DROP NOT NULL;
+    """,
+    """
+    ALTER TABLE local_leader_auth_codes ALTER COLUMN phone_number DROP NOT NULL;
     """,
     """
     ALTER TABLE local_leaders ADD COLUMN IF NOT EXISTS fcm_device_token VARCHAR(512);

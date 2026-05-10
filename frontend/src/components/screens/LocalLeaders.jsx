@@ -33,17 +33,6 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
     loadLeaders();
   }, [loadLeaders, wsRefreshKey, refreshKey]);
 
-  const sendSetupCode = async (leader) => {
-    try {
-      await api.post(`/api/v1/local-leaders/${leader.local_leader_id}/send-setup-code`);
-      window.alert(
-        "Setup code sent to the leader's email. They can use it in the app under “Set up password with code”."
-      );
-    } catch (e) {
-      setError(e?.message || "Failed to send setup code.");
-    }
-  };
-
   const deleteLeader = async (leader) => {
     const ok = window.confirm(`Delete local leader "${leader.full_name}"?`);
     if (!ok) return;
@@ -77,7 +66,10 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
     <>
       <div className="page-header">
         <h2>Local Leaders</h2>
-        <p>Register village chiefs and cell executives. Login codes are sent by email.</p>
+        <p>
+          Register village chiefs and cell executives. Leaders request setup/login codes from the app
+          (sent by email via server SMTP configuration).
+        </p>
       </div>
 
       {error && (
@@ -170,9 +162,6 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
                     <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
                       <button type="button" className="btn btn-outline btn-sm" onClick={() => onEditLeader?.(l)}>
                         Edit
-                      </button>
-                      <button type="button" className="btn btn-outline btn-sm" onClick={() => sendSetupCode(l)}>
-                        Send setup code
                       </button>
                       <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteLeader(l)}>
                         Delete

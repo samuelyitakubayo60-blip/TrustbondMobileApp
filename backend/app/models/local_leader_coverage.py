@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import backref, relationship
 
 from app.database import Base
 
@@ -16,7 +16,11 @@ class LocalLeaderCoverageLocation(Base):
     )
     location_id = Column(Integer, ForeignKey("locations.location_id"), nullable=False, index=True)
 
-    local_leader = relationship("LocalLeader", backref="coverage_locations")
+    # passive_deletes: DB has ON DELETE CASCADE; avoid ORM issuing UPDATE ... SET local_leader_id=NULL first.
+    local_leader = relationship(
+        "LocalLeader",
+        backref=backref("coverage_locations", passive_deletes=True),
+    )
     location = relationship("Location")
 
     __table_args__ = (

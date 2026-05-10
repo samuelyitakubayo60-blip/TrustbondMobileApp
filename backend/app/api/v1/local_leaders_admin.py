@@ -2,20 +2,20 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.v1.auth import get_current_admin
-from app.core.email import is_smtp_configured, send_leader_otp_email
+from app.core.email import is_smtp_configured
 from app.core.security import get_password_hash
 from app.database import get_db
 from app.models.location import Location
 from app.models.local_leader import LocalLeader
 from app.models.local_leader_coverage import LocalLeaderCoverageLocation
 from app.models.local_leader_auth_code import LocalLeaderAuthCode
+from app.models.report import Report
 from app.schemas.local_leader import (
     VALID_LEADER_ROLES,
     LEADER_ROLE_CHIEF_OF_VILLAGE,
@@ -241,45 +241,30 @@ def delete_local_leader(
     leader = db.query(LocalLeader).filter(LocalLeader.local_leader_id == local_leader_id).first()
     if not leader:
         raise HTTPException(status_code=404, detail="Local leader not found")
+    lid = int(local_leader_id)
+    # ORM delete() would nullify child FKs first; coverage uses NOT NULL + we want CASCADE semantics.
+    db.query(LocalLeaderCoverageLocation).filter(
+        LocalLeaderCoverageLocation.local_leader_id == lid
+    ).delete(synchronize_session=False)
+    db.query(LocalLeaderAuthCode).filter(
+        LocalLeaderAuthCode.local_leader_id == lid
+    ).delete(synchronize_session=False)
+    # Reports reference local leaders with nullable FKs; clear so DELETE is not blocked.
+    db.query(Report).filter(Report.leader_verified_by == lid).update(
+        {Report.leader_verified_by: None},
+        synchronize_session=False,
+    )
+    db.query(Report).filter(Report.submitted_by_local_leader_id == lid).update(
+        {Report.submitted_by_local_leader_id: None},
+        synchronize_session=False,
+    )
     db.delete(leader)
     db.commit()
     return None
 
 
-@router.post("/{local_leader_id}/send-setup-code")
-def send_setup_code(
-    local_leader_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_admin),
-):
-    leader = db.query(LocalLeader).filter(LocalLeader.local_leader_id == local_leader_id).first()
-    if not leader:
-        raise HTTPException(status_code=404, detail="Local leader not found")
-    if not leader.is_active:
-        raise HTTPException(status_code=400, detail="Local leader is inactive")
-    if not leader.email:
-        raise HTTPException(status_code=400, detail="Local leader has no email address; add an email before sending a setup code.")
-    if not is_smtp_configured():
-        raise HTTPException(status_code=503, detail="Email delivery is not configured on the server.")
-
-    db.query(LocalLeaderAuthCode).filter(
-        LocalLeaderAuthCode.local_leader_id == leader.local_leader_id,
-        LocalLeaderAuthCode.purpose == "password_setup",
-        LocalLeaderAuthCode.used_at.is_(None),
-    ).delete()
-
-    code = "".join(secrets.choice("0123456789") for _ in range(6))
-    row = LocalLeaderAuthCode(
-        local_leader_id=leader.local_leader_id,
-        phone_number=None,
-        code=code,
-        purpose="password_setup",
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
-    )
-    db.add(row)
-    db.commit()
-
-    ok, err = send_leader_otp_email(leader.email, code, "password_setup")
-    if not ok:
-        raise HTTPException(status_code=503, detail=err or "Failed to send setup email.")
-    return {"message": "Setup code sent to the leader's email address."}
+"""
+Admin OTP sending removed:
+Local leaders must request setup/login codes themselves via /api/v1/leader-auth/request-setup-code
+and /api/v1/leader-auth/request-login-code.
+"""
