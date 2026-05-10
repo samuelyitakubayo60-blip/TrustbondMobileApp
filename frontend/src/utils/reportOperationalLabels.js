@@ -16,7 +16,14 @@ export function formatTechnicalStatus(report) {
   if (vs === "under_review") policeParts.push("Police review: pending");
   else if (vs === "pending") policeParts.push("Police review: pending");
   else if (vs === "verified") {
-    policeParts.push(report?.verified_by ? "Police confirmed" : "Auto-verified (AI)");
+    if (report?.verified_by) {
+      const name = (report?.verified_by_name || "").trim();
+      const role = (report?.verified_by_role || "").trim();
+      const who = [role, name].filter(Boolean).join(" · ");
+      policeParts.push(who ? `Police confirmed (${who})` : "Police confirmed");
+    } else {
+      policeParts.push("Auto-verified (AI)");
+    }
   } else if (vs === "rejected") {
     policeParts.push("Police rejected");
   }

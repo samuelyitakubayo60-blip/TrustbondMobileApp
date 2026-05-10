@@ -57,3 +57,4 @@ class Report(Base):
     location = relationship("Location", foreign_keys=[location_id])
     handling_station = relationship("Station", backref="reports", foreign_keys=[handling_station_id])
     evidence_files = relationship("EvidenceFile", back_populates="report", cascade="all, delete-orphan")
+    verified_by_user = relationship("PoliceUser", foreign_keys=[verified_by])

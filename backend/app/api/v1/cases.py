@@ -227,6 +227,16 @@ def _report_to_response(r: Report, linked_case_id: Optional[UUID] = None) -> Rep
         is_flagged=r.is_flagged,
         flag_reason=r.flag_reason,
         verified_at=r.verified_at,
+        verified_by=getattr(r, "verified_by", None),
+        verified_by_name=(
+            f"{getattr(getattr(r, 'verified_by_user', None), 'first_name', '')} {getattr(getattr(r, 'verified_by_user', None), 'last_name', '')}".strip()
+            or None
+        )
+        if getattr(r, "verified_by_user", None) is not None
+        else None,
+        verified_by_role=getattr(getattr(r, "verified_by_user", None), "role", None)
+        if getattr(r, "verified_by_user", None) is not None
+        else None,
         leader_verification_status=getattr(r, "leader_verification_status", None),
         leader_verified_at=getattr(r, "leader_verified_at", None),
         submitted_by_local_leader_id=getattr(r, "submitted_by_local_leader_id", None),

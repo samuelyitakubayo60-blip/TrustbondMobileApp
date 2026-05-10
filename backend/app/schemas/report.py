@@ -101,6 +101,9 @@ class ReportResponse(BaseModel):
     verified_at: Optional[datetime] = None
     # Police officer who recorded the final review (null if never officer-verified).
     verified_by: Optional[int] = None
+    # Human-readable verifier information for police portal (never returned to mobile device listing).
+    verified_by_name: Optional[str] = None
+    verified_by_role: Optional[str] = None
     # Local leader community confirmation (separate from police / AI verification pipeline).
     leader_verification_status: Optional[str] = None  # pending | confirmed | rejected
     leader_verified_at: Optional[datetime] = None

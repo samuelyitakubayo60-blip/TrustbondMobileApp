@@ -6862,6 +6862,17 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         for ef in (report.evidence_files or [])
     ]
     
+    verified_by_value = getattr(report, "verified_by", None) if request_device_id is None else None
+    verified_user = getattr(report, "verified_by_user", None) if verified_by_value is not None else None
+    verified_by_name = None
+    verified_by_role = None
+    if verified_user is not None:
+        first = (getattr(verified_user, "first_name", None) or "").strip()
+        last = (getattr(verified_user, "last_name", None) or "").strip()
+        full = f"{first} {last}".strip()
+        verified_by_name = full or None
+        verified_by_role = getattr(verified_user, "role", None)
+
     return ReportResponse(
         report_id=str(report.report_id),
         report_number=report.report_number,
@@ -6897,11 +6908,9 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
             getattr(report, "ai_verification_reason", None)
         ),
         verified_at=getattr(report, "verified_at", None),
-        verified_by=(
-            getattr(report, "verified_by", None)
-            if request_device_id is None
-            else None
-        ),
+        verified_by=verified_by_value,
+        verified_by_name=verified_by_name,
+        verified_by_role=verified_by_role,
         # Add missing required fields
         device_id=str(report.device_id),
         latitude=float(report.latitude) if report.latitude else None,

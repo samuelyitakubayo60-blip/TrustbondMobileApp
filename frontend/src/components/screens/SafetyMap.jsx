@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
+  CircleMarker,
   Tooltip,
   ZoomControl,
   Polygon,
@@ -10,6 +11,7 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import api from "../../api/client";
+import { policeVerificationOkForHotspots } from "../../utils/reportOperationalLabels";
 
 const MUSANZE_CENTER = [-1.5042, 29.638]; // Musanze district center
 const MUSANZE_ZOOM = 12;
@@ -179,6 +181,7 @@ const formatTimeWindow = (hours) => {
 const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   const [hotspots, setHotspots] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [liveGroups, setLiveGroups] = useState([]);
   const [typeFilter, setTypeFilter] = useState("all"); // 'all' | incident_type_name
   const [timePeriod, setTimePeriod] = useState("month"); // '', 'day', 'week', 'month', 'quarter', 'year'
   const [customHours, setCustomHours] = useState(""); // Custom hours input
@@ -217,6 +220,47 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+  };
+
+  const loadLiveIncidents = () => {
+    const fromDate = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // last 1 hour
+    const params = new URLSearchParams();
+    params.set("limit", "100");
+    params.set("offset", "0");
+    params.set("from_date", fromDate);
+    params.set("verification_status_in", "verified");
+
+    api
+      .get(`/api/v1/reports/?${params.toString()}`)
+      .then((res) => {
+        const items = Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [];
+        const eligible = items.filter((r) => policeVerificationOkForHotspots(r).ok);
+        const grouped = new Map();
+        eligible.forEach((r) => {
+          const lat = Number(r.latitude);
+          const lng = Number(r.longitude);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+          const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+          const prev = grouped.get(key);
+          if (prev) {
+            prev.count += 1;
+            prev.report_ids.push(r.report_id);
+          } else {
+            grouped.set(key, {
+              key,
+              lat,
+              lng,
+              count: 1,
+              incident_type_name: r.incident_type_name || "Incident",
+              report_ids: [r.report_id],
+            });
+          }
+        });
+        setLiveGroups(Array.from(grouped.values()));
+      })
+      .catch(() => {
+        setLiveGroups([]);
+      });
   };
 
   const loadHistoricalHotspots = () => {
@@ -278,6 +322,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
 
   useEffect(() => {
     loadHotspots();
+    loadLiveIncidents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsRefreshKey]);
 
@@ -584,6 +629,31 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     return expandBoundsByKm(computed, MUSANZE_BUFFER_KM);
   }, [polygons]);
 
+  const countIcon = (count, tone = "neutral") => {
+    const bg =
+      tone === "danger"
+        ? "#f87171"
+        : tone === "warning"
+          ? "#fb923c"
+          : tone === "success"
+            ? "#34d399"
+            : "#60a5fa";
+    const size = count >= 10 ? 34 : 30;
+    return L.divIcon({
+      className: "hotspot-count-icon",
+      html: `<div style="
+          width:${size}px;height:${size}px;border-radius:${size}px;
+          background:${bg};color:white;font-weight:800;
+          display:flex;align-items:center;justify-content:center;
+          border:2px solid rgba(255,255,255,0.95);
+          box-shadow:0 2px 8px rgba(0,0,0,0.28);
+          font-size:${count >= 10 ? 12 : 13}px;
+        ">${count}</div>`,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+    });
+  };
+
   return (
     <>
       <div className="page-header smx-page-header">
@@ -720,6 +790,78 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                   </Polygon>
                 );
               })}
+
+              {plottedHotspots
+                .filter((h) => Number.isFinite(h.lat) && Number.isFinite(h.lng))
+                .map((h) => {
+                  const tone =
+                    h.risk_level === "high" || h.risk_level === "critical"
+                      ? "danger"
+                      : h.risk_level === "medium" || h.risk_level === "active"
+                        ? "warning"
+                        : "success";
+                  const color = getCircleColor(h.risk_level);
+                  const count = Number(h.incident_count || 0);
+                  return (
+                    <CircleMarker
+                      key={`cluster-center-${h.hotspot_id}`}
+                      center={[h.lat, h.lng]}
+                      radius={Math.min(26, 10 + Math.log2(Math.max(1, count)) * 6)}
+                      pathOptions={{
+                        color,
+                        weight: 2,
+                        fillColor: color,
+                        fillOpacity: 0.28,
+                      }}
+                    >
+                      <Tooltip
+                        direction="top"
+                        offset={[0, -4]}
+                        opacity={0.95}
+                        interactive={false}
+                      >
+                        <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
+                          <strong>Hotspot cluster</strong>
+                          <br />
+                          Reports: {count}
+                          <br />
+                          Risk: {String(h.risk_level || "low").toUpperCase()}
+                          <br />
+                          Type: {h.incident_type_name || "Mixed"}
+                        </div>
+                      </Tooltip>
+                    </CircleMarker>
+                  );
+                })}
+
+              {liveGroups.map((g) => (
+                <CircleMarker
+                  key={`live-group-${g.key}`}
+                  center={[g.lat, g.lng]}
+                  radius={Math.min(20, 8 + Math.log2(Math.max(1, g.count)) * 5)}
+                  pathOptions={{
+                    color: "#1f2937",
+                    weight: 1,
+                    fillColor: "#60a5fa",
+                    fillOpacity: 0.22,
+                  }}
+                >
+                  <Tooltip
+                    direction="top"
+                    offset={[0, -4]}
+                    opacity={0.95}
+                    interactive={false}
+                  >
+                    <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
+                      <strong>Live incidents (last 1h)</strong>
+                      <br />
+                      Reports at this point: {g.count}
+                      <br />
+                      Type: {g.incident_type_name || "Incident"}
+                    </div>
+                  </Tooltip>
+                </CircleMarker>
+              ))}
 
               {plottedHotspots
                 .filter(
