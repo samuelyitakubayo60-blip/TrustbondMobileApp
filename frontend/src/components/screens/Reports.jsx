@@ -303,7 +303,7 @@ const Reports = ({
           <select
             className="select"
             value={queuePreset}
-            title="Operational queue presets filter the list only; police screening unchanged"
+            title="Saved-search presets for DPC / IO / station leads — filters only; no change to verification pipeline"
             onChange={(e) => {
               const v = e.target.value;
               setQueuePreset(v);

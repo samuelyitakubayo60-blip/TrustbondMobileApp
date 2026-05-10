@@ -5,6 +5,7 @@ import { formatLocalDateTime } from "../../utils/dateTime";
 import {
   formatTechnicalStatus,
   formatCommunityConfirmation,
+  formatHotspotClusteringCue,
 } from "../../utils/reportOperationalLabels";
 
 const friendlyFlagReason = (reason) => {
@@ -2314,6 +2315,29 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   ) : null}
                 </div>
               </div>
+
+              {(() => {
+                const cue = formatHotspotClusteringCue(report);
+                return (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      fontSize: 11,
+                      lineHeight: 1.45,
+                      color: cue.excluded ? "var(--warning, #b45309)" : "var(--muted)",
+                      background: cue.excluded ? "rgba(251, 191, 36, 0.08)" : "var(--surface2)",
+                      border: `1px solid ${cue.excluded ? "rgba(251, 191, 36, 0.35)" : "var(--border2)"}`,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--text)" }}>
+                      Safety map / hotspot clustering
+                    </div>
+                    {cue.text}
+                  </div>
+                );
+              })()}
 
               <div style={{ marginTop: 12, padding: "10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
                 <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>Community Votes</div>

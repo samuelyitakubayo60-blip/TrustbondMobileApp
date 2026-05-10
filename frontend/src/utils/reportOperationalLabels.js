@@ -43,6 +43,70 @@ export function communityBadgeClass(report) {
   return "b-orange";
 }
 
+/** Mirrors backend hotspot_auto._is_report_eligible (police + leader gate when enabled server-side). */
+export function policeVerificationOkForHotspots(report) {
+  const status = (report?.status || "").trim().toLowerCase();
+  const verification = (report?.verification_status || "").trim().toLowerCase();
+  const ruleStatus = (report?.rule_status || "").trim().toLowerCase();
+  if (status === "rejected" || verification === "rejected" || ruleStatus === "rejected") {
+    return { ok: false, reason: "rejected" };
+  }
+  const officerConfirmed =
+    Array.isArray(report?.reviews) &&
+    report.reviews.some((rv) => (rv.decision || "").trim().toLowerCase() === "confirmed");
+  const policeOk =
+    verification === "verified" || status === "verified" || officerConfirmed;
+  return { ok: policeOk, reason: policeOk ? null : "police_pending" };
+}
+
+/** Mirrors backend leader_workflow.report_meets_leader_confirmation. */
+export function leaderConfirmationOkForHotspots(report) {
+  const st = (report?.leader_verification_status || "pending").trim().toLowerCase();
+  if (st === "rejected") return false;
+  return st === "confirmed";
+}
+
+/**
+ * One-line UX cue for DPC / IO: why this row may be absent from safety-map hotspot clusters.
+ * Server flags (leader gate, DPU requirement) can relax rules; copy stays accurate for default deployments.
+ */
+export function formatHotspotClusteringCue(report) {
+  const pv = policeVerificationOkForHotspots(report);
+  if (!pv.ok && pv.reason === "rejected") {
+    return {
+      excluded: true,
+      text: "Hotspot clustering: not included (report rejected).",
+    };
+  }
+  if (!pv.ok) {
+    return {
+      excluded: true,
+      text:
+        "Hotspot clustering: not included until police verification is complete (verification_status verified, report status verified, or officer review confirmed).",
+    };
+  }
+  if (!leaderConfirmationOkForHotspots(report)) {
+    const ls = (report?.leader_verification_status || "").trim().toLowerCase();
+    if (ls === "rejected") {
+      return {
+        excluded: true,
+        text:
+          "Hotspot clustering: not included when community confirmation is required (leader disputed).",
+      };
+    }
+    return {
+      excluded: true,
+      text:
+        "Hotspot clustering: not included while community confirmation is pending — many DPU deployments only cluster leader_verification_status = confirmed.",
+    };
+  }
+  return {
+    excluded: false,
+    text:
+      "Hotspot clustering: meets usual inputs (police verified + community confirmed for gated analytics). Exact behavior depends on server settings.",
+  };
+}
+
 export const REPORT_QUEUE_PRESETS = {
   none: {
     label: "All reports (clear queue filters)",
@@ -50,15 +114,15 @@ export const REPORT_QUEUE_PRESETS = {
     verification_status_filter: null,
     verification_status_in: null,
     hint:
-      "No queue preset — use dropdowns below. Technical status reflects police screening and AI; community shows local-leader confirmation (separate from screening).",
+      "No preset — use filters below. For DPC / IO / station leads: technical status is police screening and AI; community is local-leader confirmation (separate from screening).",
   },
   awaiting_leader: {
-    label: "Awaiting leader input",
+    label: "Awaiting leader input (my jurisdiction)",
     leader_confirmation: "pending",
     verification_status_filter: null,
     verification_status_in: null,
     hint:
-      "Reports where village/cell leaders have not yet confirmed community attestation (status blank, pending). Police screening may still run in parallel.",
+      "Saved search for DPC/IO: village/cell leaders have not confirmed community attestation yet. Station screening may still run in parallel.",
   },
   confirmed_screening: {
     label: "Leader confirmed · under police screening",
@@ -66,7 +130,7 @@ export const REPORT_QUEUE_PRESETS = {
     verification_status_filter: "under_review",
     verification_status_in: null,
     hint:
-      "Community attestation complete; incident is actively under officer / station screening.",
+      "For IO/DPC triage: community attestation done; incident still under officer or station screening (under_review).",
   },
   leader_rejected: {
     label: "Leader disputed / not confirmed",
@@ -74,22 +138,22 @@ export const REPORT_QUEUE_PRESETS = {
     verification_status_filter: null,
     verification_status_in: null,
     hint:
-      "Local leader flagged that the community narrative does not match or is unreliable. Review alongside technical screening outcomes.",
+      "DPC/IO queue: leader flagged narrative mismatch or unreliability. Compare with technical screening before closing out.",
   },
   station_need_action: {
-    label: "Station ops — screening queue",
+    label: "Station ops — police screening queue",
     leader_confirmation: null,
     verification_status_filter: null,
     verification_status_in: "pending,under_review",
     hint:
-      "Operational slice: reports still moving through verification_status pending or under_review (police workload). Combine with filters above as needed.",
+      "Station workload slice: verification_status pending or under_review (needs police action). Combine with location filters as needed.",
   },
   dpu_analytics_lens: {
-    label: "DPU lens — leader confirmed only",
+    label: "DPU / safety analytics lens — leader confirmed only",
     leader_confirmation: "confirmed",
     verification_status_filter: null,
     verification_status_in: null,
     hint:
-      "Same filter used for analytics that require community confirmation: incidents with leader_verification_status=confirmed align with gated DPU / sector views when that policy is enabled on the backend.",
+      "Aligns with gated DPU and sector views when the backend requires leader_verification_status = confirmed (same gate as many hotspot runs).",
   },
 };
