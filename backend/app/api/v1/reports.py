@@ -6238,8 +6238,7 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
         case_reports_table = CaseReport.__table__
         
         report = reports[0]  # Use first report as reference
-        case_count = db.query(Case).count()
-        case_number = f"CASE-{datetime.now().year}-{case_count + 1:04d}"
+        case_number = None
         
         high_priority_count = sum(1 for r in reports if r.priority == 'high')
         priority = 'high' if high_priority_count >= 1 else 'medium'  # Single high priority report makes case high priority
@@ -6266,27 +6265,57 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
             raw_u = getattr(itype, "default_special_assignment_unit", None) or ""
             default_unit = raw_u.strip() or None
 
-        case = Case(
-            case_id=uuid4(),
-            case_number=case_number,
-            title=title,
-            description=description,
-            incident_type_id=report.incident_type_id,
-            priority=priority,
-            status='open',
-            assigned_to_id=officer_id,
-            created_by=1,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-            report_count=len(reports),
-            location_id=report.location_id,
-            latitude=case_lat,
-            longitude=case_lon,
-            special_assignment_unit=default_unit,
-        )
-        
-        db.add(case)
-        db.flush()
+        # Collision-safe case number allocation under concurrent auto-case runs.
+        case = None
+        case_created = False
+        for _attempt in range(5):
+            now_year = datetime.now().year
+            prefix = f"CASE-{now_year}-"
+            latest = (
+                db.query(Case.case_number)
+                .filter(Case.case_number.like(f"{prefix}%"))
+                .order_by(Case.case_number.desc())
+                .first()
+            )
+            next_seq = 1
+            if latest and latest[0]:
+                try:
+                    next_seq = int(str(latest[0]).split("-")[-1]) + 1
+                except Exception:
+                    next_seq = 1
+            case_number = f"{prefix}{next_seq:04d}"
+
+            case = Case(
+                case_id=uuid4(),
+                case_number=case_number,
+                title=title,
+                description=description,
+                incident_type_id=report.incident_type_id,
+                priority=priority,
+                status='open',
+                assigned_to_id=officer_id,
+                created_by=1,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+                report_count=len(reports),
+                location_id=report.location_id,
+                latitude=case_lat,
+                longitude=case_lon,
+                special_assignment_unit=default_unit,
+            )
+            try:
+                db.add(case)
+                db.flush()
+                case_created = True
+                break
+            except IntegrityError as e:
+                db.rollback()
+                if "cases_case_number_key" not in str(e):
+                    raise
+                continue
+
+        if not case_created or case is None:
+            raise RuntimeError("Failed to allocate unique case number")
         
         # Link reports to case
         for report in reports:

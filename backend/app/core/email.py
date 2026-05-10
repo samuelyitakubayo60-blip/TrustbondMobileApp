@@ -4,6 +4,9 @@ Uses settings from config; no-op if SMTP not configured.
 """
 import smtplib
 import socket
+import json
+from urllib import request as urlrequest
+from urllib import error as urlerror
 from html import escape
 from pathlib import Path
 from email.mime.text import MIMEText
@@ -18,6 +21,12 @@ EMAIL_LOGO_PATH = Path(__file__).resolve().parents[2] / "logo.jpeg"
 
 
 def is_smtp_configured() -> bool:
+    # Backward-compatible name used across API handlers.
+    # True means "an email provider is configured", not strictly SMTP.
+    provider = (getattr(settings, "email_provider", "smtp") or "smtp").strip().lower()
+    if provider == "resend":
+        from_addr = getattr(settings, "resend_from", None) or settings.smtp_from or settings.smtp_user
+        return bool(getattr(settings, "resend_api_key", None) and from_addr)
     return bool(settings.smtp_host and settings.smtp_user and settings.smtp_pass)
 
 
@@ -29,7 +38,71 @@ def send_email(to: str, subject: str, body_plain: str, body_html: str | None = N
     """
     Send an email. Returns (True, None) if sent, (False, error_message) if not configured or send failed.
     """
-    if not is_smtp_configured():
+    provider = (getattr(settings, "email_provider", "smtp") or "smtp").strip().lower()
+    if provider == "resend":
+        return _send_email_via_resend(to, subject, body_plain, body_html)
+    return _send_email_via_smtp(to, subject, body_plain, body_html)
+
+
+def _send_email_via_resend(to: str, subject: str, body_plain: str, body_html: str | None = None) -> tuple[bool, str | None]:
+    api_key = getattr(settings, "resend_api_key", None)
+    from_addr = getattr(settings, "resend_from", None) or settings.smtp_from or settings.smtp_user
+    if not api_key or not from_addr:
+        return False, "Resend not configured (RESEND_API_KEY and RESEND_FROM or SMTP_FROM required)"
+    payload: dict[str, object] = {
+        "from": from_addr,
+        "to": [to],
+        "subject": subject,
+        "text": body_plain,
+    }
+    if body_html:
+        payload["html"] = body_html
+    req = urlrequest.Request(
+        url="https://api.resend.com/emails",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        timeout = max(3, int(getattr(settings, "smtp_timeout_seconds", 12) or 12))
+        with urlrequest.urlopen(req, timeout=timeout) as resp:
+            if 200 <= int(getattr(resp, "status", 0)) < 300:
+                return True, None
+            return False, f"Resend send failed with status {getattr(resp, 'status', 'unknown')}"
+    except urlerror.HTTPError as e:
+        try:
+            body = e.read().decode("utf-8", errors="ignore")
+        except Exception:
+            body = ""
+        err = f"Resend HTTP error {e.code}: {body or e.reason}"
+        try:
+            parsed = json.loads(body) if body else {}
+            code = str(parsed.get("code", "")).strip()
+            message = str(parsed.get("message", "")).strip()
+            if code == "1010":
+                # Common Resend auth/sender-identity policy failure.
+                err = (
+                    "Resend rejected the sender identity (code 1010). "
+                    "Set RESEND_FROM to a verified sender/domain in Resend "
+                    "(for testing: onboarding@resend.dev), then redeploy."
+                )
+            elif message:
+                err = f"Resend HTTP error {e.code}: {message}"
+        except Exception:
+            pass
+        print(f"[Email] Send failed: {err}")
+        return False, err
+    except Exception as e:
+        err = str(e).strip() or "Resend send failed"
+        print(f"[Email] Send failed: {err}")
+        return False, err
+
+
+def _send_email_via_smtp(to: str, subject: str, body_plain: str, body_html: str | None = None) -> tuple[bool, str | None]:
+    if not (settings.smtp_host and settings.smtp_user and settings.smtp_pass):
         return False, "SMTP not configured (SMTP_HOST, SMTP_USER, SMTP_PASS required)"
     from_addr = settings.smtp_from or settings.smtp_user
     embed_logo = bool(body_html and EMAIL_LOGO_PATH.exists())

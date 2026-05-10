@@ -2295,7 +2295,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
 
               <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
                 <div style={{ padding: "10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
-                  <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 4 }}>Technical status (station / AI)</div>
+                  <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 4 }}>AI + Police verification</div>
                   <div style={{ fontSize: "11px", color: "var(--muted)", marginBottom: 6 }}>
                     {formatTechnicalStatus(report)}
                   </div>

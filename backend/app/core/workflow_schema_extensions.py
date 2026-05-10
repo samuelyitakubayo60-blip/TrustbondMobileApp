@@ -5,6 +5,8 @@ Used on startup (so production matches ORM) and by scripts/ensure_workflow_leade
 
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
@@ -21,8 +23,14 @@ DDL_STATEMENTS: tuple[str, ...] = (
     """,
     """
     ALTER TABLE cases ADD COLUMN IF NOT EXISTS special_assignment_unit VARCHAR(80);
+    """,
+    """
     ALTER TABLE cases ADD COLUMN IF NOT EXISTS rib_handed_over_at TIMESTAMPTZ;
+    """,
+    """
     ALTER TABLE cases ADD COLUMN IF NOT EXISTS rib_handover_summary TEXT;
+    """,
+    """
     ALTER TABLE cases ADD COLUMN IF NOT EXISTS rib_handover_prerequisites_acknowledged BOOLEAN NOT NULL DEFAULT FALSE;
     """,
     """
@@ -39,6 +47,7 @@ DDL_STATEMENTS: tuple[str, ...] = (
     ALTER TABLE incident_types ADD COLUMN IF NOT EXISTS default_special_assignment_unit VARCHAR(80);
     """,
 )
+_log = logging.getLogger(__name__)
 
 # One-time-style data fix; run from the ensure script, not every app startup.
 LEADER_VERIFIED_BACKFILL_SQL = """
@@ -51,9 +60,13 @@ WHERE verification_status = 'verified'
 
 def apply_workflow_schema_ddl(engine: Engine) -> None:
     """Add missing columns/indexes. Safe to call on every deploy."""
-    with engine.begin() as conn:
-        for stmt in DDL_STATEMENTS:
-            conn.execute(text(stmt))
+    for stmt in DDL_STATEMENTS:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(stmt))
+        except Exception as exc:
+            # Best-effort startup alignment: continue so one timeout/lock does not block other fixes.
+            _log.warning("Workflow DDL statement failed: %s", exc)
 
 
 def apply_leader_verified_backfill(engine: Engine) -> None:

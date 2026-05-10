@@ -2,19 +2,27 @@
 
 export function formatTechnicalStatus(report) {
   const vs = (report?.verification_status || "").trim().toLowerCase();
-  const st = (report?.status || "").trim().toLowerCase();
   const rs = (report?.rule_status || "").trim().toLowerCase();
-  const verified = !!report?.verified_at;
-  const parts = [];
-  if (vs)
-    parts.push(
-      vs === "under_review"
-        ? "Police screening: Under review"
-        : `Police verification: ${vs.replaceAll("_", " ")}`,
-    );
-  else if (st || rs) parts.push(`Report status: ${st || rs || "—"}`);
-  if (verified) parts.push("Officer action recorded");
-  return parts.filter(Boolean).join(" · ") || "—";
+  const policeVerified = vs === "verified" || vs === "rejected";
+
+  const aiParts = [];
+  if (rs === "passed") aiParts.push("AI verification: passed");
+  else if (rs === "flagged") aiParts.push("AI verification: needs review");
+  else if (rs === "rejected") aiParts.push("AI verification: rejected");
+  else if (rs === "pending") aiParts.push("AI verification: pending");
+
+  // Police confirmation is the human / station step.
+  const policeParts = [];
+  if (vs === "under_review") policeParts.push("Police review: pending");
+  else if (vs === "pending") policeParts.push("Police review: pending");
+  else if (vs === "verified") {
+    policeParts.push(report?.verified_by ? "Police confirmed" : "Auto-verified (AI)");
+  } else if (vs === "rejected") {
+    policeParts.push("Police rejected");
+  }
+
+  const parts = [...aiParts, ...policeParts].filter(Boolean);
+  return parts.join(" · ") || "—";
 }
 
 export function formatCommunityConfirmation(report) {
@@ -114,7 +122,7 @@ export const REPORT_QUEUE_PRESETS = {
     verification_status_filter: null,
     verification_status_in: null,
     hint:
-      "No preset — use filters below. For DPC / IO / station leads: technical status is police screening and AI; community is local-leader confirmation (separate from screening).",
+      "No preset — use filters below. AI verification is separate from police confirmation; community confirmation is local-leader attestation (separate from both).",
   },
   awaiting_leader: {
     label: "Awaiting leader input (my jurisdiction)",

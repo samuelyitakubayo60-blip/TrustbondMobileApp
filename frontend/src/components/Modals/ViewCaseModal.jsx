@@ -336,7 +336,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                     <th>Report</th>
                     <th>Type</th>
                     <th>Village</th>
-                    <th>Technical (screening)</th>
+                    <th>AI + Police verification</th>
                     <th>Community (leader)</th>
                     <th>Date</th>
                     <th>Actions</th>

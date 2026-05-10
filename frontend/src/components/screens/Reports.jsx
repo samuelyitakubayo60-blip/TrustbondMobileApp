@@ -442,7 +442,7 @@ const Reports = ({
                 <th style={{ minWidth: 110, whiteSpace: "nowrap" }}>
                   Priority
                 </th>
-                <th style={{ minWidth: 150 }}>Technical (screening)</th>
+                <th style={{ minWidth: 180 }}>AI + Police verification</th>
                 <th style={{ minWidth: 150 }}>Community (leader)</th>
                 <th>Date</th>
                 <th>Action</th>
@@ -619,18 +619,15 @@ const Reports = ({
                           }`}
                           style={{ display: "inline-block", marginBottom: 6 }}
                         >
-                          {vs === "pending"
-                            ? "Verification: pending"
-                            : vs.replaceAll("_", " ")}
+                          {vs === "pending" || vs === "under_review"
+                            ? "Police: pending"
+                            : vs === "verified"
+                              ? "Police: confirmed"
+                              : "Police: rejected"}
                         </span>
                       ) : (
                         <span className="badge b-gray">{r.status || "—"}</span>
                       )}
-                      {(r.rule_status || r.status) ? (
-                        <div style={{ marginTop: 4, color: "var(--muted)" }}>
-                          Rule: {String(r.rule_status || "—")}
-                        </div>
-                      ) : null}
                       {r.flag_reason && (
                         <div style={{ marginTop: 6, fontSize: "10px", color: "var(--muted)", maxWidth: 220 }}>
                           {friendlyFlagReason(r.flag_reason)}
