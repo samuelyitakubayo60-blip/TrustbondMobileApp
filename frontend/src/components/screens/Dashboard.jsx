@@ -10,6 +10,7 @@ const DeploymentDecisionsSection = ({ user, api, goToScreen }) => {
   const [incidents, setIncidents] = useState([]);
   const [specialUnits, setSpecialUnits] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [unitsLoading, setUnitsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('pending_deployment');
   const [error, setError] = useState(null);
   const [showDeploymentForm, setShowDeploymentForm] = useState(false);
@@ -28,6 +29,7 @@ const DeploymentDecisionsSection = ({ user, api, goToScreen }) => {
 
   const loadSpecialUnits = async () => {
     try {
+      setUnitsLoading(true);
       const token = getToken();
       console.log('Auth token available:', !!token);
       console.log('User role:', user?.role);
@@ -43,6 +45,8 @@ const DeploymentDecisionsSection = ({ user, api, goToScreen }) => {
       if (err.status === 401) {
         setError('Authentication required. Please log in again.');
       }
+    } finally {
+      setUnitsLoading(false);
     }
   };
 
@@ -189,18 +193,33 @@ const DeploymentDecisionsSection = ({ user, api, goToScreen }) => {
             <div style={{ display: 'grid', gap: '12px', marginBottom: '16px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 'bold' }}>Assigned Unit</label>
-                <select 
-                  style={{ width: '100%', padding: '8px', border: '1px solid #dee2e6', borderRadius: '4px' }}
-                  value={deploymentData.assigned_unit}
-                  onChange={(e) => setDeploymentData({...deploymentData, assigned_unit: e.target.value})}
-                >
-                  <option value="">Select Unit</option>
-                  {specialUnits.map((unit) => (
-                    <option key={unit.unit_id} value={unit.unit_code}>
-                      {unit.unit_name}
-                    </option>
-                  ))}
-                </select>
+                {unitsLoading ? (
+                  <select 
+                    style={{ width: '100%', padding: '8px', border: '1px solid #dee2e6', borderRadius: '4px', backgroundColor: '#f8f9fa' }}
+                    disabled
+                  >
+                    <option>Loading units...</option>
+                  </select>
+                ) : (
+                  <select 
+                    style={{ width: '100%', padding: '8px', border: '1px solid #dee2e6', borderRadius: '4px' }}
+                    value={deploymentData.assigned_unit}
+                    onChange={(e) => setDeploymentData({...deploymentData, assigned_unit: e.target.value})}
+                    required
+                  >
+                    <option value="" disabled>Select Unit</option>
+                    {specialUnits.map((unit) => (
+                      <option key={unit.unit_id} value={unit.unit_code}>
+                        {unit.unit_name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {!unitsLoading && specialUnits.length === 0 && (
+                  <div style={{ fontSize: '12px', color: '#dc3545', marginTop: '4px' }}>
+                    No special units available. Please check your connection.
+                  </div>
+                )}
               </div>
               
               <div>
