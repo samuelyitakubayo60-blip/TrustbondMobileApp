@@ -55,6 +55,7 @@ from app.api.v1 import (
     leader_reports,
     local_leaders_admin,
     deployment_decisions,
+    special_assignment_units,
 )
 
 
@@ -247,6 +248,7 @@ app.include_router(leader_auth.router, prefix="/api/v1")
 app.include_router(leader_reports.router, prefix="/api/v1")
 app.include_router(local_leaders_admin.router, prefix="/api/v1")
 app.include_router(deployment_decisions.router, prefix="/api/v1/deployment-decisions")
+app.include_router(special_assignment_units.router, prefix="/api/v1/special-assignment-units")
 
 @app.get("/health")
 def health():

@@ -11,6 +11,7 @@ from . import (
     leader_reports,
     local_leaders_admin,
     deployment_decisions,
+    special_assignment_units,
 )
 
 __all__ = [
@@ -26,5 +27,6 @@ __all__ = [
     "leader_reports",
     "local_leaders_admin",
     "deployment_decisions",
+    "special_assignment_units",
 ]
 

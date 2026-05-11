@@ -14,7 +14,8 @@ from app.schemas.deployment_decision import (
     SuspectVictimCreate, SuspectVictimUpdate, SuspectVictimResponse,
     CommanderDashboardIncident, LeaderMobileIncident
 )
-from app.api.deps import get_current_police_user, get_current_local_leader
+from app.api.v1.auth import get_current_user, get_current_admin_or_supervisor
+from app.api.v1.leader_auth import get_current_local_leader
 from app.core.leader_workflow import leader_gate_enabled, report_meets_leader_confirmation
 from app.api.v1.notifications import create_role_notifications, create_notification
 
@@ -27,7 +28,7 @@ def get_commander_dashboard(
     limit: int = 50,
     status_filter: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: PoliceUser = Depends(get_current_police_user)
+    current_user: PoliceUser = Depends(get_current_admin_or_supervisor)
 ):
     """Get incidents ready for commander deployment decisions"""
     # Only supervisors and admins (acting as station commanders) can access
@@ -103,7 +104,7 @@ def create_deployment_decision(
     decision: DeploymentDecisionCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: PoliceUser = Depends(get_current_police_user)
+    current_user: PoliceUser = Depends(get_current_admin_or_supervisor)
 ):
     """Create a deployment decision for a leader-confirmed incident"""
     # Only supervisors and admins can make deployment decisions
@@ -176,7 +177,7 @@ def update_deployment_decision(
     decision_id: int,
     update: DeploymentDecisionUpdate,
     db: Session = Depends(get_db),
-    current_user: PoliceUser = Depends(get_current_police_user)
+    current_user: PoliceUser = Depends(get_current_admin_or_supervisor)
 ):
     """Update deployment decision status and outcome"""
     decision = db.query(DeploymentDecision).filter(DeploymentDecision.decision_id == decision_id).first()
@@ -284,7 +285,7 @@ def get_leader_mobile_incidents(
 def create_suspect_victim(
     tracking: SuspectVictimCreate,
     db: Session = Depends(get_db),
-    current_user: PoliceUser = Depends(get_current_police_user)
+    current_user: PoliceUser = Depends(get_current_admin_or_supervisor)
 ):
     """Add suspect/victim tracking to a case"""
     # Verify case exists
@@ -332,7 +333,7 @@ def update_suspect_victim(
     tracking_id: int,
     update: SuspectVictimUpdate,
     db: Session = Depends(get_db),
-    current_user: PoliceUser = Depends(get_current_police_user)
+    current_user: PoliceUser = Depends(get_current_admin_or_supervisor)
 ):
     """Update suspect/victim tracking (including RIB handover)"""
     tracking = db.query(SuspectVictimTracking).filter(SuspectVictimTracking.tracking_id == tracking_id).first()
@@ -389,7 +390,7 @@ def update_suspect_victim(
 def get_case_suspect_victims(
     case_id: str,
     db: Session = Depends(get_db),
-    current_user: PoliceUser = Depends(get_current_police_user)
+    current_user: PoliceUser = Depends(get_current_admin_or_supervisor)
 ):
     """Get all suspect/victim tracking for a case"""
     tracking_records = db.query(SuspectVictimTracking).filter(

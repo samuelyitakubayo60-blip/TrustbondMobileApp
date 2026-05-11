@@ -67,6 +67,43 @@ def run_migration():
                     )
                 """))
                 
+                # Create special_assignment_units table
+                print("Creating special_assignment_units table...")
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS special_assignment_units (
+                        unit_id SERIAL PRIMARY KEY,
+                        unit_code VARCHAR(50) NOT NULL UNIQUE,
+                        unit_name VARCHAR(100) NOT NULL,
+                        description VARCHAR(500),
+                        is_active BOOLEAN DEFAULT TRUE,
+                        requires_commander_approval BOOLEAN DEFAULT TRUE,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """))
+                
+                # Insert standard special assignment units
+                print("Inserting standard special assignment units...")
+                units = [
+                    ('general_patrol', 'General Patrol', 'Regular patrol officers for routine incidents'),
+                    ('quick_response', 'Quick Response Team', 'Rapid response team for urgent incidents'),
+                    ('counter_terror', 'Counter Terrorism', 'Specialized counter-terrorism unit'),
+                    ('fire_rescue', 'Fire & Rescue', 'Fire fighting and rescue operations'),
+                    ('rib', 'Rwanda Investigation Bureau', 'National investigation bureau for serious cases')
+                ]
+                
+                for unit_code, unit_name, description in units:
+                    conn.execute(text("""
+                        INSERT INTO special_assignment_units (unit_code, unit_name, description, requires_commander_approval)
+                        VALUES (:unit_code, :unit_name, :description, :requires_approval)
+                        ON CONFLICT (unit_code) DO NOTHING
+                    """), {
+                        'unit_code': unit_code,
+                        'unit_name': unit_name,
+                        'description': description,
+                        'requires_approval': unit_code != 'general_patrol'  # General patrol doesn't require approval
+                    })
+                
                 # Create indexes
                 print("Creating indexes...")
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_deployment_decisions_report_id ON deployment_decisions(report_id)"))
@@ -75,6 +112,7 @@ def run_migration():
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_suspect_victim_tracking_case_id ON suspect_victim_tracking(case_id)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_suspect_victim_tracking_person_type ON suspect_victim_tracking(person_type)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_suspect_victim_tracking_status ON suspect_victim_tracking(status)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_special_assignment_units_unit_code ON special_assignment_units(unit_code)"))
                 
                 # Commit transaction
                 trans.commit()

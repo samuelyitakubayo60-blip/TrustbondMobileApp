@@ -4,6 +4,230 @@ import { useAuth } from "../../context/AuthContext";
 import { formatRelativeTime } from "../../utils/dateTime";
 import AdvancedGeographicCharts from "../charts/AdvancedGeographicCharts";
 
+// Deployment Decisions Section for Supervisors/Admins
+const DeploymentDecisionsSection = ({ user, api, goToScreen }) => {
+  const [incidents, setIncidents] = useState([]);
+  const [specialUnits, setSpecialUnits] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('pending_deployment');
+  const [error, setError] = useState(null);
+  const [showDeploymentForm, setShowDeploymentForm] = useState(false);
+  const [selectedIncident, setSelectedIncident] = useState(null);
+  const [deploymentData, setDeploymentData] = useState({
+    deployment_status: 'pending',
+    assigned_unit: '',
+    deployment_priority: 'medium',
+    decision_note: ''
+  });
+
+  useEffect(() => {
+    loadIncidents();
+    loadSpecialUnits();
+  }, [statusFilter]);
+
+  const loadSpecialUnits = async () => {
+    try {
+      const response = await api.get('/special-assignment-units/');
+      setSpecialUnits(response.data);
+    } catch (err) {
+      console.error('Failed to load special units:', err);
+    }
+  };
+
+  const loadIncidents = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get(`/deployment-decisions/commander-dashboard`, {
+        params: { status_filter: statusFilter }
+      });
+      setIncidents(response.data);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to load incidents');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeploymentDecision = async (incident) => {
+    setSelectedIncident(incident);
+    setShowDeploymentForm(true);
+    setDeploymentData({
+      deployment_status: 'deployed',
+      assigned_unit: '',
+      deployment_priority: incident.priority || 'medium',
+      decision_note: ''
+    });
+  };
+
+  const submitDeploymentDecision = async () => {
+    try {
+      await api.post('/deployment-decisions/', {
+        report_id: selectedIncident.report_id,
+        ...deploymentData
+      });
+      setShowDeploymentForm(false);
+      setSelectedIncident(null);
+      loadIncidents();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to submit deployment decision');
+    }
+  };
+
+  if (loading) return <div className="card"><div className="loading-state">Loading deployment decisions...</div></div>;
+  if (error) return <div className="card"><div className="alert-banner">{error}</div></div>;
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title">Leader-Confirmed Incidents</div>
+        <select 
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={{ padding: '6px 12px', border: '1px solid #dee2e6', borderRadius: '4px' }}
+        >
+          <option value="pending_deployment">Pending Deployment</option>
+          <option value="deployed">Deployed</option>
+        </select>
+      </div>
+      
+      {!incidents.length ? (
+        <div style={{ padding: '40px', textAlign: 'center', color: '#6c757d' }}>
+          No incidents {statusFilter === 'pending_deployment' ? 'pending deployment' : 'deployed'}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: '16px', padding: '16px' }}>
+          {incidents.map((incident) => (
+            <div key={incident.report_id} style={{ 
+              border: '1px solid #dee2e6', 
+              borderRadius: '8px', 
+              padding: '16px',
+              backgroundColor: '#f8f9fa'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 4px 0', color: '#495057' }}>{incident.incident_type}</h4>
+                  <p style={{ margin: '0', fontSize: '14px', color: '#6c757d' }}>
+                    {incident.location_name} • {incident.village_name}
+                  </p>
+                </div>
+                <span style={{ 
+                  backgroundColor: '#28a745', 
+                  color: 'white', 
+                  padding: '4px 8px', 
+                  borderRadius: '4px', 
+                  fontSize: '12px' 
+                }}>
+                  LEADER CONFIRMED
+                </span>
+              </div>
+              
+              <p style={{ margin: '0 0 12px 0', fontSize: '14px' }}>{incident.description}</p>
+              
+              <div style={{ fontSize: '12px', color: '#6c757d', marginBottom: '12px' }}>
+                <div>Reported: {new Date(incident.reported_at).toLocaleDateString()}</div>
+                <div>Verified by: {incident.leader_verified_by_name} ({incident.leader_role})</div>
+              </div>
+              
+              {statusFilter === 'pending_deployment' ? (
+                <button
+                  className="btn btn-primary"
+                  onClick={() => handleDeploymentDecision(incident)}
+                  style={{ padding: '8px 16px', fontSize: '14px' }}
+                >
+                  Make Deployment Decision
+                </button>
+              ) : (
+                <div style={{ fontSize: '12px', color: '#6c757d' }}>
+                  <strong>Deployment:</strong> {incident.deployment_decision?.deployment_status || 'Not deployed'}
+                  {incident.deployment_decision?.assigned_unit && (
+                    <span> • {specialUnits.find(u => u.unit_code === incident.deployment_decision.assigned_unit)?.unit_name || incident.deployment_decision.assigned_unit}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Deployment Decision Modal */}
+      {showDeploymentForm && selectedIncident && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '8px', maxWidth: '500px', width: '90%' }}>
+            <h3 style={{ margin: '0 0 16px 0' }}>Deployment Decision</h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '14px', color: '#6c757d' }}>
+              {selectedIncident.incident_type} at {selectedIncident.location_name}
+            </p>
+            
+            <div style={{ display: 'grid', gap: '12px', marginBottom: '16px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 'bold' }}>Assigned Unit</label>
+                <select 
+                  style={{ width: '100%', padding: '8px', border: '1px solid #dee2e6', borderRadius: '4px' }}
+                  value={deploymentData.assigned_unit}
+                  onChange={(e) => setDeploymentData({...deploymentData, assigned_unit: e.target.value})}
+                >
+                  <option value="">Select Unit</option>
+                  {specialUnits.map((unit) => (
+                    <option key={unit.unit_id} value={unit.unit_code}>
+                      {unit.unit_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 'bold' }}>Priority</label>
+                <select 
+                  style={{ width: '100%', padding: '8px', border: '1px solid #dee2e6', borderRadius: '4px' }}
+                  value={deploymentData.deployment_priority}
+                  onChange={(e) => setDeploymentData({...deploymentData, deployment_priority: e.target.value})}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 'bold' }}>Notes</label>
+                <textarea 
+                  style={{ width: '100%', padding: '8px', border: '1px solid #dee2e6', borderRadius: '4px', minHeight: '60px' }}
+                  value={deploymentData.decision_note}
+                  onChange={(e) => setDeploymentData({...deploymentData, decision_note: e.target.value})}
+                  placeholder="Additional deployment notes..."
+                />
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowDeploymentForm(false)}
+                style={{ padding: '8px 16px' }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={submitDeploymentDecision}
+                disabled={!deploymentData.assigned_unit}
+                style={{ padding: '8px 16px' }}
+              >
+                Deploy Unit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
   const { user } = useAuth();
   const role = user?.role || "officer";
@@ -417,6 +641,15 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
           />
         </div>
       </div>
+
+      {/* Supervisor Deployment Decisions Section */}
+      {(role === "supervisor" || role === "admin") && (
+        <DeploymentDecisionsSection 
+          user={user} 
+          api={api} 
+          goToScreen={goToScreen} 
+        />
+      )}
 
       <div className="main-row">
         <div className="card">
