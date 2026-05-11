@@ -3,6 +3,7 @@ import api from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { formatRelativeTime } from "../../utils/dateTime";
 import AdvancedGeographicCharts from "../charts/AdvancedGeographicCharts";
+import { getToken } from "../../api/client";
 
 // Deployment Decisions Section for Supervisors/Admins
 const DeploymentDecisionsSection = ({ user, api, goToScreen }) => {
@@ -27,22 +28,45 @@ const DeploymentDecisionsSection = ({ user, api, goToScreen }) => {
 
   const loadSpecialUnits = async () => {
     try {
-      const response = await api.get('/special-assignment-units/');
-      setSpecialUnits(response.data);
+      const token = getToken();
+      console.log('Auth token available:', !!token);
+      console.log('User role:', user?.role);
+      
+      const response = await api.get('/api/v1/special-assignment-units/');
+      console.log('Special units API response:', response);
+      setSpecialUnits(response.data || response);
     } catch (err) {
       console.error('Failed to load special units:', err);
+      console.error('Error details:', err.response);
+      console.error('Error status:', err.status);
+      
+      if (err.status === 401) {
+        setError('Authentication required. Please log in again.');
+      }
     }
   };
 
   const loadIncidents = async () => {
     try {
       setLoading(true);
-      const response = await api.get(`/deployment-decisions/commander-dashboard`, {
+      const token = getToken();
+      console.log('Auth token available for incidents:', !!token);
+      
+      const response = await api.get(`/api/v1/deployment-decisions/commander-dashboard`, {
         params: { status_filter: statusFilter }
       });
-      setIncidents(response.data);
+      console.log('Incidents API response:', response);
+      setIncidents(response.data || response);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to load incidents');
+      console.error('Failed to load incidents:', err);
+      console.error('Error details:', err.response);
+      console.error('Error status:', err.status);
+      
+      if (err.status === 401) {
+        setError('Authentication required. Please log in again.');
+      } else {
+        setError(err.response?.data?.detail || 'Failed to load incidents');
+      }
     } finally {
       setLoading(false);
     }
@@ -61,7 +85,7 @@ const DeploymentDecisionsSection = ({ user, api, goToScreen }) => {
 
   const submitDeploymentDecision = async () => {
     try {
-      await api.post('/deployment-decisions/', {
+      await api.post('/api/v1/deployment-decisions/', {
         report_id: selectedIncident.report_id,
         ...deploymentData
       });
