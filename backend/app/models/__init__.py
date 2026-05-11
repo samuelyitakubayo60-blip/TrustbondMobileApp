@@ -20,6 +20,7 @@ from app.models.station_coverage import StationCoverageCell
 from app.models.local_leader import LocalLeader
 from app.models.local_leader_coverage import LocalLeaderCoverageLocation
 from app.models.local_leader_auth_code import LocalLeaderAuthCode
+from app.models.deployment_decision import DeploymentDecision, SuspectVictimTracking
 
 __all__ = [
     "Base",
@@ -45,4 +46,6 @@ __all__ = [
     "LocalLeader",
     "LocalLeaderCoverageLocation",
     "LocalLeaderAuthCode",
+    "DeploymentDecision",
+    "SuspectVictimTracking",
 ]

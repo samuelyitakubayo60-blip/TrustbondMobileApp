@@ -9,6 +9,7 @@ import json
 from app.database import get_db
 from app.models.location import Location
 from app.schemas.location import LocationResponse
+from app.core.village_lookup import get_village_location_info
 
 router = APIRouter(prefix="/public/locations", tags=["public"])
 
@@ -193,3 +194,30 @@ def locations_geojson(
         )
     return {"type": "FeatureCollection", "features": features}
 
+
+@router.get("/resolve")
+def resolve_coordinates(
+    lat: float = Query(..., ge=-90, le=90, description="WGS84 latitude"),
+    lon: float = Query(..., ge=-180, le=180, description="WGS84 longitude"),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Point-in-polygon lookup against PostGIS `locations` (village polygons).
+
+    Use this to verify what the server thinks your coordinates resolve to — e.g. Kigali
+    will return `inside_village_polygon: false` if villages are only loaded for Musanze.
+    """
+    info = get_village_location_info(db, lat, lon)
+    if not info:
+        return {
+            "inside_village_polygon": False,
+            "latitude": lat,
+            "longitude": lon,
+            "hint": "No village polygon contains this point in the database.",
+        }
+    return {
+        "inside_village_polygon": True,
+        "latitude": lat,
+        "longitude": lon,
+        **info,
+    }

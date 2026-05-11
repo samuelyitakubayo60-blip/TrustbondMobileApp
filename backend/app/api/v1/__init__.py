@@ -10,6 +10,7 @@ from . import (
     leader_auth,
     leader_reports,
     local_leaders_admin,
+    deployment_decisions,
 )
 
 __all__ = [
@@ -24,5 +25,6 @@ __all__ = [
     "leader_auth",
     "leader_reports",
     "local_leaders_admin",
+    "deployment_decisions",
 ]
 

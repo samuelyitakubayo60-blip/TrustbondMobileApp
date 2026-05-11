@@ -3,6 +3,7 @@ import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import EditCaseModal from '../Modals/EditCaseModal';
 import ViewCaseModal from '../Modals/ViewCaseModal';
+import { getRoleDisplayName, canHandoverToRib } from '../../utils/roleMapping';
 
 const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
   const { user: me } = useAuth();
@@ -260,6 +261,27 @@ const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
                   }}
                 >
                   Update
+                </button>
+              )}
+              {canHandoverToRib(role) && c.status === 'closed' && !c.rib_handed_over_at && (
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={async () => {
+                    const confirmed = window.confirm('Hand over this case to RIB? This will mark the case as transferred to the Rwanda Investigation Bureau.');
+                    if (!confirmed) return;
+                    try {
+                      await api.put(`/api/v1/cases/${c.case_id}`, {
+                        rib_handed_over_at: new Date().toISOString(),
+                        rib_handover_summary: 'Case handed over to RIB for further investigation',
+                        status: 'handed_to_rib'
+                      });
+                      reload();
+                    } catch (e) {
+                      window.alert(e?.message || 'Failed to hand over case to RIB.');
+                    }
+                  }}
+                >
+                  Hand to RIB
                 </button>
               )}
               {isAdminOrSupervisor && (

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { staffRoleLabel } from '../../utils/roleLabels';
+import { getRoleDisplayName } from '../../utils/roleMapping';
 
 const PAGE_SIZE = 20;
 

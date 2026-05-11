@@ -48,6 +48,8 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   double? _userLat;
   double? _userLng;
   VillageLocation? _userVillage;
+  /// Shown when GPS is known but [\_userVillage] is null (e.g. Kigali — outside Musanze polygons).
+  String? _userLocationCaption;
   bool _locatingUser = false;
   bool _loadingHotspots = false;
   List<Hotspot> _hotspots = [];
@@ -181,10 +183,18 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     try {
       final result = await _locationService.getFullLocation();
       if (result.hasPosition && mounted) {
+        final lat = result.latitude!;
+        final lng = result.longitude!;
+        final caption = result.hasVillage
+            ? null
+            : 'Outside Musanze village boundaries — '
+                '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)} '
+                '(map tiles show your real position)';
         setState(() {
-          _userLat = result.latitude;
-          _userLng = result.longitude;
+          _userLat = lat;
+          _userLng = lng;
           _userVillage = result.village;
+          _userLocationCaption = caption;
           _locatingUser = false;
         });
         // Re-query hotspots with nearby filter once accurate location is available.
@@ -1017,7 +1027,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
             ),
           ),
                     // Current location banner
-          if (_userVillage != null)
+          if (_userVillage != null || _userLocationCaption != null)
             Positioned(
               top: 8,
               left: 10,
@@ -1039,12 +1049,15 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'You are in ${_userVillage!.village}, ${_userVillage!.cell}',
+                        _userVillage != null
+                            ? 'You are in ${_userVillage!.village}, ${_userVillage!.cell}'
+                            : _userLocationCaption!,
                         style: const TextStyle(
                             fontSize: 11,
                             color: AppColors.accent,
                             fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis,
+                        maxLines: 3,
                       ),
                     ),
                   ],

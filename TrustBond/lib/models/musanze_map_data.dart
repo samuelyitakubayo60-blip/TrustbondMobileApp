@@ -254,36 +254,55 @@ class MusanzeMapData {
     return null;
   }
 
+  /// Max distance (meters) from GPS to a village centroid for "nearest" fallback.
+  /// Prevents labeling Kigali (or anywhere far from Musanze) as a random Musanze village.
+  static const double nearestFallbackMaxMeters = 22000;
+
+  static double _haversineMeters(double lat1, double lon1, double lat2, double lon2) {
+    const earthRadius = 6371000.0;
+    final dLat = _degToRad(lat2 - lat1);
+    final dLon = _degToRad(lon2 - lon1);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_degToRad(lat1)) *
+            math.cos(_degToRad(lat2)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return earthRadius * c;
+  }
+
+  static double _degToRad(double d) => d * math.pi / 180.0;
+
   /// Find the nearest village to a GPS point (fallback when point-in-polygon misses).
+  /// Outside [nearestFallbackMaxMeters] of the closest centroid → null (do not guess).
   VillageLocation? findNearestVillage(double latitude, double longitude) {
     // First try exact match
     final exact = findVillage(latitude, longitude);
     if (exact != null) return exact;
 
-    // Fallback: find the closest village centroid
-    final point = ui.Offset(longitude, latitude);
-    double minDist = double.infinity;
+    // Fallback only when still plausibly near this dataset (e.g. GPS drift at a border).
+    double minMeters = double.infinity;
     MapFeature? closest;
 
     for (final feature in features) {
       for (final ring in feature.rings) {
         if (ring.isEmpty) continue;
-        // Compute centroid of this ring
-        double sumX = 0, sumY = 0;
+        double sumLng = 0, sumLat = 0;
         for (final pt in ring) {
-          sumX += pt.dx;
-          sumY += pt.dy;
+          sumLng += pt.dx;
+          sumLat += pt.dy;
         }
-        final centroid = ui.Offset(sumX / ring.length, sumY / ring.length);
-        final dist = _distance(point, centroid);
-        if (dist < minDist) {
-          minDist = dist;
+        final cLat = sumLat / ring.length;
+        final cLng = sumLng / ring.length;
+        final m = _haversineMeters(latitude, longitude, cLat, cLng);
+        if (m < minMeters) {
+          minMeters = m;
           closest = feature;
         }
       }
     }
 
-    if (closest != null) {
+    if (closest != null && minMeters <= nearestFallbackMaxMeters) {
       return VillageLocation(
         village: closest.village,
         cell: closest.cell,
