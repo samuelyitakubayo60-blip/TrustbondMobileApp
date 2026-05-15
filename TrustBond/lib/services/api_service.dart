@@ -417,6 +417,7 @@ class ApiService {
     } catch (_) {}
     throw Exception(message);
   }
+}
 
 /// Custom exception for evidence upload failures with status code info.
 class EvidenceUploadException implements Exception {
