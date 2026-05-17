@@ -1,6 +1,6 @@
 """
-Send emails via SMTP (e.g. new user credentials).
-Uses settings from config; no-op if SMTP not configured.
+Send emails via Brevo HTTP API (preferred) or SMTP.
+Uses settings from config; no-op if neither provider is configured.
 """
 import smtplib
 import socket
@@ -9,30 +9,146 @@ from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
+from typing import Iterable
 
 from app.config import settings
+from app.core.brevo_email import (
+    deliver_brevo_from_mime,
+    is_brevo_configured,
+    send_brevo_email,
+)
+from app.core.smtp_config import clean_env_value, resolve_smtp_host, smtp_settings_ready
 
 
 EMAIL_LOGO_CID = "trustbond-logo"
 EMAIL_LOGO_PATH = Path(__file__).resolve().parents[2] / "logo.jpeg"
 
 
+def is_email_configured() -> bool:
+    """True when Brevo or SMTP can send mail."""
+    if is_brevo_configured():
+        return bool(resolved_from_address())
+    if getattr(settings, "smtp_disable", False):
+        return False
+    return smtp_settings_ready(settings.smtp_host, settings.smtp_user, settings.smtp_pass)
+
+
 def is_smtp_configured() -> bool:
-    """Check if SMTP is configured."""
-    return bool(settings.smtp_host and settings.smtp_user and settings.smtp_pass)
+    """Backward-compatible alias for is_email_configured()."""
+    return is_email_configured()
+
+
+def resolved_from_address() -> str | None:
+    from app.core.brevo_email import resolved_from_address as _brevo_from
+
+    return _brevo_from()
+
+
+def _smtp_dns_error_message(host: str) -> str:
+    return (
+        f"Cannot resolve SMTP server hostname '{host}'. "
+        "Set SMTP_HOST to your provider's SMTP server (e.g. smtp.gmail.com for Gmail), "
+        "not your email address. Ensure backend/.env is loaded or set SMTP_* in the host environment."
+    )
+
+
+def deliver_smtp_message(
+    msg: MIMEMultipart,
+    from_addr: str,
+    to_addrs: Iterable[str],
+) -> tuple[bool, str | None]:
+    """Send a prepared MIME message via SMTP. Returns (success, error_message)."""
+    host = resolve_smtp_host(settings.smtp_host, settings.smtp_user)
+    user = clean_env_value(settings.smtp_user)
+    password = clean_env_value(settings.smtp_pass)
+    if not host or not user or not password:
+        return False, "SMTP not configured (SMTP_HOST, SMTP_USER, SMTP_PASS required)"
+
+    recipients = [a.strip() for a in to_addrs if a and str(a).strip()]
+    if not recipients:
+        return False, "No recipient email addresses provided."
+
+    port = int(getattr(settings, "smtp_port", 587) or 587)
+    timeout = max(3, int(getattr(settings, "smtp_timeout_seconds", 12) or 12))
+    try:
+        if port == 465:
+            with smtplib.SMTP_SSL(host, port, timeout=timeout) as server:
+                server.login(user, password)
+                server.sendmail(from_addr, recipients, msg.as_string())
+        else:
+            with smtplib.SMTP(host, port, timeout=timeout) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(user, password)
+                server.sendmail(from_addr, recipients, msg.as_string())
+        return True, None
+    except (socket.timeout, TimeoutError):
+        err = "SMTP connection timed out. Check SMTP settings/network or reduce SMTP_TIMEOUT_SECONDS."
+        print(f"[Email] Send failed: {err}")
+        return False, err
+    except OSError as e:
+        errno = getattr(e, "errno", None)
+        if errno in (-2, 11001, 11003) or "Name or service not known" in str(e) or "getaddrinfo failed" in str(e):
+            err = _smtp_dns_error_message(host)
+            print(f"[Email] Send failed: {err}")
+            return False, err
+        if errno == 101:
+            err = (
+                f"Network is unreachable when connecting to SMTP server {host}:{port}. "
+                "This usually means outbound SMTP is blocked by the hosting provider/firewall. "
+                "Allow egress to the SMTP host/port or switch to an email HTTP API provider."
+            )
+            print(f"[Email] Send failed: {err}")
+            return False, err
+        err = str(e).strip() or "SMTP send failed (OS error)."
+        print(f"[Email] Send failed: {err}")
+        return False, err
+    except smtplib.SMTPAuthenticationError:
+        err = "SMTP authentication failed. Check SMTP_USER and SMTP_PASS (use an app password for Gmail)."
+        print(f"[Email] Send failed: {err}")
+        return False, err
+    except Exception as e:
+        err = str(e).strip() or "SMTP send failed."
+        print(f"[Email] Send failed: {err}")
+        return False, err
 
 
 def get_email_logo_src() -> str:
     return f"cid:{EMAIL_LOGO_CID}"
 
 
+def deliver_email_message(
+    msg: MIMEMultipart,
+    from_addr: str,
+    to_addrs: Iterable[str],
+) -> tuple[bool, str | None]:
+    """Send via Brevo when configured, otherwise SMTP."""
+    if is_brevo_configured():
+        return deliver_brevo_from_mime(msg, to_addrs)
+    return deliver_smtp_message(msg, from_addr, to_addrs)
+
+
 def send_email(to: str, subject: str, body_plain: str, body_html: str | None = None) -> tuple[bool, str | None]:
     """
-    Send an email via SMTP. Returns (True, None) if sent, (False, error_message) if not configured or send failed.
+    Send an email via Brevo (preferred) or SMTP.
+    Returns (True, None) if sent, (False, error_message) if not configured or send failed.
     """
-    if not (settings.smtp_host and settings.smtp_user and settings.smtp_pass):
-        return False, "SMTP not configured (SMTP_HOST, SMTP_USER, SMTP_PASS required)"
-    from_addr = settings.smtp_from or settings.smtp_user
+    if not is_email_configured():
+        return False, (
+            "Email is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL, "
+            "or SMTP_HOST, SMTP_USER, and SMTP_PASS."
+        )
+
+    if is_brevo_configured():
+        return send_brevo_email(
+            to,
+            subject,
+            html=body_html,
+            text=body_plain,
+        )
+
+    from_addr = clean_env_value(settings.smtp_from) or clean_env_value(settings.smtp_user) or ""
     embed_logo = bool(body_html and EMAIL_LOGO_PATH.exists())
     msg = MIMEMultipart("related") if embed_logo else MIMEMultipart("alternative")
     content = MIMEMultipart("alternative") if embed_logo else msg
@@ -49,48 +165,7 @@ def send_email(to: str, subject: str, body_plain: str, body_html: str | None = N
         logo.add_header("Content-ID", f"<{EMAIL_LOGO_CID}>")
         logo.add_header("Content-Disposition", "inline", filename=EMAIL_LOGO_PATH.name)
         msg.attach(logo)
-    try:
-        port = getattr(settings, "smtp_port", 587) or 587
-        timeout = max(3, int(getattr(settings, "smtp_timeout_seconds", 12) or 12))
-        if port == 465:
-            with smtplib.SMTP_SSL(settings.smtp_host, port, timeout=timeout) as server:
-                server.login(settings.smtp_user, settings.smtp_pass)
-                server.sendmail(from_addr, [to], msg.as_string())
-        else:
-            with smtplib.SMTP(settings.smtp_host, port, timeout=timeout) as server:
-                server.starttls()
-                server.login(settings.smtp_user, settings.smtp_pass)
-                server.sendmail(from_addr, [to], msg.as_string())
-        return True, None
-    except (socket.timeout, TimeoutError):
-        err = "SMTP connection timed out. Check SMTP settings/network or reduce SMTP_TIMEOUT_SECONDS."
-        print(f"[Email] Send failed: {err}")
-        return False, err
-    except OSError as e:
-        # Common in hosted environments that block outbound SMTP.
-        port = getattr(settings, "smtp_port", 587) or 587
-        host = settings.smtp_host or ""
-        if getattr(e, "errno", None) == 101:
-            err = (
-                f"Network is unreachable when connecting to SMTP server {host}:{port}. "
-                "This usually means outbound SMTP is blocked by the hosting provider/firewall. "
-                "Allow egress to the SMTP host/port or switch to an email HTTP API provider."
-            )
-            print(f"[Email] Send failed: {err}")
-            return False, err
-        err = str(e).strip() or "SMTP send failed (OS error)."
-        print(f"[Email] Send failed: {err}")
-        return False, err
-    except Exception as e:
-        err = str(e).strip()
-        # Handle DNS resolution errors specifically
-        if "Name or service not known" in err or "[Errno -2]" in err:
-            err = (
-                f"DNS resolution failed for SMTP server {settings.smtp_host}. "
-                "Try using the IP address instead of hostname, or check network connectivity."
-            )
-        print(f"[Email] Send failed: {err}")
-        return False, err
+    return deliver_smtp_message(msg, from_addr, [to])
 
 
 def send_new_user_credentials(

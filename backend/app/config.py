@@ -1,7 +1,14 @@
 import os
 import logging
+from pathlib import Path
 from typing import Optional, List
-from pydantic_settings import BaseSettings
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.core.smtp_config import clean_env_value, resolve_smtp_host
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+_ENV_FILE = _BACKEND_DIR / ".env"
 
 
 class Settings(BaseSettings):
@@ -27,8 +34,35 @@ class Settings(BaseSettings):
     smtp_pass: Optional[str] = None
     smtp_from: Optional[str] = None
     smtp_timeout_seconds: int = 12
+    # Set SMTP_DISABLE=true on hosts that block outbound SMTP (e.g. Render free tier).
+    smtp_disable: bool = False
+    # Brevo transactional email API (preferred on HF Space / Render). Docs: https://developers.brevo.com/
+    brevo_api_key: Optional[str] = None
+    brevo_sender_email: Optional[str] = None
+    brevo_sender_name: str = "TrustBond"
+    brevo_api_url: str = "https://api.brevo.com/v3/smtp/email"
+    brevo_timeout_seconds: int = 30
     # Base URL of the police dashboard (for login link in email)
     frontend_url: str = "http://localhost:5173"
+
+    @field_validator(
+        "smtp_host",
+        "smtp_user",
+        "smtp_pass",
+        "smtp_from",
+        "brevo_api_key",
+        "brevo_sender_email",
+        "brevo_sender_name",
+        mode="before",
+    )
+    @classmethod
+    def _strip_smtp_strings(cls, value: object) -> object:
+        if value is None or not isinstance(value, str):
+            return value
+        return clean_env_value(value)
+
+    def resolved_smtp_host(self) -> str | None:
+        return resolve_smtp_host(self.smtp_host, self.smtp_user)
 
     # How many hours after submitting a report the user (device) can still add evidence (mobile).
     evidence_add_window_hours: int = 72
@@ -107,9 +141,11 @@ class Settings(BaseSettings):
                 merged.append(origin)
         return merged
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        env_file=str(_ENV_FILE) if _ENV_FILE.is_file() else None,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()

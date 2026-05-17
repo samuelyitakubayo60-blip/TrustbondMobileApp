@@ -3,8 +3,6 @@ Email notification service for sending email alerts to police users.
 Integrates with existing notification system to send both web and email notifications.
 """
 
-import os
-import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import List, Optional
@@ -99,22 +97,32 @@ class EmailNotificationService:
     """Service for sending email notifications to police users."""
     
     def __init__(self):
-        # Use central settings to handle .env parsing reliably
         from app.config import settings
-        
-        # Fallbacks for any missing settings or CRLF trailing chars
-        self.smtp_server = (settings.smtp_host or "smtp.gmail.com").strip()
+        from app.core.brevo_email import is_brevo_configured
+        from app.core.email import is_email_configured
+        from app.core.smtp_config import clean_env_value, resolve_smtp_host, smtp_settings_ready
+
+        self.smtp_server = resolve_smtp_host(settings.smtp_host, settings.smtp_user) or "smtp.gmail.com"
         self.smtp_port = getattr(settings, "smtp_port", 587) or 587
-        self.smtp_username = (settings.smtp_user or "").strip()
-        self.smtp_password = (settings.smtp_pass or "").strip()
-        self.from_email = (settings.smtp_from or "noreply@trustbond.system").strip()
+        self.smtp_username = clean_env_value(settings.smtp_user) or ""
+        self.smtp_password = clean_env_value(settings.smtp_pass) or ""
+        self.from_email = (
+            resolved_from_address()
+            or clean_env_value(settings.smtp_from)
+            or self.smtp_username
+            or "noreply@trustbond.system"
+        )
         self.frontend_url = (settings.frontend_url or "https://trustbond-mobile-app.vercel.app").strip()
-        
-        # Check if email is configured
-        self.email_enabled = bool(self.smtp_username and self.smtp_password)
-        
+        self.email_enabled = is_email_configured()
+        self.use_brevo = is_brevo_configured()
+
         if not self.email_enabled:
-            logger.warning("Email notifications disabled - SMTP credentials not configured")
+            if getattr(settings, "smtp_disable", False) and not self.use_brevo:
+                logger.info(
+                    "Email notifications disabled (SMTP_DISABLE=true and Brevo not configured)"
+                )
+            else:
+                logger.warning("Email notifications disabled - email provider not configured")
     
     def send_email(
         self,
@@ -143,34 +151,28 @@ class EmailNotificationService:
             logger.warning("No recipients specified - skipping email send")
             return False
         
-        try:
-            # Create message
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = subject
-            msg['From'] = self.from_email
-            msg['To'] = ', '.join(to_emails)
-            
-            # Add plain text body
-            if text_body:
-                text_part = MIMEText(text_body, 'plain')
-                msg.attach(text_part)
-            
-            # Add HTML body
-            html_part = MIMEText(html_body, 'html')
-            msg.attach(html_part)
-            
-            # Send email
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.smtp_username, self.smtp_password)
-                server.send_message(msg)
-            
-            logger.info(f"Email sent successfully to {len(to_emails)} recipients")
+        from app.core.email import deliver_email_message, resolved_from_address
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = self.from_email
+        msg["To"] = ", ".join(to_emails)
+
+        if text_body:
+            msg.attach(MIMEText(text_body, "plain", "utf-8"))
+
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+        ok, err = deliver_email_message(msg, self.from_email, to_emails)
+        if ok:
+            logger.info("Email sent successfully to %s recipients", len(to_emails))
             return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send email: {str(e)}")
-            return False
+
+        if err and ("Network is unreachable" in err or "outbound SMTP is blocked" in err):
+            logger.warning("Email not sent (host blocks SMTP): %s", err)
+        else:
+            logger.error("Failed to send email: %s", err or "unknown error")
+        return False
     
     def send_case_assignment_notification(
         self,

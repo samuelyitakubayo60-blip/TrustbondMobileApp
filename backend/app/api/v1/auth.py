@@ -255,7 +255,7 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
     if not is_smtp_configured():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Email is not configured. Contact an administrator to reset your password.",
+            detail="Email is not configured (Brevo or SMTP). Contact an administrator to reset your password.",
         )
 
     # Invalidate any existing codes for this email

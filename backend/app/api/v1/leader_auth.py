@@ -156,7 +156,10 @@ def request_setup_code(payload: LocalLeaderRequestCodeRequest, db: Session = Dep
         return {"message": "If this email is registered, a setup code was sent."}
 
     if not is_smtp_configured():
-        raise HTTPException(status_code=503, detail="Email delivery is not configured on the server.")
+        raise HTTPException(
+            status_code=503,
+            detail="Email delivery is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL, or SMTP settings.",
+        )
 
     db.query(LocalLeaderAuthCode).filter(
         LocalLeaderAuthCode.local_leader_id == leader.local_leader_id,
@@ -220,7 +223,10 @@ def request_login_code(payload: LocalLeaderRequestCodeRequest, db: Session = Dep
         return {"message": "If this email is registered, a login code was sent."}
 
     if not is_smtp_configured():
-        raise HTTPException(status_code=503, detail="Email delivery is not configured on the server.")
+        raise HTTPException(
+            status_code=503,
+            detail="Email delivery is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL, or SMTP settings.",
+        )
 
     latest = (
         db.query(LocalLeaderAuthCode)

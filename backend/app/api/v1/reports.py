@@ -1,5 +1,6 @@
 import logging
 import json
+import threading
 from typing import Annotated, Optional, List, Tuple, Dict, Any
 from decimal import Decimal
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form, Query, status, Request
@@ -79,6 +80,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 logger = logging.getLogger(__name__)
+_auto_case_realtime_lock = threading.Lock()
 _SEMANTIC_MODEL = None
 _SEMANTIC_MODEL_UNAVAILABLE = False
 _LLM_CLIENT = None
@@ -2912,22 +2914,24 @@ def run_hotspot_auto():
 
 def run_auto_case_realtime():
     """Background task to run case auto-linking/creation after live report changes."""
+    if not _auto_case_realtime_lock.acquire(blocking=False):
+        logger.info("Skipping overlapping realtime auto-case run")
+        return
+
     db = SessionLocal()
     try:
         case_stats = _create_auto_cases(db)
         if case_stats.get("cases_created", 0) > 0:
-            print(
-                f"Realtime auto-case run: created {case_stats['cases_created']} case(s)"
+            logger.info(
+                "Realtime auto-case run: created %s case(s)",
+                case_stats["cases_created"],
             )
-            try:
-                _balance_workload_and_reassign(db)
-            except Exception as balance_error:
-                print(f"Warning: workload balancing failed after auto-case run: {balance_error}")
     except Exception as e:
-        print(f"Error in realtime auto-case run: {e}")
+        logger.error("Error in realtime auto-case run: %s", e)
         db.rollback()
     finally:
         db.close()
+        _auto_case_realtime_lock.release()
 
 
 def run_auto_case_for_report(report_id: str):
@@ -5959,90 +5963,124 @@ def _balance_report_workload_and_reassign(db: Session):
 
 
 def _balance_workload_and_reassign(db: Session):
-    """Smart workload balancing across multiple officers"""
+    """Smart workload balancing across multiple officers."""
+    from uuid import UUID
+
+    from app.models.case import Case
+    from app.models.police_user import PoliceUser
+    from sqlalchemy import func
+    from sqlalchemy.orm.exc import StaleDataError
+
     try:
-        from app.models.case import Case
-        from app.models.police_user import PoliceUser
-        from sqlalchemy import func
-        
-        # Get all active officers
         officers = db.query(PoliceUser).filter(
             PoliceUser.is_active == True,
-            PoliceUser.role == 'officer'
+            PoliceUser.role == "officer",
         ).all()
-        
+
         if len(officers) <= 1:
-            return  # No balancing needed with 0 or 1 officer
-        
-        # Get current case counts per officer
-        case_counts = db.query(
-            Case.assigned_to_id,
-            func.count(Case.case_id).label('active_cases')
-        ).filter(
-            Case.status.in_(['open', 'assigned', 'in_progress']),
-            Case.assigned_to_id.isnot(None)
-        ).group_by(Case.assigned_to_id).all()
-        
-        # Create workload dictionary
-        workload = {str(officer.police_user_id): 0 for officer in officers}
+            return
+
+        officer_ids = [o.police_user_id for o in officers]
+        case_counts = (
+            db.query(Case.assigned_to_id, func.count(Case.case_id).label("active_cases"))
+            .filter(
+                Case.status.in_(["open", "assigned", "in_progress"]),
+                Case.assigned_to_id.in_(officer_ids),
+            )
+            .group_by(Case.assigned_to_id)
+            .all()
+        )
+
+        workload = {officer_id: 0 for officer_id in officer_ids}
         for officer_id, count in case_counts:
-            workload[str(officer_id)] = count
-        
-        # Find overloaded and underloaded officers (aggressive balancing for equal distribution)
-        avg_cases = sum(workload.values()) / len(workload)
+            if officer_id in workload:
+                workload[officer_id] = int(count)
+
         max_cases = max(workload.values()) if workload else 0
         min_cases = min(workload.values()) if workload else 0
-        
-        # Trigger balancing if there's any imbalance (difference of 1 or more)
         if max_cases - min_cases <= 0:
-            return  # Already perfectly balanced
-        
-        overloaded = [oid for oid, count in workload.items() if count > min_cases]
-        underloaded = [oid for oid, count in workload.items() if count < max_cases]
-        
-        if not overloaded or not underloaded:
-            return  # No imbalance to fix
-        
-        # Reassign cases from overloaded to underloaded officers
+            return
+
+        overloaded_ids = [oid for oid, count in workload.items() if count > min_cases]
+        underloaded_ids = [oid for oid, count in workload.items() if count < max_cases]
+        if not overloaded_ids or not underloaded_ids:
+            return
+
+        recent_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        candidate_cases = (
+            db.query(Case)
+            .filter(
+                Case.assigned_to_id.in_(overloaded_ids),
+                Case.status.in_(["assigned", "open", "in_progress"]),
+                Case.created_at >= recent_cutoff,
+            )
+            .order_by(Case.created_at.desc())
+            .all()
+        )
+
+        cases_by_officer: dict[int, list[Case]] = {oid: [] for oid in overloaded_ids}
+        for case in candidate_cases:
+            if case.assigned_to_id in cases_by_officer:
+                cases_by_officer[case.assigned_to_id].append(case)
+
         reassigned = 0
-        for overloaded_officer in overloaded:
-            # Get cases from overloaded officer (aggressive rebalancing)
-            cases_to_reassign = db.query(Case).filter(
-                Case.assigned_to_id == overloaded_officer,
-                Case.status.in_(['assigned', 'open', 'in_progress']),  # Include more statuses
-                Case.created_at >= datetime.now(timezone.utc) - timedelta(days=7)  # Include last 7 days
-            ).order_by(Case.created_at.desc()).limit(5).all()  # Reassign up to 5 cases
-            
-            for case in cases_to_reassign:
-                if underloaded:
-                    # Find least loaded underloaded officer
-                    target_officer = min(underloaded, key=lambda oid: workload[oid])
-                    
-                    # Reassign case
-                    case.assigned_to_id = target_officer
-                    case.status = 'open'
-                    case.updated_at = datetime.now(timezone.utc)
-                    
-                    # Update workload tracking
-                    workload[overloaded_officer] -= 1
-                    workload[target_officer] += 1
-                    
-                    # Remove from underloaded if they're now balanced
-                    if workload[target_officer] >= avg_cases - 1:
-                        underloaded.remove(target_officer)
-                    
-                    reassigned += 1
-                    
-                    print(f"🔄 Reassigned case {case.case_number} from officer {overloaded_officer} to officer {target_officer}")
-        
+        touched_case_ids: set[UUID] = set()
+
+        for overloaded_id in overloaded_ids:
+            for case in cases_by_officer.get(overloaded_id, [])[:5]:
+                if case.case_id in touched_case_ids:
+                    continue
+                if not underloaded_ids:
+                    break
+
+                target_officer_id = min(underloaded_ids, key=lambda oid: workload[oid])
+                still_exists = (
+                    db.query(Case.case_id)
+                    .filter(
+                        Case.case_id == case.case_id,
+                        Case.assigned_to_id == overloaded_id,
+                    )
+                    .first()
+                )
+                if not still_exists:
+                    db.expire(case)
+                    continue
+
+                old_officer_id = case.assigned_to_id
+                case.assigned_to_id = target_officer_id
+                case.status = "open"
+                case.updated_at = datetime.now(timezone.utc)
+                db.flush()
+
+                workload[overloaded_id] = max(0, workload.get(overloaded_id, 0) - 1)
+                workload[target_officer_id] = workload.get(target_officer_id, 0) + 1
+                touched_case_ids.add(case.case_id)
+                reassigned += 1
+
+                if workload[target_officer_id] >= min_cases:
+                    underloaded_ids = [
+                        oid for oid in underloaded_ids if workload[oid] < max_cases
+                    ]
+
+                logger.info(
+                    "Reassigned case %s from officer %s to officer %s",
+                    case.case_number,
+                    old_officer_id,
+                    target_officer_id,
+                )
+
         if reassigned > 0:
             db.commit()
-            print(f" Workload balanced: {reassigned} cases reassigned across {len(officers)} officers")
-            
-            # Broadcast changes to keep clients synchronized
+            logger.info(
+                "Workload balanced: %s cases reassigned across %s officers",
+                reassigned,
+                len(officers),
+            )
+
             try:
                 import asyncio
                 from app.api.v1.ws import manager
+
                 payload = {"type": "refresh_data", "entity": "case", "action": "reassigned"}
                 try:
                     loop = asyncio.get_running_loop()
@@ -6050,11 +6088,19 @@ def _balance_workload_and_reassign(db: Session):
                 except RuntimeError:
                     asyncio.run(manager.broadcast(payload))
             except Exception as broadcast_error:
-                print(f"Warning: Could not broadcast case reassignments: {broadcast_error}")
-    
-    except Exception as e:
-        print(f"Error in workload balancing: {e}")
+                logger.warning(
+                    "Could not broadcast case reassignments: %s", broadcast_error
+                )
+
+    except StaleDataError as e:
         db.rollback()
+        logger.warning(
+            "Workload balancing skipped stale case update (case may have been deleted): %s",
+            e,
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error("Error in workload balancing: %s", e)
 
 
 def _handle_officer_case_finalization(db: Session, officer_id: str):
@@ -6333,12 +6379,6 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
         db.commit()
         stats['cases_created'] += 1
         stats['case_number'] = case_number
-        
-        # Trigger workload balancing after case creation to ensure fair distribution
-        try:
-            _balance_workload_and_reassign(db)
-        except Exception as e:
-            print(f"Warning: Could not trigger continuous workload balancing: {e}")
         print(f"Created auto-case {case.case_number} with {len(reports)} reports")
         
         # Broadcast case creation to all connected clients for real-time updates
@@ -6533,14 +6573,21 @@ def _create_auto_cases(db: Session) -> Dict[str, int]:
                             f"Created ONE geo-clustered case for {len(cluster)} reports of incident type {incident_type_id} within {cluster_radius_meters}m"
                         )
         
-        if stats['cases_created'] > 0:
-            db.commit()
+        if stats["cases_created"] > 0:
+            try:
+                _balance_workload_and_reassign(db)
+            except Exception as balance_error:
+                logger.warning(
+                    "Workload balancing after auto-case creation failed: %s",
+                    balance_error,
+                )
+
         return stats
-        
+
     except Exception as e:
-        logger.error(f"Auto-case creation error: {e}")
+        logger.error("Auto-case creation error: %s", e)
+        db.rollback()
         return stats
-        db.commit()
 
 
 def _automatic_incident_consolidation(db: Session, report: Report):
