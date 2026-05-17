@@ -27,10 +27,6 @@ class Settings(BaseSettings):
     smtp_pass: Optional[str] = None
     smtp_from: Optional[str] = None
     smtp_timeout_seconds: int = 12
-    # Email backend: "smtp" (default) or "resend" (recommended on hosted envs that block SMTP egress).
-    email_provider: str = "smtp"
-    resend_api_key: Optional[str] = None
-    resend_from: Optional[str] = None
     # Base URL of the police dashboard (for login link in email)
     frontend_url: str = "http://localhost:5173"
 

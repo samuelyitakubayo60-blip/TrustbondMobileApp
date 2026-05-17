@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { formatRelativeTime } from "../../utils/dateTime";
 import AdvancedGeographicCharts from "../charts/AdvancedGeographicCharts";
 import { getToken } from "../../api/client";
+import SpecialAssignmentUnitSelect from "../SpecialAssignmentUnitSelect";
 
 // Deployment Decisions Section for Supervisors/Admins
 const DeploymentDecisionsSection = ({ user, api, goToScreen }) => {
@@ -31,20 +32,40 @@ const DeploymentDecisionsSection = ({ user, api, goToScreen }) => {
     try {
       setUnitsLoading(true);
       const token = getToken();
+      console.log('=== LOADING SPECIAL UNITS ===');
       console.log('Auth token available:', !!token);
       console.log('User role:', user?.role);
+      console.log('User object:', user);
       
+      // Try direct API call with full debugging
       const response = await api.get('/api/v1/special-assignment-units/');
       console.log('Special units API response:', response);
-      setSpecialUnits(response.data || response);
+      console.log('Response data:', response.data);
+      console.log('Response type:', typeof response);
+      
+      if (response && response.data) {
+        console.log('Setting special units:', response.data);
+        setSpecialUnits(response.data);
+      } else if (response && Array.isArray(response)) {
+        console.log('Setting special units from array:', response);
+        setSpecialUnits(response);
+      } else {
+        console.log('No valid response data, setting empty array');
+        setSpecialUnits([]);
+      }
     } catch (err) {
-      console.error('Failed to load special units:', err);
+      console.error('=== FAILED TO LOAD SPECIAL UNITS ===');
+      console.error('Error:', err);
       console.error('Error details:', err.response);
       console.error('Error status:', err.status);
+      console.error('Error message:', err.message);
       
       if (err.status === 401) {
         setError('Authentication required. Please log in again.');
+      } else {
+        setError('Failed to load special units. Check console for details.');
       }
+      setSpecialUnits([]);
     } finally {
       setUnitsLoading(false);
     }
@@ -193,33 +214,12 @@ const DeploymentDecisionsSection = ({ user, api, goToScreen }) => {
             <div style={{ display: 'grid', gap: '12px', marginBottom: '16px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 'bold' }}>Assigned Unit</label>
-                {unitsLoading ? (
-                  <select 
-                    style={{ width: '100%', padding: '8px', border: '1px solid #dee2e6', borderRadius: '4px', backgroundColor: '#f8f9fa' }}
-                    disabled
-                  >
-                    <option>Loading units...</option>
-                  </select>
-                ) : (
-                  <select 
-                    style={{ width: '100%', padding: '8px', border: '1px solid #dee2e6', borderRadius: '4px' }}
-                    value={deploymentData.assigned_unit}
-                    onChange={(e) => setDeploymentData({...deploymentData, assigned_unit: e.target.value})}
-                    required
-                  >
-                    <option value="" disabled>Select Unit</option>
-                    {specialUnits.map((unit) => (
-                      <option key={unit.unit_id} value={unit.unit_code}>
-                        {unit.unit_name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {!unitsLoading && specialUnits.length === 0 && (
-                  <div style={{ fontSize: '12px', color: '#dc3545', marginTop: '4px' }}>
-                    No special units available. Please check your connection.
-                  </div>
-                )}
+                <SpecialAssignmentUnitSelect
+                  value={deploymentData.assigned_unit}
+                  onChange={(value) => setDeploymentData({...deploymentData, assigned_unit: value})}
+                  required={true}
+                  placeholder="Select Unit"
+                />
               </div>
               
               <div>
