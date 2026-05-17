@@ -83,6 +83,12 @@ def send_email(to: str, subject: str, body_plain: str, body_html: str | None = N
         return False, err
     except Exception as e:
         err = str(e).strip()
+        # Handle DNS resolution errors specifically
+        if "Name or service not known" in err or "[Errno -2]" in err:
+            err = (
+                f"DNS resolution failed for SMTP server {settings.smtp_host}. "
+                "Try using the IP address instead of hostname, or check network connectivity."
+            )
         print(f"[Email] Send failed: {err}")
         return False, err
 

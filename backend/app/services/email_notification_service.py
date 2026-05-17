@@ -99,16 +99,16 @@ class EmailNotificationService:
     """Service for sending email notifications to police users."""
     
     def __init__(self):
-        # Load environment variables if not already loaded
-        from dotenv import load_dotenv
-        load_dotenv()
+        # Use central settings to handle .env parsing reliably
+        from app.config import settings
         
-        self.smtp_server = os.getenv("SMTP_HOST", "smtp.gmail.com")
-        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        self.smtp_username = os.getenv("SMTP_USER", "")
-        self.smtp_password = os.getenv("SMTP_PASS", "")
-        self.from_email = os.getenv("SMTP_FROM", "noreply@trustbond.system")
-        self.frontend_url = os.getenv("VITE_API_BASE_URL", "https://trustbondmobileapp.onrender.com")
+        # Fallbacks for any missing settings or CRLF trailing chars
+        self.smtp_server = (settings.smtp_host or "smtp.gmail.com").strip()
+        self.smtp_port = getattr(settings, "smtp_port", 587) or 587
+        self.smtp_username = (settings.smtp_user or "").strip()
+        self.smtp_password = (settings.smtp_pass or "").strip()
+        self.from_email = (settings.smtp_from or "noreply@trustbond.system").strip()
+        self.frontend_url = (settings.frontend_url or "https://trustbond-mobile-app.vercel.app").strip()
         
         # Check if email is configured
         self.email_enabled = bool(self.smtp_username and self.smtp_password)

@@ -6336,7 +6336,7 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
         
         # Trigger workload balancing after case creation to ensure fair distribution
         try:
-            _continuous_workload_balancing(db)
+            _balance_workload_and_reassign(db)
         except Exception as e:
             print(f"Warning: Could not trigger continuous workload balancing: {e}")
         print(f"Created auto-case {case.case_number} with {len(reports)} reports")
