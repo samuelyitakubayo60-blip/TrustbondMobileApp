@@ -119,12 +119,16 @@ class NaturalLanguageScorer:
         else:
             metadata["length_score"] = "insufficient"
         
-        # Word count analysis
-        if word_count >= 10:
-            score += 20
+        # Word count analysis (15+ words recommended for full credit)
+        min_words = getattr(self.thresholds.config, "DESCRIPTION_MIN_WORDS", 15)
+        if word_count >= min_words + 10:
+            score += 25
             metadata["word_count_score"] = "detailed"
-        elif word_count >= 5:
-            score += 10
+        elif word_count >= min_words:
+            score += 18
+            metadata["word_count_score"] = "adequate"
+        elif word_count >= max(5, min_words // 2):
+            score += 8
             metadata["word_count_score"] = "moderate"
         else:
             metadata["word_count_score"] = "minimal"

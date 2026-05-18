@@ -5,7 +5,7 @@ import '../config/theme.dart';
 import '../services/leader_service.dart';
 import '../services/notification_service.dart';
 import '../services/api_service.dart';
-import 'report_screen.dart';
+import 'report_step1_screen.dart';
 
 class LeaderInboxScreen extends StatefulWidget {
   const LeaderInboxScreen({super.key});
@@ -117,7 +117,7 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
             onPressed: () async {
               await Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => const ReportScreen(localLeaderSubmit: true),
+                  builder: (_) => const ReportStep1Screen(localLeaderSubmit: true),
                 ),
               );
               if (mounted) _load();
@@ -529,6 +529,26 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
                     ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if ((r['credibility_summary'] ?? '').toString().isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F4FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: Text(
+                      (r['credibility_summary'] ?? '').toString(),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF334155),
+                        height: 1.35,
+                      ),
+                    ),
                   ),
                 ],
               ],

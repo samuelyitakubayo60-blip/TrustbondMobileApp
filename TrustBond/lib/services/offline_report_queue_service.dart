@@ -13,6 +13,7 @@ import 'api_service.dart';
 import 'app_refresh_bus.dart';
 import 'device_service.dart';
 import 'device_status_service.dart';
+import 'leader_service.dart';
 
 class OfflineSubmitResult {
   final String reportId;
@@ -41,6 +42,14 @@ class OfflineReportQueueService {
 
   bool _isSyncing = false;
   DateTime? _lastSyncAt;
+
+  Future<String?> _leaderTokenIfAny() async {
+    try {
+      final token = await LeaderService().getToken();
+      if (token != null && token.trim().isNotEmpty) return token.trim();
+    } catch (_) {}
+    return null;
+  }
 
   // Errors we can safely retry by queueing offline.
   static const Set<int> _retryableHttpStatuses = {408, 409, 425, 429, 500, 502, 503, 504};
@@ -78,6 +87,7 @@ class OfflineReportQueueService {
     required bool locationConsistencyCheck,
     required bool evidenceSourceValid,
     required bool evidenceTamperingDetected,
+    String? leaderAccessToken,
   }) async {
     final deviceHash = await _deviceService.getDeviceHash();
     final deviceId = await _deviceService.getDeviceId();
@@ -127,7 +137,10 @@ class OfflineReportQueueService {
 
     // Prefer immediate online send. Queue only when offline or when immediate send fails.
     if (onlineNow) {
-      final immediate = await _trySendImmediately(queueItem);
+      final immediate = await _trySendImmediately(
+        queueItem,
+        leaderAccessToken: leaderAccessToken,
+      );
       if (immediate.sent) {
         return OfflineSubmitResult(reportId: reportId, queuedOffline: false);
       }
@@ -260,7 +273,11 @@ class OfflineReportQueueService {
     String? resolvedDeviceId = item.deviceId;
 
     try {
-      final response = await _api.submitReport(_reportPayload(item));
+      final leaderTok = await _leaderTokenIfAny();
+      final response = await _api.submitReport(
+        _reportPayload(item),
+        leaderAccessToken: leaderTok,
+      );
       resolvedDeviceId = response['device_id']?.toString() ?? resolvedDeviceId;
     } on ApiRequestException catch (e) {
       if (e.statusCode == 409) {
@@ -315,11 +332,17 @@ class OfflineReportQueueService {
     return await _hasInternet();
   }
 
-  Future<_ImmediateSubmitOutcome> _trySendImmediately(OfflineReportQueueItem item) async {
+  Future<_ImmediateSubmitOutcome> _trySendImmediately(
+    OfflineReportQueueItem item, {
+    String? leaderAccessToken,
+  }) async {
     String? resolvedDeviceId = item.deviceId;
 
     try {
-      final response = await _api.submitReport(_reportPayload(item));
+      final response = await _api.submitReport(
+        _reportPayload(item),
+        leaderAccessToken: leaderAccessToken,
+      );
       resolvedDeviceId = response['device_id']?.toString() ?? resolvedDeviceId;
     } on ApiRequestException catch (e) {
       if (e.statusCode == 409) {

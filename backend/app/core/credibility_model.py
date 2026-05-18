@@ -318,8 +318,8 @@ def _build_feature_row(
 
     time_of_day = _bucket_time_of_day(reported_at)
 
-    # TrustBond must avoid NLP-style conclusions; text quality/semantic checks belong to NL model.
-    description_word_count = 0
+    desc_text = (getattr(report, "description", None) or "").strip()
+    description_word_count = len(desc_text.split()) if desc_text else 0
     drug_keyword_count = 0
     drug_keyword_ratio = 0.0
     mentions_drug_keywords = 0
@@ -427,10 +427,9 @@ def _build_feature_row(
             # NLP model owns semantic mismatch; keep neutral in TrustBond input.
             row[col] = 0
         elif col == "description":
-            # Keep text payload neutral in TrustBond to avoid duplicated NLP responsibility.
-            row[col] = ""
+            row[col] = desc_text[:500] if desc_text else ""
         elif col == "description_text":
-            row[col] = ""
+            row[col] = desc_text[:500] if desc_text else ""
         elif col == "network_type":
             row[col] = network_type
         elif col == "device_total_reports":
@@ -659,6 +658,22 @@ def score_report_credibility(
             credibility_score = min(100.0, credibility_score + (community_net * 5.0))
         elif community_net < 0:
             credibility_score = max(0.0, credibility_score + (community_net * 10.0))
+
+        from app.core.description_credibility import adjust_credibility_for_description
+
+        credibility_score, desc_meta = adjust_credibility_for_description(
+            credibility_score,
+            getattr(report, "description", None),
+            evidence_count=evidence_count,
+            report=report,
+        )
+        factors["description_credibility"] = desc_meta
+        try:
+            fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+            fv["description_credibility"] = desc_meta
+            report.feature_vector = _json_safe(fv)
+        except Exception:
+            pass
 
         # Store TrustBond output as a model contribution only.
         # Final label/decision is assigned later by unified aggregation.

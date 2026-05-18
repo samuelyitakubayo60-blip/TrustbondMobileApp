@@ -8,12 +8,17 @@ import 'report_step3_screen.dart';
 class ReportStep2Screen extends StatefulWidget {
   final int incidentTypeId;
   final String incidentTypeName;
+  final bool localLeaderSubmit;
 
   const ReportStep2Screen({
     super.key,
     required this.incidentTypeId,
     required this.incidentTypeName,
+    this.localLeaderSubmit = false,
   });
+
+  static const int recommendedWordCount = 15;
+  static const int minimumWordCount = 8;
 
   @override
   State<ReportStep2Screen> createState() => _ReportStep2ScreenState();
@@ -181,8 +186,11 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
         const Text('Description (Required)',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
-        const Text('Describe what happened clearly. This field is required.',
-            style: TextStyle(fontSize: 11, color: AppColors.muted)),
+        const Text(
+          'Describe what happened clearly. Aim for at least 15 words. '
+          'Shorter text is OK if you add evidence in the next step.',
+          style: TextStyle(fontSize: 11, color: AppColors.muted),
+        ),
         const SizedBox(height: 8),
         TextField(
           controller: _descController,
@@ -208,14 +216,33 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
             ),
           ),
         ),
-        if (_descController.text.trim().isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 6),
-            child: Text(
-              'Description is required to continue.',
-              style: TextStyle(fontSize: 11, color: AppColors.warn),
-            ),
-          ),
+        Builder(
+          builder: (context) {
+            final words = _wordCount(_descController.text);
+            final String message;
+            if (words < ReportStep2Screen.minimumWordCount) {
+              message =
+                  'At least ${ReportStep2Screen.minimumWordCount} words required to continue.';
+            } else if (words < ReportStep2Screen.recommendedWordCount) {
+              message =
+                  '$words / ${ReportStep2Screen.recommendedWordCount} words — add evidence next if keeping it short.';
+            } else {
+              message = '$words words — good detail for credibility.';
+            }
+            return Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                message,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: words >= ReportStep2Screen.recommendedWordCount
+                      ? AppColors.ok
+                      : AppColors.warn,
+                ),
+              ),
+            );
+          },
+        ),
       ],
     );
   }
@@ -406,9 +433,18 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
     );
   }
 
+  int _wordCount(String text) {
+    return text
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .length;
+  }
+
   Widget _buildContinueButton() {
     final hasLoc = _latitude != null;
-    final hasDescription = _descController.text.trim().isNotEmpty;
+    final words = _wordCount(_descController.text);
+    final hasDescription = words >= ReportStep2Screen.minimumWordCount;
     final enabled = hasLoc && hasDescription;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
@@ -426,6 +462,7 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
                         longitude: _longitude!,
                         gpsAccuracy: _gpsAccuracy,
                         tags: List.from(_selectedTags),
+                        localLeaderSubmit: widget.localLeaderSubmit,
                       )))
               : null,
           style: ElevatedButton.styleFrom(

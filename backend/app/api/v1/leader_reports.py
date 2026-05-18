@@ -35,6 +35,11 @@ class LeaderReportResponse(BaseModel):
     sector_name: Optional[str] = None
     leader_verification_status: Optional[str] = None
     leader_verified_at: Optional[datetime] = None
+    trust_score: Optional[float] = None
+    verification_status: Optional[str] = None
+    flag_reason: Optional[str] = None
+    evidence_count: int = 0
+    credibility_summary: Optional[str] = None
 
 
 class LeaderReportListResponse(BaseModel):
@@ -63,6 +68,7 @@ def list_leader_reports(
         db.query(Report)
         .options(
             joinedload(Report.incident_type),
+            joinedload(Report.evidence_files),
             joinedload(Report.village_location)
             .joinedload(Location.parent)
             .joinedload(Location.parent),
@@ -86,6 +92,28 @@ def list_leader_reports(
             if r.village_location.parent.parent:
                 sector_name = r.village_location.parent.parent.location_name
 
+        fv = r.feature_vector if isinstance(r.feature_vector, dict) else {}
+        desc_meta = fv.get("description_credibility") if isinstance(fv.get("description_credibility"), dict) else {}
+        evidence_count = len(getattr(r, "evidence_files", None) or [])
+        trust_val = float(r.trust_score) if getattr(r, "trust_score", None) is not None else None
+        summary_parts: list[str] = []
+        if trust_val is not None:
+            summary_parts.append(f"Credibility score: {trust_val:.0f}/100")
+        if r.flag_reason:
+            summary_parts.append(f"Flag: {r.flag_reason}")
+        if desc_meta:
+            wc = desc_meta.get("word_count")
+            if wc is not None:
+                summary_parts.append(f"Description: {wc} words")
+            if desc_meta.get("short_description_rescue"):
+                summary_parts.append("Short text but matches incident and evidence")
+            elif desc_meta.get("length_adjustment") == "penalty":
+                summary_parts.append("Short description lowered credibility")
+        if evidence_count:
+            summary_parts.append(f"Evidence files: {evidence_count}")
+        elif not (r.description or "").strip():
+            summary_parts.append("No description or evidence on file")
+
         items.append(
             LeaderReportResponse(
                 report_id=str(r.report_id),
@@ -103,6 +131,10 @@ def list_leader_reports(
                 sector_name=sector_name,
                 leader_verification_status=getattr(r, "leader_verification_status", None),
                 leader_verified_at=getattr(r, "leader_verified_at", None),
+                trust_score=trust_val,
+                flag_reason=r.flag_reason,
+                evidence_count=evidence_count,
+                credibility_summary=" · ".join(summary_parts) if summary_parts else None,
             )
         )
 

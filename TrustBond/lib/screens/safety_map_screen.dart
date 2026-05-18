@@ -55,7 +55,9 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   List<Hotspot> _hotspots = [];
   List<Map<String, dynamic>> _publicAlerts = [];
   bool _loadingAlerts = false;
-  int _hotspotTimeWindowHours = 24;
+  /// Default list/stats filter (1 week). Map always shows all clusters.
+  int _hotspotTimeWindowHours = 168;
+  static const int _mapClusterWindowHours = 8760;
   int _nearbyHotspotRadiusMeters = 3000;
 
   Timer? _hotspotRefreshTimer;
@@ -247,16 +249,18 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     if (_loadingHotspots) return;
     setState(() => _loadingHotspots = true);
     try {
-      debugPrint('Loading hotspots with time window: $_hotspotTimeWindowHours hours');
+      debugPrint(
+        'Loading map clusters (all incidents window: $_mapClusterWindowHours h)',
+      );
       final hotspots = (_userLat != null && _userLng != null)
           ? await _hotspotService.getNearbyHotspots(
               lat: _userLat!,
               lon: _userLng!,
               radiusMeters: _nearbyHotspotRadiusMeters,
-              timeWindowHours: _hotspotTimeWindowHours,
+              timeWindowHours: _mapClusterWindowHours,
             )
           : await _hotspotService.getAllHotspots(
-              timeWindowHours: _hotspotTimeWindowHours,
+              timeWindowHours: _mapClusterWindowHours,
             );
       debugPrint('Received ${hotspots.length} hotspots from service');
       
@@ -439,11 +443,19 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     ];
   }
 
+  bool _hotspotInSelectedFilter(Hotspot hotspot) {
+    final cutoff =
+        DateTime.now().subtract(Duration(hours: _hotspotTimeWindowHours));
+    return hotspot.detectedAt.isAfter(cutoff);
+  }
+
   List<Marker> _buildHotspotMarkers() {
     if (_hotspots.isEmpty) return [];
     return _hotspots.map((hotspot) {
       final color = _getHotspotColor(hotspot.riskLevel);
       final isSecurityCluster = hotspot.incidentCount >= 3; // Security clusters have 3+ incidents
+      final inFilter = _hotspotInSelectedFilter(hotspot);
+      final fade = inFilter ? 1.0 : 0.42;
       
       return Marker(
         point: LatLng(hotspot.centerLat, hotspot.centerLong),
@@ -451,7 +463,9 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
         height: isSecurityCluster ? 45 : 38,
         child: GestureDetector(
           onTap: () => _showHotspotDetails(hotspot),
-          child: Stack(
+          child: Opacity(
+            opacity: fade,
+            child: Stack(
             alignment: Alignment.center,
             children: [
               // Outer glow for security clusters
@@ -460,9 +474,9 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                   width: 35,
                   height: 35,
                   decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.2),
+                    color: Colors.red.withValues(alpha: fade * 0.2),
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.red.withValues(alpha: 0.4), width: 1),
+                    border: Border.all(color: Colors.red.withValues(alpha: fade * 0.4), width: 1),
                   ),
                 ),
               // Main hotspot circle
@@ -470,7 +484,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.25),
+                  color: color.withValues(alpha: fade * 0.25),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -505,6 +519,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                   ),
                 ),
             ],
+            ),
           ),
         ),
       );
@@ -716,7 +731,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                   _loadingHotspots
                       ? 'Loading hotspots...'
                       : _mapData != null
-                      ? '${_mapData!.features.length} villages · ${_hotspots.length} hotspots · ${_formatHotspotWindow(_hotspotTimeWindowHours)} · ${_userLat != null && _userLng != null ? 'near ${(_nearbyHotspotRadiusMeters / 1000).toStringAsFixed(0)}km' : 'district'}'
+                      ? '${_mapData!.features.length} villages · ${_hotspots.length} clusters on map · filter ${_formatHotspotWindow(_hotspotTimeWindowHours)} · ${_userLat != null && _userLng != null ? 'near ${(_nearbyHotspotRadiusMeters / 1000).toStringAsFixed(0)}km' : 'district'}'
                           : 'Loading...',
                   style: const TextStyle(
                       fontSize: 10,

@@ -11,8 +11,10 @@ import '../services/device_status_service.dart';
 import '../services/motion_service.dart';
 import '../services/mobile_verification_service.dart';
 import '../services/app_refresh_bus.dart';
+import '../services/leader_service.dart';
 import '../services/offline_report_queue_service.dart';
 import '../widgets/shared_widgets.dart';
+import 'leader_inbox_screen.dart';
 import 'report_success_screen.dart';
 
 class ReportStep3Screen extends StatefulWidget {
@@ -23,6 +25,7 @@ class ReportStep3Screen extends StatefulWidget {
   final double longitude;
   final double? gpsAccuracy;
   final List<String> tags;
+  final bool localLeaderSubmit;
 
   const ReportStep3Screen({
     super.key,
@@ -33,6 +36,7 @@ class ReportStep3Screen extends StatefulWidget {
     required this.longitude,
     this.gpsAccuracy,
     this.tags = const [],
+    this.localLeaderSubmit = false,
   });
 
   @override
@@ -305,6 +309,11 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
           .getBatteryLevel()
           .timeout(const Duration(milliseconds: 500), onTimeout: () => null);
 
+      String? leaderTok;
+      if (widget.localLeaderSubmit) {
+        leaderTok = await LeaderService().getToken();
+      }
+
       final result = await _queueService.submitReport(
         incidentTypeId: widget.incidentTypeId,
         incidentTypeName: widget.incidentTypeName,
@@ -324,6 +333,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
         locationConsistencyCheck: mobileVerification.locationConsistencyCheck,
         evidenceSourceValid: mobileVerification.evidenceSourceValid,
         evidenceTamperingDetected: mobileVerification.evidenceTamperingDetected,
+        leaderAccessToken: leaderTok,
       );
 
       AppRefreshBus.notify('report_submitted');
@@ -336,6 +346,20 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
               duration: Duration(seconds: 2),
             ),
           );
+        }
+
+        if (widget.localLeaderSubmit) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Incident submitted as local leader.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const LeaderInboxScreen()),
+            (route) => route.isFirst,
+          );
+          return;
         }
 
         Navigator.of(context).pushAndRemoveUntil(

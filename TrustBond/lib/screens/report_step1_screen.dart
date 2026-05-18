@@ -5,7 +5,10 @@ import '../services/api_service.dart';
 import 'report_step2_screen.dart';
 
 class ReportStep1Screen extends StatefulWidget {
-  const ReportStep1Screen({super.key});
+  const ReportStep1Screen({super.key, this.localLeaderSubmit = false});
+
+  /// When true, submission uses local leader auth (community-confirmed report).
+  final bool localLeaderSubmit;
 
   @override
   State<ReportStep1Screen> createState() => _ReportStep1ScreenState();
@@ -68,10 +71,10 @@ class _ReportStep1ScreenState extends State<ReportStep1Screen> {
             onPressed: () => Navigator.of(context).pop(),
             icon: const Icon(Icons.arrow_back_ios_new, size: 18),
           ),
-          const Expanded(
+          Expanded(
             child: Text(
-              'New Report',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              widget.localLeaderSubmit ? 'Leader Report' : 'New Report',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
             ),
           ),
           const Text('Step 1 of 3',
@@ -234,6 +237,7 @@ class _ReportStep1ScreenState extends State<ReportStep1Screen> {
                   builder: (_) => ReportStep2Screen(
                         incidentTypeId: _selectedTypeId!,
                         incidentTypeName: _selectedTypeName ?? '',
+                        localLeaderSubmit: widget.localLeaderSubmit,
                       )))
               : null,
           style: ElevatedButton.styleFrom(

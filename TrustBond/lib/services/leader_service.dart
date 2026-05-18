@@ -15,6 +15,30 @@ class LeaderService {
   static const _storage = FlutterSecureStorage();
   static const _tokenKey = 'tb_leader_access_token';
 
+  String _parseErrorMessage(http.Response res, String fallback) {
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map) {
+        final detail = decoded['detail'];
+        if (detail is String && detail.trim().isNotEmpty) {
+          return detail.trim();
+        }
+        if (detail is List && detail.isNotEmpty) {
+          final first = detail.first;
+          if (first is Map && first['msg'] != null) {
+            return first['msg'].toString();
+          }
+        }
+        if (decoded['message'] != null) {
+          return decoded['message'].toString();
+        }
+      }
+    } catch (_) {}
+    final body = res.body.trim();
+    if (body.isNotEmpty && body.length < 300) return body;
+    return fallback;
+  }
+
   Future<String?> getToken() => _storage.read(key: _tokenKey);
 
   Future<void> logout() => _storage.delete(key: _tokenKey);
@@ -29,14 +53,9 @@ class LeaderService {
         .timeout(_timeout);
 
     if (res.statusCode != 200) {
-      String msg = 'Login failed (HTTP ${res.statusCode})';
-      try {
-        final decoded = jsonDecode(res.body);
-        if (decoded is Map && decoded['detail'] != null) {
-          msg = decoded['detail'].toString();
-        }
-      } catch (_) {}
-      throw Exception(msg);
+      throw Exception(
+        _parseErrorMessage(res, 'Login failed (HTTP ${res.statusCode})'),
+      );
     }
 
     final decoded = jsonDecode(res.body) as Map<String, dynamic>;
@@ -56,14 +75,12 @@ class LeaderService {
         )
         .timeout(_timeout);
     if (res.statusCode != 200) {
-      String msg = 'Failed to request login code (HTTP ${res.statusCode})';
-      try {
-        final decoded = jsonDecode(res.body);
-        if (decoded is Map && decoded['detail'] != null) {
-          msg = decoded['detail'].toString();
-        }
-      } catch (_) {}
-      throw Exception(msg);
+      throw Exception(
+        _parseErrorMessage(
+          res,
+          'Failed to request login code (HTTP ${res.statusCode})',
+        ),
+      );
     }
   }
 
@@ -76,14 +93,12 @@ class LeaderService {
         )
         .timeout(_timeout);
     if (res.statusCode != 200) {
-      String msg = 'Failed to request login code (HTTP ${res.statusCode})';
-      try {
-        final decoded = jsonDecode(res.body);
-        if (decoded is Map && decoded['detail'] != null) {
-          msg = decoded['detail'].toString();
-        }
-      } catch (_) {}
-      throw Exception(msg);
+      throw Exception(
+        _parseErrorMessage(
+          res,
+          'Failed to request login code (HTTP ${res.statusCode})',
+        ),
+      );
     }
     try {
       final decoded = jsonDecode(res.body);
@@ -110,14 +125,12 @@ class LeaderService {
         )
         .timeout(_timeout);
     if (res.statusCode != 200) {
-      String msg = 'Failed to verify login code (HTTP ${res.statusCode})';
-      try {
-        final decoded = jsonDecode(res.body);
-        if (decoded is Map && decoded['detail'] != null) {
-          msg = decoded['detail'].toString();
-        }
-      } catch (_) {}
-      throw Exception(msg);
+      throw Exception(
+        _parseErrorMessage(
+          res,
+          'Failed to verify login code (HTTP ${res.statusCode})',
+        ),
+      );
     }
 
     final decoded = jsonDecode(res.body) as Map<String, dynamic>;
@@ -137,14 +150,12 @@ class LeaderService {
         )
         .timeout(_timeout);
     if (res.statusCode != 200) {
-      String msg = 'Failed to request setup code (HTTP ${res.statusCode})';
-      try {
-        final decoded = jsonDecode(res.body);
-        if (decoded is Map && decoded['detail'] != null) {
-          msg = decoded['detail'].toString();
-        }
-      } catch (_) {}
-      throw Exception(msg);
+      throw Exception(
+        _parseErrorMessage(
+          res,
+          'Failed to request setup code (HTTP ${res.statusCode})',
+        ),
+      );
     }
   }
 
@@ -165,14 +176,12 @@ class LeaderService {
         )
         .timeout(_timeout);
     if (res.statusCode != 200) {
-      String msg = 'Failed to set password (HTTP ${res.statusCode})';
-      try {
-        final decoded = jsonDecode(res.body);
-        if (decoded is Map && decoded['detail'] != null) {
-          msg = decoded['detail'].toString();
-        }
-      } catch (_) {}
-      throw Exception(msg);
+      throw Exception(
+        _parseErrorMessage(
+          res,
+          'Failed to set password (HTTP ${res.statusCode})',
+        ),
+      );
     }
   }
 

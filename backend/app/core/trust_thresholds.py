@@ -38,6 +38,7 @@ class ThresholdConfig:
     VOLO_MIN_CONFIDENCE: float = 0.3   # Minimum object detection confidence
     
     # Description Quality Thresholds (Natural Language model only)
+    DESCRIPTION_MIN_WORDS: int = 15
     DESCRIPTION_MIN_LENGTH: int = 20
     DESCRIPTION_ADEQUATE_LENGTH: int = 50
     DESCRIPTION_MAX_LENGTH: int = 1000
