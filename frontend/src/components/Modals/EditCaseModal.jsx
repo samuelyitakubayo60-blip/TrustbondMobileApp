@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { parseApiDate } from '../../utils/dateTime';
+import SpecialAssignmentUnitSelect from '../SpecialAssignmentUnitSelect';
 
 function toDatetimeLocalValue(iso) {
   const d = parseApiDate(iso);
@@ -221,11 +222,11 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
           <>
             <div className="input-group">
               <div className="input-label">Special assignment unit</div>
-              <input
-                className="input"
+              <SpecialAssignmentUnitSelect
                 value={specialAssignmentUnit}
-                onChange={(e) => setSpecialAssignmentUnit(e.target.value)}
-                placeholder="e.g. RIB, traffic task force…"
+                onChange={setSpecialAssignmentUnit}
+                placeholder="None — select if case goes to a special unit"
+                allowEmpty
               />
             </div>
             <div className="form-grid" style={{ marginBottom: '12px' }}>

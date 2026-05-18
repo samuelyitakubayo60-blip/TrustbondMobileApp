@@ -200,6 +200,12 @@ const Sidebar = ({
                   label: "Incident Types",
                   icon: "ni-it",
                 },
+                {
+                  id: "special-assignment-units",
+                  idx: 17,
+                  label: "Assignment Units",
+                  icon: "ni-st",
+                },
                 { id: "stations", idx: 10, label: "Stations", icon: "ni-st" },
                 { id: "local-leaders", idx: 16, label: "Local Leaders", icon: "ni-us" },
                 {

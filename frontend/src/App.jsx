@@ -11,6 +11,7 @@ import GeographicIntelligence from "./components/screens/GeographicIntelligence"
 import EnhancedGeographicIntelligence from "./components/screens/EnhancedGeographicIntelligence";
 import Users from "./components/screens/Users";
 import IncidentTypes from "./components/screens/IncidentTypes";
+import SpecialAssignmentUnits from "./components/screens/SpecialAssignmentUnits";
 import Stations from "./components/screens/Stations";
 import LocalLeaders from "./components/screens/LocalLeaders";
 import AuditLog from "./components/screens/AuditLog";
@@ -74,6 +75,8 @@ function App() {
         return "users";
       case "/incident-types":
         return "incident-types";
+      case "/special-assignment-units":
+        return "special-assignment-units";
       case "/stations":
         return "stations";
       case "/local-leaders":
@@ -152,6 +155,8 @@ function App() {
         return "/users";
       case "incident-types":
         return "/incident-types";
+      case "special-assignment-units":
+        return "/special-assignment-units";
       case "stations":
         return "/stations";
       case "local-leaders":
@@ -206,6 +211,8 @@ function App() {
         return "users";
       case "/incident-types":
         return "incident-types";
+      case "/special-assignment-units":
+        return "special-assignment-units";
       case "/stations":
         return "stations";
       case "/local-leaders":
@@ -262,6 +269,7 @@ function App() {
     "device-trust": "Device Trust Management",
     users: "User Management",
     "incident-types": "Incident Types",
+    "special-assignment-units": "Assignment Units",
     "local-leaders": "Local Leaders",
     "audit-log": "Audit Log",
     "system-config": "System Configuration",
@@ -476,6 +484,8 @@ function App() {
             }}
           />
         );
+      case "special-assignment-units":
+        return <SpecialAssignmentUnits wsRefreshKey={wsRefreshKey} />;
       case "stations":
         return (
           <Stations

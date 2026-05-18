@@ -18,6 +18,29 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
   const [selectedTargetCase, setSelectedTargetCase] = useState('');
   const [caseSearch, setCaseSearch] = useState('');
   const [movingReport, setMovingReport] = useState(false);
+  const [unitLabels, setUnitLabels] = useState({});
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    api
+      .get('/api/v1/special-assignment-units/')
+      .then((res) => {
+        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        if (cancelled) return;
+        const map = {};
+        list.forEach((u) => {
+          if (u?.unit_code) map[u.unit_code] = u.unit_name || u.unit_code;
+        });
+        setUnitLabels(map);
+      })
+      .catch(() => {
+        if (!cancelled) setUnitLabels({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !caseItem?.case_id) return;
@@ -298,7 +321,10 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
             {caseItem.special_assignment_unit && (
               <div className="input-group">
                 <div className="input-label">Special assignment unit</div>
-                <div style={{ fontSize: 13 }}>{caseItem.special_assignment_unit}</div>
+                <div style={{ fontSize: 13 }}>
+                  {unitLabels[caseItem.special_assignment_unit] ||
+                    caseItem.special_assignment_unit}
+                </div>
               </div>
             )}
             {caseItem.rib_handed_over_at && (

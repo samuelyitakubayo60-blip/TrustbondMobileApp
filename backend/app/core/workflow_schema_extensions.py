@@ -46,6 +46,29 @@ DDL_STATEMENTS: tuple[str, ...] = (
     """
     ALTER TABLE incident_types ADD COLUMN IF NOT EXISTS default_special_assignment_unit VARCHAR(80);
     """,
+    """
+    CREATE TABLE IF NOT EXISTS special_assignment_units (
+      unit_id SERIAL PRIMARY KEY,
+      unit_code VARCHAR(50) NOT NULL UNIQUE,
+      unit_name VARCHAR(100) NOT NULL,
+      description VARCHAR(500),
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      requires_commander_approval BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    """,
+    """
+    INSERT INTO special_assignment_units (unit_code, unit_name, description)
+    VALUES
+      ('RIB', 'RIB — Investigation Bureau', 'Serious crime / investigation handover'),
+      ('TRAFFIC', 'Traffic Police', 'Road traffic incidents and enforcement'),
+      ('COUNTER_TERROR', 'Counter Terror Unit', 'Terrorism-related deployments'),
+      ('FIRE_RESCUE', 'Fire & Rescue', 'Fire and rescue response'),
+      ('QUICK_RESPONSE', 'Quick Response Team', 'Rapid deployment to active incidents'),
+      ('GENERAL_PATROL', 'General Patrol', 'Routine patrol and community response')
+    ON CONFLICT (unit_code) DO NOTHING;
+    """,
 )
 _log = logging.getLogger(__name__)
 

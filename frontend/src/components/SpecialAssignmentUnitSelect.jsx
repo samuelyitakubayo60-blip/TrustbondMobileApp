@@ -1,101 +1,105 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/client';
-import { getToken } from '../api/client';
 
-const SpecialAssignmentUnitSelect = ({ value, onChange, required = false, disabled = false, placeholder = "Select Unit" }) => {
+/**
+ * Dropdown for special_assignment_unit / assigned_unit fields.
+ * Stores unit_code on the case; displays unit_name in the list.
+ */
+const SpecialAssignmentUnitSelect = ({
+  value = '',
+  onChange,
+  required = false,
+  disabled = false,
+  placeholder = 'Select unit',
+  className = 'select',
+  allowEmpty = true,
+}) => {
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    loadUnits();
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await api.get('/api/v1/special-assignment-units/');
+        const list = Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response)
+            ? response
+            : [];
+        if (!cancelled) setUnits(list);
+      } catch {
+        if (!cancelled) {
+          setError('Failed to load units');
+          setUnits([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const loadUnits = async () => {
-    try {
-      setLoading(true);
-      const token = getToken();
-      console.log('SpecialAssignmentUnitSelect - Loading units...');
-      console.log('Token available:', !!token);
-      
-      const response = await api.get('/api/v1/special-assignment-units/');
-      console.log('SpecialAssignmentUnitSelect - API response:', response);
-      
-      if (response && response.data) {
-        console.log('SpecialAssignmentUnitSelect - Setting units:', response.data);
-        setUnits(response.data);
-      } else if (response && Array.isArray(response)) {
-        console.log('SpecialAssignmentUnitSelect - Setting units from array:', response);
-        setUnits(response);
-      } else {
-        console.log('SpecialAssignmentUnitSelect - No valid response, setting empty array');
-        setUnits([]);
-      }
-    } catch (err) {
-      console.error('SpecialAssignmentUnitSelect - Failed to load units:', err);
-      console.error('Error details:', err.response);
-      setError('Failed to load special units');
-      setUnits([]);
-    } finally {
-      setLoading(false);
+  const handleChange = (e) => {
+    if (typeof onChange === 'function') {
+      onChange(e.target.value);
     }
   };
 
+  const normalizedValue = value == null ? '' : String(value);
+  const knownCode = units.some((u) => u.unit_code === normalizedValue);
+  const legacyLabel =
+    normalizedValue && !knownCode ? `${normalizedValue} (saved value)` : null;
+
   if (loading) {
     return (
-      <select 
-        value={value}
-        onChange={onChange}
+      <select
+        className={className}
+        value={normalizedValue}
+        onChange={handleChange}
         required={required}
-        disabled={disabled || true}
-        style={{ 
-          width: '100%', 
-          padding: '8px', 
-          border: '1px solid #dee2e6', 
-          borderRadius: '4px',
-          backgroundColor: '#f8f9fa'
-        }}
+        disabled
       >
-        <option value="" disabled>{placeholder}</option>
-        <option value="" disabled>Loading units...</option>
+        <option value="">{placeholder}</option>
+        <option value="" disabled>
+          Loading units…
+        </option>
       </select>
     );
   }
 
   if (error) {
     return (
-      <select 
-        value={value}
-        onChange={onChange}
+      <select
+        className={className}
+        value={normalizedValue}
+        onChange={handleChange}
         required={required}
-        disabled={true}
-        style={{ 
-          width: '100%', 
-          padding: '8px', 
-          border: '1px solid #dc3545', 
-          borderRadius: '4px',
-          backgroundColor: '#f8d7da'
-        }}
+        disabled
       >
-        <option value="" disabled>Error loading units</option>
+        <option value="">{error}</option>
       </select>
     );
   }
 
   return (
-    <select 
-      value={value}
-      onChange={onChange}
+    <select
+      className={className}
+      style={{ width: "100%" }}
+      value={normalizedValue}
+      onChange={handleChange}
       required={required}
       disabled={disabled}
-      style={{ 
-        width: '100%', 
-        padding: '8px', 
-        border: '1px solid #dee2e6', 
-        borderRadius: '4px'
-      }}
     >
-      <option value="" disabled>{placeholder}</option>
+      {allowEmpty && <option value="">{placeholder}</option>}
+      {legacyLabel && (
+        <option value={normalizedValue}>{legacyLabel}</option>
+      )}
       {units.map((unit) => (
         <option key={unit.unit_id} value={unit.unit_code}>
           {unit.unit_name}

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../../api/client';
+import SpecialAssignmentUnitSelect from '../SpecialAssignmentUnitSelect';
 
 const AddIncidentModal = ({ isOpen, onClose, mode = 'add', incidentType = null, onSaved }) => {
   const isEdit = mode === 'edit';
@@ -126,12 +127,16 @@ const AddIncidentModal = ({ isOpen, onClose, mode = 'add', incidentType = null, 
 
         <div className="input-group">
           <div className="input-label">Default special assignment unit (auto-cases)</div>
-          <input
-            className="input"
-            placeholder="Optional — applied when auto-creating cases from this type"
+          <SpecialAssignmentUnitSelect
             value={defaultSpecialUnit}
-            onChange={(e) => setDefaultSpecialUnit(e.target.value)}
+            onChange={setDefaultSpecialUnit}
+            placeholder="None — select from registered units"
+            allowEmpty
           />
+          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>
+            When verified reports auto-create a case for this type, the selected unit
+            is copied to the case. Manage units under Management → Assignment Units.
+          </div>
         </div>
 
         <div className="input-group" style={{ marginTop: '4px' }}>
