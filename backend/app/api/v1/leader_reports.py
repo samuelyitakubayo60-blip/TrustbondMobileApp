@@ -14,6 +14,7 @@ from app.models.report import Report
 from app.models.local_leader import LocalLeader
 from app.api.v1.leader_auth import get_current_local_leader
 from app.core.leader_workflow import leader_covered_village_ids as _leader_covered_village_ids
+from app.core.report_credibility_summary import build_credibility_summary
 
 
 router = APIRouter(prefix="/leader", tags=["leader"])
@@ -92,27 +93,14 @@ def list_leader_reports(
             if r.village_location.parent.parent:
                 sector_name = r.village_location.parent.parent.location_name
 
-        fv = r.feature_vector if isinstance(r.feature_vector, dict) else {}
-        desc_meta = fv.get("description_credibility") if isinstance(fv.get("description_credibility"), dict) else {}
         evidence_count = len(getattr(r, "evidence_files", None) or [])
         trust_val = float(r.trust_score) if getattr(r, "trust_score", None) is not None else None
-        summary_parts: list[str] = []
-        if trust_val is not None:
-            summary_parts.append(f"Credibility score: {trust_val:.0f}/100")
-        if r.flag_reason:
-            summary_parts.append(f"Flag: {r.flag_reason}")
-        if desc_meta:
-            wc = desc_meta.get("word_count")
-            if wc is not None:
-                summary_parts.append(f"Description: {wc} words")
-            if desc_meta.get("short_description_rescue"):
-                summary_parts.append("Short text but matches incident and evidence")
-            elif desc_meta.get("length_adjustment") == "penalty":
-                summary_parts.append("Short description lowered credibility")
-        if evidence_count:
-            summary_parts.append(f"Evidence files: {evidence_count}")
-        elif not (r.description or "").strip():
-            summary_parts.append("No description or evidence on file")
+        credibility_summary = build_credibility_summary(
+            report=r,
+            trust_score=trust_val,
+            flag_reason=r.flag_reason,
+            evidence_count=evidence_count,
+        )
 
         items.append(
             LeaderReportResponse(
@@ -134,7 +122,7 @@ def list_leader_reports(
                 trust_score=trust_val,
                 flag_reason=r.flag_reason,
                 evidence_count=evidence_count,
-                credibility_summary=" · ".join(summary_parts) if summary_parts else None,
+                credibility_summary=credibility_summary,
             )
         )
 

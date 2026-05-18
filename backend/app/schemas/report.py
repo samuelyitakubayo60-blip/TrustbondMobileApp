@@ -96,6 +96,10 @@ class ReportResponse(BaseModel):
     flag_reason: Optional[str] = None
     ai_evidence_description: Optional[str] = None
     ai_verification_reason: Optional[str] = None
+    # Description length / semantic match adjustments (from feature_vector after scoring).
+    description_credibility: Optional[Dict[str, Any]] = None
+    credibility_summary: Optional[str] = None
+    credibility_detail_lines: List[str] = []
     decision_patterns: List[str] = []
     decision_pattern_explanations: Dict[str, str] = {}
     verified_at: Optional[datetime] = None

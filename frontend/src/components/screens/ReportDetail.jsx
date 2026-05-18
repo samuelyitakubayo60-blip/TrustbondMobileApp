@@ -7,6 +7,10 @@ import {
   formatCommunityConfirmation,
   formatHotspotClusteringCue,
 } from "../../utils/reportOperationalLabels";
+import {
+  hasDescriptionCredibility,
+  descriptionCredibilityDetailLines,
+} from "../../utils/descriptionCredibility";
 
 const friendlyFlagReason = (reason) => {
   const m = {
@@ -85,6 +89,46 @@ const cleanAiNarrative = (text) => {
     .replace(/\s+/g, " ")
     .trim();
 };
+
+const descriptionCredibilityPanelStyle = {
+  padding: "10px 12px",
+  borderRadius: 8,
+  background: "rgba(156, 39, 176, 0.08)",
+  border: "1px solid rgba(156, 39, 176, 0.28)",
+  color: "var(--text)",
+  fontSize: 12,
+  display: "grid",
+  gap: 8,
+};
+
+function DescriptionCredibilityPanel({ report, title }) {
+  if (!hasDescriptionCredibility(report)) return null;
+  const lines = descriptionCredibilityDetailLines(report);
+  const summary = (report.credibility_summary || "").trim();
+  return (
+    <div style={descriptionCredibilityPanelStyle}>
+      <div style={{ fontWeight: 700 }}>{title}</div>
+      {summary ? (
+        <div style={{ lineHeight: 1.5 }}>{summary}</div>
+      ) : null}
+      {lines.length > 0 ? (
+        <ul
+          style={{
+            margin: 0,
+            paddingLeft: 18,
+            lineHeight: 1.45,
+            fontSize: 11,
+            color: "var(--muted)",
+          }}
+        >
+          {lines.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 const prettyFactorName = (key) => {
   if (key === "aggregation_adjustment") {
@@ -1041,7 +1085,9 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 {friendlyFlagReason(report.flag_reason)}
               </div>
             )}
-            {(report.ai_verification_reason || report.ai_evidence_description) && (
+            {(report.ai_verification_reason ||
+              report.ai_evidence_description ||
+              hasDescriptionCredibility(report)) && (
               <div
                 style={{
                   margin: "0 14px 12px",
@@ -1055,6 +1101,10 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   gap: 8,
                 }}
               >
+                <DescriptionCredibilityPanel
+                  report={report}
+                  title="Why this report was scored (description & evidence)"
+                />
                 {report.ai_verification_reason && (
                   <div>
                     <strong>AI Decision Reason:</strong>{" "}
@@ -1075,7 +1125,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   )}
                 {report.ai_evidence_description && (
                   <div>
-                    <strong>AI Evidence Summary:</strong>{" "}
+                    <strong>AI Evidence Summary (generated):</strong>{" "}
                     <span>{cleanAiNarrative(report.ai_evidence_description)}</span>
                   </div>
                 )}

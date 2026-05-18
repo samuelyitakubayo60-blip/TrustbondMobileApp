@@ -24,6 +24,39 @@ const HOTSPOT_PERIOD_OPTIONS = [
   { label: "1 year", hours: 8760 },
 ];
 
+/** Map always loads full cluster history; side panel filter highlights a period. */
+const MAP_CLUSTER_WINDOW_HOURS = 8760;
+const DEFAULT_TIME_PERIOD = "week";
+
+const TIME_PERIOD_HOURS = {
+  day: 24,
+  week: 168,
+  month: 720,
+  quarter: 2160,
+  year: 8760,
+};
+
+const getSelectedFilterHours = (timePeriod, customHours) => {
+  const custom = Number(customHours);
+  if (Number.isFinite(custom) && custom > 0) return custom;
+  if (!timePeriod) return null;
+  return TIME_PERIOD_HOURS[timePeriod] ?? 168;
+};
+
+const isWithinSelectedFilter = (isoDate, filterHours) => {
+  if (filterHours == null) return true;
+  if (!isoDate) return false;
+  const t = new Date(isoDate).getTime();
+  if (Number.isNaN(t)) return false;
+  return t >= Date.now() - filterHours * 60 * 60 * 1000;
+};
+
+const formatFilterPeriodLabel = (timePeriod, customHours) => {
+  const hours = getSelectedFilterHours(timePeriod, customHours);
+  if (hours == null) return "All time";
+  return formatTimeWindow(hours);
+};
+
 const riskWeight = { critical: -1, high: 0, medium: 1, low: 2 };
 const incidentTone = {
   theft: "danger",
@@ -179,11 +212,11 @@ const formatTimeWindow = (hours) => {
 };
 
 const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
-  const [hotspots, setHotspots] = useState([]);
+  const [mapHotspots, setMapHotspots] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [liveGroups, setLiveGroups] = useState([]);
+  const [confirmedOnMap, setConfirmedOnMap] = useState([]);
   const [typeFilter, setTypeFilter] = useState("all"); // 'all' | incident_type_name
-  const [timePeriod, setTimePeriod] = useState("month"); // '', 'day', 'week', 'month', 'quarter', 'year'
+  const [timePeriod, setTimePeriod] = useState(DEFAULT_TIME_PERIOD); // '', 'day', 'week', 'month', 'quarter', 'year'
   const [customHours, setCustomHours] = useState(""); // Custom hours input
   const [historicalHotspots, setHistoricalHotspots] = useState([]);
   const [historicalLoading, setHistoricalLoading] = useState(false);
@@ -207,25 +240,27 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     trust_min: 50,
   });
 
-  const loadHotspots = (params = dbscanParams) => {
+  const loadMapHotspots = () => {
     setLoading(true);
     const query = new URLSearchParams();
-    if (params?.time_window_hours) {
-      query.set("time_window_hours", String(params.time_window_hours));
-    }
+    query.set("time_window_hours", String(MAP_CLUSTER_WINDOW_HOURS));
+    query.set("limit", "200");
     api
-      .get(`/api/v1/hotspots/${query.toString() ? `?${query}` : ""}`)
+      .get(`/api/v1/hotspots/?${query.toString()}`)
       .then((res) => {
-        setHotspots(res || []);
+        setMapHotspots(res || []);
         setLoading(false);
       })
       .catch(() => setLoading(false));
   };
 
-  const loadLiveIncidents = () => {
-    const fromDate = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // last 1 hour
+  /** Police-confirmed reports for map pins (full history; filter dims older pins). */
+  const loadConfirmedReportsForMap = () => {
+    const fromDate = new Date(
+      Date.now() - MAP_CLUSTER_WINDOW_HOURS * 60 * 60 * 1000,
+    ).toISOString();
     const params = new URLSearchParams();
-    params.set("limit", "100");
+    params.set("limit", "500");
     params.set("offset", "0");
     params.set("from_date", fromDate);
     params.set("verification_status_in", "verified");
@@ -234,32 +269,20 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       .get(`/api/v1/reports/?${params.toString()}`)
       .then((res) => {
         const items = Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [];
-        const eligible = items.filter((r) => policeVerificationOkForHotspots(r).ok);
-        const grouped = new Map();
-        eligible.forEach((r) => {
-          const lat = Number(r.latitude);
-          const lng = Number(r.longitude);
-          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-          const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
-          const prev = grouped.get(key);
-          if (prev) {
-            prev.count += 1;
-            prev.report_ids.push(r.report_id);
-          } else {
-            grouped.set(key, {
-              key,
-              lat,
-              lng,
-              count: 1,
-              incident_type_name: r.incident_type_name || "Incident",
-              report_ids: [r.report_id],
-            });
-          }
-        });
-        setLiveGroups(Array.from(grouped.values()));
+        const pins = items
+          .filter((r) => policeVerificationOkForHotspots(r).ok)
+          .map((r) => ({
+            report_id: r.report_id,
+            lat: Number(r.latitude),
+            lng: Number(r.longitude),
+            reported_at: r.reported_at,
+            incident_type_name: r.incident_type_name || "Incident",
+          }))
+          .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng));
+        setConfirmedOnMap(pins);
       })
       .catch(() => {
-        setLiveGroups([]);
+        setConfirmedOnMap([]);
       });
   };
 
@@ -321,10 +344,15 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   };
 
   useEffect(() => {
-    loadHotspots();
-    loadLiveIncidents();
+    loadMapHotspots();
+    loadConfirmedReportsForMap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsRefreshKey]);
+
+  const selectedFilterHours = useMemo(
+    () => getSelectedFilterHours(timePeriod, customHours),
+    [timePeriod, customHours],
+  );
 
   useEffect(() => {
     loadHistoricalHotspots();
@@ -338,7 +366,8 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
         if (!res) return;
         const nextParams = { ...dbscanParams, ...res };
         setDbscanParams(nextParams);
-        loadHotspots(nextParams);
+        loadMapHotspots();
+        loadHistoricalHotspots();
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -414,13 +443,23 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
 
   const filteredHotspots = useMemo(() => {
     return typeFilter === "all"
-      ? hotspots
-      : hotspots.filter(
+      ? mapHotspots
+      : mapHotspots.filter(
           (h) =>
             (h.incident_type_name || "").toLowerCase() ===
             typeFilter.toLowerCase(),
         );
-  }, [hotspots, typeFilter]);
+  }, [mapHotspots, typeFilter]);
+
+  const filteredConfirmedOnMap = useMemo(() => {
+    return typeFilter === "all"
+      ? confirmedOnMap
+      : confirmedOnMap.filter(
+          (r) =>
+            (r.incident_type_name || "").toLowerCase() ===
+            typeFilter.toLowerCase(),
+        );
+  }, [confirmedOnMap, typeFilter]);
 
   const plottedHotspots = useMemo(
     () =>
@@ -659,10 +698,10 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       <div className="page-header smx-page-header">
         <h2>Community Safety Map</h2>
         <p>
-          Real-time crime cluster visualization (last 1 hour) with historical
-          analysis tools - Musanze District. Map shows live incidents, while
-          side panel provides time-based pattern analysis. This is also the
-          public-facing view available to citizens.
+          Musanze District safety map: all police-confirmed reports and DBSCAN
+          clusters stay visible so you can see how clusters form. Use Time Period
+          in the side panel to highlight a window (default last week); older
+          points appear faded on the map.
         </p>
       </div>
 
@@ -715,7 +754,8 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             color: "var(--muted)",
           }}
         >
-          🕐 Real-time view: Last 1 hour only
+          Map: {mapHotspots.length} clusters · {confirmedOnMap.length} confirmed
+          reports · filter highlight: {formatFilterPeriodLabel(timePeriod, customHours)}
         </span>
       </div>
 
@@ -791,17 +831,55 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                 );
               })}
 
+              {filteredConfirmedOnMap.map((r) => {
+                const inFilter = isWithinSelectedFilter(
+                  r.reported_at,
+                  selectedFilterHours,
+                );
+                const fade = inFilter ? 1 : 0.38;
+                return (
+                  <CircleMarker
+                    key={`confirmed-${r.report_id}`}
+                    center={[r.lat, r.lng]}
+                    radius={6}
+                    pathOptions={{
+                      color: "#1e3a8a",
+                      weight: 1,
+                      fillColor: "#3b82f6",
+                      fillOpacity: 0.35 * fade,
+                      opacity: fade,
+                    }}
+                  >
+                    <Tooltip
+                      direction="top"
+                      offset={[0, -4]}
+                      opacity={0.95}
+                      interactive={false}
+                    >
+                      <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
+                        <strong>Police-confirmed report</strong>
+                        <br />
+                        Type: {r.incident_type_name}
+                        <br />
+                        {inFilter
+                          ? "In selected time filter"
+                          : "Outside filter (shown faded)"}
+                      </div>
+                    </Tooltip>
+                  </CircleMarker>
+                );
+              })}
+
               {plottedHotspots
                 .filter((h) => Number.isFinite(h.lat) && Number.isFinite(h.lng))
                 .map((h) => {
-                  const tone =
-                    h.risk_level === "high" || h.risk_level === "critical"
-                      ? "danger"
-                      : h.risk_level === "medium" || h.risk_level === "active"
-                        ? "warning"
-                        : "success";
                   const color = getCircleColor(h.risk_level);
                   const count = Number(h.incident_count || 0);
+                  const inFilter = isWithinSelectedFilter(
+                    h.detected_at,
+                    selectedFilterHours,
+                  );
+                  const fade = inFilter ? 1 : 0.42;
                   return (
                     <CircleMarker
                       key={`cluster-center-${h.hotspot_id}`}
@@ -811,7 +889,8 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                         color,
                         weight: 2,
                         fillColor: color,
-                        fillOpacity: 0.28,
+                        fillOpacity: 0.28 * fade,
+                        opacity: fade,
                       }}
                     >
                       <Tooltip
@@ -828,40 +907,15 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                           Risk: {String(h.risk_level || "low").toUpperCase()}
                           <br />
                           Type: {h.incident_type_name || "Mixed"}
+                          <br />
+                          {inFilter
+                            ? "In selected time filter"
+                            : "Outside filter (shown faded)"}
                         </div>
                       </Tooltip>
                     </CircleMarker>
                   );
                 })}
-
-              {liveGroups.map((g) => (
-                <CircleMarker
-                  key={`live-group-${g.key}`}
-                  center={[g.lat, g.lng]}
-                  radius={Math.min(20, 8 + Math.log2(Math.max(1, g.count)) * 5)}
-                  pathOptions={{
-                    color: "#1f2937",
-                    weight: 1,
-                    fillColor: "#60a5fa",
-                    fillOpacity: 0.22,
-                  }}
-                >
-                  <Tooltip
-                    direction="top"
-                    offset={[0, -4]}
-                    opacity={0.95}
-                    interactive={false}
-                  >
-                    <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
-                      <strong>Live incidents (last 1h)</strong>
-                      <br />
-                      Reports at this point: {g.count}
-                      <br />
-                      Type: {g.incident_type_name || "Incident"}
-                    </div>
-                  </Tooltip>
-                </CircleMarker>
-              ))}
 
               {plottedHotspots
                 .filter(
@@ -871,6 +925,11 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                 )
                 .map((h) => {
                   const color = getCircleColor(h.risk_level);
+                  const inFilter = isWithinSelectedFilter(
+                    h.detected_at,
+                    selectedFilterHours,
+                  );
+                  const fade = inFilter ? 1 : 0.42;
                   return (
                     <Polygon
                       key={`cluster-boundary-${h.hotspot_id}`}
@@ -879,7 +938,8 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                         color,
                         weight: 2,
                         fillColor: color,
-                        fillOpacity: 0.1,
+                        fillOpacity: 0.1 * fade,
+                        opacity: fade,
                         dashArray: "3 6",
                       }}
                     >
@@ -919,8 +979,9 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                 backdropFilter: "blur(2px)",
               }}
             >
-              View is locked to Musanze district (+0.5 km buffer). Use home
-              button to recenter.
+              All confirmed reports & clusters shown · brighter = in time filter (
+              {formatFilterPeriodLabel(timePeriod, customHours)}). Home button
+              recenters Musanze view.
             </div>
           </div>
         </div>
@@ -941,7 +1002,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             <div className="status-row">
               <span>Time period</span>
               <strong>
-                {timePeriod ? timePeriod.charAt(0).toUpperCase() + timePeriod.slice(1) : "Month"}
+                {formatFilterPeriodLabel(timePeriod, customHours)}
               </strong>
             </div>
             <div className="status-row">
@@ -1478,7 +1539,9 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                         time_window_hours: Number(e.target.value),
                       };
                       setDbscanParams(nextParams);
-                      loadHotspots(nextParams);
+                      loadMapHotspots();
+                      loadConfirmedReportsForMap();
+                      loadHistoricalHotspots();
                     }}
                     style={{ width: "100%", fontSize: "12px" }}
                   >
@@ -1586,7 +1649,9 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                       ),
                       trust_min: Number(dbscanParams.trust_min || 0),
                     });
-                    loadHotspots(dbscanParams);
+                    loadMapHotspots();
+                    loadConfirmedReportsForMap();
+                    loadHistoricalHotspots();
                   } catch {
                     // non-fatal
                   } finally {

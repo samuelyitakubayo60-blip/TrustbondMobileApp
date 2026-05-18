@@ -65,6 +65,7 @@ from app.core.report_review import (
     resolve_ml_prediction_for_report,
 )
 from app.core.credibility_model import score_report_credibility, update_device_ml_aggregates, _json_safe
+from app.core.report_credibility_summary import report_credibility_api_fields
 from app.core.natural_language_scorer import analyze_description_quality
 from app.core.audit import log_action
 from app.core.hotspot_auto import (
@@ -561,6 +562,29 @@ def _deterministic_ai_executive_summary(
         except (TypeError, ValueError):
             pass
 
+    dc = (snapshot.get("model_signals") or {}).get("description_credibility") or {}
+    desc_length_line = ""
+    if isinstance(dc, dict) and dc.get("word_count") is not None:
+        wc = int(dc["word_count"])
+        min_w = int(dc.get("min_recommended_words") or 15)
+        if dc.get("short_description_rescue"):
+            desc_length_line = (
+                f"Description length: {wc} words (under {min_w} recommended) but wording matches "
+                f"the incident type and attached evidence, so only a limited credibility penalty was applied."
+            )
+        elif wc < min_w:
+            applied = dc.get("applied_penalty_points")
+            pts = f" (−{applied} on credibility score)" if applied is not None else ""
+            desc_length_line = (
+                f"Description length: {wc} words (recommended {min_w}+); short text reduced credibility{pts}."
+            )
+        elif dc.get("length_adjustment") == "bonus":
+            bonus = dc.get("length_points")
+            bonus_txt = f" (+{bonus} credibility points)" if bonus is not None else ""
+            desc_length_line = (
+                f"Description length: {wc} words — sufficient detail improved credibility{bonus_txt}."
+            )
+
     ts = fd.get("trust_score")
     label = fd.get("label")
     scoring: List[str] = []
@@ -606,6 +630,8 @@ def _deterministic_ai_executive_summary(
         p1_parts.append("They did not provide a usable description.")
 
     closing: List[str] = [loc_sentence, media_line]
+    if desc_length_line:
+        closing.append(desc_length_line)
     if sem_bits:
         closing.append(" ".join(sem_bits))
     if scoring:
@@ -633,6 +659,12 @@ def _deterministic_ai_executive_summary(
                 whys.append("credibility stays below automatic confirmation thresholds")
             elif code == "CONTEXT_MISMATCH":
                 whys.append("the wording does not line up cleanly with incident-type expectations")
+            elif code in {"SHORT_DESCRIPTION", "SHORT_DESCRIPTION_PARTIAL"}:
+                whys.append("the written description is shorter than recommended for full credibility credit")
+            elif code == "SHORT_DESCRIPTION_RESCUED":
+                whys.append(
+                    "the description is short but still aligns with the incident type and evidence on file"
+                )
             elif code == "RULE_FLAGGED":
                 whys.append("rule checks requested manual scrutiny")
             elif code == "FINAL_PENDING_REVIEW":
@@ -728,6 +760,7 @@ def _build_ai_analysis_snapshot(
     longitude: Optional[Any] = None,
     gps_accuracy: Optional[Any] = None,
     location_label: Optional[str] = None,
+    description_credibility: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build structured, model-grounded snapshot for narrative generation."""
     model_breakdown = (
@@ -828,6 +861,9 @@ def _build_ai_analysis_snapshot(
                 "breakdown": model_breakdown.get("volo", {}),
             },
             "base": model_breakdown.get("base", {}),
+            "description_credibility": (
+                description_credibility if isinstance(description_credibility, dict) else {}
+            ),
         },
         "rules": {
             "triggered": rules_triggered,
@@ -987,6 +1023,62 @@ def _compose_ai_evidence_description(
     return _finalize(snapshot, fb, [incident_label, object_text, media_text, desc_excerpt])
 
 
+def _description_credibility_from_report(report: Any) -> Optional[Dict[str, Any]]:
+    """Structured description length/semantic adjustment saved during credibility scoring."""
+    fv = getattr(report, "feature_vector", None)
+    if isinstance(fv, dict):
+        meta = fv.get("description_credibility")
+        if isinstance(meta, dict) and meta:
+            return meta
+    return None
+
+
+def _apply_description_credibility_patterns(
+    description_credibility: Optional[Dict[str, Any]],
+    add_pattern: Any,
+) -> None:
+    """Encode description_credibility into decision patterns shown during AI confirmation."""
+    if not isinstance(description_credibility, dict) or not description_credibility:
+        return
+    wc = description_credibility.get("word_count")
+    min_w = int(description_credibility.get("min_recommended_words") or 15)
+    if wc is None:
+        return
+    try:
+        wc_i = int(wc)
+    except (TypeError, ValueError):
+        return
+    if description_credibility.get("short_description_rescue"):
+        sem = description_credibility.get("semantic_similarity")
+        sem_txt = f", semantic match {float(sem):.0f}%" if sem is not None else ""
+        add_pattern(
+            "SHORT_DESCRIPTION_RESCUED",
+            f"only {wc_i} words (under {min_w} recommended) but description matches incident type "
+            f"and evidence{sem_txt}; credibility penalty capped at 30%",
+        )
+        return
+    if wc_i < min_w:
+        applied = description_credibility.get("applied_penalty_points")
+        pts = f" (−{applied} points on credibility score)" if applied is not None else ""
+        add_pattern(
+            "SHORT_DESCRIPTION",
+            f"description has {wc_i} words (recommended {min_w}+); short text lowered credibility{pts}",
+        )
+        if description_credibility.get("partial_rescue") == "semantic_only":
+            add_pattern(
+                "SHORT_DESCRIPTION_PARTIAL",
+                "text aligns with incident type but lacks evidence for full short-description credit",
+            )
+        return
+    if description_credibility.get("length_adjustment") == "bonus":
+        bonus = description_credibility.get("length_points")
+        bonus_txt = f" (+{bonus} credibility points)" if bonus is not None else ""
+        add_pattern(
+            "DETAILED_DESCRIPTION",
+            f"{wc_i} words provided additional description detail{bonus_txt}",
+        )
+
+
 def _compose_ai_verification_reason(
     *,
     verification_status: Optional[str],
@@ -1002,6 +1094,7 @@ def _compose_ai_verification_reason(
     reviewer_note: Optional[str] = None,
     unified_validation: Optional[Dict[str, Any]] = None,
     scorecard: Optional[Dict[str, Any]] = None,
+    description_credibility: Optional[Dict[str, Any]] = None,
     latitude: Optional[Any] = None,
     longitude: Optional[Any] = None,
     gps_accuracy: Optional[Any] = None,
@@ -1150,6 +1243,8 @@ def _compose_ai_verification_reason(
                 "semantic comparison shows mismatch between description, incident type, and evidence",
             )
 
+    _apply_description_credibility_patterns(description_credibility, _add_pattern)
+
     if rule_status_norm == "rejected":
         _add_pattern(
             "RULE_REJECTION",
@@ -1197,6 +1292,7 @@ def _compose_ai_verification_reason(
         longitude=longitude,
         gps_accuracy=gps_accuracy,
         location_label=location_label,
+        description_credibility=description_credibility,
     )
     deterministic_body = _deterministic_ai_executive_summary(
         snapshot,
@@ -3685,6 +3781,7 @@ def create_report(
             longitude=getattr(report, "longitude", None),
             gps_accuracy=getattr(report, "gps_accuracy", None),
             location_label=_human_location_chain_from_report(report),
+            description_credibility=_description_credibility_from_report(report),
         )
         report.ai_evidence_description = _compose_ai_evidence_description(
             evidence_validations,
@@ -4261,6 +4358,7 @@ def add_review(
         longitude=getattr(report, "longitude", None),
         gps_accuracy=getattr(report, "gps_accuracy", None),
         location_label=_human_location_chain_from_report(report),
+        description_credibility=_description_credibility_from_report(report),
     )
     validations_police = (
         report.feature_vector.get("evidence_validations")
@@ -5339,6 +5437,7 @@ async def upload_evidence(
             longitude=getattr(report_after, "longitude", None),
             gps_accuracy=getattr(report_after, "gps_accuracy", None),
             location_label=loc_chain,
+            description_credibility=_description_credibility_from_report(report_after),
         )
         snapshot_after = _build_ai_analysis_snapshot(
             verification_status=report_after.verification_status,
@@ -6832,6 +6931,11 @@ def _build_report_detail_response(
         hotspot_incident_count=getattr(report, "hotspot_incident_count", None),
         hotspot_label=getattr(report, "hotspot_label", None),
         ml_predictions=[],
+        **report_credibility_api_fields(
+            report,
+            trust_score=float(trust_score) if trust_score is not None else None,
+            evidence_count=len(getattr(report, "evidence_files", []) or []),
+        ),
     )
 
 
@@ -6974,6 +7078,11 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         leader_verification_status=getattr(report, "leader_verification_status", None),
         leader_verified_at=getattr(report, "leader_verified_at", None),
         submitted_by_local_leader_id=getattr(report, "submitted_by_local_leader_id", None),
+        **report_credibility_api_fields(
+            report,
+            trust_score=float(trust_score) if trust_score is not None else None,
+            evidence_count=len(report.evidence_files or []),
+        ),
     )
 
 
