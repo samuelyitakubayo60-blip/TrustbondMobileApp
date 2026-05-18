@@ -91,3 +91,16 @@ class LocalLeaderVerifyLoginCodeRequest(BaseModel):
 
 class LocalLeaderFcmTokenRequest(BaseModel):
     fcm_token: str = Field(..., min_length=10, max_length=512)
+
+
+class LeaderCoverageGapItem(BaseModel):
+    location_id: int
+    location_name: str
+    location_type: str
+    parent_name: Optional[str] = None
+    missing_roles: list[str] = Field(default_factory=list)
+
+
+class LeaderCoverageGapsResponse(BaseModel):
+    items: list[LeaderCoverageGapItem]
+    total: int

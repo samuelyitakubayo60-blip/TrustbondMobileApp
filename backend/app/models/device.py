@@ -21,3 +21,4 @@ class Device(Base):
     # Column name is "metadata" in Postgres, but "metadata" is reserved by SQLAlchemy.
     metadata_json = Column("metadata", JSONB, nullable=True)
     is_banned = Column(Boolean, default=False)
+    mobile_token = Column(String(512), nullable=True)  # FCM token for citizen push (mobile app)

@@ -19,6 +19,7 @@ class ApiConfig {
       _url('$baseUrl/public/locations/geojson');
   static String get leaderAuthUrl => _url('$baseUrl/leader-auth');
   static String get leaderUrl => _url('$baseUrl/leader');
+  static String get notificationsUrl => _url('$baseUrl/notifications');
 
   static String _url(String url) {
     if (url.startsWith('http://') || url.startsWith('https://')) return url;

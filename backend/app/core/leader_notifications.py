@@ -1,4 +1,4 @@
-"""Notify local leaders when a new public report appears in their village (email + FCM)."""
+"""Mobile local-leader alerts (email + FCM). Not police web dashboard notifications."""
 
 from __future__ import annotations
 
@@ -10,15 +10,11 @@ from sqlalchemy.orm import joinedload
 from app.database import SessionLocal
 from app.models.local_leader import LocalLeader
 from app.models.report import Report
-from app.core.leader_workflow import local_leader_ids_covering_village
+from app.core.leader_coverage import active_leader_ids_covering_village
+from app.core.leader_coverage_notifications import notify_admins_leader_coverage_gap_task
 
 
 def notify_local_leaders_new_report_task(report_id: str) -> None:
-    email_on = getattr(settings, "notify_local_leaders_new_report_email", True)
-    fcm_on = getattr(settings, "notify_local_leaders_new_report_fcm", True)
-    if not email_on and not fcm_on:
-        return
-
     db = SessionLocal()
     try:
         report = (
@@ -33,8 +29,14 @@ def notify_local_leaders_new_report_task(report_id: str) -> None:
         if village_id is None:
             return
 
-        leader_ids = local_leader_ids_covering_village(db, int(village_id))
+        leader_ids = active_leader_ids_covering_village(db, int(village_id))
         if not leader_ids:
+            notify_admins_leader_coverage_gap_task(str(report.report_id))
+            return
+
+        email_on = getattr(settings, "notify_local_leaders_new_report_email", True)
+        fcm_on = getattr(settings, "notify_local_leaders_new_report_fcm", True)
+        if not email_on and not fcm_on:
             return
 
         vname = None

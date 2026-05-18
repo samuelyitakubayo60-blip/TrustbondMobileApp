@@ -91,11 +91,32 @@ def report_meets_leader_confirmation(report: Report) -> bool:
     return False
 
 
-def report_eligible_for_auto_case(report: Report) -> bool:
-    """Auto-case linking/creation requires police verification and (if enabled) leader confirmation."""
+def report_police_verified(report: Report) -> bool:
+    """Police/AI pipeline accepted the report (verified), not merely under_review or rejected."""
+    return (getattr(report, "verification_status", None) or "").strip().lower() == "verified"
+
+
+def report_ready_for_cases_and_hotspots(report: Report) -> bool:
+    """
+    Operational eligibility for auto-cases and hotspot clustering.
+
+    Both must pass when leader gate is on:
+    1. Police/AI: verification_status == verified (threshold or manual police review)
+    2. Community: leader_verification_status == confirmed
+
+    Leader confirmation alone does not satisfy (1). A pending AI report stays out of
+    cases/hotspots until police verify; leader confirm is stored as community signal.
+    """
+    if not report_police_verified(report):
+        return False
     if not leader_gate_enabled():
         return True
     return report_meets_leader_confirmation(report)
+
+
+def report_eligible_for_auto_case(report: Report) -> bool:
+    """Alias for case linking; same rules as hotspot operational eligibility."""
+    return report_ready_for_cases_and_hotspots(report)
 
 
 def apply_leader_confirmed_filter_reports(query, report_model):

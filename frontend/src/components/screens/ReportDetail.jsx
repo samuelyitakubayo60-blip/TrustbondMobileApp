@@ -6,7 +6,11 @@ import {
   formatTechnicalStatus,
   formatCommunityConfirmation,
   formatHotspotClusteringCue,
+  communityBadgeClass,
+  formatOperationalPipelineLabel,
+  operationalPipelineBadgeClass,
 } from "../../utils/reportOperationalLabels";
+import ReportWorkflowBanner from "../ReportWorkflowBanner";
 import {
   hasDescriptionCredibility,
   descriptionCredibilityDetailLines,
@@ -953,7 +957,10 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
         >
           Report {idLabel}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span className={`badge ${operationalPipelineBadgeClass(report)}`}>
+            {formatOperationalPipelineLabel(report)}
+          </span>
           {hasCase && (
             <span
               className="badge b-blue"
@@ -1062,6 +1069,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
           {actionMessage}
         </div>
       )}
+
+      <ReportWorkflowBanner report={report} />
 
       <div className="detail-layout">
         <div className="detail-col">
@@ -2236,19 +2245,9 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
         <div className="detail-col">
           <div className="card">
             <div className="card-header">
-              <div className="card-title">Verification & Trust</div>
-              <span
-                className={`badge ${isReportVerified(report, mlPrediction) ? "b-green" : "b-orange"}`}
-              >
-                {isReportVerified(report, mlPrediction)
-                  ? "Verified"
-                  : report.verification_status === "pending"
-                    ? "Pending"
-                    : report.verification_status === "under_review"
-                      ? "Under Review"
-                      : report.verification_status === "rejected"
-                        ? "Rejected"
-                        : "Needs verification"}
+              <div className="card-title">Verification & workflow gates</div>
+              <span className={`badge ${operationalPipelineBadgeClass(report)}`}>
+                {formatOperationalPipelineLabel(report)}
               </span>
             </div>
             <div style={{ marginBottom: "12px" }}>
@@ -2382,7 +2381,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                     }}
                   >
                     <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--text)" }}>
-                      Safety map / hotspot clustering
+                      Cases & hotspot clustering
                     </div>
                     {cue.text}
                   </div>

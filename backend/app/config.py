@@ -96,6 +96,7 @@ class Settings(BaseSettings):
     # Optional override; defaults to project_id inside the JSON file.
     firebase_project_id: Optional[str] = None
     notify_local_leaders_new_report_fcm: bool = True
+    notify_citizen_report_status_fcm: bool = True
 
     # Device anti-abuse guardrails for report creation.
     duplicate_report_time_window_seconds: int = 120

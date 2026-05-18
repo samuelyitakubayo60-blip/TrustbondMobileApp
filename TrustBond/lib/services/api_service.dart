@@ -417,6 +417,25 @@ class ApiService {
     } catch (_) {}
     throw Exception(message);
   }
+
+  /// Register FCM token for citizen mobile push (not police dashboard).
+  Future<void> registerMobileFcmToken({
+    required String deviceId,
+    required String token,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.notificationsUrl}/mobile/$deviceId/register-token');
+    final response = await _client
+        .post(
+          uri,
+          headers: _jsonHeaders,
+          body: jsonEncode({'token': token}),
+        )
+        .timeout(_timeout);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return;
+    }
+    throw Exception('Failed to register mobile push token (${response.statusCode})');
+  }
 }
 
 /// Custom exception for evidence upload failures with status code info.

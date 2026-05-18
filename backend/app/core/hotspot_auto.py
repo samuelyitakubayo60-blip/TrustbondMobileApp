@@ -18,7 +18,7 @@ from app.models.location import Location
 from app.models.report import Report
 from app.models.system_config import SystemConfig
 from app.config import settings
-from app.core.leader_workflow import leader_gate_enabled, report_meets_leader_confirmation
+from app.core.leader_workflow import report_ready_for_cases_and_hotspots
 
 
 DEFAULT_TIME_WINDOW_HOURS = 24
@@ -120,26 +120,22 @@ def _report_trust_score(report: Report) -> float:
 
 
 def _is_report_eligible(report: Report) -> bool:
-    """Only allow finalized verified reports into hotspot clustering."""
+    """Only police-verified + leader-confirmed reports (when gate on) enter hotspot clustering."""
     status = (report.status or "").lower()
     verification = (report.verification_status or "").lower()
     rule_status = (report.rule_status or "").lower()
     if status == "rejected" or verification == "rejected" or rule_status == "rejected":
         return False
 
+    if getattr(settings, "dpu_analytics_require_leader_confirmation", True):
+        return report_ready_for_cases_and_hotspots(report)
+
     officer_confirmed = any(
         (rv.decision or "").lower() == "confirmed"
         for rv in (getattr(report, "police_reviews", None) or [])
     )
     police_ok = verification == "verified" or status == "verified" or officer_confirmed
-    if not police_ok:
-        return False
-
-    if leader_gate_enabled() and getattr(settings, "dpu_analytics_require_leader_confirmation", True):
-        if not report_meets_leader_confirmation(report):
-            return False
-
-    return True
+    return police_ok
 
 
 def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

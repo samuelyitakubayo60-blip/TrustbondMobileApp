@@ -20,10 +20,13 @@ from app.schemas.local_leader import (
     VALID_LEADER_ROLES,
     LEADER_ROLE_CHIEF_OF_VILLAGE,
     LEADER_ROLE_EXECUTIVE_OF_CELL,
+    LeaderCoverageGapItem,
+    LeaderCoverageGapsResponse,
     LocalLeaderCreate,
     LocalLeaderResponse,
     LocalLeaderUpdate,
 )
+from app.core.leader_coverage import find_leader_coverage_gaps
 
 
 router = APIRouter(prefix="/local-leaders", tags=["local-leaders"])
@@ -115,6 +118,18 @@ def _replace_coverage(db: Session, leader_id: int, location_ids: list[int]) -> N
     ).delete()
     for lid in sorted(valid):
         db.add(LocalLeaderCoverageLocation(local_leader_id=leader_id, location_id=lid))
+
+
+@router.get("/coverage-gaps", response_model=LeaderCoverageGapsResponse)
+def list_leader_coverage_gaps(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+    limit: int = Query(200, ge=1, le=1000),
+):
+    """Villages/cells with no active local leader registered (admin warning)."""
+    raw = find_leader_coverage_gaps(db, limit=limit)
+    items = [LeaderCoverageGapItem(**row) for row in raw]
+    return LeaderCoverageGapsResponse(items=items, total=len(items))
 
 
 @router.get("/", response_model=list[LocalLeaderResponse])

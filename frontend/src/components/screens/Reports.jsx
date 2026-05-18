@@ -6,6 +6,9 @@ import {
   formatTechnicalStatus,
   formatCommunityConfirmation,
   communityBadgeClass,
+  formatOperationalPipelineLabel,
+  operationalPipelineBadgeClass,
+  formatOperationalPipelineHint,
   REPORT_QUEUE_PRESETS,
 } from "../../utils/reportOperationalLabels";
 
@@ -238,11 +241,23 @@ const Reports = ({
       <div className="page-header">
         <h2>Reports</h2>
         <p>
-          Citizen submissions: <strong>technical screening</strong> (police
-          verification + AI/rules) runs in parallel with{" "}
-          <strong>community confirmation</strong> (local village/cell leader).
-          They are labelled separately below.
+          Each report needs <strong>two gates</strong> before cases and hotspots: (1) AI/police
+          verification, then (2) local leader confirmation. Use the operational column and queue
+          presets to match the workflow diagram.
         </p>
+      </div>
+
+      <div
+        className="alert alert-info"
+        style={{ marginBottom: 14, fontSize: 13, lineHeight: 1.5 }}
+      >
+        <span className="alert-icon">i</span>
+        <div>
+          <strong>Pipeline:</strong> Citizen submit → AI threshold → police review if needed →
+          leader confirms → <em>Cases & hotspots</em> only when police verified <em>and</em> leader
+          confirmed. Leader confirmed while police still pending →{" "}
+          <strong>Pending for ops</strong>.
+        </div>
       </div>
 
       {queuePreset !== "none" ? (
@@ -391,6 +406,7 @@ const Reports = ({
                 "trust_score",
                 "technical_screening_summary",
                 "community_leader_summary",
+                "operational_status",
                 "assignment_priority",
                 "rule_status",
                 "reported_at",
@@ -402,6 +418,7 @@ const Reports = ({
                 r.trust_score ?? "",
                 formatTechnicalStatus(r),
                 formatCommunityConfirmation(r),
+                formatOperationalPipelineLabel(r),
                 r.assignment_priority || "",
                 r.rule_status ?? "",
                 r.reported_at || "",
@@ -444,6 +461,7 @@ const Reports = ({
                 </th>
                 <th style={{ minWidth: 180 }}>AI + Police verification</th>
                 <th style={{ minWidth: 150 }}>Community (leader)</th>
+                <th style={{ minWidth: 140 }}>Operational status</th>
                 <th>Date</th>
                 <th>Action</th>
               </tr>
@@ -645,6 +663,17 @@ const Reports = ({
                         {formatCommunityConfirmation(r)}
                       </div>
                     </td>
+                    <td style={{ verticalAlign: "top", fontSize: "11px" }}>
+                      <span
+                        className={`badge ${operationalPipelineBadgeClass(r)}`}
+                        style={{ display: "inline-block", marginBottom: 6 }}
+                      >
+                        {formatOperationalPipelineLabel(r)}
+                      </span>
+                      <div style={{ color: "var(--muted)", lineHeight: 1.35, fontSize: "10px" }}>
+                        {formatOperationalPipelineHint(r)}
+                      </div>
+                    </td>
                     <td style={{ fontSize: "10px", color: "var(--muted)" }}>
                       {formatLocalDate(r.reported_at)}
                     </td>
@@ -662,7 +691,7 @@ const Reports = ({
               {!items.length && !loading && (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={12}
                     style={{
                       fontSize: "12px",
                       color: "var(--muted)",
@@ -676,7 +705,7 @@ const Reports = ({
               {loading && (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={12}
                     style={{
                       fontSize: "12px",
                       color: "var(--muted)",

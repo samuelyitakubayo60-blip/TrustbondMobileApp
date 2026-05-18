@@ -81,44 +81,137 @@ export function leaderConfirmationOkForHotspots(report) {
   return st === "confirmed";
 }
 
+/** Mirrors backend leader_workflow.report_ready_for_cases_and_hotspots. */
+export function reportReadyForCasesAndHotspots(report) {
+  const pv = policeVerificationOkForHotspots(report);
+  if (!pv.ok) return false;
+  return leaderConfirmationOkForHotspots(report);
+}
+
+/**
+ * Single operational state aligned with the police dashboard workflow diagram.
+ * @returns {'eligible'|'leader_confirmed_police_pending'|'leader_rejected'|'awaiting_leader'|'police_review_queue'|'rejected'}
+ */
+export function getOperationalPipelineState(report) {
+  const pv = policeVerificationOkForHotspots(report);
+  const leaderOk = leaderConfirmationOkForHotspots(report);
+  const ls = (report?.leader_verification_status || "pending").trim().toLowerCase();
+
+  if (!pv.ok && pv.reason === "rejected") return "rejected";
+  if (ls === "rejected") return "leader_rejected";
+  if (pv.ok && leaderOk) return "eligible";
+  if (!pv.ok && ls === "confirmed") return "leader_confirmed_police_pending";
+  if (pv.ok && !leaderOk) return "awaiting_leader";
+  return "police_review_queue";
+}
+
+const PIPELINE_META = {
+  eligible: {
+    label: "Cases & hotspots",
+    badge: "b-green",
+    hint: "Police/AI verified and local leader confirmed. Report can feed auto-cases and hotspot clustering.",
+  },
+  leader_confirmed_police_pending: {
+    label: "Pending for ops",
+    badge: "b-orange",
+    hint: "Leader confirmed but police verification is not complete yet. Stays out of cases/hotspots until police verifies.",
+  },
+  leader_rejected: {
+    label: "Out of cases/hotspots",
+    badge: "b-red",
+    hint: "Local leader did not confirm this report. Excluded from case formation and hotspot clustering.",
+  },
+  awaiting_leader: {
+    label: "Awaiting leader",
+    badge: "b-orange",
+    hint: "Police/AI step passed or in progress; waiting for village/cell leader community confirmation.",
+  },
+  police_review_queue: {
+    label: "Police review queue",
+    badge: "b-orange",
+    hint: "Needs police screening (AI under_review, pending, or flagged). Leader input may still be pending.",
+  },
+  rejected: {
+    label: "Rejected",
+    badge: "b-red",
+    hint: "Report rejected by rules, AI threshold, or police. Not used for cases or hotspots unless overturned on review.",
+  },
+};
+
+export function formatOperationalPipelineLabel(report) {
+  const state = getOperationalPipelineState(report);
+  return PIPELINE_META[state]?.label || "—";
+}
+
+export function operationalPipelineBadgeClass(report) {
+  const state = getOperationalPipelineState(report);
+  return PIPELINE_META[state]?.badge || "b-gray";
+}
+
+export function formatOperationalPipelineHint(report) {
+  const state = getOperationalPipelineState(report);
+  return PIPELINE_META[state]?.hint || "";
+}
+
+/** Compact gate checklist for list/detail UI. */
+export function operationalGateChecklist(report) {
+  const pv = policeVerificationOkForHotspots(report);
+  const leaderOk = leaderConfirmationOkForHotspots(report);
+  const ls = (report?.leader_verification_status || "pending").trim().toLowerCase();
+  return [
+    {
+      key: "ai_police",
+      label: "1. AI / police verification",
+      done: pv.ok,
+      detail: pv.ok
+        ? "Verified (AI threshold or police review)"
+        : pv.reason === "rejected"
+          ? "Rejected"
+          : "Pending — under_review or awaiting officer",
+    },
+    {
+      key: "leader",
+      label: "2. Local leader confirmation",
+      done: leaderOk,
+      detail:
+        ls === "confirmed"
+          ? "Community confirmed"
+          : ls === "rejected"
+            ? "Leader disputed"
+            : "Awaiting village/cell leader",
+    },
+    {
+      key: "ops",
+      label: "3. Cases & hotspots",
+      done: pv.ok && leaderOk,
+      detail: reportReadyForCasesAndHotspots(report)
+        ? "Eligible for auto-case and hotspot clustering"
+        : "Blocked until both gates above pass",
+    },
+  ];
+}
+
 /**
  * One-line UX cue for DPC / IO: why this row may be absent from safety-map hotspot clusters.
  * Server flags (leader gate, DPU requirement) can relax rules; copy stays accurate for default deployments.
  */
 export function formatHotspotClusteringCue(report) {
-  const pv = policeVerificationOkForHotspots(report);
-  if (!pv.ok && pv.reason === "rejected") {
+  if (reportReadyForCasesAndHotspots(report)) {
     return {
-      excluded: true,
-      text: "Hotspot clustering: not included (report rejected).",
+      excluded: false,
+      text: "Cases & hotspots: eligible — police/AI verified and local leader confirmed.",
     };
   }
-  if (!pv.ok) {
+  const state = getOperationalPipelineState(report);
+  if (state === "leader_confirmed_police_pending") {
     return {
       excluded: true,
-      text:
-        "Hotspot clustering: not included until police verification is complete (verification_status verified, report status verified, or officer review confirmed).",
-    };
-  }
-  if (!leaderConfirmationOkForHotspots(report)) {
-    const ls = (report?.leader_verification_status || "").trim().toLowerCase();
-    if (ls === "rejected") {
-      return {
-        excluded: true,
-        text:
-          "Hotspot clustering: not included when community confirmation is required (leader disputed).",
-      };
-    }
-    return {
-      excluded: true,
-      text:
-        "Hotspot clustering: not included while community confirmation is pending — many DPU deployments only cluster leader_verification_status = confirmed.",
+      text: formatOperationalPipelineHint(report),
     };
   }
   return {
-    excluded: false,
-    text:
-      "Hotspot clustering: meets usual inputs (police verified + community confirmed for gated analytics). Exact behavior depends on server settings.",
+    excluded: true,
+    text: formatOperationalPipelineHint(report),
   };
 }
 
@@ -170,5 +263,21 @@ export const REPORT_QUEUE_PRESETS = {
     verification_status_in: null,
     hint:
       "Aligns with gated DPU and sector views when the backend requires leader_verification_status = confirmed (same gate as many hotspot runs).",
+  },
+  ready_for_ops: {
+    label: "Ready for cases & hotspots (both gates)",
+    leader_confirmation: "confirmed",
+    verification_status_filter: "verified",
+    verification_status_in: null,
+    hint:
+      "Leader confirmed and police verification_status verified — matches backend case/hotspot eligibility.",
+  },
+  leader_yes_police_pending: {
+    label: "Leader confirmed · police still pending",
+    leader_confirmation: "confirmed",
+    verification_status_filter: null,
+    verification_status_in: "pending,under_review",
+    hint:
+      "Community attestation done; report stays pending for operations until police verifies (diagram: stays pending for ops).",
   },
 };

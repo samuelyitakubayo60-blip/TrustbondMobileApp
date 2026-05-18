@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -8,7 +10,10 @@ import '../services/api_service.dart';
 import 'report_step1_screen.dart';
 
 class LeaderInboxScreen extends StatefulWidget {
-  const LeaderInboxScreen({super.key});
+  const LeaderInboxScreen({super.key, this.initialReportId});
+
+  /// Open inbox focused on this report (e.g. from FCM tap).
+  final String? initialReportId;
 
   @override
   State<LeaderInboxScreen> createState() => _LeaderInboxScreenState();
@@ -17,6 +22,7 @@ class LeaderInboxScreen extends StatefulWidget {
 class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
   final _leader = LeaderService();
   final _api = ApiService();
+  final _scrollController = ScrollController();
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _items = [];
@@ -24,11 +30,51 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
   bool _showPendingOnly = true;
   int _pendingCount = 0;
   int _confirmedCount = 0;
+  String? _highlightReportId;
+  StreamSubscription<String>? _deepLinkSub;
+  final Map<String, GlobalKey> _reportKeys = {};
 
   @override
   void initState() {
     super.initState();
+    _highlightReportId =
+        widget.initialReportId ?? NotificationService().consumePendingLeaderReportId();
+    if (_highlightReportId != null) {
+      _showPendingOnly = true;
+    }
+    _deepLinkSub = NotificationService().leaderDeepLinkStream.listen(_onLeaderDeepLink);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _deepLinkSub?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onLeaderDeepLink(String reportId) {
+    if (!mounted) return;
+    setState(() {
+      _highlightReportId = reportId;
+      _showPendingOnly = true;
+    });
+    _load();
+  }
+
+  void _scrollToHighlightedReport() {
+    final id = _highlightReportId;
+    if (id == null) return;
+    final key = _reportKeys[id];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+        alignment: 0.2,
+      );
+    }
   }
 
   Future<void> _syncLeaderPushToken() async {
@@ -75,7 +121,18 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
         _pendingCount = pendingCount;
         _confirmedCount = confirmedCount;
       });
+      if (_highlightReportId != null &&
+          !items.any((e) => (e['report_id'] ?? '').toString() == _highlightReportId) &&
+          _showPendingOnly) {
+        final allPending = allItems
+            .where((e) => (e['leader_verification_status'] ?? 'pending') == 'pending')
+            .toList();
+        if (allPending.any((e) => (e['report_id'] ?? '').toString() == _highlightReportId)) {
+          setState(() => _items = allPending);
+        }
+      }
       await _syncLeaderPushToken();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToHighlightedReport());
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
@@ -161,6 +218,7 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
                         : _items.isEmpty
                             ? _buildEmptyState()
                             : ListView(
+                                controller: _scrollController,
                                 padding: const EdgeInsets.all(16),
                                 children: [
                                   if (_me != null) _buildLeaderInfo(),
@@ -407,14 +465,18 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
       }
     }
 
+    final isHighlighted = _highlightReportId != null && id == _highlightReportId;
+    _reportKeys.putIfAbsent(id, GlobalKey.new);
+
     return Card(
+      key: _reportKeys[id],
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
+      elevation: isHighlighted ? 6 : 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: getStatusColor().withOpacity(0.3),
-          width: 1,
+          color: isHighlighted ? const Color(0xFF1E3A8A) : getStatusColor().withOpacity(0.3),
+          width: isHighlighted ? 2.5 : 1,
         ),
       ),
       child: Column(

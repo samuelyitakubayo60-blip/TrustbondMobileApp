@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'api_service.dart';
+import 'device_service.dart';
 import 'leader_service.dart';
 
-/// Handles Firebase Cloud Messaging and local notifications
+/// Mobile FCM push (citizens + local leaders). Police use the web dashboard only.
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
@@ -19,6 +22,16 @@ class NotificationService {
   // Notification stream controllers
   final StreamController<RemoteMessage> _messageStreamController = StreamController<RemoteMessage>.broadcast();
   Stream<RemoteMessage> get messageStream => _messageStreamController.stream;
+
+  final StreamController<String> _leaderDeepLinkController = StreamController<String>.broadcast();
+  Stream<String> get leaderDeepLinkStream => _leaderDeepLinkController.stream;
+
+  final StreamController<String> _citizenReportDeepLinkController =
+      StreamController<String>.broadcast();
+  Stream<String> get citizenReportDeepLinkStream => _citizenReportDeepLinkController.stream;
+
+  String? _pendingLeaderReportId;
+  String? _pendingCitizenReportId;
 
   bool _isInitialized = false;
   String? _fcmToken;
@@ -50,15 +63,11 @@ class NotificationService {
       // Get FCM token
       _fcmToken = await _firebaseMessaging.getToken();
       debugPrint('FCM Token: $_fcmToken');
+      await _syncPushTokenWithBackend();
 
       _firebaseMessaging.onTokenRefresh.listen((newToken) async {
         _fcmToken = newToken;
-        try {
-          final lt = await LeaderService().getToken();
-          if (lt != null && newToken.isNotEmpty) {
-            await LeaderService().registerFcmToken(fcmToken: newToken);
-          }
-        } catch (_) {}
+        await _syncPushTokenWithBackend();
       });
 
       // Initialize local notifications
@@ -102,10 +111,29 @@ class NotificationService {
     );
   }
 
+  /// Leader inbox deep-link: open a specific pending report.
+  String? consumePendingLeaderReportId() {
+    final id = _pendingLeaderReportId;
+    _pendingLeaderReportId = null;
+    return id;
+  }
+
+  void _dispatchLeaderDeepLink(RemoteMessage message) {
+    final type = message.data['type']?.toString();
+    if (type != 'leader_new_report') return;
+    final reportId = message.data['report_id']?.toString().trim();
+    if (reportId == null || reportId.isEmpty) return;
+    _pendingLeaderReportId = reportId;
+    if (!_leaderDeepLinkController.isClosed) {
+      _leaderDeepLinkController.add(reportId);
+    }
+  }
+
   /// Handle foreground messages
   void _handleForegroundMessage(RemoteMessage message) {
     debugPrint('Received foreground message: ${message.messageId}');
     _messageStreamController.add(message);
+    _dispatchMobileDeepLink(message);
     _showLocalNotification(message);
   }
 
@@ -113,6 +141,7 @@ class NotificationService {
   void _handleMessageOpenedApp(RemoteMessage message) {
     debugPrint('App opened from notification: ${message.messageId}');
     _messageStreamController.add(message);
+    _dispatchMobileDeepLink(message);
   }
 
   /// Show local notification for foreground messages
@@ -137,19 +166,40 @@ class NotificationService {
       iOS: iosDetails,
     );
 
+    final payload = jsonEncode(message.data);
     await _localNotifications.show(
       message.hashCode,
       message.notification?.title ?? 'TrustBond',
       message.notification?.body ?? 'New notification',
       details,
-      payload: message.data.toString(),
+      payload: payload,
     );
   }
 
   /// Handle notification tap
   void _onNotificationTapped(NotificationResponse response) {
     debugPrint('Notification tapped: ${response.payload}');
-    // Handle navigation based on notification payload
+    final raw = response.payload;
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final data = jsonDecode(raw);
+      if (data is Map) {
+        final type = data['type']?.toString();
+        final reportId = data['report_id']?.toString().trim();
+        if (reportId == null || reportId.isEmpty) return;
+        if (type == 'leader_new_report') {
+          _pendingLeaderReportId = reportId;
+          if (!_leaderDeepLinkController.isClosed) {
+            _leaderDeepLinkController.add(reportId);
+          }
+        } else if (type == 'report_status_update') {
+          _pendingCitizenReportId = reportId;
+          if (!_citizenReportDeepLinkController.isClosed) {
+            _citizenReportDeepLinkController.add(reportId);
+          }
+        }
+      }
+    } catch (_) {}
   }
 
   /// Request notification permissions
@@ -211,6 +261,8 @@ class NotificationService {
   /// Dispose resources
   void dispose() {
     _messageStreamController.close();
+    _leaderDeepLinkController.close();
+    _citizenReportDeepLinkController.close();
   }
 }
 

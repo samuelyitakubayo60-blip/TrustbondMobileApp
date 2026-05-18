@@ -9,6 +9,7 @@ const ROLE_LABEL = {
 const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader }) => {
   const PAGE_SIZE = 20;
   const [leaders, setLeaders] = useState([]);
+  const [coverageGaps, setCoverageGaps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchText, setSearchText] = useState("");
@@ -19,8 +20,12 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
   const loadLeaders = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get("/api/v1/local-leaders/");
+      const [res, gapsRes] = await Promise.all([
+        api.get("/api/v1/local-leaders/"),
+        api.get("/api/v1/local-leaders/coverage-gaps?limit=50"),
+      ]);
       setLeaders(res || []);
+      setCoverageGaps(gapsRes?.items || []);
       setError("");
     } catch (e) {
       setError(e?.message || "Failed to load local leaders.");
@@ -76,6 +81,32 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
         <div className="alert alert-danger" style={{ marginBottom: "12px" }}>
           <span className="alert-icon">!</span>
           <div>{error}</div>
+        </div>
+      )}
+
+      {coverageGaps.length > 0 && (
+        <div className="alert alert-warning" style={{ marginBottom: "12px" }}>
+          <span className="alert-icon">!</span>
+          <div>
+            <strong>{coverageGaps.length} area(s) have no active local leader.</strong>
+            <p style={{ margin: "6px 0 0", fontSize: 13 }}>
+              Citizen reports in these areas will not reach a village chief or cell executive until you
+              register one. Admins also receive an in-app alert when a report is submitted in an
+              uncovered area.
+            </p>
+            <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12 }}>
+              {coverageGaps.slice(0, 8).map((g) => (
+                <li key={`${g.location_type}-${g.location_id}`}>
+                  {g.location_name}
+                  {g.parent_name ? ` (${g.parent_name})` : ""} —{" "}
+                  {g.location_type === "cell" ? "missing cell executive" : "no chief or cell executive"}
+                </li>
+              ))}
+              {coverageGaps.length > 8 ? (
+                <li>…and {coverageGaps.length - 8} more</li>
+              ) : null}
+            </ul>
+          </div>
         </div>
       )}
 

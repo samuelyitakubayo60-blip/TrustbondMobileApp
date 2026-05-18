@@ -231,53 +231,15 @@ def mark_read(
 
 
 @router.get("/mobile/{device_id}")
-def get_device_notifications(
-    device_id: str,
-    db: Session = Depends(get_db),
-    limit: int = 50,
-    unread_only: bool = False,
-):
+def get_device_notifications(device_id: str):
     """
-    Get notifications for a device (mobile app).
-    This returns system notifications relevant to the device user.
+    Deprecated: mobile citizens do not use the police notifications table.
+
+    The TrustBond mobile app builds its notification list from report status
+    (see NotificationsScreen) and receives push via FCM (register-token below).
+    Police alerts live at GET /api/v1/notifications/ (authenticated police users).
     """
-    from app.models.device import Device
-    
-    try:
-        # Find the device - only search by device_hash for mobile API
-        device = db.query(Device).filter(
-            Device.device_hash == device_id
-        ).first()
-        
-        # For testing, if device not found, return empty list instead of 404
-        if not device:
-            return []
-        
-        # For mobile devices, we return system-wide notifications
-        # In a real implementation, you might want location-based filtering
-        query = db.query(Notification).filter(
-            Notification.is_read == False if unread_only else True
-        )
-        
-        # Get the most recent notifications
-        notifications = query.order_by(Notification.created_at.desc()).limit(limit).all()
-        
-        # Return a simplified response format for mobile devices
-        return [
-            {
-                "id": str(notification.notification_id),
-                "title": notification.title,
-                "message": notification.message,
-                "type": notification.type,
-                "created_at": notification.created_at.isoformat(),
-                "related_entity_type": notification.related_entity_type,
-                "related_entity_id": notification.related_entity_id,
-            }
-            for notification in notifications
-        ]
-    except Exception as e:
-        # Return error details for debugging
-        return {"error": str(e), "device_id": device_id}
+    return []
 
 
 @router.post("/mobile/{device_id}/register-token")
@@ -287,32 +249,34 @@ def register_mobile_token(
     db: Session = Depends(get_db),
 ):
     """
-    Register a mobile device token for push notifications.
-    This would integrate with Firebase Cloud Messaging or similar service.
+    Register FCM token for a citizen device (mobile app push).
+
+    ``device_id`` may be the device UUID or the anonymous device_hash.
+    Police dashboard users never register here.
     """
+    from uuid import UUID
+
+    from app.models.device import Device
+
+    token = (token_data.get("token") or token_data.get("fcm_token") or "").strip()
+    if len(token) < 10:
+        raise HTTPException(status_code=400, detail="Token is required")
+
+    device = None
     try:
-        from app.models.device import Device
-        
-        token = token_data.get("token")
-        if not token:
-            raise HTTPException(status_code=400, detail="Token is required")
-        
-        device = db.query(Device).filter(
-            Device.device_hash == device_id
-        ).first()
-        
-        if not device:
-            raise HTTPException(status_code=404, detail="Device not found")
-        
-        # Store the token
-        device.mobile_token = token
-        db.add(device)
-        db.commit()
-        
-        return {"message": "Token registered successfully", "device_id": device_id}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        did = UUID(device_id)
+        device = db.query(Device).filter(Device.device_id == did).first()
+    except ValueError:
+        device = db.query(Device).filter(Device.device_hash == device_id).first()
+
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    device.mobile_token = token[:512]
+    db.add(device)
+    db.commit()
+
+    return {"message": "Token registered successfully", "device_id": str(device.device_id)}
 
 
 def _send_email_notification(

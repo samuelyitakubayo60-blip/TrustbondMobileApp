@@ -164,6 +164,17 @@ def verify_report(
     db.add(r)
     db.commit()
 
+    from app.core.leader_verification_notifications import notify_police_leader_verification_task
+    from app.core.mobile_push_notifications import notify_citizen_leader_decision_task
+
+    background_tasks.add_task(
+        notify_police_leader_verification_task,
+        str(r.report_id),
+        decision,
+        int(current_leader.local_leader_id),
+    )
+    background_tasks.add_task(notify_citizen_leader_decision_task, str(r.report_id), decision)
+
     if decision == "confirmed":
         from app.api.v1.reports import run_auto_case_for_report
 
