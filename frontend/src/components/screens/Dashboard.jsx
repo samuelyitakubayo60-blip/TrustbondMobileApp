@@ -3,6 +3,7 @@ import api from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { formatRelativeTime } from "../../utils/dateTime";
 import AdvancedGeographicCharts from "../charts/AdvancedGeographicCharts";
+import ReportTrustScore from "../ReportTrustScore";
 
 const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
   const { user } = useAuth();
@@ -697,7 +698,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
                   <th>ID</th>
                   <th>Type</th>
                   <th>Location</th>
-                  <th>Trust</th>
+                  <th>Trust Score</th>
                   <th>Status</th>
                   <th>Time</th>
                   <th></th>
@@ -705,10 +706,6 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
               </thead>
               <tbody>
                 {(recentReports || []).map((r) => {
-                  const score = Math.max(
-                    0,
-                    Math.min(100, Number(r.trust_score || 0)),
-                  );
                   const status = (
                     r.status ||
                     r.verification_status ||
@@ -726,17 +723,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
                       </td>
                       <td>{r.village_name || "Unknown location"}</td>
                       <td>
-                        <div className="trust-mini">
-                          <div className="mini-bar">
-                            <div
-                              className="mini-fill"
-                              style={{ width: `${score}%` }}
-                            ></div>
-                          </div>
-                          <span className="mini-score">
-                            {Math.round(score)}
-                          </span>
-                        </div>
+                        <ReportTrustScore report={r} />
                       </td>
                       <td>
                         <span className={`badge ${statusBadgeClass(status)}`}>

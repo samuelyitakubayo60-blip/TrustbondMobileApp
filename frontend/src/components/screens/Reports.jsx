@@ -11,6 +11,7 @@ import {
   formatOperationalPipelineHint,
   REPORT_QUEUE_PRESETS,
 } from "../../utils/reportOperationalLabels";
+import ReportTrustScore from "../ReportTrustScore";
 
 const friendlyFlagReason = (reason) => {
   const m = {
@@ -468,20 +469,6 @@ const Reports = ({
             </thead>
             <tbody>
               {items.map((r, index) => {
-                const score = (() => {
-                  if (r.trust_score !== null && r.trust_score !== undefined) {
-                    return parseFloat(r.trust_score) || 0;
-                  }
-                  if (r.ml_predictions && r.ml_predictions.length > 0) {
-                    // Get the latest ML prediction
-                    const latestPrediction = r.ml_predictions.reduce((latest, pred) => {
-                      return (!latest || new Date(pred.evaluated_at) > new Date(latest.evaluated_at)) ? pred : latest;
-                    }, null);
-                    return latestPrediction ? parseFloat(latestPrediction.trust_score) : 0;
-                  }
-                  return 0;
-                })();
-                const width = Math.max(0, Math.min(100, Number(score)));
                 const assignmentPriority = (
                   r.assignment_priority || ""
                 ).toLowerCase();
@@ -508,23 +495,7 @@ const Reports = ({
                     </td>
                     <td>{r.village_name || "—"}</td>
                     <td>
-                      <div className="trust-wrap">
-                        <div className="trust-track">
-                          <div
-                            className="trust-fill"
-                            style={{
-                              width: `${width}%`,
-                              background:
-                                score >= 70
-                                  ? "var(--success)"
-                                  : score >= 40
-                                    ? "var(--warning)"
-                                    : "var(--danger)",
-                            }}
-                          ></div>
-                        </div>
-                        <div className="trust-val">{Math.round(score)}</div>
-                      </div>
+                      <ReportTrustScore report={r} />
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       {r.ml_prediction_label ? (
