@@ -839,9 +839,11 @@ class _ReportScreenState extends State<ReportScreen> {
       final reportData = report.toJson();
       reportData.addAll(mobileVerification.toJson());
 
-      String? leaderTok;
-      if (widget.localLeaderSubmit) {
-        leaderTok = await LeaderService().getToken();
+      final leaderTok = await LeaderService().getAccessTokenForSubmission();
+      if (widget.localLeaderSubmit && (leaderTok == null || leaderTok.isEmpty)) {
+        throw Exception(
+          'Local leader session expired. Sign in from Profile → Local Leader.',
+        );
       }
       final result = await _apiService.submitReport(
         reportData,

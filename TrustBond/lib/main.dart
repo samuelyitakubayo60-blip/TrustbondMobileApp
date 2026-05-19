@@ -3,22 +3,39 @@ import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config/theme.dart';
+import 'firebase_options.dart';
 import 'screens/main_shell.dart';
 import 'screens/splash_screen.dart';
 import 'services/platform_service.dart';
 import 'services/notification_service.dart';
 
+Future<void> _bootstrapNotifications() async {
+  // FCM push is mobile-only (Android/iOS). Police use the web dashboard.
+  if (PlatformService.supportsFirebase) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    await NotificationService().initialize();
+    return;
+  }
+
+  // Windows desktop links firebase_core; initialize once so plugins do not throw
+  // [core/no-app]. No FCM registration or messaging on desktop.
+  if (PlatformService.isDesktop) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.windows,
+      );
+    } catch (e) {
+      debugPrint('Firebase desktop init (no FCM): $e');
+    }
+  }
+  await MockNotificationService.initialize();
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize Firebase + notifications only on mobile.
-  if (PlatformService.supportsFirebase) {
-    await Firebase.initializeApp();
-    await NotificationService().initialize();
-  } else {
-    await MockNotificationService.initialize();
-  }
+  await _bootstrapNotifications();
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(

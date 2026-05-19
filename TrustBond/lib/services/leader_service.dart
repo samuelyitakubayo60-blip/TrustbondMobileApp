@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import 'app_refresh_bus.dart';
 
 class LeaderService {
   static final LeaderService _instance = LeaderService._internal();
@@ -41,7 +42,30 @@ class LeaderService {
 
   Future<String?> getToken() => _storage.read(key: _tokenKey);
 
-  Future<void> logout() => _storage.delete(key: _tokenKey);
+  /// Bearer token for report submit when a leader session exists.
+  Future<String?> getAccessTokenForSubmission() async {
+    final token = await getToken();
+    if (token == null || token.trim().isEmpty) return null;
+    return token.trim();
+  }
+
+  /// True when a stored token validates against /me.
+  Future<bool> isSessionActive() async {
+    final token = await getToken();
+    if (token == null || token.trim().isEmpty) return false;
+    try {
+      await me();
+      return true;
+    } catch (_) {
+      await logout();
+      return false;
+    }
+  }
+
+  Future<void> logout() async {
+    await _storage.delete(key: _tokenKey);
+    AppRefreshBus.notify('leader_session');
+  }
 
   Future<void> login({required String email, required String password}) async {
     final res = await _client
@@ -64,6 +88,7 @@ class LeaderService {
       throw Exception('Login failed: token missing');
     }
     await _storage.write(key: _tokenKey, value: token);
+    AppRefreshBus.notify('leader_session');
   }
 
   Future<void> requestLoginCode({required String email}) async {
@@ -139,6 +164,7 @@ class LeaderService {
       throw Exception('Login failed: token missing');
     }
     await _storage.write(key: _tokenKey, value: token);
+    AppRefreshBus.notify('leader_session');
   }
 
   Future<void> requestSetupCode({required String email}) async {

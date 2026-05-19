@@ -5,6 +5,8 @@ from typing import Annotated, List
 from app.database import get_db
 from app.models.special_assignment_unit import SpecialAssignmentUnit
 from app.models.deployment_decision import DeploymentDecision
+from app.models.case import Case
+from app.models.incident_type import IncidentType
 from app.models.police_user import PoliceUser
 from app.api.v1.auth import get_current_user
 from app.schemas.special_assignment_unit import (
@@ -101,6 +103,45 @@ def update_special_assignment_unit(
     db.commit()
     db.refresh(unit)
     return _unit_dict(unit)
+
+
+@router.delete("/{unit_id}", status_code=204)
+def delete_special_assignment_unit(
+    unit_id: int,
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
+):
+    """Permanently remove a unit when it is not referenced on cases, types, or deployments (admin only)."""
+    _require_admin(current_user)
+    unit = db.query(SpecialAssignmentUnit).filter(SpecialAssignmentUnit.unit_id == unit_id).first()
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unit not found")
+
+    code = unit.unit_code
+    refs: list[str] = []
+    if db.query(Case.case_id).filter(Case.special_assignment_unit == code).first():
+        refs.append("cases")
+    if (
+        db.query(IncidentType.incident_type_id)
+        .filter(IncidentType.default_special_assignment_unit == code)
+        .first()
+    ):
+        refs.append("incident types")
+    if db.query(DeploymentDecision.decision_id).filter(DeploymentDecision.assigned_unit == code).first():
+        refs.append("deployment decisions")
+
+    if refs:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot delete unit '{code}': it is still used on {', '.join(refs)}. "
+                "Deactivate the unit instead, or remove it from those records first."
+            ),
+        )
+
+    db.delete(unit)
+    db.commit()
+    return None
 
 
 @router.get("/deployment-stats", response_model=dict)

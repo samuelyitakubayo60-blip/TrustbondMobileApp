@@ -12,6 +12,8 @@ import 'about_screen.dart';
 import 'help_faq_screen.dart';
 import 'privacy_security_screen.dart';
 import 'settings_screen.dart';
+import '../services/leader_service.dart';
+import 'leader_inbox_screen.dart';
 import 'leader_login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -24,19 +26,27 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _api = ApiService();
   final _deviceService = DeviceService();
+  final _leader = LeaderService();
   StreamSubscription<String>? _refreshSub;
 
   int _totalReports = 0;
   int _verifiedReports = 0;
   double _trustScore = 0;
   ReportListItem? _latestReport;
+  bool _leaderSessionActive = false;
+  String? _leaderName;
+  String? _leaderEmail;
 
   @override
   void initState() {
     super.initState();
     _loadData();
-    _refreshSub = AppRefreshBus.stream.listen((_) {
-      _loadData();
+    _refreshSub = AppRefreshBus.stream.listen((reason) {
+      if (reason == 'leader_session') {
+        _loadLeaderSession();
+      } else {
+        _loadData();
+      }
     });
   }
 
@@ -46,9 +56,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
+  Future<void> _loadLeaderSession() async {
+    try {
+      final active = await _leader.isSessionActive();
+      if (!mounted) return;
+      if (!active) {
+        setState(() {
+          _leaderSessionActive = false;
+          _leaderName = null;
+          _leaderEmail = null;
+        });
+        return;
+      }
+      final me = await _leader.me();
+      if (!mounted) return;
+      setState(() {
+        _leaderSessionActive = true;
+        _leaderName = me['full_name']?.toString();
+        _leaderEmail = me['email']?.toString();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _leaderSessionActive = false;
+        _leaderName = null;
+        _leaderEmail = null;
+      });
+    }
+  }
+
   Future<void> _loadData() async {
     final deviceHash = await _deviceService.getDeviceHash();
     final deviceId = await _deviceService.getDeviceId();
+
+    unawaited(_loadLeaderSession());
 
     if (deviceHash.isEmpty) return;
 
@@ -292,15 +333,104 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _openLocalLeaderArea() async {
+    if (_leaderSessionActive) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const LeaderInboxScreen()),
+      );
+    } else {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const LeaderLoginScreen()),
+      );
+    }
+    if (mounted) await _loadLeaderSession();
+  }
+
+  Future<void> _leaderLogout() async {
+    await _leader.logout();
+    if (mounted) await _loadLeaderSession();
+  }
+
+  Widget _buildLocalLeaderSection() {
+    if (_leaderSessionActive) {
+      return Column(
+        children: [
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              border: Border.all(color: AppColors.border),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.verified_user,
+                        size: 18, color: AppColors.accent),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Local Leader',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _leaderLogout,
+                      child: const Text('Log out', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+                if (_leaderName != null && _leaderName!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    _leaderName!,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+                if (_leaderEmail != null && _leaderEmail!.isNotEmpty)
+                  Text(
+                    _leaderEmail!,
+                    style: const TextStyle(fontSize: 11, color: AppColors.muted),
+                  ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _openLocalLeaderArea,
+                    icon: const Icon(Icons.inbox_outlined, size: 18),
+                    label: const Text('Open leader inbox'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        _menuItem(Icons.verified_user, 'Local Leader Login', _openLocalLeaderArea),
+      ],
+    );
+  }
+
   Widget _buildMenuItems() {
     return Column(
       children: [
-        _menuItem(Icons.verified_user, 'Local Leader Login', () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const LeaderLoginScreen()),
-          );
-        }),
+        _buildLocalLeaderSection(),
         _menuItem(Icons.security, 'Privacy & Security', () {
           Navigator.push(context,
               MaterialPageRoute(builder: (_) => const PrivacySecurityScreen()));

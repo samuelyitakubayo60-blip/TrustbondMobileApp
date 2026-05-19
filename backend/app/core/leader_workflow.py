@@ -81,6 +81,48 @@ def leader_gate_enabled() -> bool:
     return bool(getattr(settings, "require_leader_confirmation_for_workflow", True))
 
 
+def report_is_leader_submitted(report: Report) -> bool:
+    """Incident filed by a logged-in local leader (not only community-confirmed later)."""
+    return getattr(report, "submitted_by_local_leader_id", None) is not None
+
+
+def apply_leader_submission_verification(
+    report: Report,
+    db: Session,
+    *,
+    evidence_count: int = 0,
+) -> None:
+    """
+    Leader-submitted reports: trust mobile gates only (location, original evidence, no tampering).
+    Skip unified ML / threshold scorecard; mark police verification as satisfied via attestation.
+    """
+    from app.core.report_priority import calculate_report_priority
+
+    report.rule_status = "passed"
+    report.is_flagged = False
+    report.verification_status = "verified"
+    report.flag_reason = None
+    fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
+    fv["verification_path"] = "local_leader_submission"
+    fv["mobile_verification_only"] = True
+    report.feature_vector = fv
+    report.priority = calculate_report_priority(report, evidence_count, db, {})
+    report.ai_verification_reason = (
+        "Local leader submission: verified using mobile checks only "
+        "(original evidence, location consistency, no tampering). "
+        "Automated AI credibility scoring was not applied."
+    )
+    if evidence_count > 0:
+        report.ai_evidence_description = (
+            f"Leader-attested incident with {evidence_count} evidence file(s). "
+            "Server-side AI evidence analysis skipped."
+        )
+    else:
+        report.ai_evidence_description = (
+            "Leader-attested text-only incident. Server-side AI analysis skipped."
+        )
+
+
 def report_meets_leader_confirmation(report: Report) -> bool:
     """Incident is cleared for DPU analytics / public-style clustering when community confirmed."""
     st = (getattr(report, "leader_verification_status", None) or "pending").strip().lower()
@@ -100,13 +142,19 @@ def report_ready_for_cases_and_hotspots(report: Report) -> bool:
     """
     Operational eligibility for auto-cases and hotspot clustering.
 
-    Both must pass when leader gate is on:
-    1. Police/AI: verification_status == verified (threshold or manual police review)
+    Citizen-submitted (when leader gate is on):
+    1. Police/AI: verification_status == verified
     2. Community: leader_verification_status == confirmed
 
-    Leader confirmation alone does not satisfy (1). A pending AI report stays out of
-    cases/hotspots until police verify; leader confirm is stored as community signal.
+    Leader-submitted: mobile basic checks at submit + leader attestation (no AI threshold);
+    both gates are satisfied when verification_status is verified and leader confirmed.
     """
+    if report_is_leader_submitted(report):
+        if not report_police_verified(report):
+            return False
+        if not leader_gate_enabled():
+            return True
+        return report_meets_leader_confirmation(report)
     if not report_police_verified(report):
         return False
     if not leader_gate_enabled():

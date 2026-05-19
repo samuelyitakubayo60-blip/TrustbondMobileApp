@@ -309,9 +309,17 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
           .getBatteryLevel()
           .timeout(const Duration(milliseconds: 500), onTimeout: () => null);
 
-      String? leaderTok;
-      if (widget.localLeaderSubmit) {
-        leaderTok = await LeaderService().getToken();
+      final leaderTok = await LeaderService().getAccessTokenForSubmission();
+      final submitAsLeader =
+          widget.localLeaderSubmit || (leaderTok != null && leaderTok.isNotEmpty);
+
+      if (widget.localLeaderSubmit && (leaderTok == null || leaderTok.isEmpty)) {
+        setState(() {
+          _error =
+              'Local leader session expired. Open Profile → Local Leader and sign in again.';
+          _submitting = false;
+        });
+        return;
       }
 
       final result = await _queueService.submitReport(
@@ -348,7 +356,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
           );
         }
 
-        if (widget.localLeaderSubmit) {
+        if (submitAsLeader) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Incident submitted as local leader.'),

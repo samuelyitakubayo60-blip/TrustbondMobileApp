@@ -28,6 +28,7 @@ class _LeaderLoginScreenState extends State<LeaderLoginScreen> {
   Timer? _resendTimer;
   String? _error;
   String? _success;
+  bool _sessionChecking = true;
 
   @override
   void initState() {
@@ -46,15 +47,18 @@ class _LeaderLoginScreenState extends State<LeaderLoginScreen> {
 
   Future<void> _tryAutoLogin() async {
     try {
-      final token = await _leader.getToken();
-      if (token == null || token.isEmpty) return;
-      await _leader.me();
+      final active = await _leader.isSessionActive();
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LeaderInboxScreen()),
-      );
+      if (active) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const LeaderInboxScreen()),
+        );
+        return;
+      }
     } catch (_) {
       await _leader.logout();
+    } finally {
+      if (mounted) setState(() => _sessionChecking = false);
     }
   }
 
@@ -228,6 +232,16 @@ class _LeaderLoginScreenState extends State<LeaderLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_sessionChecking) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Local Leader'),
+          backgroundColor: AppColors.bg,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final isOtp = _signInMethod == _SignInMethod.otp;
     final primaryLabel = _signInMethod == _SignInMethod.password
         ? 'Sign in'

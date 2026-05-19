@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../services/leader_service.dart';
 import '../services/notification_service.dart';
+import '../services/platform_service.dart';
 import '../services/api_service.dart';
 import 'report_step1_screen.dart';
 
@@ -78,7 +79,7 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
   }
 
   Future<void> _syncLeaderPushToken() async {
-    if (defaultTargetPlatform == TargetPlatform.windows) return;
+    if (!PlatformService.supportsFirebase) return;
     try {
       final ns = NotificationService();
       await ns.initialize();

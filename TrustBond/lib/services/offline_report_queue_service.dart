@@ -89,6 +89,11 @@ class OfflineReportQueueService {
     required bool evidenceTamperingDetected,
     String? leaderAccessToken,
   }) async {
+    final effectiveLeaderToken =
+        (leaderAccessToken != null && leaderAccessToken.trim().isNotEmpty)
+            ? leaderAccessToken.trim()
+            : await _leaderTokenIfAny();
+
     final deviceHash = await _deviceService.getDeviceHash();
     final deviceId = await _deviceService.getDeviceId();
     final currentNetworkType = await _statusService.getNetworkType();
@@ -139,7 +144,7 @@ class OfflineReportQueueService {
     if (onlineNow) {
       final immediate = await _trySendImmediately(
         queueItem,
-        leaderAccessToken: leaderAccessToken,
+        leaderAccessToken: effectiveLeaderToken,
       );
       if (immediate.sent) {
         return OfflineSubmitResult(reportId: reportId, queuedOffline: false);
