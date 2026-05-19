@@ -189,9 +189,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
         final lng = result.longitude!;
         final caption = result.hasVillage
             ? null
-            : 'Outside Musanze village boundaries — '
-                '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)} '
-                '(map tiles show your real position)';
+            : '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
         setState(() {
           _userLat = lat;
           _userLng = lng;
@@ -1041,43 +1039,13 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
               ],
             ),
           ),
-                    // Current location banner
+          // Current location banner
           if (_userVillage != null || _userLocationCaption != null)
             Positioned(
               top: 8,
               left: 10,
               right: 60,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.accent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                      color: AppColors.accent.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.my_location,
-                        size: 14, color: AppColors.accent),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        _userVillage != null
-                            ? 'You are in ${_userVillage!.village}, ${_userVillage!.cell}'
-                            : _userLocationCaption!,
-                        style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.accent,
-                            fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 3,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              child: _buildLocationBanner(),
             ),
           if (_locatingUser)
             Positioned(
@@ -1158,6 +1126,85 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// GPS banner on the map — distinct styles for inside vs outside Musanze.
+  Widget _buildLocationBanner() {
+    final outside = _userVillage == null && _userLocationCaption != null;
+    final accentColor = outside ? AppColors.warn : AppColors.accent;
+    final bgColor = AppColors.surface.withValues(alpha: 0.94);
+    final borderColor = outside
+        ? AppColors.warn.withValues(alpha: 0.55)
+        : AppColors.accent.withValues(alpha: 0.45);
+
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: borderColor, width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              outside ? Icons.location_off_outlined : Icons.my_location,
+              size: 18,
+              color: accentColor,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    outside
+                        ? 'Outside Musanze District'
+                        : 'You are in ${_userVillage!.village}, ${_userVillage!.cell}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.text,
+                      height: 1.25,
+                    ),
+                  ),
+                  if (outside) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      'GPS: ${_userLocationCaption!}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.muted,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Map shows Musanze; your pin is your real position.',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: AppColors.muted.withValues(alpha: 0.9),
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
