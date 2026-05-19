@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func, or_
 
 from app.database import get_db
-from app.core.report_review import needs_police_review_clause, resolve_display_trust_score
+from app.core.report_review import needs_police_review_clause
+from app.core.report_list_trust import resolve_report_list_trust_score
 from app.core.village_lookup import get_village_location_info
 from app.models.report import Report
 from app.models.report_assignment import ReportAssignment
@@ -330,6 +331,7 @@ def get_dashboard_stats(
         joinedload(Report.incident_type),
         joinedload(Report.village_location),
         selectinload(Report.ml_predictions),
+        selectinload(Report.evidence_files),
     ).filter(report_filter).order_by(Report.reported_at.desc()).limit(5)
     recent_reports = recent_reports_q.all()
 
@@ -347,7 +349,7 @@ def get_dashboard_stats(
         return None
 
     def _report_row(r):
-        ts = resolve_display_trust_score(r)
+        ts = resolve_report_list_trust_score(r)
         return {
             "report_id": str(r.report_id),
             "report_number": getattr(r, "report_number", None),

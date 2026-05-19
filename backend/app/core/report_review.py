@@ -90,7 +90,7 @@ def resolve_ml_prediction_label_for_display(report: Any) -> Optional[str]:
 
     Prefer stored ML prediction (or infer from that row's trust_score).
     If there is no qualifying ML row, infer from the same trust the list/detail
-    UI shows (`resolve_display_trust_score`: ML trust first, else device aggregate)
+    UI shows (`resolve_display_trust_score`: same headline score as police report list)
     so the badge matches the trust bar (avoids "No ML" next to a 70%+ bar).
     """
     ml = resolve_ml_prediction_for_report(report)
@@ -143,10 +143,7 @@ def resolve_ml_prediction_for_report(report: Any):
 
 
 def resolve_display_trust_score(report: Any) -> Optional[float]:
-    """Per-report trust for UI: ML trust first, else device trust (matches list endpoint)."""
-    ml_prediction = resolve_ml_prediction_for_report(report)
-    if ml_prediction is not None and ml_prediction.trust_score is not None:
-        return float(ml_prediction.trust_score)
-    if getattr(report, "device", None) and report.device and report.device.device_trust_score is not None:
-        return float(report.device.device_trust_score)
-    return None
+    """Per-report trust for police list/dashboard — delegates to scorecard headline resolver."""
+    from app.core.report_list_trust import resolve_report_list_trust_score
+
+    return resolve_report_list_trust_score(report)
