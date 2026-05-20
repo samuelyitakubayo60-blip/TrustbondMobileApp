@@ -2649,6 +2649,23 @@ textarea:focus {
   position: relative;
   overflow: hidden;
   z-index: 1;
+  height: 100%;
+  min-height: 480px;
+}
+
+.map-box .leaflet-container {
+  height: 100% !important;
+  width: 100% !important;
+  cursor: grab;
+}
+
+.map-box .leaflet-container.leaflet-dragging {
+  cursor: grabbing;
+}
+
+.map-box .leaflet-container:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 0;
 }
 
 .cluster {
