@@ -17,10 +17,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:postgres@localhost:5432/trustbond"
     secret_key: str = "change-me-in-production"
 
-    # CORS: comma-separated origins, e.g. "https://dashboard.trustbond.rw". Empty = allow all ("*").
+    # CORS: comma-separated origins, e.g. "https://dashboard.trustbond.rw".
+    # Leave empty to allow all origins (default for deployed environments).
     cors_origins: str = ""
-    # Optional regex for dynamic origins (e.g. ngrok): r"https://.*\\.ngrok-free\\.dev"
-    cors_origin_regex: Optional[str] = None
 
     # Optional Cloudinary configuration (pulled from .env if present)
     cloudinary_cloud_name: Optional[str] = None
@@ -107,40 +106,12 @@ class Settings(BaseSettings):
     max_plausible_speed_kmh: float = 250.0
 
     def get_cors_origins_list(self) -> List[str]:
-        default_local_origins = [
-            "http://localhost:5173",
-            "http://localhost:3000",
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:3000",
-        ]
-
-        # Auto-detect frontend URL from frontend_url setting
-        auto_detected_origins = []
-        if self.frontend_url and self.frontend_url.strip():
-            frontend_url = self.frontend_url.strip()
-            # Add both http and https variants for the frontend URL
-            if frontend_url.startswith("http://"):
-                auto_detected_origins.append(frontend_url)
-                auto_detected_origins.append(frontend_url.replace("http://", "https://"))
-            elif frontend_url.startswith("https://"):
-                auto_detected_origins.append(frontend_url)
-                auto_detected_origins.append(frontend_url.replace("https://", "http://"))
-
         if not self.cors_origins or not self.cors_origins.strip():
-            # If no explicit CORS origins, use auto-detected + defaults
-            all_origins = auto_detected_origins + default_local_origins
-            return list(set(all_origins)) if all_origins else ["*"]
+            # No explicit list configured → open to all (handled via regex in middleware)
+            return []
 
         configured = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
-        if "*" in configured:
-            return ["*"]
-
-        # Merge configured origins with auto-detected and defaults
-        merged: List[str] = []
-        for origin in configured + auto_detected_origins + default_local_origins:
-            if origin not in merged:
-                merged.append(origin)
-        return merged
+        return configured
 
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE) if _ENV_FILE.is_file() else None,

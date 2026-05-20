@@ -155,51 +155,25 @@ def _compute_peak_window(report_times: List[datetime]) -> Optional[str]:
 def _prediction_for_hotspot(
     classification: str,
     incident_count: int,
-    dominant_crime: Optional[str],
     cluster_kind: str,
-    area_label: Optional[str],
-    incident_mix: Optional[Dict[str, int]] = None,
     report_times: Optional[List[datetime]] = None,
 ) -> Dict[str, Any]:
-    crime_label = dominant_crime or "incident"
-    area_text = area_label or "this area"
+    """Return only the computed numeric fields; text fields (recommendation,
+    narrative, status) are always provided by generate_recommendation()."""
     peak_time = _compute_peak_window(report_times or [])
 
     if cluster_kind == "mixed_hotspot":
-        mix_text = ""
-        if incident_mix:
-            top_mix = sorted(incident_mix.items(), key=lambda x: x[1], reverse=True)[:3]
-            mix_text = ", ".join([f"{name}: {count}" for name, count in top_mix])
-        return {
-            "status": "security_alert",
-            "predicted_increase_pct": min(85, 30 + incident_count * 4),
-            "peak_time": peak_time,
-            "recommendation": f"Mixed incidents co-located in {area_text}. Trigger coordinated security response.",
-            "narrative": f"Different incident types are converging in {area_text}{f' ({mix_text})' if mix_text else ''}.",
-        }
+        predicted_increase_pct = min(85, 30 + incident_count * 4)
+    elif classification == "critical":
+        predicted_increase_pct = min(75, 20 + incident_count * 4)
+    elif classification == "active":
+        predicted_increase_pct = min(40, 10 + incident_count * 2)
+    else:
+        predicted_increase_pct = min(25, 5 + incident_count * 2)
 
-    if classification == "critical":
-        return {
-            "status": "escalation_likely",
-            "predicted_increase_pct": min(75, 20 + incident_count * 4),
-            "peak_time": peak_time,
-            "recommendation": f"Deploy patrol units around {crime_label} cluster in {area_text}",
-            "narrative": f"{crime_label.capitalize()} is rapidly escalating in {area_text}.",
-        }
-    if classification == "active":
-        return {
-            "status": "monitor_growth",
-            "predicted_increase_pct": min(40, 10 + incident_count * 2),
-            "peak_time": peak_time,
-            "recommendation": "Increase monitoring and community patrol checks",
-            "narrative": f"{crime_label.capitalize()} is increasing in {area_text}.",
-        }
     return {
-        "status": "emerging_trend",
-        "predicted_increase_pct": min(25, 5 + incident_count * 2),
+        "predicted_increase_pct": predicted_increase_pct,
         "peak_time": peak_time,
-        "recommendation": f"Track early signals of {crime_label} in {area_text}",
-        "narrative": f"Early pattern detected: {crime_label} may be emerging in {area_text}.",
     }
 
 
@@ -501,13 +475,10 @@ def list_hotspots(
         prediction = _prediction_for_hotspot(
             classification,
             incident_count,
-            dominant_crime,
             cluster_kind,
-            area_label,
-            incident_mix,
             report_times=report_times,
         )
-        # Overlay LLM-generated fields on top of the computed prediction
+        # All text fields come from the LLM (Groq → Gemini → template fallback)
         prediction["recommendation"] = llm["recommendation"]
         prediction["narrative"]       = llm["narrative"]
         prediction["status"]          = llm["status"]

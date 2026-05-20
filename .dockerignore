@@ -1,0 +1,60 @@
+# Python virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Node modules (frontend has its own build stage)
+frontend/node_modules/
+node_modules/
+
+# Frontend build output
+frontend/dist/
+
+# ML model files (downloaded at build time in Dockerfile)
+backend/models/
+*.pt
+*.onnx
+*.weights
+
+# Uploads (mounted as volume)
+backend/uploads/
+
+# Git
+.git/
+.gitignore
+
+# IDE / OS
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker files (not needed inside image)
+docker-compose*.yml
+frontend/Dockerfile
+
+# Database dumps (large SQL files not needed in backend image)
+*.sql
+
+# Local secrets — set these as HF Space secrets / Docker env vars instead
+backend/.env
+.env
