@@ -180,6 +180,20 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     }
   }
 
+  /// Polygon-only village match (no far-away "nearest village" guess).
+  void _applyUserLocationFromGps(double lat, double lng) {
+    final village = _mapData?.findVillage(lat, lng);
+    final outside = village == null;
+    setState(() {
+      _userLat = lat;
+      _userLng = lng;
+      _userVillage = village;
+      _userLocationCaption = outside
+          ? '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}'
+          : null;
+    });
+  }
+
   Future<void> _getUserLocation() async {
     setState(() => _locatingUser = true);
     try {
@@ -187,17 +201,8 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
       if (result.hasPosition && mounted) {
         final lat = result.latitude!;
         final lng = result.longitude!;
-        final caption = result.hasVillage
-            ? null
-            : '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
-        setState(() {
-          _userLat = lat;
-          _userLng = lng;
-          _userVillage = result.village;
-          _userLocationCaption = caption;
-          _locatingUser = false;
-        });
-        // Re-query hotspots with nearby filter once accurate location is available.
+        _applyUserLocationFromGps(lat, lng);
+        setState(() => _locatingUser = false);
         _loadHotspots();
         _loadPublicAlerts();
       } else {
@@ -230,6 +235,9 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
           _villageColors = {};
         _loading = false;
       });
+        if (_userLat != null && _userLng != null) {
+          _applyUserLocationFromGps(_userLat!, _userLng!);
+        }
         debugPrint('Map data loaded and state updated');
       }
     } catch (e) {
@@ -630,6 +638,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
             _buildSectorFilters(),
             _buildHotspotPeriodFilters(),
             _buildNearbyRadiusFilters(),
+            _buildLocationStatusStrip(),
             Expanded(
               flex: 3,
               child: _buildMap(),
@@ -1039,14 +1048,6 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
               ],
             ),
           ),
-          // Current location banner
-          if (_userVillage != null || _userLocationCaption != null)
-            Positioned(
-              top: 8,
-              left: 10,
-              right: 60,
-              child: _buildLocationBanner(),
-            ),
           if (_locatingUser)
             Positioned(
               top: 8,
@@ -1130,80 +1131,95 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     );
   }
 
-  /// GPS banner on the map — distinct styles for inside vs outside Musanze.
-  Widget _buildLocationBanner() {
-    final outside = _userVillage == null && _userLocationCaption != null;
-    final accentColor = outside ? AppColors.warn : AppColors.accent;
-    final bgColor = AppColors.surface.withValues(alpha: 0.94);
-    final borderColor = outside
-        ? AppColors.warn.withValues(alpha: 0.55)
-        : AppColors.accent.withValues(alpha: 0.45);
+  /// Location status above the map — light card so text is always readable on dark UI.
+  Widget _buildLocationStatusStrip() {
+    if (_userLat == null || _userLng == null) {
+      return const SizedBox.shrink();
+    }
 
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: borderColor, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              outside ? Icons.location_off_outlined : Icons.my_location,
-              size: 18,
-              color: accentColor,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    outside
-                        ? 'Outside Musanze District'
-                        : 'You are in ${_userVillage!.village}, ${_userVillage!.cell}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.text,
-                      height: 1.25,
-                    ),
-                  ),
-                  if (outside) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      'GPS: ${_userLocationCaption!}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.muted,
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Map shows Musanze; your pin is your real position.',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: AppColors.muted.withValues(alpha: 0.9),
-                        height: 1.25,
-                      ),
-                    ),
-                  ],
-                ],
+    final outside = _userVillage == null;
+    if (outside &&
+        (_userLocationCaption == null || _userLocationCaption!.trim().isEmpty)) {
+      return const SizedBox.shrink();
+    }
+
+    // Cream / mint cards with dark text (high contrast on dark scaffold).
+    final bg = outside ? const Color(0xFFFFF7ED) : const Color(0xFFECFDF5);
+    final accent = outside ? const Color(0xFFC2410C) : const Color(0xFF047857);
+    final bodyColor = const Color(0xFF1E293B);
+    final mutedColor = const Color(0xFF475569);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Material(
+        color: bg,
+        elevation: 1,
+        shadowColor: Colors.black26,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: accent.withValues(alpha: 0.45)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                outside ? Icons.location_off_outlined : Icons.my_location,
+                size: 20,
+                color: accent,
               ),
-            ),
-          ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: DefaultTextStyle(
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: bodyColor,
+                    fontWeight: FontWeight.w500,
+                    height: 1.3,
+                  ),
+                  child: outside
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Outside Musanze District',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: accent,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Your GPS: ${_userLocationCaption!}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: bodyColor,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Map shows Musanze; your pin is your real position.',
+                              style: TextStyle(fontSize: 12, color: mutedColor),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          'You are in ${_userVillage!.village}, ${_userVillage!.cell}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: accent,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
