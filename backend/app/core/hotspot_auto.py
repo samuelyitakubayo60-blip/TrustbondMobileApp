@@ -22,7 +22,7 @@ from app.core.leader_workflow import report_ready_for_cases_and_hotspots
 
 
 DEFAULT_TIME_WINDOW_HOURS = 24
-DEFAULT_MIN_INCIDENTS = 3
+DEFAULT_MIN_INCIDENTS = 1
 DEFAULT_RADIUS_METERS = 500
 DEFAULT_TRUST_MIN = 50.0
 
@@ -62,8 +62,7 @@ def get_hotspot_params_from_db(
                 mi = int(value)
     except Exception:
         pass
-    # Hotspots should never be formed from fewer than 3 incidents.
-    return tw, max(3, mi), max(50.0, rm)
+    return tw, max(1, mi), max(50.0, rm)
 
 
 def get_hotspot_trust_min_from_db(db: Session, default: float = DEFAULT_TRUST_MIN) -> float:
@@ -119,25 +118,31 @@ def _report_trust_score(report: Report) -> float:
     return 35.0
 
 
-def _is_report_eligible(report: Report) -> bool:
-    """Only police-verified + leader-confirmed reports (when gate on) enter hotspot clustering."""
+def _is_report_eligible(
+    report: Report,
+    *,
+    require_leader_confirmation: Optional[bool] = None,
+) -> bool:
+    """Eligible for safety-map clustering: police-verified; optional leader gate."""
     status = (report.status or "").lower()
     verification = (report.verification_status or "").lower()
     rule_status = (report.rule_status or "").lower()
     if status == "rejected" or verification == "rejected" or rule_status == "rejected":
         return False
 
-    from app.core.leader_workflow import leader_gate_enabled
+    from app.core.leader_workflow import leader_gate_enabled, report_ready_for_cases_and_hotspots
 
-    if leader_gate_enabled():
+    if require_leader_confirmation is None:
+        require_leader_confirmation = leader_gate_enabled()
+
+    if require_leader_confirmation:
         return report_ready_for_cases_and_hotspots(report)
 
     officer_confirmed = any(
         (rv.decision or "").lower() == "confirmed"
         for rv in (getattr(report, "police_reviews", None) or [])
     )
-    police_ok = verification == "verified" or status == "verified" or officer_confirmed
-    return police_ok
+    return verification == "verified" or status == "verified" or officer_confirmed
 
 
 def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -227,6 +232,7 @@ def create_hotspots_from_reports(
     analyze_all_reports: bool = False,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
+    require_leader_confirmation: Optional[bool] = None,
 ) -> int:
     """
     Enhanced Pipeline:
@@ -260,7 +266,9 @@ def create_hotspots_from_reports(
     # Filter eligible reports
     eligible_reports = []
     for r in reports:
-        if not _is_report_eligible(r):
+        if not _is_report_eligible(
+            r, require_leader_confirmation=require_leader_confirmation
+        ):
             continue
         if incident_type_id is not None and int(r.incident_type_id) != int(incident_type_id):
             continue
@@ -289,13 +297,52 @@ def create_hotspots_from_reports(
         return 0
 
     created = _create_geographic_hotspots(
-        db, eligible_reports, radius_meters, min_incidents, effective_time_window_hours
+        db,
+        eligible_reports,
+        radius_meters,
+        min_incidents,
+        effective_time_window_hours,
+        enforce_time_span=not analyze_all_reports,
     )
     print(
         f"Created {created} DBSCAN hotspots "
         f"from {len(eligible_reports)} eligible reports in {effective_time_window_hours}h"
     )
     
+    return created
+
+
+def ensure_hotspots_materialized(
+    db: Session,
+    *,
+    time_window_hours: int = 8760,
+) -> int:
+    """
+    Build hotspots from the DB when the table is empty (e.g. first Safety Map load).
+    Uses full eligible report history so clusters match persisted hotspot rows.
+    """
+    existing = db.query(Hotspot.hotspot_id).limit(1).first()
+    if existing is not None:
+        return 0
+
+    tw, mi, rm = get_hotspot_params_from_db(
+        db,
+        time_window_hours=time_window_hours,
+        min_incidents=DEFAULT_MIN_INCIDENTS,
+        radius_meters=DEFAULT_RADIUS_METERS,
+    )
+    trust_min = get_hotspot_trust_min_from_db(db, DEFAULT_TRUST_MIN)
+    created = create_hotspots_from_reports(
+        db,
+        time_window_hours=max(int(tw), int(time_window_hours)),
+        min_incidents=mi,
+        radius_meters=rm,
+        trust_min=trust_min,
+        analyze_all_reports=True,
+        require_leader_confirmation=False,
+    )
+    if created > 0:
+        db.commit()
     return created
 
 
@@ -413,19 +460,28 @@ def _create_geographic_hotspots(
     reports: List[Dict[str, Any]], 
     radius_meters: float, 
     min_incidents: int, 
-    time_window_hours: int
+    time_window_hours: int,
+    *,
+    enforce_time_span: bool = True,
 ) -> int:
-    """Create hotspots using geographic DBSCAN clustering with strict time constraint"""
+    """Create hotspots using geographic DBSCAN clustering."""
     # Convert reports to points format for DBSCAN
     points = reports  # Already in correct format
     
-    # Apply DBSCAN clustering
-    labels = _dbscan(points, max(50.0, float(radius_meters)), max(1, int(min_incidents)))
+    # Spatial grouping: min_pts=2 merges nearby incidents; singletons added below when allowed.
+    dbscan_min_pts = 2
+    labels = _dbscan(points, max(50.0, float(radius_meters)), dbscan_min_pts)
     clusters: Dict[int, List[Dict[str, Any]]] = {}
     for idx, label in enumerate(labels):
         if label < 0:
             continue
         clusters.setdefault(label, []).append(points[idx])
+
+    if int(min_incidents) <= 1:
+        for idx, label in enumerate(labels):
+            if label == -1:
+                sid = -(idx + 1)
+                clusters[sid] = [points[idx]]
 
     created = 0
     for _, cluster_points in clusters.items():
@@ -437,7 +493,7 @@ def _create_geographic_hotspots(
         cluster_points.sort(key=lambda p: p["reported_at"])
         time_span = (cluster_points[-1]["reported_at"] - cluster_points[0]["reported_at"]).total_seconds() / 3600
         
-        if time_span > time_window_hours:
+        if enforce_time_span and time_span > time_window_hours:
             print(f"Skipped geographic cluster - time span {time_span:.1f}h exceeds {time_window_hours}h limit")
             continue
 
@@ -451,12 +507,7 @@ def _create_geographic_hotspots(
             tid = int(p["incident_type_id"])
             type_counts[tid] = type_counts.get(tid, 0) + 1
         
-        # Only create hotspot if all reports are of the same type
-        if len(type_counts) != 1:
-            print(f"Skipped geographic cluster - contains multiple incident types: {list(type_counts.keys())}")
-            continue
-            
-        dominant_incident_type_id = list(type_counts.keys())[0]
+        dominant_incident_type_id = max(type_counts.items(), key=lambda item: item[1])[0]
 
         area_sqkm = max(0.001, 3.14159 * (float(radius_meters) / 1000.0) ** 2)
         cluster_density = incident_count / area_sqkm

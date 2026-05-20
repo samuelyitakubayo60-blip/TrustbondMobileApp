@@ -2961,11 +2961,11 @@ def run_hotspot_auto():
 
         created = create_hotspots_from_reports(
             db,
-            time_window_hours=tw,
+            time_window_hours=max(int(tw), 8760),
             min_incidents=mi,
             radius_meters=rm,
             trust_min=trust_min,
-            analyze_all_reports=False,  # Use time window for real-time updates
+            analyze_all_reports=True,
         )
         if created > 0:
             print(f"Background hotspot creation: {created} new hotspots created")

@@ -18,6 +18,7 @@ from app.schemas.hotspot import HotspotResponse, HotspotIncidentResponse
 from app.schemas.report import EvidenceFileResponse
 from app.core.hotspot_auto import (
     create_hotspots_from_reports,
+    ensure_hotspots_materialized,
     DEFAULT_TIME_WINDOW_HOURS,
     DEFAULT_MIN_INCIDENTS,
     DEFAULT_RADIUS_METERS,
@@ -244,6 +245,11 @@ def list_hotspots(
     - Supervisor: hotspots that include at least one report in their assigned_location_id (if set).
     - Officer: same sector scoping as supervisor when assigned_location_id is set, otherwise all.
     """
+    try:
+        ensure_hotspots_materialized(db)
+    except Exception as exc:
+        logger.warning("Hotspot materialization skipped: %s", exc)
+
     query = db.query(Hotspot).options(
         joinedload(Hotspot.incident_type),
         selectinload(Hotspot.reports).selectinload(Report.ml_predictions),
@@ -887,6 +893,8 @@ async def get_hotspot_stats(
     Get hotspot statistics for the sidebar cards
     """
     try:
+        ensure_hotspots_materialized(db)
+
         # Calculate time cutoff based on parameters
         cutoff_time = datetime.utcnow()
         

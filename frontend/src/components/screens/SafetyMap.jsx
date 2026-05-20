@@ -30,6 +30,54 @@ const HOTSPOT_PERIOD_OPTIONS = [
 const MAP_CLUSTER_WINDOW_HOURS = 8760;
 const DEFAULT_TIME_PERIOD = "week";
 
+/** Derive sidebar stats from persisted hotspot rows (same source as map polygons). */
+const buildStatsFromHotspots = (hotspots) => {
+  const list = Array.isArray(hotspots) ? hotspots : [];
+  let reportsIn = 0;
+  let crit = 0;
+  let warn = 0;
+  let normal = 0;
+  let emerging = 0;
+  let active = 0;
+  let intense = 0;
+  const trusts = [];
+  let latestMs = 0;
+
+  for (const h of list) {
+    const count = Number(h.incident_count) || 0;
+    reportsIn += count;
+    const risk = String(h.risk_level || "").toLowerCase();
+    if (risk === "critical" || risk === "high") crit += 1;
+    else if (risk === "medium" || risk === "active") warn += 1;
+    else normal += 1;
+
+    if (risk === "critical" || count >= 8) intense += 1;
+    else if (risk === "high" || count >= 4) active += 1;
+    else emerging += 1;
+
+    if (h.avg_trust_score != null && Number.isFinite(Number(h.avg_trust_score))) {
+      trusts.push(Number(h.avg_trust_score));
+    }
+    if (h.detected_at) {
+      const t = new Date(h.detected_at).getTime();
+      if (Number.isFinite(t) && t > latestMs) latestMs = t;
+    }
+  }
+
+  return {
+    total_clusters: list.length,
+    reports_in_clusters: reportsIn,
+    risk_counts: { critical: crit, warning: warn, normal: normal },
+    stage_counts: { emerging, active, intense },
+    avg_cluster_trust:
+      trusts.length > 0
+        ? Math.round(trusts.reduce((a, b) => a + b, 0) / trusts.length)
+        : null,
+    latest_cluster_run:
+      latestMs > 0 ? new Date(latestMs).toLocaleString() : "Never",
+  };
+};
+
 const TIME_PERIOD_HOURS = {
   day: 24,
   week: 168,
@@ -249,7 +297,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   const [legendOpen, setLegendOpen] = useState(false);
   const [dbscanParams, setDbscanParams] = useState({
     radius_meters: 500,
-    min_incidents: 2,
+    min_incidents: 1,
     time_window_hours: 24,
     trust_min: 50,
   });
@@ -263,7 +311,9 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     api
       .get(`/api/v1/hotspots/?${query.toString()}`)
       .then((res) => {
-        setMapHotspots(res || []);
+        const rows = res || [];
+        setMapHotspots(rows);
+        setHotspotStats(buildStatsFromHotspots(rows));
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -476,127 +526,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
         );
   }, [confirmedOnMap, typeFilter]);
 
-  /**
-   * Epsilon in real metres — taken directly from the DBSCAN params so clustering
-   * is always based on fixed geographic distance, never affected by zoom level.
-   */
-  const epsilonMeters = useMemo(
-    () => dbscanParams.radius_meters ?? 500,
-    [dbscanParams.radius_meters],
-  );
-
-  /**
-   * True DBSCAN clustering using haversine distance.
-   *
-   * Parameters
-   * ----------
-   * eps     – epsilonMeters (zoom-adaptive screen distance → real metres)
-   * minPts  – minimum neighbours for a point to qualify as a CORE point
-   *           (taken from dbscanParams.min_incidents, default 2)
-   *
-   * Point classification
-   * --------------------
-   * CORE   – has ≥ minPts neighbours within eps; starts / expands a cluster.
-   * BORDER – within eps of a core point but fewer than minPts neighbours;
-   *          joins the cluster but does NOT expand it further.
-   * NOISE  – not within eps of any core point; displayed as an isolated pin.
-   *
-   * Returns an array of groups. Each group is an array of report objects.
-   * Noise points each form a singleton group (rendered as individual diamonds).
-   */
-  const clusterGroups = useMemo(() => {
-    const pts = filteredConfirmedOnMap;
-    const n = pts.length;
-    if (n === 0) return [];
-
-    // minPts follows sklearn convention: counts the point itself.
-    // So a core point needs (minPts - 1) OTHER neighbours within epsilon.
-    const minPts = dbscanParams.min_incidents ?? 3;
-    const minNeighbours = Math.max(1, minPts - 1);
-
-    // Haversine distance in metres between pts[i] and pts[j]
-    const haversineDist = (i, j) => {
-      const dLat = ((pts[j].lat - pts[i].lat) * Math.PI) / 180;
-      const dLng = ((pts[j].lng - pts[i].lng) * Math.PI) / 180;
-      const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos((pts[i].lat * Math.PI) / 180) *
-          Math.cos((pts[j].lat * Math.PI) / 180) *
-          Math.sin(dLng / 2) ** 2;
-      return 6371000 * 2 * Math.asin(Math.sqrt(a));
-    };
-
-    // Pre-compute the neighbour list for every point (O(n²), n is small client-side)
-    const nbOf = pts.map((_, i) => {
-      const nb = [];
-      for (let j = 0; j < n; j++) {
-        if (j !== i && haversineDist(i, j) <= epsilonMeters) nb.push(j);
-      }
-      return nb;
-    });
-
-    // Labels: -1 = unvisited, -2 = noise, ≥ 0 = cluster id
-    const label = new Int32Array(n).fill(-1);
-    let nextCluster = 0;
-
-    for (let i = 0; i < n; i++) {
-      if (label[i] !== -1) continue; // already classified
-
-      if (nbOf[i].length < minNeighbours) {
-        // Not enough neighbours to be a core point → tentative noise
-        label[i] = -2;
-        continue;
-      }
-
-      // i is a CORE point → start a new cluster and expand
-      const cId = nextCluster++;
-      label[i] = cId;
-
-      // Seed queue with i's neighbours
-      const queue = nbOf[i].slice();
-      const inQueue = new Uint8Array(n);
-      for (const nb of queue) inQueue[nb] = 1;
-
-      while (queue.length > 0) {
-        const q = queue.shift();
-
-        // Promote noise to border point
-        if (label[q] === -2) label[q] = cId;
-        // Skip if already assigned to any cluster
-        if (label[q] !== -1) continue;
-
-        label[q] = cId; // q joins cluster (border or core)
-
-        // Only core points expand the cluster further
-        if (nbOf[q].length >= minNeighbours) {
-          for (const r of nbOf[q]) {
-            if (!inQueue[r] && (label[r] === -1 || label[r] === -2)) {
-              queue.push(r);
-              inQueue[r] = 1;
-            }
-          }
-        }
-      }
-    }
-
-    // Bucket points by cluster id
-    const buckets = new Map();
-    for (let i = 0; i < n; i++) {
-      const key = label[i] === -2 ? `noise_${i}` : String(label[i]);
-      if (!buckets.has(key)) buckets.set(key, []);
-      buckets.get(key).push(pts[i]);
-    }
-
-    // Assign color indices only to real clusters (non-noise)
-    let colorIdx = 0;
-    return Array.from(buckets.entries()).map(([key, points]) => {
-      const isNoise = key.startsWith('noise_');
-      const entry = { isNoise, points, clusterIdx: isNoise ? -1 : colorIdx };
-      if (!isNoise) colorIdx++;
-      return entry;
-    });
-  }, [filteredConfirmedOnMap, epsilonMeters, dbscanParams.min_incidents]);
-
   const plottedHotspots = useMemo(
     () =>
       filteredHotspots
@@ -610,17 +539,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
         .filter((h) => Number.isFinite(h.lat) && Number.isFinite(h.lng)),
     [filteredHotspots],
   );
-
-  /** Reports that are not part of any backend hotspot cluster → rendered as noise. */
-  const noisePoints = useMemo(() => {
-    const inCluster = new Set();
-    for (const h of plottedHotspots) {
-      for (const pt of (h.incident_points || [])) {
-        inCluster.add(String(pt.report_id));
-      }
-    }
-    return confirmedOnMap.filter((r) => !inCluster.has(String(r.report_id)));
-  }, [plottedHotspots, confirmedOnMap]);
 
 // Filter historical hotspots for table display
   const filteredHistoricalHotspots = useMemo(() => {
@@ -748,13 +666,16 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     return incidentTone[String(name).toLowerCase()] || "neutral";
   };
 
-  const getCircleColor = (risk) => {
-    // Leaflet needs real color values, not CSS variables.
-    // These hex codes should match your --danger / --warning / --success theme colors.
-    if (risk === "high" || risk === "critical") return "#f87171"; // Critical (red)
-    if (risk === "medium") return "#fb923c"; // Warning (orange)
-    return "#34d399"; // Normal (green)
+  /** Musanze safety map cluster zone colours (red / yellow / green). */
+  const getRiskZoneColor = (risk) => {
+    const rl = String(risk || "").toLowerCase();
+    if (rl === "high" || rl === "critical") return "#ef4444";
+    if (rl === "medium" || rl === "active" || rl === "emerging") return "#eab308";
+    if (rl === "low" || rl === "low_activity") return "#22c55e";
+    return "#22c55e";
   };
+
+  const getCircleColor = (risk) => getRiskZoneColor(risk);
 
   /** Haversine distance in metres between two lat/lng points. */
   const haversineMeters = (lat1, lng1, lat2, lng2) => {
@@ -1069,17 +990,14 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       <div className="alert alert-info">
         <span className="alert-icon">i</span>
         <div>
-          Hotspots are auto-detected using{" "}
-          <strong>trust-weighted DBSCAN</strong>: reports are clustered by
-          proximity (epsilon-radius) and minimum density (min samples). Each
-          cluster&apos;s risk score (0-100) is weighted by the average Random
-          Forest trust score of its constituent reports; low-trust reports
-          reduce the hotspot score even if many are present.
-          <span style={{ display: 'block', marginTop: '0.65rem' }}>
-            Clustering only includes incidents that passed police verification (verified or
-            equivalent). When analytics gates are enabled in deployment (DPU lens), hotspots
-            also require community confirmation (local leader)—reports can exist in workflow
-            but stay off the map until those policies are satisfied.
+          Musanze District safety map: every <strong>police-verified</strong> incident is
+          plotted and coloured by risk zone — red (high), yellow (medium), green (low),
+          blue (rare / isolated). Persisted <strong>DBSCAN hotspot circles</strong> from the
+          database overlay cluster boundaries; a single verified report can form its own
+          low-risk cluster.
+          <span style={{ display: "block", marginTop: "0.65rem" }}>
+            Use the <strong>Time Period</strong> panel to highlight a window; incidents
+            outside that window appear faded (35% opacity).
           </span>
         </div>
       </div>
@@ -1115,8 +1033,8 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             color: "var(--muted)",
           }}
         >
-          Map: {mapHotspots.length} clusters · {confirmedOnMap.length} confirmed
-          reports · filter highlight: {formatFilterPeriodLabel(timePeriod, customHours)}
+          Map: {plottedHotspots.length} clusters · {confirmedOnMap.length} verified
+          incidents · highlight: {formatFilterPeriodLabel(timePeriod, customHours)}
         </span>
       </div>
 
@@ -1189,113 +1107,102 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
 
               {/* ── Backend DBSCAN clusters ─────────────────────────────── */}
               {plottedHotspots.map((h, hIdx) => {
-                const clusterColor = getClusterColor(hIdx);
-                const inFilter = isWithinSelectedFilter(h.detected_at, selectedFilterHours);
-                const alpha = inFilter ? 1 : 0.35;
+                const zoneColor = getRiskZoneColor(h.risk_level);
                 const pts = Array.isArray(h.incident_points) ? h.incident_points : [];
+                const clusterInFilter =
+                  selectedFilterHours == null ||
+                  isWithinSelectedFilter(h.detected_at, selectedFilterHours) ||
+                  pts.some((p) =>
+                    isWithinSelectedFilter(p.reported_at, selectedFilterHours),
+                  );
+                const alpha = clusterInFilter ? 1 : 0.35;
                 const hull = Array.isArray(h.boundary_points) && h.boundary_points.length >= 3
-                  ? h.boundary_points          // pre-computed by backend
+                  ? h.boundary_points
                   : convexHull(pts.map((p) => ({ lat: p.latitude, lng: p.longitude })));
                 const types = [...new Set(pts.map((p) => p.incident_type_name).filter(Boolean))];
-                const riskColor = getCircleColor(h.risk_level);
 
                 return (
                   <React.Fragment key={`hs-${h.hotspot_id}`}>
-                    {/* Convex hull polygon */}
+                    {h.radius_meters > 0 && (
+                      <Circle
+                        center={[h.lat, h.lng]}
+                        radius={h.radius_meters}
+                        pathOptions={{
+                          color: zoneColor,
+                          weight: 2.5,
+                          opacity: alpha * 0.9,
+                          fillColor: zoneColor,
+                          fillOpacity: alpha * 0.12,
+                        }}
+                      />
+                    )}
+
                     {hull.length >= 3 && (
                       <Polygon
                         positions={hull}
                         pathOptions={{
-                          color: clusterColor,
-                          weight: 2.5,
-                          opacity: alpha * 0.9,
-                          fillColor: clusterColor,
-                          fillOpacity: alpha * 0.18,
+                          color: zoneColor,
+                          weight: 3,
+                          opacity: alpha * 0.95,
+                          fillColor: zoneColor,
+                          fillOpacity: alpha * 0.2,
                           dashArray: "8 5",
                         }}
                       />
                     )}
 
-                    {/* Individual incident points — colored by incident type */}
-                    {pts.map((p, pIdx) => {
-                      const typeColor = getIncidentTypeColor(p.incident_type_name);
-                      return (
-                        <CircleMarker
-                          key={`hs-pt-${h.hotspot_id}-${pIdx}`}
-                          center={[p.latitude, p.longitude]}
-                          radius={8}
-                          pathOptions={{
-                            color: "#fff",
-                            weight: 2,
-                            opacity: alpha,
-                            fillColor: typeColor,
-                            fillOpacity: alpha * 0.9,
-                          }}
-                        >
-                          <Tooltip direction="top" offset={[0, -15]} opacity={0.97} interactive={false}>
-                            <div style={{ fontSize: "11px", lineHeight: 1.5 }}>
-                              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: typeColor, marginRight: 5, verticalAlign: "middle" }} />
-                              <strong>{p.incident_type_name || "Incident"}</strong>
-                              <br />
-                              Cluster {hIdx + 1} · {pts.length} total
-                              {p.trust_score != null && (
-                                <><br />Trust: {Math.round(p.trust_score)}/100</>
-                              )}
-                            </div>
-                          </Tooltip>
-                        </CircleMarker>
-                      );
-                    })}
-
-                    {/* Star at centroid */}
-                    <Marker
-                      position={[h.lat, h.lng]}
-                      icon={createStarIcon()}
-                      zIndexOffset={1000}
-                    >
-                      <Tooltip direction="top" offset={[0, -18]} opacity={0.97} interactive={false}>
-                        <div style={{ fontSize: "11px", lineHeight: 1.6 }}>
-                          <strong>Cluster {hIdx + 1}</strong><br />
-                          Incidents: {pts.length || h.incident_count}<br />
-                          {types.slice(0, 3).join(", ")}{types.length > 3 ? " …" : ""}<br />
-                          <span style={{ color: riskColor, fontWeight: 700, textTransform: "uppercase" }}>
-                            {String(h.risk_level || "low").toUpperCase()}
-                          </span>
-                        </div>
-                      </Tooltip>
-                    </Marker>
+                    {pts.length > 1 && (
+                      <Marker
+                        position={[h.lat, h.lng]}
+                        icon={createClusterIcon(
+                          pts.length || h.incident_count,
+                          zoneColor,
+                          getReportRiskBorder(zoneColor),
+                          alpha,
+                        )}
+                        zIndexOffset={900}
+                      >
+                        <Tooltip direction="top" offset={[0, -18]} opacity={0.97} interactive={false}>
+                          <div style={{ fontSize: "11px", lineHeight: 1.6 }}>
+                            <strong>Cluster {hIdx + 1}</strong>
+                            <br />
+                            {pts.length || h.incident_count} incidents · {getReportRiskLabel(zoneColor)}
+                            <br />
+                            {types.slice(0, 3).join(", ")}
+                          </div>
+                        </Tooltip>
+                      </Marker>
+                    )}
                   </React.Fragment>
                 );
               })}
 
-              {/* ── Isolated incidents not in any cluster ───────────────── */}
-              {noisePoints.map((r, nIdx) => {
+              {filteredConfirmedOnMap.map((r) => {
                 const inFilter = isWithinSelectedFilter(r.reported_at, selectedFilterHours);
                 const alpha = inFilter ? 1 : 0.35;
-                const typeColor = getIncidentTypeColor(r.incident_type_name);
+                const fill = getReportRiskColor(r, plottedHotspots);
+                const border = getReportRiskBorder(fill);
                 return (
-                  <CircleMarker
-                    key={`noise-${nIdx}`}
-                    center={[r.lat, r.lng]}
-                    radius={6}
-                    pathOptions={{
-                      color: NOISE_COLOR,
-                      weight: 1.5,
-                      opacity: alpha * 0.7,
-                      fillColor: typeColor,
-                      fillOpacity: alpha * 0.55,
-                      dashArray: "3 3",
-                    }}
+                  <Marker
+                    key={`inc-${r.report_id}`}
+                    position={[r.lat, r.lng]}
+                    icon={createDiamondIcon(fill, border, alpha)}
+                    zIndexOffset={800}
                   >
-                    <Tooltip direction="top" offset={[0, -10]} opacity={0.97} interactive={false}>
+                    <Tooltip direction="top" offset={[0, -12]} opacity={0.97} interactive={false}>
                       <div style={{ fontSize: "11px", lineHeight: 1.5 }}>
-                        <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: typeColor, marginRight: 5, verticalAlign: "middle" }} />
                         <strong>{r.incident_type_name || "Incident"}</strong>
                         <br />
-                        <span style={{ color: NOISE_COLOR, fontWeight: 600 }}>Isolated — not in any cluster</span>
+                        {getReportRiskLabel(fill)}
+                        {!inFilter && (
+                          <>
+                            <br />
+                            <span style={{ color: "var(--muted)" }}>Outside selected period</span>
+                          </>
+                        )}
                       </div>
                     </Tooltip>
-                  </CircleMarker>
+                  </Marker>
                 );
               })}
 
@@ -1343,21 +1250,28 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                   pointerEvents: "none",
                 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 7 }}>
-                    Incident Types
+                    Risk zones (Musanze)
                   </div>
-                  {incidentTypes.map((t) => {
-                    const name = t.type_name || "";
-                    if (!name) return null;
-                    return (
-                      <div key={name} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: getIncidentTypeColor(name), flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.35)" }} />
-                        <span style={{ fontSize: 11, color: "#e2e8f0" }}>{name}</span>
-                      </div>
-                    );
-                  })}
-                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", marginTop: 6, paddingTop: 6, display: "flex", alignItems: "center", gap: 7 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: "50%", background: "transparent", border: `1.5px dashed ${NOISE_COLOR}`, flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, color: "#94a3b8" }}>Isolated (no cluster)</span>
+                  {[
+                    { color: "#ef4444", label: "High-risk cluster" },
+                    { color: "#eab308", label: "Medium-risk cluster" },
+                    { color: "#22c55e", label: "Low-risk cluster" },
+                    { color: "#3b82f6", label: "Rare / isolated incident" },
+                  ].map((row) => (
+                    <div key={row.label} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
+                      <div style={{
+                        width: 10,
+                        height: 10,
+                        background: row.color,
+                        transform: "rotate(45deg)",
+                        border: "1.5px solid rgba(255,255,255,0.35)",
+                        flexShrink: 0,
+                      }} />
+                      <span style={{ fontSize: 11, color: "#e2e8f0" }}>{row.label}</span>
+                    </div>
+                  ))}
+                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", marginTop: 6, paddingTop: 6, fontSize: 10, color: "#94a3b8" }}>
+                    DBSCAN circles show cluster radius. Outside the selected time period, incidents appear faded.
                   </div>
                 </div>
               )}
@@ -2021,11 +1935,9 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                   setRecomputing(true);
                   try {
                     await api.post("/api/v1/hotspots/recompute", {
+                      time_window_hours: MAP_CLUSTER_WINDOW_HOURS,
                       radius_meters: Number(dbscanParams.radius_meters || 500),
                       min_incidents: Number(dbscanParams.min_incidents || 2),
-                      time_window_hours: Number(
-                        dbscanParams.time_window_hours || 24,
-                      ),
                       trust_min: Number(dbscanParams.trust_min || 0),
                     });
                     loadMapHotspots();
