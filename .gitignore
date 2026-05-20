@@ -15,3 +15,8 @@ venv/
 *.safetensors
 backend/.env
 .env
+
+# Local Docker orchestration only — not needed for HF/Render deployment
+docker-compose*.yml
+frontend/.dockerignore
+frontend/nginx.conf

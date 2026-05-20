@@ -205,21 +205,21 @@ app = FastAPI(
     title=settings.app_name,
     lifespan=lifespan,
 )
-# Debug: Log the actual CORS origins being used
-cors_origins = settings.get_cors_origins_list()
-print(f"DEBUG: CORS origins loaded: {cors_origins}")
-print(f"DEBUG: FRONTEND_URL setting: {settings.frontend_url}")
-print(f"DEBUG: cors_origins setting: {settings.cors_origins}")
+
+_cors_origins = settings.get_cors_origins_list()
+# When no specific origins are configured, allow all via regex so that
+# allow_credentials=True remains valid (allow_origins=["*"] + credentials is illegal in CORS spec).
+_cors_regex = r".*" if not _cors_origins else None
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.get_cors_origins_list(),  # Dynamic origins from environment
-    allow_origin_regex=settings.cors_origin_regex,
-    allow_credentials=True,  # Allow credentials with specific origins
+    allow_origins=_cors_origins,
+    allow_origin_regex=_cors_regex,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["*"],
     expose_headers=["*"],
-    max_age=600,  # Cache preflight for 10 minutes
+    max_age=600,
 )
 
 # Mount static files for evidence uploads

@@ -31,8 +31,9 @@ COPY . .
 # Set Python path to backend package only (avoid /app module shadowing)
 ENV PYTHONPATH=/app/backend:$PYTHONPATH
 
-# Expose port
+# Expose port (7860 for HF Spaces; Render overrides via PORT env var)
 EXPOSE 7860
 
 # Run the real backend API app (not the standalone fallback)
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+# PORT env var is set automatically by Render; HF Spaces doesn't set it so 7860 is used.
+CMD sh -c "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-7860}"
