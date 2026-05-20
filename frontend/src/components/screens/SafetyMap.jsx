@@ -211,67 +211,26 @@ const expandBoundsByKm = (bounds, km = 1) => {
   ];
 };
 
-/** Fit Musanze once; keep pan/zoom usable (do not lock minZoom to fitBounds). */
 const MapBoundsController = ({ maxBounds }) => {
   const map = useMap();
   const didInitialFitRef = useRef(false);
-  const boundsKeyRef = useRef(null);
 
   useEffect(() => {
     if (!maxBounds) return;
 
     const bounds = L.latLngBounds(maxBounds);
-    const key = [
-      bounds.getSouth(),
-      bounds.getWest(),
-      bounds.getNorth(),
-      bounds.getEast(),
-    ].join(",");
+    map.setMaxBounds(bounds);
 
-    map.setMaxBounds(bounds.pad(0.12));
+    const minZoomForBounds = map.getBoundsZoom(bounds, false, [8, 8]);
+    map.setMinZoom(Math.max(1, minZoomForBounds));
 
-    if (!didInitialFitRef.current || boundsKeyRef.current !== key) {
-      map.fitBounds(bounds, { padding: [28, 28], animate: false });
+    if (!didInitialFitRef.current) {
+      map.fitBounds(bounds, { padding: [12, 12], animate: false });
       didInitialFitRef.current = true;
-      boundsKeyRef.current = key;
+    } else if (!bounds.contains(map.getCenter())) {
+      map.panInsideBounds(bounds, { animate: false });
     }
   }, [map, maxBounds]);
-
-  return null;
-};
-
-/** Ensure drag, wheel zoom, and keyboard pan stay enabled (village polygons are non-interactive). */
-const MapInteractionEnabler = () => {
-  const map = useMap();
-
-  useEffect(() => {
-    map.dragging.enable();
-    map.touchZoom.enable();
-    map.scrollWheelZoom.enable();
-    map.doubleClickZoom.enable();
-    map.boxZoom.enable();
-    if (map.keyboard) map.keyboard.enable();
-    const container = map.getContainer();
-    container.style.cursor = "grab";
-    container.setAttribute("tabindex", "0");
-    container.setAttribute("aria-label", "Musanze safety map — drag to pan, scroll to zoom, arrow keys to move");
-  }, [map]);
-
-  useEffect(() => {
-    const container = map.getContainer();
-    const onDragStart = () => {
-      container.style.cursor = "grabbing";
-    };
-    const onDragEnd = () => {
-      container.style.cursor = "grab";
-    };
-    map.on("dragstart", onDragStart);
-    map.on("dragend", onDragEnd);
-    return () => {
-      map.off("dragstart", onDragStart);
-      map.off("dragend", onDragEnd);
-    };
-  }, [map]);
 
   return null;
 };
@@ -1093,27 +1052,22 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             <MapContainer
               center={MUSANZE_CENTER}
               zoom={MUSANZE_ZOOM}
-              minZoom={9}
+              minZoom={11}
               maxZoom={18}
               maxBounds={musanzeBounds}
-              maxBoundsViscosity={0.65}
-              dragging
-              touchZoom
-              scrollWheelZoom
-              doubleClickZoom
-              boxZoom
-              keyboard
-              keyboardPanDelta={80}
-              wheelDebounceTime={40}
-              wheelPxPerZoomLevel={80}
+              maxBoundsViscosity={1.0}
+              scrollWheelZoom="center"
+              wheelDebounceTime={80}
+              wheelPxPerZoomLevel={100}
               zoomSnap={0.25}
               zoomDelta={0.5}
               inertia
-              style={{ width: "100%", height: "100%", cursor: "grab" }}
+              inertiaDeceleration={2500}
+              tapTolerance={20}
+              style={{ width: "100%", height: "100%" }}
               zoomControl={false}
             >
               <MapBoundsController maxBounds={musanzeBounds} />
-              <MapInteractionEnabler />
               <ZoomTracker onZoom={setMapZoom} />
               <TileLayer
                 attribution="&copy; OpenStreetMap contributors"
@@ -1126,15 +1080,12 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                 <Polygon
                   key={p.id}
                   positions={p.positions}
-                  interactive={false}
-                  bubblingMouseEvents={false}
                   pathOptions={{
                     color: "#94a3b8",
                     weight: 1,
                     opacity: 0.55,
                     fillColor: "#1e293b",
                     fillOpacity: 0.04,
-                    interactive: false,
                   }}
                 >
                   <Tooltip
@@ -1176,15 +1127,12 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                       <Circle
                         center={[h.lat, h.lng]}
                         radius={h.radius_meters}
-                        interactive={false}
-                        bubblingMouseEvents={false}
                         pathOptions={{
                           color: zoneColor,
                           weight: 2.5,
                           opacity: alpha * 0.9,
                           fillColor: zoneColor,
                           fillOpacity: alpha * 0.12,
-                          interactive: false,
                         }}
                       />
                     )}
@@ -1192,8 +1140,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                     {hull.length >= 3 && (
                       <Polygon
                         positions={hull}
-                        interactive={false}
-                        bubblingMouseEvents={false}
                         pathOptions={{
                           color: zoneColor,
                           weight: 3,
@@ -1201,7 +1147,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                           fillColor: zoneColor,
                           fillOpacity: alpha * 0.2,
                           dashArray: "8 5",
-                          interactive: false,
                         }}
                       />
                     )}
@@ -1267,7 +1212,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             <div
               onMouseEnter={() => setLegendOpen(true)}
               onMouseLeave={() => setLegendOpen(false)}
-              style={{ position: "absolute", bottom: 10, left: 10, zIndex: 500, cursor: "default", pointerEvents: "none" }}
+              style={{ position: "absolute", bottom: 10, left: 10, zIndex: 500, cursor: "default" }}
             >
               {/* Collapsed pill */}
               <div style={{
