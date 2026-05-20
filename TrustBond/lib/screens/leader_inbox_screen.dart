@@ -1,13 +1,11 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
 import '../services/leader_service.dart';
 import '../services/notification_service.dart';
 import '../services/platform_service.dart';
-import '../services/api_service.dart';
 import 'report_step1_screen.dart';
 
 class LeaderInboxScreen extends StatefulWidget {
@@ -22,7 +20,6 @@ class LeaderInboxScreen extends StatefulWidget {
 
 class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
   final _leader = LeaderService();
-  final _api = ApiService();
   final _scrollController = ScrollController();
   bool _loading = true;
   String? _error;
@@ -102,19 +99,20 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList(growable: false);
-      
-      // Get counts for dashboard
+
       final allRows = await _leader.listReports(onlyPending: false);
       final allItems = allRows
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList(growable: false);
-      
-      final pendingCount = allItems.where((item) => 
-        (item['leader_verification_status'] ?? 'pending') == 'pending').length;
-      final confirmedCount = allItems.where((item) => 
-        (item['leader_verification_status'] ?? 'pending') == 'confirmed').length;
-      
+
+      final pendingCount = allItems
+          .where((item) => (item['leader_verification_status'] ?? 'pending') == 'pending')
+          .length;
+      final confirmedCount = allItems
+          .where((item) => (item['leader_verification_status'] ?? 'pending') == 'confirmed')
+          .length;
+
       if (!mounted) return;
       setState(() {
         _me = me;
@@ -149,7 +147,10 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: AppColors.surface2,
+        ),
       );
     }
   }
@@ -157,18 +158,19 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: AppColors.bg,
       appBar: AppBar(
         title: const Text(
           'Village Safety Dashboard',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: Colors.white,
+            color: AppColors.text,
           ),
         ),
-        backgroundColor: const Color(0xFF1E3A8A),
+        backgroundColor: AppColors.bg,
         elevation: 0,
+        iconTheme: const IconThemeData(color: AppColors.text),
         actions: [
           IconButton(
             tooltip: 'Submit incident',
@@ -180,7 +182,7 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
               );
               if (mounted) _load();
             },
-            icon: const Icon(Icons.add_circle_outline, color: Colors.white),
+            icon: const Icon(Icons.add_circle_outline, color: AppColors.accent),
           ),
           IconButton(
             tooltip: 'Logout',
@@ -189,26 +191,33 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
               if (!context.mounted) return;
               Navigator.of(context).pop();
             },
-            icon: const Icon(Icons.logout, color: Colors.white),
+            icon: const Icon(Icons.logout, color: AppColors.muted),
           ),
         ],
       ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _load,
-          color: const Color(0xFF1E3A8A),
+          color: AppColors.accent,
+          backgroundColor: AppColors.surface2,
           child: Column(
             children: [
               _buildStatsHeader(),
               _buildFilterToggle(),
               Expanded(
                 child: _loading
-                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF1E3A8A)))
+                    ? const Center(
+                        child: CircularProgressIndicator(color: AppColors.accent),
+                      )
                     : _error != null
                         ? ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
                             padding: const EdgeInsets.all(24),
                             children: [
-                              Text(_error!, style: const TextStyle(color: Colors.red)),
+                              Text(
+                                _error!,
+                                style: const TextStyle(color: AppColors.danger),
+                              ),
                               const SizedBox(height: 12),
                               ElevatedButton(
                                 onPressed: _load,
@@ -217,10 +226,14 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
                             ],
                           )
                         : _items.isEmpty
-                            ? _buildEmptyState()
+                            ? ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                children: [_buildEmptyState()],
+                              )
                             : ListView(
                                 controller: _scrollController,
-                                padding: const EdgeInsets.all(16),
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                                 children: [
                                   if (_me != null) _buildLeaderInfo(),
                                   const SizedBox(height: 12),
@@ -239,30 +252,41 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
   Widget _buildStatsHeader() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E3A8A),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(20),
-          bottomRight: Radius.circular(20),
-        ),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         children: [
           const Text(
             'Your Village Safety',
             style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text,
             ),
           ),
           const SizedBox(height: 16),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildStatCard('Pending Review', _pendingCount.toString(), Colors.orange),
-              _buildStatCard('Confirmed', _confirmedCount.toString(), Colors.green),
+              Expanded(
+                child: _buildStatCard(
+                  'Pending Review',
+                  _pendingCount.toString(),
+                  AppColors.warn,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                  'Confirmed',
+                  _confirmedCount.toString(),
+                  AppColors.accent,
+                ),
+              ),
             ],
           ),
         ],
@@ -272,28 +296,29 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
 
   Widget _buildStatCard(String title, String count, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+        color: AppColors.surface2,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.5)),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Column(
         children: [
           Text(
             count,
             style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
               color: color,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             title,
+            textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 12,
-              color: Colors.white,
+              fontSize: 11,
+              color: AppColors.muted,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -303,67 +328,50 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
   }
 
   Widget _buildFilterToggle() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _showPendingOnly = true;
-                });
-                _load();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: _showPendingOnly ? const Color(0xFF1E3A8A) : Colors.grey[200],
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(8),
-                    bottomLeft: Radius.circular(8),
-                  ),
-                ),
-                child: Text(
-                  'Need Verification',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: _showPendingOnly ? Colors.white : Colors.grey[600],
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface2,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Expanded(child: _filterTab('Need Verification', true)),
+            Expanded(child: _filterTab('All Incidents', false)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _filterTab(String label, bool pendingTab) {
+    final selected = pendingTab ? _showPendingOnly : !_showPendingOnly;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _showPendingOnly = pendingTab);
+        _load();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.accent2.withValues(alpha: 0.18) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: selected
+              ? Border.all(color: AppColors.accent2.withValues(alpha: 0.5))
+              : null,
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: selected ? AppColors.accent2 : AppColors.muted,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            fontSize: 13,
           ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _showPendingOnly = false;
-                });
-                _load();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: !_showPendingOnly ? const Color(0xFF1E3A8A) : Colors.grey[200],
-                  borderRadius: const BorderRadius.only(
-                    topRight: Radius.circular(8),
-                    bottomRight: Radius.circular(8),
-                  ),
-                ),
-                child: Text(
-                  'All Incidents',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: !_showPendingOnly ? Colors.white : Colors.grey[600],
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -372,13 +380,13 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[300]!),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         children: [
-          const Icon(Icons.verified_user, color: Color(0xFF1E3A8A)),
+          const Icon(Icons.verified_user, color: AppColors.accent, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -386,12 +394,16 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
               children: [
                 Text(
                   (_me!['full_name'] ?? 'Local Leader').toString(),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.text,
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   'Coverage: ${((_me!['covered_location_ids'] as List?)?.length ?? 0)} locations',
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  style: const TextStyle(fontSize: 11, color: AppColors.muted),
                 ),
               ],
             ),
@@ -402,24 +414,26 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            _showPendingOnly ? Icons.check_circle : Icons.security,
-            size: 80,
-            color: Colors.grey[400],
+            _showPendingOnly ? Icons.check_circle_outline : Icons.security,
+            size: 72,
+            color: AppColors.muted.withValues(alpha: 0.6),
           ),
           const SizedBox(height: 16),
           Text(
-            _showPendingOnly 
+            _showPendingOnly
                 ? 'No incidents need verification'
                 : 'No incidents in your area',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 17,
+              color: AppColors.text,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
@@ -427,14 +441,40 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
             _showPendingOnly
                 ? 'Great job keeping your village safe!'
                 : 'Check back later for new reports',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[500],
-            ),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 13, color: AppColors.muted),
           ),
         ],
       ),
     );
+  }
+
+  Color _priorityColor(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'urgent':
+        return AppColors.danger;
+      case 'high':
+        return AppColors.warn;
+      case 'medium':
+        return AppColors.accent2;
+      case 'low':
+        return AppColors.accent;
+      default:
+        return AppColors.muted;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'confirmed':
+        return AppColors.accent;
+      case 'rejected':
+        return AppColors.danger;
+      case 'pending':
+        return AppColors.warn;
+      default:
+        return AppColors.muted;
+    }
   }
 
   Widget _reportCard(Map<String, dynamic> r) {
@@ -446,102 +486,78 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
     final priority = (r['priority'] ?? 'medium').toString();
     final status = (r['leader_verification_status'] ?? 'pending').toString();
     final needsVerification = status == 'pending';
-
-    Color getPriorityColor() {
-      switch (priority.toLowerCase()) {
-        case 'urgent': return Colors.red;
-        case 'high': return Colors.orange;
-        case 'medium': return Colors.yellow[700]!;
-        case 'low': return Colors.green;
-        default: return Colors.grey;
-      }
-    }
-
-    Color getStatusColor() {
-      switch (status.toLowerCase()) {
-        case 'confirmed': return Colors.green;
-        case 'rejected': return Colors.red;
-        case 'pending': return Colors.orange;
-        default: return Colors.grey;
-      }
-    }
-
+    final priorityColor = _priorityColor(priority);
+    final statusColor = _statusColor(status);
     final isHighlighted = _highlightReportId != null && id == _highlightReportId;
     _reportKeys.putIfAbsent(id, GlobalKey.new);
 
-    return Card(
+    return Container(
       key: _reportKeys[id],
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: isHighlighted ? 6 : 2,
-      shape: RoundedRectangleBorder(
+      decoration: BoxDecoration(
+        color: AppColors.card,
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isHighlighted ? const Color(0xFF1E3A8A) : getStatusColor().withOpacity(0.3),
-          width: isHighlighted ? 2.5 : 1,
+        border: Border.all(
+          color: isHighlighted
+              ? AppColors.accent2
+              : AppColors.border,
+          width: isHighlighted ? 1.5 : 1,
         ),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: getStatusColor().withOpacity(0.1),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                topRight: Radius.circular(12),
-              ),
-            ),
+            padding: const EdgeInsets.all(14),
+            color: statusColor.withValues(alpha: 0.12),
             child: Row(
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: getPriorityColor(),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              priority.toUpperCase(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: priorityColor.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: priorityColor.withValues(alpha: 0.5)),
+                        ),
+                        child: Text(
+                          priority.toUpperCase(),
+                          style: TextStyle(
+                            color: priorityColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
                           ),
-                          const SizedBox(width: 8),
-                        ],
+                        ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Text(
                         incident,
                         style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E3A8A),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.text,
                         ),
                       ),
                     ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: getStatusColor(),
-                    borderRadius: BorderRadius.circular(20),
+                    color: statusColor.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: statusColor.withValues(alpha: 0.5)),
                   ),
                   child: Text(
                     status.toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
@@ -549,47 +565,38 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.location_on, color: Colors.grey, size: 16),
+                    const Icon(Icons.location_on, color: AppColors.muted, size: 16),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
                         village.isNotEmpty ? village : 'Location in your coverage',
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 14,
-                        ),
+                        style: const TextStyle(color: AppColors.muted, fontSize: 13),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Row(
                   children: [
-                    const Icon(Icons.schedule, color: Colors.grey, size: 16),
+                    const Icon(Icons.schedule, color: AppColors.muted, size: 16),
                     const SizedBox(width: 4),
                     Text(
                       when.isNotEmpty ? 'Reported: $when' : 'Time unknown',
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 12,
-                      ),
+                      style: const TextStyle(color: AppColors.muted, fontSize: 12),
                     ),
                   ],
                 ),
                 if (desc.isNotEmpty) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Text(
                     desc,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF374151),
-                    ),
+                    style: const TextStyle(fontSize: 13, color: AppColors.text, height: 1.35),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -600,15 +607,15 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF0F4FF),
+                      color: AppColors.surface2,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                      border: Border.all(color: AppColors.border),
                     ),
                     child: Text(
                       (r['credibility_summary'] ?? '').toString(),
                       style: const TextStyle(
                         fontSize: 11,
-                        color: Color(0xFF334155),
+                        color: AppColors.muted,
                         height: 1.35,
                       ),
                     ),
@@ -619,26 +626,24 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
           ),
           if (needsVerification)
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.orange[50],
-                border: Border(
-                  top: BorderSide(color: Colors.orange[200]!),
-                ),
+                color: AppColors.surface2,
+                border: const Border(top: BorderSide(color: AppColors.border)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  const Row(
                     children: [
-                      Icon(Icons.warning, color: Colors.orange[700], size: 16),
-                      const SizedBox(width: 4),
+                      Icon(Icons.warning_amber_rounded, color: AppColors.warn, size: 18),
+                      SizedBox(width: 6),
                       Text(
-                        'Action Required',
+                        'Action required',
                         style: TextStyle(
-                          color: Colors.orange[700],
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                          color: AppColors.warn,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
                         ),
                       ),
                     ],
@@ -646,10 +651,7 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
                   const SizedBox(height: 8),
                   const Text(
                     'Please verify if this incident actually occurred in your area:',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF6B7280),
-                    ),
+                    style: TextStyle(fontSize: 12, color: AppColors.muted),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -658,11 +660,11 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
                         child: ElevatedButton(
                           onPressed: () => _decision(id, 'confirmed'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
+                            backgroundColor: AppColors.accent,
+                            foregroundColor: AppColors.bg,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(10),
                             ),
                           ),
                           child: const Row(
@@ -675,16 +677,16 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       Expanded(
-                        child: ElevatedButton(
+                        child: OutlinedButton(
                           onPressed: () => _decision(id, 'rejected'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.danger,
+                            side: const BorderSide(color: AppColors.danger),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(10),
                             ),
                           ),
                           child: const Row(
@@ -707,4 +709,3 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
     );
   }
 }
-
