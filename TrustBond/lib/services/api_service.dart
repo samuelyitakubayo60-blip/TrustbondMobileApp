@@ -436,6 +436,20 @@ class ApiService {
     }
     throw Exception('Failed to register mobile push token (${response.statusCode})');
   }
+
+  /// Drop cached incident types and report payloads stored on device.
+  Future<void> clearLocalCaches() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_incidentTypesCacheKey);
+    final keys = prefs.getKeys().where(
+      (k) =>
+          k.startsWith(_myReportsCachePrefix) ||
+          k.startsWith(_reportDetailCachePrefix),
+    );
+    for (final key in keys) {
+      await prefs.remove(key);
+    }
+  }
 }
 
 /// Custom exception for evidence upload failures with status code info.

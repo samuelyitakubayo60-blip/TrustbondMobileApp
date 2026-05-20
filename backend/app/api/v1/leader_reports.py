@@ -37,7 +37,6 @@ class LeaderReportResponse(BaseModel):
     leader_verification_status: Optional[str] = None
     leader_verified_at: Optional[datetime] = None
     trust_score: Optional[float] = None
-    verification_status: Optional[str] = None
     flag_reason: Optional[str] = None
     evidence_count: int = 0
     credibility_summary: Optional[str] = None

@@ -16,7 +16,7 @@ from app.schemas.deployment_decision import (
 )
 from app.api.v1.auth import get_current_user, get_current_admin_or_supervisor
 from app.api.v1.leader_auth import get_current_local_leader
-from app.core.leader_workflow import leader_gate_enabled, report_meets_leader_confirmation
+from app.core.leader_workflow import report_meets_leader_confirmation
 from app.api.v1.notifications import create_role_notifications, create_notification
 
 router = APIRouter()
@@ -35,8 +35,11 @@ def get_commander_dashboard(
     if current_user.role not in ["supervisor", "admin"]:
         raise HTTPException(status_code=403, detail="Only commanders can access deployment dashboard")
     
-    # Get leader-confirmed reports that need deployment decisions
-    query = db.query(Report).filter(Report.leader_verification_status == "confirmed")
+    # Incidents cleared for commander ops: police verified and community confirmed
+    query = db.query(Report).filter(
+        Report.leader_verification_status == "confirmed",
+        Report.verification_status == "verified",
+    )
     
     if status_filter == "pending_deployment":
         query = query.outerjoin(DeploymentDecision).filter(DeploymentDecision.decision_id.is_(None))

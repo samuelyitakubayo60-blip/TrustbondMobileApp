@@ -94,42 +94,8 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
         setSectorData(d);
       })
       .catch((err) => {
-        console.log(`${role} performance data not available, using fallback`);
-        // Role-based fallback data
-        let fallbackData;
-        switch(role) {
-          case "admin":
-            fallbackData = {
-              performance_data: [
-                { sector_name: 'Sector A', report_count: 15, device_count: 5, avg_trust_score: 75 },
-                { sector_name: 'Sector B', report_count: 23, device_count: 8, avg_trust_score: 82 },
-                { sector_name: 'Sector C', report_count: 8, device_count: 3, avg_trust_score: 68 }
-              ]
-            };
-            break;
-          case "supervisor":
-            fallbackData = {
-              performance_data: [
-                { sector_name: 'Sector 1', report_count: 12, device_count: 4, avg_trust_score: 78 },
-                { sector_name: 'Sector 2', report_count: 18, device_count: 6, avg_trust_score: 85 }
-              ]
-            };
-            break;
-          case "officer":
-            fallbackData = {
-              performance_data: [
-                { date: 'Mon', reports_processed: 8, avg_response_time: 15 },
-                { date: 'Tue', reports_processed: 12, avg_response_time: 12 },
-                { date: 'Wed', reports_processed: 10, avg_response_time: 18 },
-                { date: 'Thu', reports_processed: 15, avg_response_time: 10 },
-                { date: 'Fri', reports_processed: 9, avg_response_time: 20 }
-              ]
-            };
-            break;
-          default:
-            fallbackData = { performance_data: [] };
-        }
-        setSectorData(fallbackData);
+        console.warn(`${role} performance data unavailable:`, err);
+        setSectorData({ performance_data: [], load_error: true });
       });
   };
 
@@ -411,11 +377,17 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
           </div>
         </div>
         <div style={{ padding: '20px' }}>
-          <AdvancedGeographicCharts 
-            data={sectorData}
-            type={getChartType(role)}
-            timeWindow={selectedTimeWindow}
-          />
+          {sectorData?.load_error ? (
+            <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
+              Performance charts are unavailable right now. Check your connection or try again later.
+            </p>
+          ) : (
+            <AdvancedGeographicCharts
+              data={sectorData}
+              type={getChartType(role)}
+              timeWindow={selectedTimeWindow}
+            />
+          )}
         </div>
       </div>
 

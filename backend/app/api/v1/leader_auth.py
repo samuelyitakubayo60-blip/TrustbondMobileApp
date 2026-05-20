@@ -86,10 +86,7 @@ def get_optional_local_leader(
 ) -> LocalLeader | None:
     if not credentials or not (credentials.credentials or "").strip():
         return None
-    try:
-        return _get_local_leader_from_token(db, credentials.credentials.strip())
-    except HTTPException:
-        return None
+    return _get_local_leader_from_token(db, credentials.credentials.strip())
 
 
 @router.post("/login", response_model=LocalLeaderToken)

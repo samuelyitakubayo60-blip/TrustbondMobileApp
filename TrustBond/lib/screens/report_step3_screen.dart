@@ -517,18 +517,16 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
             builder: (context, constraints) {
               final spacing = 8.0;
               final itemWidth = (constraints.maxWidth - spacing) / 2;
-              return Wrap(
-                spacing: spacing,
-                runSpacing: spacing,
-                children: [
-                  SizedBox(
-                    width: itemWidth,
-                    child: _actionChip('📷 Photo', _pickPhoto),
-                  ),
-                  SizedBox(
-                    width: itemWidth,
-                    child: _actionChip('🎥 Video', _pickVideo),
-                  ),
+              final chips = <Widget>[
+                SizedBox(
+                  width: itemWidth,
+                  child: _actionChip('📷 Photo', _pickPhoto),
+                ),
+                SizedBox(
+                  width: itemWidth,
+                  child: _actionChip('🎥 Video', _pickVideo),
+                ),
+                if (!Platform.isWindows)
                   SizedBox(
                     width: itemWidth,
                     child: _actionChip(
@@ -536,11 +534,15 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
                       _isRecording ? _stopRecording : _pickAudio,
                     ),
                   ),
-                  SizedBox(
-                    width: itemWidth,
-                    child: _actionChip('🖼️ Gallery', _pickGallery),
-                  ),
-                ],
+                SizedBox(
+                  width: itemWidth,
+                  child: _actionChip('🖼️ Gallery', _pickGallery),
+                ),
+              ];
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: chips,
               );
             },
           ),

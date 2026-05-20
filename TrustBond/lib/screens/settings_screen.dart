@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
+import '../services/api_service.dart';
+import '../services/device_service.dart';
+import '../services/leader_service.dart';
 import '../services/location_service.dart';
 import '../services/notification_service.dart';
+import '../services/offline_report_queue_service.dart';
 import '../services/storage_service.dart';
 import '../services/platform_service.dart';
+import '../services/app_refresh_bus.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -457,6 +462,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _clearAllLocalData() async {
+    try {
+      await OfflineReportQueueService().clearAllQueuedReports();
+      await ApiService().clearLocalCaches();
+      await DeviceService().clearLocalIdentity();
+      await LeaderService().logout();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Local data cleared. Restart the app to register again.')),
+      );
+      AppRefreshBus.notify('local_data_cleared');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not clear all data: $e')),
+      );
+    }
+  }
+
   void _showClearDialog() {
     showDialog(
       context: context,
@@ -476,9 +502,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: TextStyle(color: AppColors.muted)),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(ctx).pop();
-              // TODO: implement clear
+              await _clearAllLocalData();
             },
             child: const Text('Clear',
                 style: TextStyle(color: AppColors.danger)),

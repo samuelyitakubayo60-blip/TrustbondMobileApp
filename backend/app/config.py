@@ -89,6 +89,7 @@ class Settings(BaseSettings):
 
     # Local leader workflow: require community confirmation before DPU map analytics, hotspots, auto-cases.
     require_leader_confirmation_for_workflow: bool = True
+    # Legacy alias — runtime gates use require_leader_confirmation_for_workflow via leader_gate_enabled().
     dpu_analytics_require_leader_confirmation: bool = True
     notify_local_leaders_new_report_email: bool = True
     # FCM HTTP v1: path to Firebase service account JSON (same project as the mobile app).

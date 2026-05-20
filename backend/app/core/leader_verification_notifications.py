@@ -74,6 +74,57 @@ def _notify_police_users(
         )
 
 
+def notify_police_leader_submitted_report_task(report_id: str, leader_id: int) -> None:
+    """Background task: alert station police when a local leader files an incident."""
+    db = SessionLocal()
+    try:
+        report = (
+            db.query(Report)
+            .options(joinedload(Report.village_location))
+            .filter(Report.report_id == report_id)
+            .first()
+        )
+        if not report or getattr(report, "submitted_by_local_leader_id", None) is None:
+            return
+
+        leader = db.query(LocalLeader).filter(LocalLeader.local_leader_id == leader_id).first()
+        leader_name = (leader.full_name if leader else None) or "Local leader"
+        ref = str(report.report_number) if getattr(report, "report_number", None) else str(report.report_id)[:8]
+        village_name = None
+        if report.village_location:
+            village_name = report.village_location.location_name
+        loc_bit = f" ({village_name})" if village_name else ""
+        title = "Leader-submitted incident"
+        message = (
+            f"{leader_name} filed report {ref}{loc_bit} via the local leader app. "
+            f"Mobile verification only — review in Reports."
+        )
+
+        station_ids = _station_ids_for_village(db, report.village_location_id)
+        q = db.query(PoliceUser).filter(PoliceUser.is_active.is_(True))
+        if station_ids:
+            q = q.filter(
+                PoliceUser.station_id.in_(station_ids),
+                PoliceUser.role.in_(["admin", "supervisor", "officer"]),
+            )
+        else:
+            q = q.filter(PoliceUser.role.in_(["admin", "supervisor"]))
+
+        station_users = q.all()
+        if station_users:
+            _notify_police_users(
+                db,
+                station_users,
+                title=title,
+                message=message,
+                report_id=str(report.report_id),
+            )
+    except Exception as exc:
+        logger.warning("Police leader submission notify failed: %s", exc)
+    finally:
+        db.close()
+
+
 def notify_police_leader_verification_task(
     report_id: str,
     decision: str,

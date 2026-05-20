@@ -43,6 +43,17 @@ class OfflineReportQueueService {
   bool _isSyncing = false;
   DateTime? _lastSyncAt;
 
+  /// Remove all queued offline reports and their local media copies.
+  Future<void> clearAllQueuedReports() async {
+    final queue = await _loadQueue();
+    for (final item in queue) {
+      await _cleanupLocalFiles(item.localReportId);
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_queueKey);
+    AppRefreshBus.notify('offline_queue_cleared');
+  }
+
   Future<String?> _leaderTokenIfAny() async {
     try {
       final token = await LeaderService().getToken();

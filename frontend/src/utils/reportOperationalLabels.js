@@ -280,4 +280,13 @@ export const REPORT_QUEUE_PRESETS = {
     hint:
       "Community attestation done; report stays pending for operations until police verifies (diagram: stays pending for ops).",
   },
+  leader_submitted: {
+    label: "Filed by local leader (mobile attestation)",
+    leader_confirmation: null,
+    verification_status_filter: null,
+    verification_status_in: null,
+    submitted_by_leader: true,
+    hint:
+      "Incidents submitted from the leader app with mobile-only verification (no citizen AI scorecard).",
+  },
 };

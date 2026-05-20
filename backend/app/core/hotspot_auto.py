@@ -127,7 +127,9 @@ def _is_report_eligible(report: Report) -> bool:
     if status == "rejected" or verification == "rejected" or rule_status == "rejected":
         return False
 
-    if getattr(settings, "dpu_analytics_require_leader_confirmation", True):
+    from app.core.leader_workflow import leader_gate_enabled
+
+    if leader_gate_enabled():
         return report_ready_for_cases_and_hotspots(report)
 
     officer_confirmed = any(

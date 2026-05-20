@@ -3403,20 +3403,18 @@ def create_report(
         village_id = get_village_location_id(db, lat_f, lon_f)
         village_info = get_village_location_info(db, lat_f, lon_f)
 
-        # --- TEST ONLY: Musanze boundary rejection disabled (uncomment for production). ---
-        # if not village_id or not village_info:
-        #     out_of_boundary = True
-        #     out_of_boundary_reason = (
-        #         f"out_of_musanze_boundary: ({lat_f:.4f}, {lon_f:.4f})"
-        #     )
+        if not village_id or not village_info:
+            out_of_boundary = True
+            out_of_boundary_reason = (
+                f"out_of_musanze_boundary: ({lat_f:.4f}, {lon_f:.4f})"
+            )
 
         district_name = ""
         if village_info:
             district_name = (village_info.get("district_name") or "").strip().lower()
-        # --- TEST ONLY: non-Musanze district rejection disabled (uncomment for production). ---
-        # if district_name and district_name != "musanze":
-        #     out_of_boundary = True
-        #     out_of_boundary_reason = f"out_of_musanze_boundary: district={district_name}"
+        if district_name and district_name != "musanze":
+            out_of_boundary = True
+            out_of_boundary_reason = f"out_of_musanze_boundary: district={district_name}"
     except (ValueError, TypeError) as e:
         raise HTTPException(status_code=400, detail=f"Invalid coordinates: {e}")
     except Exception as e:
@@ -3586,19 +3584,18 @@ def create_report(
         )
         db.add(evidence)
 
-    # --- TEST ONLY: reject persist step disabled — restore `elif not evidence_metadata_list` when re-enabling boundary checks.
-    # if out_of_boundary:
-    #     report.rule_status = "rejected"
-    #     report.status = "rejected"
-    #     report.verification_status = "rejected"
-    #     report.is_flagged = True
-    #     report.flag_reason = out_of_boundary_reason or "out_of_musanze_boundary"
-    #
-    #     fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
-    #     fv["boundary_status"] = "out_of_musanze"
-    #     fv["excluded_from_clustering"] = True
-    #     fv["boundary_reason"] = report.flag_reason
-    #     report.feature_vector = _json_safe(fv)
+    if out_of_boundary:
+        report.rule_status = "rejected"
+        report.status = "rejected"
+        report.verification_status = "rejected"
+        report.is_flagged = True
+        report.flag_reason = out_of_boundary_reason or "out_of_musanze_boundary"
+
+        fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+        fv["boundary_status"] = "out_of_musanze"
+        fv["excluded_from_clustering"] = True
+        fv["boundary_reason"] = report.flag_reason
+        report.feature_vector = _json_safe(fv)
 
     # Note: submission-guidance (mobile guidance) has been removed from the product.
     # For text-only reports we keep the existing pipeline and record a lightweight NL analysis
@@ -3883,6 +3880,16 @@ def create_report(
         from app.core.leader_notifications import notify_local_leaders_new_report_task
 
         background_tasks.add_task(notify_local_leaders_new_report_task, str(report.report_id))
+    elif submitting_leader is not None:
+        from app.core.leader_verification_notifications import (
+            notify_police_leader_submitted_report_task,
+        )
+
+        background_tasks.add_task(
+            notify_police_leader_submitted_report_task,
+            str(report.report_id),
+            int(submitting_leader.local_leader_id),
+        )
 
     from app.core.leader_workflow import report_ready_for_cases_and_hotspots
 
@@ -3919,6 +3926,10 @@ def list_reports(
     leader_confirmation: Optional[str] = Query(
         None,
         description="Community leader gate: pending (null,pending,''), confirmed, rejected",
+    ),
+    submitted_by_leader: Optional[bool] = Query(
+        None,
+        description="When true, only reports filed by a logged-in local leader",
     ),
 ):
     """List reports.
@@ -4111,6 +4122,11 @@ def list_reports(
             query = query.filter(Report.leader_verification_status == "confirmed")
         elif lc == "rejected":
             query = query.filter(Report.leader_verification_status == "rejected")
+
+    if submitted_by_leader is True:
+        query = query.filter(Report.submitted_by_local_leader_id.isnot(None))
+    elif submitted_by_leader is False:
+        query = query.filter(Report.submitted_by_local_leader_id.is_(None))
 
     total = query.count()
     reports = (

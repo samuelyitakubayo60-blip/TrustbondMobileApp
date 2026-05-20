@@ -114,6 +114,8 @@ const Reports = ({
       params.set("verification_status_filter", qp.verification_status_filter);
     if (qp.verification_status_in)
       params.set("verification_status_in", qp.verification_status_in);
+    if (qp.submitted_by_leader === true)
+      params.set("submitted_by_leader", "true");
     if (typeFilter !== "all") {
       params.set("incident_type_id", String(typeFilter));
     }

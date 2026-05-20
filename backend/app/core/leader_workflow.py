@@ -8,12 +8,24 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.location import Location
+from app.models.local_leader import LocalLeader
 from app.models.local_leader_coverage import LocalLeaderCoverageLocation
 from app.models.report import Report
 
 
 def leader_covered_village_ids(db: Session, leader_id: int) -> set[int]:
-    """Normalize leader coverage (village or cell) to village ids."""
+    """Normalize active leader coverage (village or cell) to village ids."""
+    leader_active = (
+        db.query(LocalLeader.local_leader_id)
+        .filter(
+            LocalLeader.local_leader_id == leader_id,
+            LocalLeader.is_active.is_(True),
+        )
+        .first()
+    )
+    if not leader_active:
+        return set()
+
     covered_ids = {
         int(r[0])
         for r in db.query(LocalLeaderCoverageLocation.location_id)
@@ -169,6 +181,6 @@ def report_eligible_for_auto_case(report: Report) -> bool:
 
 def apply_leader_confirmed_filter_reports(query, report_model):
     """Narrow a SQLAlchemy query to leader-confirmed incidents (DPU / safety analytics)."""
-    if not getattr(settings, "dpu_analytics_require_leader_confirmation", True):
+    if not leader_gate_enabled():
         return query
     return query.filter(report_model.leader_verification_status == "confirmed")

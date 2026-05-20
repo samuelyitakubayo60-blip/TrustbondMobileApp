@@ -8,7 +8,6 @@ import HotspotDetails from "./components/screens/HotspotDetails";
 import SafetyMap from "./components/screens/SafetyMap";
 import DeviceTrust from "./components/screens/DeviceTrust";
 import GeographicIntelligence from "./components/screens/GeographicIntelligence";
-import EnhancedGeographicIntelligence from "./components/screens/EnhancedGeographicIntelligence";
 import Users from "./components/screens/Users";
 import IncidentTypes from "./components/screens/IncidentTypes";
 import SpecialAssignmentUnits from "./components/screens/SpecialAssignmentUnits";
