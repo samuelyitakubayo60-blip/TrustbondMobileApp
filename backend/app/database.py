@@ -3,6 +3,14 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 from app.config import settings
 
+_connect_args = {
+    "connect_timeout": 60,
+    "application_name": "trustbond_backend",
+    "options": "-c statement_timeout=30000",  # 30 second query timeout
+}
+if "render.com" in (settings.database_url or ""):
+    _connect_args["sslmode"] = "require"
+
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
@@ -10,11 +18,7 @@ engine = create_engine(
     max_overflow=20,
     pool_recycle=1800,  # Recycle connections every 30 minutes
     pool_timeout=30,
-    connect_args={
-        "connect_timeout": 60,
-        "application_name": "trustbond_backend",
-        "options": "-c statement_timeout=30000"  # 30 second query timeout
-    },
+    connect_args=_connect_args,
     echo=False  # Set to True for SQL debugging if needed
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

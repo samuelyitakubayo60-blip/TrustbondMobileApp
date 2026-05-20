@@ -942,26 +942,9 @@ def _compose_ai_evidence_description(
         )
 
     def _finalize(snapshot: Dict[str, Any], fallback_chunks: List[str], must_include: List[str]) -> str:
-        det = _deterministic_ai_evidence_summary(snapshot)
-        enriched = "\n\n".join(c for c in [det.strip(), " ".join(fallback_chunks).strip()] if c).strip()
-        nat = _naturalize_ai_text(
-            text_kind="evidence summary",
-            structured_text=enriched or det,
-            must_include=[x for x in must_include if str(x).strip()],
-        ).strip()
-        g = (
-            _generate_grounded_narrative(
-                text_kind="evidence summary",
-                snapshot=snapshot,
-                fallback_text=nat or enriched or det,
-                deterministic_fallback=det,
-            )
-            or ""
-        ).strip()
-        chosen = det
-        if g and "narrative unavailable" not in g.lower() and not _looks_template_like(g):
-            chosen = g
-        return chosen[:2000]
+        from app.core.report_verification_narrative import build_officer_evidence_brief
+
+        return build_officer_evidence_brief(snapshot)[:2000]
 
     if not evidence_validations:
         media_types = [str(m).strip() for m in (evidence_media_types or []) if str(m).strip()]
@@ -1294,30 +1277,23 @@ def _compose_ai_verification_reason(
         location_label=location_label,
         description_credibility=description_credibility,
     )
-    deterministic_body = _deterministic_ai_executive_summary(
-        snapshot,
-        verification_status or "pending",
+    from app.core.report_verification_narrative import (
+        build_officer_verification_brief,
+        polish_officer_brief_with_llm,
+    )
+
+    officer_brief = build_officer_verification_brief(
+        snapshot=snapshot,
+        verification_status=effective_status,
+        rule_status=rule_status_norm,
+        is_flagged=is_flagged,
         pattern_codes=list(pattern_codes),
         pattern_explanations=list(pattern_explanations),
     )
-    naturalized_prompt = (
-        deterministic_body + (f"\n\nOfficer review note (verbatim): {note}" if note else "")
-    ).strip()
-    naturalized = _naturalize_ai_text(
-        text_kind="verification decision summary",
-        structured_text=naturalized_prompt,
-        must_include=[
-            f"verification_status={effective_status}",
-            f"incident={incident_label}",
-            f"patterns={','.join(pattern_codes) if pattern_codes else 'none'}",
-        ],
-    )
-    grounded = _generate_grounded_narrative(
-        text_kind="verification reason",
-        snapshot=snapshot,
-        fallback_text=naturalized.strip() if naturalized else deterministic_body,
-        deterministic_fallback=deterministic_body,
-    )
+    if note:
+        officer_brief += f"\n\nOfficer note on file: {note}"
+    chosen = polish_officer_brief_with_llm(officer_brief)
+
     decision_line = (
         f"Decision patterns: {', '.join(pattern_codes)}."
         if pattern_codes
@@ -1328,13 +1304,9 @@ def _compose_ai_verification_reason(
         if pattern_explanations
         else "Pattern explanations: NONE."
     )
-    chosen = (deterministic_body or "").strip()
-    g_clean = (grounded or "").strip()
-    if g_clean and "narrative unavailable" not in g_clean.lower() and not _looks_template_like(g_clean):
-        chosen = g_clean
 
-    composed = f"{chosen}\n{decision_line}\n{explanation_line}".strip()
-    return composed[:3000]
+    composed = f"{chosen}\n\n{decision_line}\n{explanation_line}".strip()
+    return composed[:4000]
 
 
 def _extract_decision_patterns(ai_verification_reason: Optional[str]) -> List[str]:

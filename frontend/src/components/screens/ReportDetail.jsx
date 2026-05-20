@@ -143,6 +143,20 @@ const prettyFactorName = (key) => {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
+const friendlyPatternChipLabel = (code, explanations) => {
+  const key = String(code || "").trim();
+  const exp =
+    explanations && typeof explanations === "object"
+      ? explanations[key] || explanations[key.toUpperCase()]
+      : "";
+  if (exp && typeof exp === "string") {
+    const plain = exp.includes(": ") ? exp.split(": ").slice(1).join(": ").trim() : exp;
+    if (plain.length > 0 && plain.length <= 120) return plain;
+    if (plain.length > 120) return `${plain.slice(0, 117)}…`;
+  }
+  return key.replace(/_/g, " ").toLowerCase();
+};
+
 const renderDecisionPatternChips = (patterns, explanations) => {
   if (!Array.isArray(patterns) || patterns.length === 0) return null;
   const patternTone = (pattern) => {
@@ -194,9 +208,9 @@ const renderDecisionPatternChips = (patterns, explanations) => {
               fontWeight: 700,
               letterSpacing: 0.2,
             }}
-            title={(explanations && explanations[p]) || p}
+            title={p}
           >
-            {p}
+            {friendlyPatternChipLabel(p, explanations)}
           </span>
         );
       })}
@@ -1115,15 +1129,17 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   title="Why this report was scored (description & evidence)"
                 />
                 {report.ai_verification_reason && (
-                  <div>
-                    <strong>AI Decision Reason:</strong>{" "}
-                    <span>{cleanAiNarrative(report.ai_verification_reason)}</span>
+                  <div style={{ lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
+                    <strong>Automated screening explanation:</strong>
+                    <div style={{ marginTop: 6 }}>
+                      {cleanAiNarrative(report.ai_verification_reason)}
+                    </div>
                   </div>
                 )}
                 {Array.isArray(report.decision_patterns) &&
                   report.decision_patterns.length > 0 && (
                     <div>
-                      <strong>Decision Patterns:</strong>
+                      <strong>Signals that drove this outcome:</strong>
                       <div style={{ marginTop: 6 }}>
                         {renderDecisionPatternChips(
                           report.decision_patterns,
