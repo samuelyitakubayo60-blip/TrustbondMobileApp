@@ -3,6 +3,8 @@ import {
   MapContainer,
   TileLayer,
   CircleMarker,
+  Circle,
+  Marker,
   Tooltip,
   ZoomControl,
   Polygon,
@@ -211,6 +213,17 @@ const formatTimeWindow = (hours) => {
   return withUnit(value, "hour");
 };
 
+/** Tracks zoom level changes and reports them to parent via callback. */
+const ZoomTracker = ({ onZoom }) => {
+  const map = useMap();
+  useEffect(() => {
+    const handle = () => onZoom(map.getZoom());
+    map.on("zoomend", handle);
+    return () => map.off("zoomend", handle);
+  }, [map, onZoom]);
+  return null;
+};
+
 const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   const [mapHotspots, setMapHotspots] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -233,12 +246,14 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   const [selectedHotspotId, setSelectedHotspotId] = useState(null);
   const [focusNonce, setFocusNonce] = useState(0);
   const [recomputing, setRecomputing] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
   const [dbscanParams, setDbscanParams] = useState({
     radius_meters: 500,
     min_incidents: 2,
     time_window_hours: 24,
     trust_min: 50,
   });
+  const [mapZoom, setMapZoom] = useState(MUSANZE_ZOOM);
 
   const loadMapHotspots = () => {
     setLoading(true);
@@ -255,35 +270,35 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   };
 
   /** Police-confirmed reports for map pins (full history; filter dims older pins). */
-  const loadConfirmedReportsForMap = () => {
-    const fromDate = new Date(
-      Date.now() - MAP_CLUSTER_WINDOW_HOURS * 60 * 60 * 1000,
-    ).toISOString();
-    const params = new URLSearchParams();
-    params.set("limit", "500");
-    params.set("offset", "0");
-    params.set("from_date", fromDate);
-    params.set("verification_status_in", "verified");
-
-    api
-      .get(`/api/v1/reports/?${params.toString()}`)
-      .then((res) => {
-        const items = Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [];
-        const pins = items
-          .filter((r) => policeVerificationOkForHotspots(r).ok)
-          .map((r) => ({
-            report_id: r.report_id,
-            lat: Number(r.latitude),
-            lng: Number(r.longitude),
-            reported_at: r.reported_at,
-            incident_type_name: r.incident_type_name || "Incident",
-          }))
-          .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng));
-        setConfirmedOnMap(pins);
-      })
-      .catch(() => {
-        setConfirmedOnMap([]);
-      });
+  const loadConfirmedReportsForMap = async () => {
+    const PAGE = 100; // backend max limit
+    let offset = 0;
+    let all = [];
+    try {
+      while (true) {
+        const res = await api.get(
+          `/api/v1/reports/?limit=${PAGE}&offset=${offset}&verification_status=verified`,
+        );
+        const items = Array.isArray(res?.items) ? res.items : [];
+        all = all.concat(items);
+        if (items.length < PAGE) break; // last page
+        offset += PAGE;
+        if (offset > 2000) break;       // safety cap
+      }
+      const pins = all
+        .filter((r) => policeVerificationOkForHotspots(r).ok)
+        .map((r) => ({
+          report_id: r.report_id,
+          lat: Number(r.latitude),
+          lng: Number(r.longitude),
+          reported_at: r.reported_at,
+          incident_type_name: r.incident_type_name || "Incident",
+        }))
+        .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng));
+      setConfirmedOnMap(pins);
+    } catch {
+      setConfirmedOnMap([]);
+    }
   };
 
   const loadHistoricalHotspots = () => {
@@ -461,22 +476,151 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
         );
   }, [confirmedOnMap, typeFilter]);
 
+  /**
+   * Epsilon in real metres — taken directly from the DBSCAN params so clustering
+   * is always based on fixed geographic distance, never affected by zoom level.
+   */
+  const epsilonMeters = useMemo(
+    () => dbscanParams.radius_meters ?? 500,
+    [dbscanParams.radius_meters],
+  );
+
+  /**
+   * True DBSCAN clustering using haversine distance.
+   *
+   * Parameters
+   * ----------
+   * eps     – epsilonMeters (zoom-adaptive screen distance → real metres)
+   * minPts  – minimum neighbours for a point to qualify as a CORE point
+   *           (taken from dbscanParams.min_incidents, default 2)
+   *
+   * Point classification
+   * --------------------
+   * CORE   – has ≥ minPts neighbours within eps; starts / expands a cluster.
+   * BORDER – within eps of a core point but fewer than minPts neighbours;
+   *          joins the cluster but does NOT expand it further.
+   * NOISE  – not within eps of any core point; displayed as an isolated pin.
+   *
+   * Returns an array of groups. Each group is an array of report objects.
+   * Noise points each form a singleton group (rendered as individual diamonds).
+   */
+  const clusterGroups = useMemo(() => {
+    const pts = filteredConfirmedOnMap;
+    const n = pts.length;
+    if (n === 0) return [];
+
+    // minPts follows sklearn convention: counts the point itself.
+    // So a core point needs (minPts - 1) OTHER neighbours within epsilon.
+    const minPts = dbscanParams.min_incidents ?? 3;
+    const minNeighbours = Math.max(1, minPts - 1);
+
+    // Haversine distance in metres between pts[i] and pts[j]
+    const haversineDist = (i, j) => {
+      const dLat = ((pts[j].lat - pts[i].lat) * Math.PI) / 180;
+      const dLng = ((pts[j].lng - pts[i].lng) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((pts[i].lat * Math.PI) / 180) *
+          Math.cos((pts[j].lat * Math.PI) / 180) *
+          Math.sin(dLng / 2) ** 2;
+      return 6371000 * 2 * Math.asin(Math.sqrt(a));
+    };
+
+    // Pre-compute the neighbour list for every point (O(n²), n is small client-side)
+    const nbOf = pts.map((_, i) => {
+      const nb = [];
+      for (let j = 0; j < n; j++) {
+        if (j !== i && haversineDist(i, j) <= epsilonMeters) nb.push(j);
+      }
+      return nb;
+    });
+
+    // Labels: -1 = unvisited, -2 = noise, ≥ 0 = cluster id
+    const label = new Int32Array(n).fill(-1);
+    let nextCluster = 0;
+
+    for (let i = 0; i < n; i++) {
+      if (label[i] !== -1) continue; // already classified
+
+      if (nbOf[i].length < minNeighbours) {
+        // Not enough neighbours to be a core point → tentative noise
+        label[i] = -2;
+        continue;
+      }
+
+      // i is a CORE point → start a new cluster and expand
+      const cId = nextCluster++;
+      label[i] = cId;
+
+      // Seed queue with i's neighbours
+      const queue = nbOf[i].slice();
+      const inQueue = new Uint8Array(n);
+      for (const nb of queue) inQueue[nb] = 1;
+
+      while (queue.length > 0) {
+        const q = queue.shift();
+
+        // Promote noise to border point
+        if (label[q] === -2) label[q] = cId;
+        // Skip if already assigned to any cluster
+        if (label[q] !== -1) continue;
+
+        label[q] = cId; // q joins cluster (border or core)
+
+        // Only core points expand the cluster further
+        if (nbOf[q].length >= minNeighbours) {
+          for (const r of nbOf[q]) {
+            if (!inQueue[r] && (label[r] === -1 || label[r] === -2)) {
+              queue.push(r);
+              inQueue[r] = 1;
+            }
+          }
+        }
+      }
+    }
+
+    // Bucket points by cluster id
+    const buckets = new Map();
+    for (let i = 0; i < n; i++) {
+      const key = label[i] === -2 ? `noise_${i}` : String(label[i]);
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(pts[i]);
+    }
+
+    // Assign color indices only to real clusters (non-noise)
+    let colorIdx = 0;
+    return Array.from(buckets.entries()).map(([key, points]) => {
+      const isNoise = key.startsWith('noise_');
+      const entry = { isNoise, points, clusterIdx: isNoise ? -1 : colorIdx };
+      if (!isNoise) colorIdx++;
+      return entry;
+    });
+  }, [filteredConfirmedOnMap, epsilonMeters, dbscanParams.min_incidents]);
+
   const plottedHotspots = useMemo(
     () =>
       filteredHotspots
         .map((h) => ({
-          ...h,
+          ...h,                           // preserves incident_points + boundary_points from API
           lat: Number(h.center_lat),
           lng: Number(h.center_long),
-          // Add missing fields with defaults for compatibility
-          boundary_points: [],
-          incident_points: [],
           radius_meters: Number(h.radius_meters || 0),
           stage: getFormationStage(h),
         }))
         .filter((h) => Number.isFinite(h.lat) && Number.isFinite(h.lng)),
     [filteredHotspots],
   );
+
+  /** Reports that are not part of any backend hotspot cluster → rendered as noise. */
+  const noisePoints = useMemo(() => {
+    const inCluster = new Set();
+    for (const h of plottedHotspots) {
+      for (const pt of (h.incident_points || [])) {
+        inCluster.add(String(pt.report_id));
+      }
+    }
+    return confirmedOnMap.filter((r) => !inCluster.has(String(r.report_id)));
+  }, [plottedHotspots, confirmedOnMap]);
 
 // Filter historical hotspots for table display
   const filteredHistoricalHotspots = useMemo(() => {
@@ -612,6 +756,143 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     return "#34d399"; // Normal (green)
   };
 
+  /** Haversine distance in metres between two lat/lng points. */
+  const haversineMeters = (lat1, lng1, lat2, lng2) => {
+    const R = 6371000;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  /**
+   * Determine a report pin's risk level by checking which hotspot cluster it
+   * falls inside (centre + radius with 1.5× tolerance). Returns the highest
+   * risk level found, or "rare" when the report is isolated.
+   *
+   * Color key:
+   *   red    → high / critical hotspot area
+   *   yellow → medium hotspot area
+   *   green  → low hotspot area
+   *   blue   → rare / isolated (not in any cluster)
+   */
+  const getReportRiskColor = (report, hotspots) => {
+    const rankMap = { critical: 4, high: 3, medium: 2, low: 1 };
+    let bestRank = 0;
+    let bestRisk = null;
+
+    for (const h of hotspots) {
+      if (!Number.isFinite(h.lat) || !Number.isFinite(h.lng)) continue;
+      const dist = haversineMeters(report.lat, report.lng, h.lat, h.lng);
+      const radius = Number(h.radius_meters || 500) * 1.5; // 1.5× tolerance
+      if (dist <= radius) {
+        const rank = rankMap[h.risk_level] || 0;
+        if (rank > bestRank) {
+          bestRank = rank;
+          bestRisk = h.risk_level;
+        }
+      }
+    }
+
+    if (bestRisk === "critical" || bestRisk === "high") return "#ef4444"; // red
+    if (bestRisk === "medium") return "#eab308";                          // yellow
+    if (bestRisk === "low")    return "#22c55e";                          // green
+    return "#3b82f6";                                                     // blue (rare)
+  };
+
+  const getReportRiskBorder = (fillColor) => {
+    const borders = {
+      "#ef4444": "#991b1b",
+      "#eab308": "#854d0e",
+      "#22c55e": "#15803d",
+      "#3b82f6": "#1e3a8a",
+    };
+    return borders[fillColor] || "#1e3a8a";
+  };
+
+  const getReportRiskLabel = (fillColor) => {
+    if (fillColor === "#ef4444") return "High-risk area";
+    if (fillColor === "#eab308") return "Medium-risk area";
+    if (fillColor === "#22c55e") return "Low-risk area";
+    return "Rare / isolated";
+  };
+
+  /** Diamond-shaped DivIcon for incident pins — visually distinct from circular hotspot rings. */
+  const createDiamondIcon = (fillColor, borderColor, opacity) => {
+    const size = 16;
+    const half = size / 2;
+    return L.divIcon({
+      className: "",
+      html: `<div style="
+        width:${size}px;height:${size}px;
+        background:${fillColor};
+        border:2.5px solid ${borderColor};
+        transform:rotate(45deg);
+        opacity:${opacity};
+        box-shadow:0 0 0 2px rgba(0,0,0,0.55),0 2px 6px rgba(0,0,0,0.7);
+      "></div>`,
+      iconSize: [size, size],
+      iconAnchor: [half, half],
+      tooltipAnchor: [0, -half - 4],
+    });
+  };
+
+  /** Circular cluster badge showing incident count — larger badge for larger groups. */
+  const createClusterIcon = (count, fillColor, borderColor, opacity) => {
+    const size = Math.min(48, 28 + Math.floor(Math.log2(Math.max(1, count))) * 5);
+    const half = size / 2;
+    return L.divIcon({
+      className: "",
+      html: `<div style="
+        width:${size}px;height:${size}px;
+        background:${fillColor};
+        border:3px solid ${borderColor};
+        border-radius:50%;
+        display:flex;align-items:center;justify-content:center;
+        color:#fff;font-weight:800;font-size:${size < 36 ? 11 : 13}px;
+        font-family:sans-serif;
+        opacity:${opacity};
+        box-shadow:0 0 0 3px rgba(0,0,0,0.45),0 3px 10px rgba(0,0,0,0.65);
+        line-height:1;
+      ">${count}</div>`,
+      iconSize: [size, size],
+      iconAnchor: [half, half],
+      tooltipAnchor: [0, -half - 4],
+    });
+  };
+
+  /**
+   * Well-known types get hand-picked colours for immediate recognition.
+   * Any new type added to the database gets a deterministic colour derived
+   * from its name hash (HSL, always vivid and distinct) — no code change needed.
+   */
+  const INCIDENT_TYPE_COLORS = {
+    "Theft":               "#F59E0B",
+    "Assault":             "#EF4444",
+    "Vandalism":           "#8B5CF6",
+    "Domestic Violence":   "#EC4899",
+    "Drug Activity":       "#10B981",
+    "Fraud/Scam":          "#3B82F6",
+    "Harassment":          "#F97316",
+    "Suspicious Activity": "#6B7280",
+    "Traffic Incident":    "#06B6D4",
+  };
+
+  /** Deterministic HSL colour from any string — same name always → same colour. */
+  const hashColor = (str) => {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+    const hue = ((h >>> 0) % 360);
+    // Keep saturation high and lightness mid so colours are vivid on dark maps
+    return `hsl(${hue}, 70%, 58%)`;
+  };
+
+  const getIncidentTypeColor = (typeName) =>
+    typeName ? (INCIDENT_TYPE_COLORS[typeName] ?? hashColor(typeName)) : "#94A3B8";
+
   const getSectorColor = (sector) => {
     const palette = [
       "#00e5b4",
@@ -636,6 +917,83 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       0,
     );
     return palette[hash % palette.length];
+  };
+
+  /**
+   * Cluster color palette — matches the diagram spec.
+   * Cluster 1: Blue (#1E88E5), Cluster 2: Green (#43A047), Cluster 3: Red (#E53935), …
+   */
+  const CLUSTER_PALETTE = [
+    "#1E88E5", // blue
+    "#43A047", // green
+    "#E53935", // red
+    "#FB8C00", // orange
+    "#00ACC1", // cyan
+    "#8E24AA", // violet
+    "#F4511E", // deep orange
+    "#039BE5", // light blue
+    "#7CB342", // light green
+    "#E91E63", // pink
+  ];
+
+  /** Noise / outlier colour — fixed purple per spec. */
+  const NOISE_COLOR = "#8E24AA";
+  /** Star centroid colour — fixed hot-pink per spec. */
+  const STAR_COLOR = "#E91E63";
+
+  const getClusterColor = (idx) => CLUSTER_PALETTE[idx % CLUSTER_PALETTE.length];
+
+  /**
+   * Convex hull — Graham scan.
+   * Returns [[lat, lng], ...] ordered counter-clockwise for react-leaflet <Polygon>.
+   */
+  const convexHull = (pts) => {
+    if (pts.length <= 2) return pts.map((p) => [p.lat, p.lng]);
+    const s = pts.slice().sort((a, b) =>
+      a.lng !== b.lng ? a.lng - b.lng : a.lat - b.lat,
+    );
+    const cross = (O, A, B) =>
+      (A.lng - O.lng) * (B.lat - O.lat) - (A.lat - O.lat) * (B.lng - O.lng);
+    const lower = [];
+    for (const p of s) {
+      while (
+        lower.length >= 2 &&
+        cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0
+      )
+        lower.pop();
+      lower.push(p);
+    }
+    const upper = [];
+    for (let i = s.length - 1; i >= 0; i--) {
+      const p = s[i];
+      while (
+        upper.length >= 2 &&
+        cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0
+      )
+        upper.pop();
+      upper.push(p);
+    }
+    upper.pop();
+    lower.pop();
+    return [...lower, ...upper].map((p) => [p.lat, p.lng]);
+  };
+
+  /** 5-point star DivIcon at cluster centroid — always hot-pink per spec. */
+  const createStarIcon = () => {
+    const size = 34;
+    const half = size / 2;
+    const star = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 34 34">
+      <polygon
+        points="17,2 20.5,12 31,12 22.5,18.5 25.5,29 17,23 8.5,29 11.5,18.5 3,12 13.5,12"
+        fill="${STAR_COLOR}" stroke="#fff" stroke-width="2"/>
+    </svg>`;
+    return L.divIcon({
+      className: "",
+      html: `<div style="filter:drop-shadow(0 1px 6px rgba(0,0,0,0.8))">${star}</div>`,
+      iconSize: [size, size],
+      iconAnchor: [half, half],
+      tooltipAnchor: [0, -half - 6],
+    });
   };
 
   const formatClusterTimestamp = (value) => {
@@ -698,10 +1056,13 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       <div className="page-header smx-page-header">
         <h2>Community Safety Map</h2>
         <p>
-          Musanze District safety map: all police-confirmed reports and DBSCAN
-          clusters stay visible so you can see how clusters form. Use Time Period
-          in the side panel to highlight a window (default last week); older
-          points appear faded on the map.
+          Musanze District safety map. Every verified incident is plotted and
+          coloured by risk zone — <strong style={{ color: "#ef4444" }}>red</strong> (high-risk
+          cluster), <strong style={{ color: "#ca8a04" }}>yellow</strong> (medium-risk
+          cluster), <strong style={{ color: "#16a34a" }}>green</strong> (low-risk
+          cluster), <strong style={{ color: "#3b82f6" }}>blue</strong> (rare / isolated).
+          DBSCAN hotspot circles overlay cluster boundaries. Use the Time Period panel
+          to highlight a window; points outside the window appear faded.
         </p>
       </div>
 
@@ -789,6 +1150,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
               zoomControl={false}
             >
               <MapBoundsController maxBounds={musanzeBounds} />
+              <ZoomTracker onZoom={setMapZoom} />
               <TileLayer
                 attribution="&copy; OpenStreetMap contributors"
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -796,192 +1158,209 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
               <ZoomControl position="topright" />
               <RelocatorControl maxBounds={musanzeBounds} />
 
-              {polygons.map((p) => {
-                const color = getSectorColor(p.sector);
-                return (
-                  <Polygon
-                    key={p.id}
-                    positions={p.positions}
-                    pathOptions={{
-                      color,
-                      weight: 1,
-                      fillColor: color,
-                      fillOpacity: 0.15,
-                    }}
+              {polygons.map((p) => (
+                <Polygon
+                  key={p.id}
+                  positions={p.positions}
+                  pathOptions={{
+                    color: "#94a3b8",
+                    weight: 1,
+                    opacity: 0.55,
+                    fillColor: "#1e293b",
+                    fillOpacity: 0.04,
+                  }}
+                >
+                  <Tooltip
+                    direction="top"
+                    offset={[0, -2]}
+                    opacity={0.9}
+                    interactive={false}
                   >
-                    <Tooltip
-                      direction="top"
-                      offset={[0, -2]}
-                      opacity={0.95}
-                      interactive={false}
+                    <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
+                      <strong>
+                        {p.village || p.cell || p.sector || "Location"}
+                      </strong>
+                      <br />
+                      Sector: {p.sector || "N/A"} · Cell: {p.cell || "N/A"}
+                    </div>
+                  </Tooltip>
+                </Polygon>
+              ))}
+
+              {/* ── Backend DBSCAN clusters ─────────────────────────────── */}
+              {plottedHotspots.map((h, hIdx) => {
+                const clusterColor = getClusterColor(hIdx);
+                const inFilter = isWithinSelectedFilter(h.detected_at, selectedFilterHours);
+                const alpha = inFilter ? 1 : 0.35;
+                const pts = Array.isArray(h.incident_points) ? h.incident_points : [];
+                const hull = Array.isArray(h.boundary_points) && h.boundary_points.length >= 3
+                  ? h.boundary_points          // pre-computed by backend
+                  : convexHull(pts.map((p) => ({ lat: p.latitude, lng: p.longitude })));
+                const types = [...new Set(pts.map((p) => p.incident_type_name).filter(Boolean))];
+                const riskColor = getCircleColor(h.risk_level);
+
+                return (
+                  <React.Fragment key={`hs-${h.hotspot_id}`}>
+                    {/* Convex hull polygon */}
+                    {hull.length >= 3 && (
+                      <Polygon
+                        positions={hull}
+                        pathOptions={{
+                          color: clusterColor,
+                          weight: 2.5,
+                          opacity: alpha * 0.9,
+                          fillColor: clusterColor,
+                          fillOpacity: alpha * 0.18,
+                          dashArray: "8 5",
+                        }}
+                      />
+                    )}
+
+                    {/* Individual incident points — colored by incident type */}
+                    {pts.map((p, pIdx) => {
+                      const typeColor = getIncidentTypeColor(p.incident_type_name);
+                      return (
+                        <CircleMarker
+                          key={`hs-pt-${h.hotspot_id}-${pIdx}`}
+                          center={[p.latitude, p.longitude]}
+                          radius={8}
+                          pathOptions={{
+                            color: "#fff",
+                            weight: 2,
+                            opacity: alpha,
+                            fillColor: typeColor,
+                            fillOpacity: alpha * 0.9,
+                          }}
+                        >
+                          <Tooltip direction="top" offset={[0, -15]} opacity={0.97} interactive={false}>
+                            <div style={{ fontSize: "11px", lineHeight: 1.5 }}>
+                              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: typeColor, marginRight: 5, verticalAlign: "middle" }} />
+                              <strong>{p.incident_type_name || "Incident"}</strong>
+                              <br />
+                              Cluster {hIdx + 1} · {pts.length} total
+                              {p.trust_score != null && (
+                                <><br />Trust: {Math.round(p.trust_score)}/100</>
+                              )}
+                            </div>
+                          </Tooltip>
+                        </CircleMarker>
+                      );
+                    })}
+
+                    {/* Star at centroid */}
+                    <Marker
+                      position={[h.lat, h.lng]}
+                      icon={createStarIcon()}
+                      zIndexOffset={1000}
                     >
-                      <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
-                        <strong>
-                          {p.village || p.cell || p.sector || "Location"}
-                        </strong>
-                        <br />
-                        Sector: {p.sector || "N/A"}
-                        <br />
-                        Cell: {p.cell || "N/A"}
-                        <br />
-                        Village: {p.village || "N/A"}
-                      </div>
-                    </Tooltip>
-                  </Polygon>
+                      <Tooltip direction="top" offset={[0, -18]} opacity={0.97} interactive={false}>
+                        <div style={{ fontSize: "11px", lineHeight: 1.6 }}>
+                          <strong>Cluster {hIdx + 1}</strong><br />
+                          Incidents: {pts.length || h.incident_count}<br />
+                          {types.slice(0, 3).join(", ")}{types.length > 3 ? " …" : ""}<br />
+                          <span style={{ color: riskColor, fontWeight: 700, textTransform: "uppercase" }}>
+                            {String(h.risk_level || "low").toUpperCase()}
+                          </span>
+                        </div>
+                      </Tooltip>
+                    </Marker>
+                  </React.Fragment>
                 );
               })}
 
-              {filteredConfirmedOnMap.map((r) => {
-                const inFilter = isWithinSelectedFilter(
-                  r.reported_at,
-                  selectedFilterHours,
-                );
-                const fade = inFilter ? 1 : 0.38;
+              {/* ── Isolated incidents not in any cluster ───────────────── */}
+              {noisePoints.map((r, nIdx) => {
+                const inFilter = isWithinSelectedFilter(r.reported_at, selectedFilterHours);
+                const alpha = inFilter ? 1 : 0.35;
+                const typeColor = getIncidentTypeColor(r.incident_type_name);
                 return (
                   <CircleMarker
-                    key={`confirmed-${r.report_id}`}
+                    key={`noise-${nIdx}`}
                     center={[r.lat, r.lng]}
                     radius={6}
                     pathOptions={{
-                      color: "#1e3a8a",
-                      weight: 1,
-                      fillColor: "#3b82f6",
-                      fillOpacity: 0.35 * fade,
-                      opacity: fade,
+                      color: NOISE_COLOR,
+                      weight: 1.5,
+                      opacity: alpha * 0.7,
+                      fillColor: typeColor,
+                      fillOpacity: alpha * 0.55,
+                      dashArray: "3 3",
                     }}
                   >
-                    <Tooltip
-                      direction="top"
-                      offset={[0, -4]}
-                      opacity={0.95}
-                      interactive={false}
-                    >
-                      <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
-                        <strong>Police-confirmed report</strong>
+                    <Tooltip direction="top" offset={[0, -10]} opacity={0.97} interactive={false}>
+                      <div style={{ fontSize: "11px", lineHeight: 1.5 }}>
+                        <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: typeColor, marginRight: 5, verticalAlign: "middle" }} />
+                        <strong>{r.incident_type_name || "Incident"}</strong>
                         <br />
-                        Type: {r.incident_type_name}
-                        <br />
-                        {inFilter
-                          ? "In selected time filter"
-                          : "Outside filter (shown faded)"}
+                        <span style={{ color: NOISE_COLOR, fontWeight: 600 }}>Isolated — not in any cluster</span>
                       </div>
                     </Tooltip>
                   </CircleMarker>
                 );
               })}
 
-              {plottedHotspots
-                .filter((h) => Number.isFinite(h.lat) && Number.isFinite(h.lng))
-                .map((h) => {
-                  const color = getCircleColor(h.risk_level);
-                  const count = Number(h.incident_count || 0);
-                  const inFilter = isWithinSelectedFilter(
-                    h.detected_at,
-                    selectedFilterHours,
-                  );
-                  const fade = inFilter ? 1 : 0.42;
-                  return (
-                    <CircleMarker
-                      key={`cluster-center-${h.hotspot_id}`}
-                      center={[h.lat, h.lng]}
-                      radius={Math.min(26, 10 + Math.log2(Math.max(1, count)) * 6)}
-                      pathOptions={{
-                        color,
-                        weight: 2,
-                        fillColor: color,
-                        fillOpacity: 0.28 * fade,
-                        opacity: fade,
-                      }}
-                    >
-                      <Tooltip
-                        direction="top"
-                        offset={[0, -4]}
-                        opacity={0.95}
-                        interactive={false}
-                      >
-                        <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
-                          <strong>Hotspot cluster</strong>
-                          <br />
-                          Reports: {count}
-                          <br />
-                          Risk: {String(h.risk_level || "low").toUpperCase()}
-                          <br />
-                          Type: {h.incident_type_name || "Mixed"}
-                          <br />
-                          {inFilter
-                            ? "In selected time filter"
-                            : "Outside filter (shown faded)"}
-                        </div>
-                      </Tooltip>
-                    </CircleMarker>
-                  );
-                })}
-
-              {plottedHotspots
-                .filter(
-                  (h) =>
-                    Array.isArray(h.boundary_points) &&
-                    h.boundary_points.length > 2,
-                )
-                .map((h) => {
-                  const color = getCircleColor(h.risk_level);
-                  const inFilter = isWithinSelectedFilter(
-                    h.detected_at,
-                    selectedFilterHours,
-                  );
-                  const fade = inFilter ? 1 : 0.42;
-                  return (
-                    <Polygon
-                      key={`cluster-boundary-${h.hotspot_id}`}
-                      positions={h.boundary_points.map((p) => [p[0], p[1]])}
-                      pathOptions={{
-                        color,
-                        weight: 2,
-                        fillColor: color,
-                        fillOpacity: 0.1 * fade,
-                        opacity: fade,
-                        dashArray: "3 6",
-                      }}
-                    >
-                      <Tooltip
-                        direction="top"
-                        offset={[0, -4]}
-                        opacity={0.92}
-                        interactive={false}
-                      >
-                        <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
-                          <strong>Cluster #{h.hotspot_id}</strong>
-                          <br />
-                          Type: {h.incident_type_name || "Mixed"}
-                          <br />
-                          Reports: {h.incident_count || 0}
-                          <br />
-                          Risk: {String(h.risk_level || "low").toUpperCase()}
-                        </div>
-                      </Tooltip>
-                    </Polygon>
-                  );
-                })}
             </MapContainer>
+
+            {/* ── Incident type legend — collapsed pill, expands on hover ── */}
             <div
-              style={{
-                position: "absolute",
-                left: "10px",
-                bottom: "10px",
-                zIndex: 500,
-                background: "rgba(255, 255, 255, 0.92)",
-                border: "1px solid var(--border)",
-                borderRadius: "10px",
-                padding: "7px 10px",
-                fontSize: "11px",
-                color: "var(--muted)",
-                pointerEvents: "none",
-                backdropFilter: "blur(2px)",
-              }}
+              onMouseEnter={() => setLegendOpen(true)}
+              onMouseLeave={() => setLegendOpen(false)}
+              style={{ position: "absolute", bottom: 10, left: 10, zIndex: 500, cursor: "default" }}
             >
-              All confirmed reports & clusters shown · brighter = in time filter (
-              {formatFilterPeriodLabel(timePeriod, customHours)}). Home button
-              recenters Musanze view.
+              {/* Collapsed pill */}
+              <div style={{
+                background: "rgba(15,23,42,0.92)",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 8,
+                padding: "5px 11px",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                backdropFilter: "blur(4px)",
+                userSelect: "none",
+              }}>
+                <div style={{ display: "flex", gap: 3 }}>
+                  {incidentTypes.slice(0, 5).map((t) => {
+                    const name = t.type_name || "";
+                    return <div key={name} style={{ width: 8, height: 8, borderRadius: "50%", background: getIncidentTypeColor(name) }} />;
+                  })}
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#e2e8f0" }}>Legend</span>
+              </div>
+
+              {/* Expanded panel */}
+              {legendOpen && (
+                <div style={{
+                  position: "absolute",
+                  bottom: "calc(100% + 6px)",
+                  left: 0,
+                  background: "rgba(15,23,42,0.95)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: 10,
+                  padding: "9px 12px",
+                  minWidth: 175,
+                  backdropFilter: "blur(4px)",
+                  pointerEvents: "none",
+                }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 7 }}>
+                    Incident Types
+                  </div>
+                  {incidentTypes.map((t) => {
+                    const name = t.type_name || "";
+                    if (!name) return null;
+                    return (
+                      <div key={name} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: getIncidentTypeColor(name), flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.35)" }} />
+                        <span style={{ fontSize: 11, color: "#e2e8f0" }}>{name}</span>
+                      </div>
+                    );
+                  })}
+                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", marginTop: 6, paddingTop: 6, display: "flex", alignItems: "center", gap: 7 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: "50%", background: "transparent", border: `1.5px dashed ${NOISE_COLOR}`, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>Isolated (no cluster)</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1958,282 +2337,380 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   );
 };
 
+// ─── Unit lookup — names only, no mock action text ─────────────────────────────
+const UNIT_LOOKUP = [
+  { match: /assault|fight|attack|violence|battery/i,     unit: "Rapid Response Unit (RRU)",                badge: "🚨" },
+  { match: /theft|robbery|burglary|steal|pickpocket/i,   unit: "Criminal Investigation Dept. (CID)",        badge: "🔍" },
+  { match: /drug|narcotic|substance|contraband/i,         unit: "Drug Enforcement Unit (DEU)",               badge: "💊" },
+  { match: /traffic|accident|road|vehicle|speeding/i,     unit: "Traffic Police Unit (TPU)",                 badge: "🚦" },
+  { match: /vandal|destruction|damage|property|cable|pump|barrier/i, unit: "Community Policing Unit (CPU)", badge: "🏘️" },
+  { match: /suspicious|loiter|trespass|stalking|threat/i, unit: "Intelligence & Surveillance Unit (ISU)",   badge: "👁️" },
+];
+
+function resolveUnit(typeName) {
+  const t = typeName || "";
+  return UNIT_LOOKUP.find((u) => u.match.test(t)) || { unit: "General Patrol Unit", badge: "🚔" };
+}
+
+/**
+ * Compute an alarm score 0–100 from real hotspot metrics.
+ *   - risk_level base
+ *   - hotspot_score (backend ML score)
+ *   - predicted_increase_pct (growth trend)
+ *   - lifecycle_state (active vs emerging)
+ *   - incident_count density
+ */
+function computeAlarm(h) {
+  const base = { critical: 80, high: 60, medium: 35, low: 15 }[h.risk_level] || 20;
+  const score = Math.min(Number(h.hotspot_score || 0) * 0.25, 15);          // max +15
+  const growth = Math.min(Number(h.prediction?.predicted_increase_pct || 0) * 0.15, 10); // max +10
+  const state = h.lifecycle_state === "intense" ? 12 : h.lifecycle_state === "active" ? 6 : 0;
+  const density = Math.min((h.incident_count || 0) * 0.7, 8);               // max +8
+  return Math.min(100, base + score + growth + state + density);
+}
+
+/** Map alarm 0–100 to a vivid colour that shifts green→yellow→orange→red. */
+function alarmToColor(alarm) {
+  if (alarm >= 82) return "#dc2626";   // crimson
+  if (alarm >= 65) return "#ef4444";   // red
+  if (alarm >= 50) return "#f97316";   // orange
+  if (alarm >= 35) return "#eab308";   // amber
+  if (alarm >= 20) return "#84cc16";   // lime
+  return "#22c55e";                     // green
+}
+
+function alarmLabel(alarm) {
+  if (alarm >= 82) return "CRITICAL ALARM";
+  if (alarm >= 65) return "HIGH ALARM";
+  if (alarm >= 50) return "ELEVATED";
+  if (alarm >= 35) return "MODERATE";
+  if (alarm >= 20) return "LOW";
+  return "CALM";
+}
+
+/**
+ * Build a natural-language situation brief entirely from real hotspot fields.
+ * No hardcoded sentences — every clause is conditional on actual data.
+ */
+function buildNarrative(h) {
+  const parts = [];
+  const area = h.area_label || "this area";
+  const type = h.dominant_crime_type || h.incident_type_name || "incidents";
+  const count = h.incident_count || 0;
+  const trust = Math.round(h.avg_trust_score || 0);
+  const pred = h.prediction || {};
+  const mix = h.incident_mix || {};
+  const mixEntries = Object.entries(mix);
+  const points = Array.isArray(h.incident_points) ? h.incident_points : [];
+
+  // Opening — from backend prediction narrative if present, else derived
+  if (pred.narrative) {
+    parts.push(pred.narrative);
+  } else {
+    parts.push(
+      `${count} verified ${type.toLowerCase()} report${count !== 1 ? "s" : ""} have been recorded in ${area}.`
+    );
+  }
+
+  // Incident mix detail (only if more than one type)
+  if (mixEntries.length > 1) {
+    const mixStr = mixEntries.map(([k, v]) => `${v} ${k.toLowerCase()}`).join(", ");
+    parts.push(`The cluster contains a mix of: ${mixStr}.`);
+  }
+
+  // Trust / evidence weight
+  if (trust > 0) {
+    const weight = trust >= 80 ? "high-confidence" : trust >= 60 ? "moderate-confidence" : "low-confidence";
+    parts.push(`Community trust score: ${trust}% (${weight} evidence base).`);
+  }
+
+  // Growth trajectory
+  if (pred.predicted_increase_pct > 0) {
+    const growStr = pred.predicted_increase_pct >= 30 ? "rapidly" : pred.predicted_increase_pct >= 15 ? "steadily" : "gradually";
+    parts.push(
+      `Trend analysis projects a ${pred.predicted_increase_pct}% increase — activity is growing ${growStr}.`
+    );
+  }
+
+  // Peak time
+  if (pred.peak_time) {
+    parts.push(`Peak activity window identified: ${pred.peak_time}.`);
+  }
+
+  // Lifecycle
+  if (h.lifecycle_state === "active" || h.lifecycle_state === "intense") {
+    parts.push(`Cluster status: ${h.lifecycle_state.toUpperCase()} — requires active response.`);
+  } else if (h.lifecycle_state === "emerging") {
+    parts.push("Pattern is still emerging — early intervention can prevent escalation.");
+  }
+
+  // What was actually observed — sample real descriptions (up to 2 unique ones)
+  const seen = new Set();
+  const samples = points
+    .filter((p) => p.description && !seen.has(p.description) && seen.add(p.description))
+    .slice(0, 2)
+    .map((p) => {
+      const loc = p.village_name ? ` (${p.village_name})` : "";
+      return `"${p.description.trim()}"${loc}`;
+    });
+  if (samples.length > 0) {
+    parts.push(`Reported observations include: ${samples.join("; ")}.`);
+  }
+
+  // Backend recommendation text
+  if (pred.recommendation) {
+    parts.push(`System recommendation: ${pred.recommendation}.`);
+  }
+
+  return parts.join(" ");
+}
+
+/** Build a specific deployment action from real data — no canned sentences. */
+function buildAction(h, unit) {
+  const pred = h.prediction || {};
+  const peakTime = pred.peak_time;
+  const area = h.area_label || "the cluster area";
+  const radius = h.radius_meters ? `${Math.round(Number(h.radius_meters))} m` : null;
+  const points = Array.isArray(h.incident_points) ? h.incident_points : [];
+
+  const clauses = [];
+
+  // Deployment scope
+  clauses.push(
+    `Deploy ${unit} to ${area}${radius ? ` (cluster radius: ${radius})` : ""}.`
+  );
+
+  // Timing — use real peak_time if available
+  if (peakTime) {
+    clauses.push(`Concentrate patrols during the identified peak window: ${peakTime}.`);
+  } else {
+    clauses.push("Maintain coverage across all hours until pattern is resolved.");
+  }
+
+  // Location-specific direction — affected villages from real incident_points
+  const villages = [...new Set(points.map((p) => p.village_name).filter(Boolean))];
+  if (villages.length > 0) {
+    clauses.push(
+      `Priority villages: ${villages.slice(0, 4).join(", ")}${villages.length > 4 ? ` and ${villages.length - 4} more` : ""}.`
+    );
+  }
+
+  // Growth-driven escalation note
+  if ((pred.predicted_increase_pct || 0) >= 25) {
+    clauses.push(
+      `Given the projected ${pred.predicted_increase_pct}% growth, pre-position additional personnel before peak window.`
+    );
+  }
+
+  // Lifecycle-based posture
+  if (h.lifecycle_state === "active" || h.lifecycle_state === "intense") {
+    clauses.push("Maintain active operational posture and report status every 6 hours to the duty commander.");
+  } else if (h.lifecycle_state === "emerging") {
+    clauses.push("Monitor for 72 hours and escalate immediately if incident count increases by 2 or more.");
+  }
+
+  // Community bridge
+  clauses.push("Engage sector and cell leadership to strengthen community reporting and cordon awareness.");
+
+  return clauses.join(" ");
+}
+
 // Security Recommendations Component
 const SecurityRecommendations = ({ hotspots }) => {
-  const recommendations = useMemo(() => {
-    if (!hotspots || hotspots.length === 0) {
-      return [
-        {
-          priority: "low",
-          title: "No Active Security Concerns",
-          description: "Current hotspot analysis shows no immediate security threats in the area.",
-          action: "Continue routine monitoring and community engagement."
-        }
-      ];
-    }
-
-    const recs = [];
-    
-    // High-priority recommendations for critical hotspots
-    const criticalHotspots = hotspots.filter(h => 
-      h.risk_level === "critical" || h.incident_count >= 5
-    );
-    
-    if (criticalHotspots.length > 0) {
-      const incidentTypes = [...new Set(criticalHotspots.map(h => h.incident_type_name).filter(Boolean))];
-      const totalIncidents = criticalHotspots.reduce((sum, h) => sum + h.incident_count, 0);
-      
-      let specificAction = "";
-      if (incidentTypes.some(type => type?.toLowerCase().includes('assault'))) {
-        specificAction = "Deploy rapid response units, establish safe zones, and provide victim support services in affected areas.";
-      } else if (incidentTypes.some(type => type?.toLowerCase().includes('theft'))) {
-        specificAction = "Set up temporary security checkpoints, increase plain-clothed officers, and secure high-value target areas.";
-      } else if (incidentTypes.some(type => type?.toLowerCase().includes('vandalism'))) {
-        specificAction = "Increase surveillance, engage community watch groups, and implement protective measures for public infrastructure.";
-      } else {
-        specificAction = "Deploy additional patrols, increase community alerts, and consider temporary safety measures in these areas.";
-      }
-      
-      recs.push({
-        priority: "critical",
-        title: `🚨 ${criticalHotspots.length} Critical Security Cluster${criticalHotspots.length > 1 ? 's' : ''} Detected`,
-        description: `Multiple high-incidence areas requiring immediate attention. ${totalIncidents} total incidents reported including: ${incidentTypes.join(', ') || 'mixed incidents'}.`,
-        action: specificAction
-      });
-    }
-
-    // Medium-priority for high-risk areas
-    const highRiskHotspots = hotspots.filter(h => 
-      h.risk_level === "high" && h.incident_count >= 3
-    );
-    
-    if (highRiskHotspots.length > 0) {
-      const incidentTypes = [...new Set(highRiskHotspots.map(h => h.incident_type_name).filter(Boolean))];
-      
-      let specificAction = "";
-      if (incidentTypes.some(type => type?.toLowerCase().includes('suspicious'))) {
-        specificAction = "Conduct community outreach, increase information gathering, and establish neighborhood communication channels.";
-      } else if (incidentTypes.some(type => type?.toLowerCase().includes('drug'))) {
-        specificAction = "Coordinate with community leaders, increase surveillance of known problem areas, and provide youth engagement programs.";
-      } else if (incidentTypes.some(type => type?.toLowerCase().includes('traffic'))) {
-        specificAction = "Deploy traffic enforcement units, conduct road safety education, and improve traffic flow management.";
-      } else {
-        specificAction = "Increase patrol frequency, conduct community safety meetings, and enhance visibility in these locations.";
-      }
-      
-      recs.push({
-        priority: "high",
-        title: `⚠️ ${highRiskHotspots.length} High-Risk Area${highRiskHotspots.length > 1 ? 's' : ''} Identified`,
-        description: `Areas with elevated incident rates requiring enhanced monitoring. Primary concerns: ${incidentTypes.join(', ') || 'various incidents'}.`,
-        action: specificAction
-      });
-    }
-
-    // Type-specific recommendations based on actual incident patterns
-    const theftHotspots = hotspots.filter(h => 
-      h.incident_type_name?.toLowerCase().includes('theft') && h.incident_count >= 2
-    );
-    
-    if (theftHotspots.length > 0) {
-      const avgIncidents = Math.round(theftHotspots.reduce((sum, h) => sum + h.incident_count, 0) / theftHotspots.length);
-      
-      let specificAction = "";
-      if (avgIncidents >= 4) {
-        specificAction = "Establish temporary security posts, implement bag check protocols, and coordinate with local businesses for theft prevention.";
-      } else {
-        specificAction = "Increase neighborhood watch presence, provide community safety education, and enhance lighting in affected areas.";
-      }
-      
-      recs.push({
-        priority: "medium",
-        title: `🔒 Theft Prevention Focus Areas`,
-        description: `${theftHotspots.length} area${theftHotspots.length > 1 ? 's' : ''} with recurring theft incidents (${avgIncidents} average incidents per area).`,
-        action: specificAction
-      });
-    }
-
-    // Assault-specific recommendations
-    const assaultHotspots = hotspots.filter(h => 
-      h.incident_type_name?.toLowerCase().includes('assault') && h.incident_count >= 2
-    );
-    
-    if (assaultHotspots.length > 0) {
-      recs.push({
-        priority: "high",
-        title: `🛡️ Assault Prevention Required`,
-        description: `${assaultHotspots.length} location${assaultHotspots.length > 1 ? 's' : ''} with reported assault incidents requiring immediate intervention.`,
-        action: "Establish safe corridors, increase police presence during peak hours, and provide community conflict resolution resources."
-      });
-    }
-
-    // Drug activity recommendations
-    const drugHotspots = hotspots.filter(h => 
-      (h.incident_type_name?.toLowerCase().includes('drug') || h.incident_type_name?.toLowerCase().includes('narcotic')) && h.incident_count >= 2
-    );
-    
-    if (drugHotspots.length > 0) {
-      recs.push({
-        priority: "medium",
-        title: `🚬 Drug Activity Monitoring`,
-        description: `${drugHotspots.length} area${drugHotspots.length > 1 ? 's' : ''} with reported drug-related incidents.`,
-        action: "Coordinate with community leaders, increase surveillance, and provide youth engagement and rehabilitation programs."
-      });
-    }
-
-    // Traffic-related recommendations
-    const trafficHotspots = hotspots.filter(h => 
-      h.incident_type_name?.toLowerCase().includes('traffic') && h.incident_count >= 2
-    );
-    
-    if (trafficHotspots.length > 0) {
-      recs.push({
-        priority: "low",
-        title: `🚦 Traffic Safety Concerns`,
-        description: `${trafficHotspots.length} location${trafficHotspots.length > 1 ? 's' : ''} with traffic-related incidents.`,
-        action: "Deploy traffic enforcement, conduct road safety audits, and implement traffic calming measures where needed."
-      });
-    }
-
-    // Emerging pattern recommendations
-    const emergingHotspots = hotspots.filter(h => {
-      const stage = getFormationStage(h);
-      return stage === "emerging" && h.incident_count >= 2;
-    });
-    
-    if (emergingHotspots.length > 0) {
-      const emergingTypes = [...new Set(emergingHotspots.map(h => h.incident_type_name).filter(Boolean))];
-      
-      recs.push({
-        priority: "medium",
-        title: `📍 ${emergingHotspots.length} Emerging Pattern${emergingHotspots.length > 1 ? 's' : ''}`,
-        description: `New incident patterns forming: ${emergingTypes.join(', ') || 'various incidents'}. Early intervention recommended.`,
-        action: "Monitor these areas closely, engage with community leaders, and implement preventive measures before patterns escalate."
-      });
-    }
-
-    // If no specific recommendations, provide general guidance
-    if (recs.length === 0) {
-      recs.push({
-        priority: "low",
-        title: "Security Recommendations",
-        description: "Current incident patterns are within normal parameters.",
-        action: "Maintain regular patrol schedules and continue community engagement efforts."
-      });
-    }
-
-    return recs.slice(0, 4); // Limit to top 4 recommendations
+  const sorted = useMemo(() => {
+    if (!hotspots || hotspots.length === 0) return [];
+    return [...hotspots]
+      .map((h) => ({ ...h, _alarm: computeAlarm(h) }))
+      .sort((a, b) => b._alarm - a._alarm);
   }, [hotspots]);
 
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case "critical": return "var(--danger)";
-      case "high": return "#ff6b35";
-      case "medium": return "#ffa726";
-      case "low": return "var(--success)";
-      default: return "var(--muted)";
-    }
-  };
+  if (sorted.length === 0) {
+    return (
+      <div style={{
+        padding: "20px 16px", textAlign: "center",
+        backgroundColor: "var(--surface)", borderRadius: "8px",
+        border: "1px solid var(--border)",
+      }}>
+        <div style={{ fontSize: "22px", marginBottom: "6px" }}>✅</div>
+        <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)", marginBottom: "4px" }}>
+          No active hotspots detected
+        </div>
+        <div style={{ fontSize: "11px", color: "var(--muted)", lineHeight: 1.5 }}>
+          No deployments are required at this time. Continue routine patrols
+          and community engagement across all sectors.
+        </div>
+      </div>
+    );
+  }
 
-  const getPriorityBg = (priority) => {
-    switch (priority) {
-      case "critical": return "rgba(220, 53, 69, 0.1)";
-      case "high": return "rgba(255, 107, 53, 0.1)";
-      case "medium": return "rgba(255, 167, 38, 0.1)";
-      case "low": return "rgba(40, 167, 69, 0.1)";
-      default: return "var(--surface)";
-    }
-  };
+  const totalIncidents = sorted.reduce((s, h) => s + (h.incident_count || 0), 0);
+  const peakAlarm = sorted[0]._alarm;
+  const peakColor = alarmToColor(peakAlarm);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-      {/* Security Recommendations Section - Hidden */}
-      {/* 
-      {recommendations.map((rec, index) => (
-        <div
-          key={index}
-          style={{
-            padding: "12px",
-            borderRadius: "8px",
-            border: `1px solid ${getPriorityColor(rec.priority)}33`,
-            backgroundColor: getPriorityBg(rec.priority),
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
-            <div
-              style={{
-                width: "4px",
-                height: "100%",
-                backgroundColor: getPriorityColor(rec.priority),
-                borderRadius: "2px",
-                marginTop: "2px",
-                minHeight: "40px",
-              }}
-            />
-            <div style={{ flex: 1 }}>
-              <div
-                style={{
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  color: getPriorityColor(rec.priority),
-                  marginBottom: "4px",
-                }}
-              >
-                {rec.title}
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      {/* District situation overview bar */}
+      <div style={{
+        padding: "10px 12px",
+        borderRadius: "8px",
+        border: `1px solid ${peakColor}55`,
+        backgroundColor: `${peakColor}12`,
+        display: "flex", flexDirection: "column", gap: "4px",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)" }}>
+            District Security Situation
+          </span>
+          <span style={{
+            fontSize: "9px", fontWeight: 800, letterSpacing: "0.07em",
+            padding: "2px 8px", borderRadius: "99px",
+            backgroundColor: peakColor, color: "#fff",
+          }}>
+            {alarmLabel(peakAlarm)}
+          </span>
+        </div>
+        {/* Alarm bar */}
+        <div style={{ height: "5px", borderRadius: "3px", backgroundColor: "var(--border)", overflow: "hidden" }}>
+          <div style={{
+            height: "100%", width: `${peakAlarm}%`,
+            backgroundColor: peakColor,
+            transition: "width 0.6s ease",
+            borderRadius: "3px",
+          }} />
+        </div>
+        <div style={{ fontSize: "10px", color: "var(--muted)", display: "flex", gap: "10px" }}>
+          <span><strong style={{ color: "var(--text)" }}>{sorted.length}</strong> active hotspot{sorted.length !== 1 ? "s" : ""}</span>
+          <span>·</span>
+          <span><strong style={{ color: "var(--text)" }}>{totalIncidents}</strong> verified incidents</span>
+          <span>·</span>
+          <span>Alarm index: <strong style={{ color: peakColor }}>{Math.round(peakAlarm)}/100</strong></span>
+        </div>
+      </div>
+
+      {/* One recommendation card per hotspot, ordered by alarm severity */}
+      {sorted.map((h, idx) => {
+        const alarm = h._alarm;
+        const color = alarmToColor(alarm);
+        const { unit, badge } = resolveUnit(h.incident_type_name);
+        const narrative = buildNarrative(h);
+        const action = buildAction(h, unit);
+        const area = h.area_label || "Unknown area";
+        const sectors = [...new Set(
+          (h.incident_points || []).map((p) => p.sector_name).filter(Boolean)
+        )].join(", ") || "—";
+
+        return (
+          <div key={h.hotspot_id || idx} style={{
+            borderRadius: "10px",
+            border: `1px solid ${color}44`,
+            backgroundColor: `${color}0b`,
+            overflow: "hidden",
+          }}>
+            {/* Header */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: "8px",
+              padding: "9px 12px",
+              borderBottom: `1px solid ${color}22`,
+              backgroundColor: `${color}1a`,
+            }}>
+              <span style={{ fontSize: "18px", lineHeight: 1, flexShrink: 0 }}>{badge}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)", lineHeight: 1.2 }}>
+                  {h.incident_type_name || "Incident"} · {area}
+                </div>
+                <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "1px" }}>
+                  Sectors: {sectors} · {h.incident_count} incident{h.incident_count !== 1 ? "s" : ""}
+                  {h.radius_meters ? ` · ${Math.round(Number(h.radius_meters))} m cluster` : ""}
+                </div>
               </div>
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "var(--text)",
-                  marginBottom: "8px",
-                  lineHeight: "1.4",
-                }}
-              >
-                {rec.description}
+              {/* Alarm pill */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px", flexShrink: 0 }}>
+                <span style={{
+                  fontSize: "9px", fontWeight: 800, letterSpacing: "0.06em",
+                  padding: "2px 7px", borderRadius: "99px",
+                  backgroundColor: color, color: "#fff",
+                }}>
+                  {alarmLabel(alarm)}
+                </span>
+                <span style={{ fontSize: "9px", color: "var(--muted)" }}>
+                  index {Math.round(alarm)}/100
+                </span>
               </div>
-              <div
-                style={{
-                  fontSize: "11px",
-                  color: "var(--muted)",
-                  fontStyle: "italic",
-                }}
-              >
-                <strong>Recommended Action:</strong> {rec.action}
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+              {/* Mini alarm bar */}
+              <div style={{ height: "3px", borderRadius: "2px", backgroundColor: "var(--border)", overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", width: `${alarm}%`,
+                  backgroundColor: color, borderRadius: "2px",
+                }} />
+              </div>
+
+              {/* Deploy label */}
+              <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+                <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.07em" }}>
+                  DEPLOY
+                </span>
+                <span style={{ fontSize: "12px", fontWeight: 700, color }}>
+                  {unit}
+                </span>
+              </div>
+
+              {/* Situation narrative — natural language from real data */}
+              <div style={{
+                fontSize: "11px", color: "var(--text)", lineHeight: 1.6,
+                padding: "8px 10px", borderRadius: "6px",
+                backgroundColor: "var(--surface)",
+                border: `1px solid ${color}22`,
+              }}>
+                <div style={{
+                  fontSize: "9px", fontWeight: 700, color: "var(--muted)",
+                  letterSpacing: "0.07em", marginBottom: "4px",
+                }}>
+                  SITUATION
+                </div>
+                {narrative}
+              </div>
+
+              {/* Action — built from real data fields */}
+              <div style={{
+                fontSize: "11px", color: "var(--text)", lineHeight: 1.6,
+                padding: "8px 10px", borderRadius: "6px",
+                backgroundColor: `${color}0d`,
+                border: `1px solid ${color}33`,
+              }}>
+                <div style={{
+                  fontSize: "9px", fontWeight: 700, color,
+                  letterSpacing: "0.07em", marginBottom: "4px",
+                }}>
+                  RECOMMENDED ACTION
+                </div>
+                {action}
+              </div>
+
+              {/* Metadata strip */}
+              <div style={{
+                display: "flex", gap: "8px", flexWrap: "wrap",
+                fontSize: "10px", color: "var(--muted)",
+              }}>
+                <span>Trust score: <strong style={{ color: "var(--text)" }}>{Math.round(h.avg_trust_score || 0)}%</strong></span>
+                {h.prediction?.predicted_increase_pct > 0 && (
+                  <span>Projected growth: <strong style={{ color }}>{h.prediction.predicted_increase_pct}%</strong></span>
+                )}
+                {h.prediction?.peak_time && (
+                  <span>Peak: <strong style={{ color: "var(--text)" }}>{h.prediction.peak_time}</strong></span>
+                )}
+                <span>State: <strong style={{ color: "var(--text)" }}>{h.lifecycle_state || "unknown"}</strong></span>
               </div>
             </div>
           </div>
-        </div>
-      ))}
-      
-      {recommendations.length > 0 && (
-        <div style={{
-          padding: "8px 12px",
-          backgroundColor: "var(--surface)",
-          borderRadius: "6px",
-          border: "1px solid var(--border)",
-        }}>
-          <div style={{
-            fontSize: "11px",
-            color: "var(--muted)",
-            textAlign: "center",
-          }}>
-            💡 Recommendations based on {hotspots.length} hotspot{hotspots.length !== 1 ? 's' : ''} analyzed
-            {hotspots.length > 0 && ` with ${hotspots.reduce((sum, h) => sum + h.incident_count, 0)} total incidents`}
-          </div>
-        </div>
-      )}
-      */}
-      
-      {/* Empty placeholder when recommendations are hidden */}
-      <div style={{
-        padding: "20px",
-        backgroundColor: "var(--surface)",
-        borderRadius: "8px",
-        border: "1px solid var(--border)",
-        textAlign: "center",
-        color: "var(--muted)",
-        fontSize: "12px"
-      }}>
-        Security recommendations are currently hidden
+        );
+      })}
+
+      <div style={{ fontSize: "10px", color: "var(--muted)", textAlign: "center", paddingTop: "2px" }}>
+        Recommendations derived from live verified hotspot data · Commanding officer approval required before execution
       </div>
     </div>
   );

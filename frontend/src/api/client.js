@@ -14,23 +14,13 @@ const BASE =
 
 // Ensure HTTPS in production environments
 const PRODUCTION_BASE = (() => {
-  // If we have a full URL and it's HTTP but we're in HTTPS production, force HTTPS
-  if (BASE.startsWith("http://") && 
-      typeof window !== "undefined" && 
+  if (BASE.startsWith("http://") &&
+      typeof window !== "undefined" &&
       window.location.protocol === "https:") {
-    const httpsUrl = BASE.replace("http://", "https://");
-    console.warn("Forcing HTTPS for API URL in production:", httpsUrl);
-    return httpsUrl;
+    return BASE.replace("http://", "https://");
   }
   return BASE;
 })();
-
-// Debug: Log the BASE URL in development/production
-if (typeof window !== "undefined" && window.location.hostname !== "localhost") {
-  console.log("API Client BASE URL:", BASE);
-  console.log("API Client PRODUCTION_BASE:", PRODUCTION_BASE);
-  console.log("Environment VITE_API_BASE_URL:", import.meta.env?.VITE_API_BASE_URL);
-}
 
 const TOKEN_KEY = "tb_token";
 /** Cookie name must match Path=/ for SPA */

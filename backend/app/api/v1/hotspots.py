@@ -27,6 +27,7 @@ from app.core.hotspot_auto import (
 )
 from app.core.village_lookup import get_village_location_info
 from app.core.websocket import manager
+from app.core.llm_recommendations import generate_recommendation
 
 router = APIRouter(prefix="/hotspots", tags=["hotspots"])
 
@@ -130,6 +131,27 @@ def _hours_between(start: datetime, end: datetime) -> int:
     return max(1, int((seconds + 3599) // 3600))
 
 
+def _compute_peak_window(report_times: List[datetime]) -> Optional[str]:
+    """Derive a real 2-hour peak window from report timestamps.
+
+    Counts incidents per hour-of-day across all reports, finds the hour
+    with the highest count, and returns a "HH:00–HH+2:00" string.
+    Returns None when fewer than 2 timestamps are available.
+    """
+    if len(report_times) < 2:
+        return None
+    hour_counts: Dict[int, int] = {}
+    for dt in report_times:
+        try:
+            h = dt.astimezone(timezone.utc).hour
+        except Exception:
+            h = dt.hour
+        hour_counts[h] = hour_counts.get(h, 0) + 1
+    peak_hour = max(hour_counts, key=lambda h: hour_counts[h])
+    end_hour = (peak_hour + 2) % 24
+    return f"{peak_hour:02d}:00\u2013{end_hour:02d}:00"
+
+
 def _prediction_for_hotspot(
     classification: str,
     incident_count: int,
@@ -137,9 +159,11 @@ def _prediction_for_hotspot(
     cluster_kind: str,
     area_label: Optional[str],
     incident_mix: Optional[Dict[str, int]] = None,
+    report_times: Optional[List[datetime]] = None,
 ) -> Dict[str, Any]:
     crime_label = dominant_crime or "incident"
     area_text = area_label or "this area"
+    peak_time = _compute_peak_window(report_times or [])
 
     if cluster_kind == "mixed_hotspot":
         mix_text = ""
@@ -149,7 +173,7 @@ def _prediction_for_hotspot(
         return {
             "status": "security_alert",
             "predicted_increase_pct": min(85, 30 + incident_count * 4),
-            "peak_time": "17:00-23:00",
+            "peak_time": peak_time,
             "recommendation": f"Mixed incidents co-located in {area_text}. Trigger coordinated security response.",
             "narrative": f"Different incident types are converging in {area_text}{f' ({mix_text})' if mix_text else ''}.",
         }
@@ -158,7 +182,7 @@ def _prediction_for_hotspot(
         return {
             "status": "escalation_likely",
             "predicted_increase_pct": min(75, 20 + incident_count * 4),
-            "peak_time": "18:00-23:00",
+            "peak_time": peak_time,
             "recommendation": f"Deploy patrol units around {crime_label} cluster in {area_text}",
             "narrative": f"{crime_label.capitalize()} is rapidly escalating in {area_text}.",
         }
@@ -166,14 +190,14 @@ def _prediction_for_hotspot(
         return {
             "status": "monitor_growth",
             "predicted_increase_pct": min(40, 10 + incident_count * 2),
-            "peak_time": "17:00-21:00",
+            "peak_time": peak_time,
             "recommendation": "Increase monitoring and community patrol checks",
             "narrative": f"{crime_label.capitalize()} is increasing in {area_text}.",
         }
     return {
         "status": "emerging_trend",
         "predicted_increase_pct": min(25, 5 + incident_count * 2),
-        "peak_time": None,
+        "peak_time": peak_time,
         "recommendation": f"Track early signals of {crime_label} in {area_text}",
         "narrative": f"Early pattern detected: {crime_label} may be emerging in {area_text}.",
     }
@@ -459,6 +483,21 @@ def list_hotspots(
 
         cluster_kind = "trend_cluster" if len(incident_mix) <= 1 else "mixed_hotspot"
 
+        report_times = [
+            r.reported_at for r in reports_in_cluster if r.reported_at is not None
+        ]
+        peak_time = _compute_peak_window(report_times)
+
+        llm = generate_recommendation(
+            classification=classification,
+            incident_count=incident_count,
+            dominant_crime=dominant_crime,
+            cluster_kind=cluster_kind,
+            area_label=area_label,
+            incident_mix=incident_mix,
+            peak_time=peak_time,
+        )
+
         prediction = _prediction_for_hotspot(
             classification,
             incident_count,
@@ -466,7 +505,12 @@ def list_hotspots(
             cluster_kind,
             area_label,
             incident_mix,
+            report_times=report_times,
         )
+        # Overlay LLM-generated fields on top of the computed prediction
+        prediction["recommendation"] = llm["recommendation"]
+        prediction["narrative"]       = llm["narrative"]
+        prediction["status"]          = llm["status"]
             
         responses.append(HotspotResponse(
             hotspot_id=h.hotspot_id,

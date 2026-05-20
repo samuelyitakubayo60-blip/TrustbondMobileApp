@@ -1,6 +1,5 @@
 import logging
 import json
-import threading
 from typing import Annotated, Optional, List, Tuple, Dict, Any
 from decimal import Decimal
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form, Query, status, Request
@@ -65,7 +64,6 @@ from app.core.report_review import (
     resolve_ml_prediction_for_report,
 )
 from app.core.credibility_model import score_report_credibility, update_device_ml_aggregates, _json_safe
-from app.core.report_credibility_summary import report_credibility_api_fields
 from app.core.natural_language_scorer import analyze_description_quality
 from app.core.audit import log_action
 from app.core.hotspot_auto import (
@@ -81,7 +79,6 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 logger = logging.getLogger(__name__)
-_auto_case_realtime_lock = threading.Lock()
 _SEMANTIC_MODEL = None
 _SEMANTIC_MODEL_UNAVAILABLE = False
 _LLM_CLIENT = None
@@ -562,29 +559,6 @@ def _deterministic_ai_executive_summary(
         except (TypeError, ValueError):
             pass
 
-    dc = (snapshot.get("model_signals") or {}).get("description_credibility") or {}
-    desc_length_line = ""
-    if isinstance(dc, dict) and dc.get("word_count") is not None:
-        wc = int(dc["word_count"])
-        min_w = int(dc.get("min_recommended_words") or 15)
-        if dc.get("short_description_rescue"):
-            desc_length_line = (
-                f"Description length: {wc} words (under {min_w} recommended) but wording matches "
-                f"the incident type and attached evidence, so only a limited credibility penalty was applied."
-            )
-        elif wc < min_w:
-            applied = dc.get("applied_penalty_points")
-            pts = f" (−{applied} on credibility score)" if applied is not None else ""
-            desc_length_line = (
-                f"Description length: {wc} words (recommended {min_w}+); short text reduced credibility{pts}."
-            )
-        elif dc.get("length_adjustment") == "bonus":
-            bonus = dc.get("length_points")
-            bonus_txt = f" (+{bonus} credibility points)" if bonus is not None else ""
-            desc_length_line = (
-                f"Description length: {wc} words — sufficient detail improved credibility{bonus_txt}."
-            )
-
     ts = fd.get("trust_score")
     label = fd.get("label")
     scoring: List[str] = []
@@ -630,8 +604,6 @@ def _deterministic_ai_executive_summary(
         p1_parts.append("They did not provide a usable description.")
 
     closing: List[str] = [loc_sentence, media_line]
-    if desc_length_line:
-        closing.append(desc_length_line)
     if sem_bits:
         closing.append(" ".join(sem_bits))
     if scoring:
@@ -659,12 +631,6 @@ def _deterministic_ai_executive_summary(
                 whys.append("credibility stays below automatic confirmation thresholds")
             elif code == "CONTEXT_MISMATCH":
                 whys.append("the wording does not line up cleanly with incident-type expectations")
-            elif code in {"SHORT_DESCRIPTION", "SHORT_DESCRIPTION_PARTIAL"}:
-                whys.append("the written description is shorter than recommended for full credibility credit")
-            elif code == "SHORT_DESCRIPTION_RESCUED":
-                whys.append(
-                    "the description is short but still aligns with the incident type and evidence on file"
-                )
             elif code == "RULE_FLAGGED":
                 whys.append("rule checks requested manual scrutiny")
             elif code == "FINAL_PENDING_REVIEW":
@@ -760,7 +726,6 @@ def _build_ai_analysis_snapshot(
     longitude: Optional[Any] = None,
     gps_accuracy: Optional[Any] = None,
     location_label: Optional[str] = None,
-    description_credibility: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build structured, model-grounded snapshot for narrative generation."""
     model_breakdown = (
@@ -861,9 +826,6 @@ def _build_ai_analysis_snapshot(
                 "breakdown": model_breakdown.get("volo", {}),
             },
             "base": model_breakdown.get("base", {}),
-            "description_credibility": (
-                description_credibility if isinstance(description_credibility, dict) else {}
-            ),
         },
         "rules": {
             "triggered": rules_triggered,
@@ -1023,62 +985,6 @@ def _compose_ai_evidence_description(
     return _finalize(snapshot, fb, [incident_label, object_text, media_text, desc_excerpt])
 
 
-def _description_credibility_from_report(report: Any) -> Optional[Dict[str, Any]]:
-    """Structured description length/semantic adjustment saved during credibility scoring."""
-    fv = getattr(report, "feature_vector", None)
-    if isinstance(fv, dict):
-        meta = fv.get("description_credibility")
-        if isinstance(meta, dict) and meta:
-            return meta
-    return None
-
-
-def _apply_description_credibility_patterns(
-    description_credibility: Optional[Dict[str, Any]],
-    add_pattern: Any,
-) -> None:
-    """Encode description_credibility into decision patterns shown during AI confirmation."""
-    if not isinstance(description_credibility, dict) or not description_credibility:
-        return
-    wc = description_credibility.get("word_count")
-    min_w = int(description_credibility.get("min_recommended_words") or 15)
-    if wc is None:
-        return
-    try:
-        wc_i = int(wc)
-    except (TypeError, ValueError):
-        return
-    if description_credibility.get("short_description_rescue"):
-        sem = description_credibility.get("semantic_similarity")
-        sem_txt = f", semantic match {float(sem):.0f}%" if sem is not None else ""
-        add_pattern(
-            "SHORT_DESCRIPTION_RESCUED",
-            f"only {wc_i} words (under {min_w} recommended) but description matches incident type "
-            f"and evidence{sem_txt}; credibility penalty capped at 30%",
-        )
-        return
-    if wc_i < min_w:
-        applied = description_credibility.get("applied_penalty_points")
-        pts = f" (−{applied} points on credibility score)" if applied is not None else ""
-        add_pattern(
-            "SHORT_DESCRIPTION",
-            f"description has {wc_i} words (recommended {min_w}+); short text lowered credibility{pts}",
-        )
-        if description_credibility.get("partial_rescue") == "semantic_only":
-            add_pattern(
-                "SHORT_DESCRIPTION_PARTIAL",
-                "text aligns with incident type but lacks evidence for full short-description credit",
-            )
-        return
-    if description_credibility.get("length_adjustment") == "bonus":
-        bonus = description_credibility.get("length_points")
-        bonus_txt = f" (+{bonus} credibility points)" if bonus is not None else ""
-        add_pattern(
-            "DETAILED_DESCRIPTION",
-            f"{wc_i} words provided additional description detail{bonus_txt}",
-        )
-
-
 def _compose_ai_verification_reason(
     *,
     verification_status: Optional[str],
@@ -1094,7 +1000,6 @@ def _compose_ai_verification_reason(
     reviewer_note: Optional[str] = None,
     unified_validation: Optional[Dict[str, Any]] = None,
     scorecard: Optional[Dict[str, Any]] = None,
-    description_credibility: Optional[Dict[str, Any]] = None,
     latitude: Optional[Any] = None,
     longitude: Optional[Any] = None,
     gps_accuracy: Optional[Any] = None,
@@ -1243,8 +1148,6 @@ def _compose_ai_verification_reason(
                 "semantic comparison shows mismatch between description, incident type, and evidence",
             )
 
-    _apply_description_credibility_patterns(description_credibility, _add_pattern)
-
     if rule_status_norm == "rejected":
         _add_pattern(
             "RULE_REJECTION",
@@ -1292,7 +1195,6 @@ def _compose_ai_verification_reason(
         longitude=longitude,
         gps_accuracy=gps_accuracy,
         location_label=location_label,
-        description_credibility=description_credibility,
     )
     deterministic_body = _deterministic_ai_executive_summary(
         snapshot,
@@ -3010,24 +2912,22 @@ def run_hotspot_auto():
 
 def run_auto_case_realtime():
     """Background task to run case auto-linking/creation after live report changes."""
-    if not _auto_case_realtime_lock.acquire(blocking=False):
-        logger.info("Skipping overlapping realtime auto-case run")
-        return
-
     db = SessionLocal()
     try:
         case_stats = _create_auto_cases(db)
         if case_stats.get("cases_created", 0) > 0:
-            logger.info(
-                "Realtime auto-case run: created %s case(s)",
-                case_stats["cases_created"],
+            print(
+                f"Realtime auto-case run: created {case_stats['cases_created']} case(s)"
             )
+            try:
+                _balance_workload_and_reassign(db)
+            except Exception as balance_error:
+                print(f"Warning: workload balancing failed after auto-case run: {balance_error}")
     except Exception as e:
-        logger.error("Error in realtime auto-case run: %s", e)
+        print(f"Error in realtime auto-case run: {e}")
         db.rollback()
     finally:
         db.close()
-        _auto_case_realtime_lock.release()
 
 
 def run_auto_case_for_report(report_id: str):
@@ -3603,8 +3503,7 @@ def create_report(
     # Note: submission-guidance (mobile guidance) has been removed from the product.
     # For text-only reports we keep the existing pipeline and record a lightweight NL analysis
     # (no auto-reject here; rule engine + police review still apply).
-    # Local leader submissions skip server-side NL/semantic/ML — mobile gates already ran on device.
-    if submitting_leader is None and not evidence_metadata_list:
+    if not evidence_metadata_list:
         try:
             incident_type_row = (
                 db.query(IncidentType)
@@ -3640,7 +3539,7 @@ def create_report(
 
     # Semantic consistency check (report text vs evidence meaning vs incident type)
     try:
-        if submitting_leader is None and evidence_validations:
+        if evidence_validations:
             incident_type_row = (
                 db.query(IncidentType)
                 .filter(IncidentType.incident_type_id == report.incident_type_id)
@@ -3667,172 +3566,163 @@ def create_report(
         logger.warning(f"Semantic consistency check failed for report {report.report_id}: {e}")
 
     # If any evidence validation clearly fails, flag the report (do not hard-reject by default)
-    if submitting_leader is None:
-        try:
-            failed = []
-            for ev in evidence_validations:
-                v = (ev or {}).get("validation") or {}
-                if v.get("valid") is False:
-                    failed.append(v)
-            if failed and not out_of_boundary and report.rule_status != "rejected":
-                report.rule_status = "flagged"
-                report.is_flagged = True
-                report.flag_reason = "evidence_incident_mismatch"
-                report.verification_status = "under_review"
-        except Exception:
-            pass
+    try:
+        failed = []
+        for ev in evidence_validations:
+            v = (ev or {}).get("validation") or {}
+            if v.get("valid") is False:
+                failed.append(v)
+        if failed and not out_of_boundary and report.rule_status != "rejected":
+            report.rule_status = "flagged"
+            report.is_flagged = True
+            report.flag_reason = "evidence_incident_mismatch"
+            report.verification_status = "under_review"
+    except Exception:
+        pass
 
-    # === Verification: leader = mobile basics only; citizens = full AI/rules pipeline ===
+    # === Apply rule-based + ML pipeline (sync, lightweight) ===
     evidence_count = len(evidence_metadata_list)
     try:
-        if submitting_leader is not None:
-            from app.core.leader_workflow import apply_leader_submission_verification
+        from app.core.unified_validator import validate_report_unified
+        from app.core.report_priority import apply_anti_fraud_rules, calculate_report_priority
 
-            apply_leader_submission_verification(
-                report, db, evidence_count=evidence_count
-            )
-        if submitting_leader is None:
-            from app.core.unified_validator import validate_report_unified
-            from app.core.report_priority import apply_anti_fraud_rules, calculate_report_priority
+        validation_result = validate_report_unified(
+            db=db,
+            report=report,
+            device=device,
+            evidence_files=list(getattr(report, "evidence_files", []) or []),
+        )
+        unified_validation_data = _store_unified_validation_result(db, report, validation_result)
 
-            validation_result = validate_report_unified(
-                db=db,
-                report=report,
-                device=device,
-                evidence_files=list(getattr(report, "evidence_files", []) or []),
-            )
-            unified_validation_data = _store_unified_validation_result(db, report, validation_result)
+        ml_prediction_tmp = resolve_ml_prediction_for_report(report)
+        rule_status, is_flagged, flag_reason = apply_anti_fraud_rules(
+            report, evidence_count, db
+        )
 
-            ml_prediction_tmp = resolve_ml_prediction_for_report(report)
-            rule_status, is_flagged, flag_reason = apply_anti_fraud_rules(
-                report, evidence_count, db
+        # HARD REJECTION: If rule-based validation fails, reject report immediately (like boundary rejection)
+        if rule_status == "rejected":
+            # Rollback any database changes and return HTTP 400
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "RULE_BASED_REJECTION",
+                    "message": _friendly_rule_rejection_message(flag_reason),
+                    "flag_reason": flag_reason or "anti_fraud_rules_violation",
+                    "rule_status": rule_status
+                }
             )
 
-            # HARD REJECTION: If rule-based validation fails, reject report immediately (like boundary rejection)
-            if rule_status == "rejected":
-                # Rollback any database changes and return HTTP 400
-                db.rollback()
-                raise HTTPException(
-                    status_code=400,
-                    detail={
-                        "error": "RULE_BASED_REJECTION",
-                        "message": _friendly_rule_rejection_message(flag_reason),
-                        "flag_reason": flag_reason or "anti_fraud_rules_violation",
-                        "rule_status": rule_status
-                    }
-                )
+        # Preserve existing flags unless the rule engine flags
+        if report.rule_status != "rejected":
+            report.rule_status = rule_status
+        
+        # Handle flagging from rule engine (not rejection)
+        report.is_flagged = bool(report.is_flagged or is_flagged)
+        if report.is_flagged:
+            report.verification_status = "under_review"
+        if report.flag_reason is None and flag_reason:
+            report.flag_reason = flag_reason
 
-            # Preserve existing flags unless the rule engine flags
-            if report.rule_status != "rejected":
-                report.rule_status = rule_status
-
-            # Handle flagging from rule engine (not rejection)
-            report.is_flagged = bool(report.is_flagged or is_flagged)
-            if report.is_flagged:
-                report.verification_status = "under_review"
-            if report.flag_reason is None and flag_reason:
-                report.flag_reason = flag_reason
-
-            # Get unified validation result for priority calculation
-            unified_validation_data = (
-                unified_validation_data
-                if isinstance(unified_validation_data, dict)
-                else report.feature_vector.get('unified_validation', {}) if isinstance(report.feature_vector, dict) else {}
-            )
-            report.priority = calculate_report_priority(report, evidence_count, db, unified_validation_data)
-            votes_tmp = {"real": 0, "false": 0, "unknown": 0}
-            if isinstance(report.feature_vector, dict):
-                vv = report.feature_vector.get("community_votes", {})
-                if isinstance(vv, dict):
-                    for v in vv.values():
-                        k = str(v)
-                        if k in votes_tmp:
-                            votes_tmp[k] += 1
-            scorecard = _compute_threshold_scorecard(
-                report,
-                ml_prediction=ml_prediction_tmp,
-                community_votes=votes_tmp,
-                unified_validation=unified_validation_data,
-            )
-            fv_sc = report.feature_vector if isinstance(report.feature_vector, dict) else {}
-            fv_sc["threshold_scorecard"] = scorecard
-            report.feature_vector = _json_safe(fv_sc)
-            _apply_threshold_outcome(report, scorecard)
-            semantic_alignment_meta = None
-            if isinstance(report.feature_vector, dict):
-                semantic_alignment_meta = report.feature_vector.get("semantic_alignment")
-            ai_trust_score = (
-                float(ml_prediction_tmp.trust_score)
-                if getattr(ml_prediction_tmp, "trust_score", None) is not None
-                else None
-            )
-            ai_label = getattr(ml_prediction_tmp, "prediction_label", None)
-            ai_trust_score, ai_label = _rule_adjusted_trust_label(report, ai_trust_score, ai_label)
-            _persist_adjusted_ml_prediction(db, ml_prediction_tmp, ai_trust_score, ai_label)
-            try:
-                update_device_ml_aggregates(db, device, window=30)
-            except Exception:
-                pass
-            report.ai_verification_reason = _compose_ai_verification_reason(
-                verification_status=report.verification_status,
-                rule_status=report.rule_status,
-                is_flagged=report.is_flagged,
-                flag_reason=report.flag_reason,
-                ml_prediction_label=ai_label,
-                trust_score=ai_trust_score,
-                semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
-                incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
-                reporter_description=report.description,
-                context_tags=list(getattr(report, "context_tags", None) or []),
-                unified_validation=unified_validation_data,
-                scorecard=scorecard,
-                latitude=getattr(report, "latitude", None),
-                longitude=getattr(report, "longitude", None),
-                gps_accuracy=getattr(report, "gps_accuracy", None),
-                location_label=_human_location_chain_from_report(report),
-                description_credibility=_description_credibility_from_report(report),
-            )
-            report.ai_evidence_description = _compose_ai_evidence_description(
-                evidence_validations,
-                incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
-                reporter_description=report.description,
-                context_tags=list(getattr(report, "context_tags", None) or []),
-                evidence_file_count=len(evidence_validations),
-                unified_validation=unified_validation_data,
-                scorecard=scorecard,
-                verification_status=report.verification_status,
-                rule_status=report.rule_status,
-                is_flagged=report.is_flagged,
-                flag_reason=report.flag_reason,
-                ml_prediction_label=ai_label,
-                trust_score=ai_trust_score,
-                semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
-                latitude=getattr(report, "latitude", None),
-                longitude=getattr(report, "longitude", None),
-                gps_accuracy=getattr(report, "gps_accuracy", None),
-                location_label=_human_location_chain_from_report(report),
-            )
-            snapshot = _build_ai_analysis_snapshot(
-                verification_status=report.verification_status,
-                rule_status=report.rule_status,
-                is_flagged=report.is_flagged,
-                flag_reason=report.flag_reason,
-                ml_prediction_label=ai_label,
-                trust_score=ai_trust_score,
-                semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
-                incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
-                reporter_description=report.description,
-                context_tags=list(getattr(report, "context_tags", None) or []),
-                unified_validation=unified_validation_data,
-                scorecard=scorecard,
-                evidence_validations=evidence_validations,
-                evidence_file_count=len(evidence_validations),
-                latitude=getattr(report, "latitude", None),
-                longitude=getattr(report, "longitude", None),
-                gps_accuracy=getattr(report, "gps_accuracy", None),
-                location_label=_human_location_chain_from_report(report),
-            )
-            _persist_ai_analysis_snapshot(report, snapshot)
+        # Get unified validation result for priority calculation
+        unified_validation_data = (
+            unified_validation_data
+            if isinstance(unified_validation_data, dict)
+            else report.feature_vector.get('unified_validation', {}) if isinstance(report.feature_vector, dict) else {}
+        )
+        report.priority = calculate_report_priority(report, evidence_count, db, unified_validation_data)
+        votes_tmp = {"real": 0, "false": 0, "unknown": 0}
+        if isinstance(report.feature_vector, dict):
+            vv = report.feature_vector.get("community_votes", {})
+            if isinstance(vv, dict):
+                for v in vv.values():
+                    k = str(v)
+                    if k in votes_tmp:
+                        votes_tmp[k] += 1
+        scorecard = _compute_threshold_scorecard(
+            report,
+            ml_prediction=ml_prediction_tmp,
+            community_votes=votes_tmp,
+            unified_validation=unified_validation_data,
+        )
+        fv_sc = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+        fv_sc["threshold_scorecard"] = scorecard
+        report.feature_vector = _json_safe(fv_sc)
+        _apply_threshold_outcome(report, scorecard)
+        semantic_alignment_meta = None
+        if isinstance(report.feature_vector, dict):
+            semantic_alignment_meta = report.feature_vector.get("semantic_alignment")
+        ai_trust_score = (
+            float(ml_prediction_tmp.trust_score)
+            if getattr(ml_prediction_tmp, "trust_score", None) is not None
+            else None
+        )
+        ai_label = getattr(ml_prediction_tmp, "prediction_label", None)
+        ai_trust_score, ai_label = _rule_adjusted_trust_label(report, ai_trust_score, ai_label)
+        _persist_adjusted_ml_prediction(db, ml_prediction_tmp, ai_trust_score, ai_label)
+        try:
+            update_device_ml_aggregates(db, device, window=30)
+        except Exception:
+            pass
+        report.ai_verification_reason = _compose_ai_verification_reason(
+            verification_status=report.verification_status,
+            rule_status=report.rule_status,
+            is_flagged=report.is_flagged,
+            flag_reason=report.flag_reason,
+            ml_prediction_label=ai_label,
+            trust_score=ai_trust_score,
+            semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
+            incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
+            reporter_description=report.description,
+            context_tags=list(getattr(report, "context_tags", None) or []),
+            unified_validation=unified_validation_data,
+            scorecard=scorecard,
+            latitude=getattr(report, "latitude", None),
+            longitude=getattr(report, "longitude", None),
+            gps_accuracy=getattr(report, "gps_accuracy", None),
+            location_label=_human_location_chain_from_report(report),
+        )
+        report.ai_evidence_description = _compose_ai_evidence_description(
+            evidence_validations,
+            incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
+            reporter_description=report.description,
+            context_tags=list(getattr(report, "context_tags", None) or []),
+            evidence_file_count=len(evidence_validations),
+            unified_validation=unified_validation_data,
+            scorecard=scorecard,
+            verification_status=report.verification_status,
+            rule_status=report.rule_status,
+            is_flagged=report.is_flagged,
+            flag_reason=report.flag_reason,
+            ml_prediction_label=ai_label,
+            trust_score=ai_trust_score,
+            semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
+            latitude=getattr(report, "latitude", None),
+            longitude=getattr(report, "longitude", None),
+            gps_accuracy=getattr(report, "gps_accuracy", None),
+            location_label=_human_location_chain_from_report(report),
+        )
+        snapshot = _build_ai_analysis_snapshot(
+            verification_status=report.verification_status,
+            rule_status=report.rule_status,
+            is_flagged=report.is_flagged,
+            flag_reason=report.flag_reason,
+            ml_prediction_label=ai_label,
+            trust_score=ai_trust_score,
+            semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
+            incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
+            reporter_description=report.description,
+            context_tags=list(getattr(report, "context_tags", None) or []),
+            unified_validation=unified_validation_data,
+            scorecard=scorecard,
+            evidence_validations=evidence_validations,
+            evidence_file_count=len(evidence_validations),
+            latitude=getattr(report, "latitude", None),
+            longitude=getattr(report, "longitude", None),
+            gps_accuracy=getattr(report, "gps_accuracy", None),
+            location_label=_human_location_chain_from_report(report),
+        )
+        _persist_ai_analysis_snapshot(report, snapshot)
     except HTTPException:
         raise
     except Exception as e:
@@ -3883,12 +3773,6 @@ def create_report(
         from app.core.leader_notifications import notify_local_leaders_new_report_task
 
         background_tasks.add_task(notify_local_leaders_new_report_task, str(report.report_id))
-
-    from app.core.leader_workflow import report_ready_for_cases_and_hotspots
-
-    if report_ready_for_cases_and_hotspots(report):
-        background_tasks.add_task(run_auto_case_for_report, str(report.report_id))
-    background_tasks.add_task(run_hotspot_auto)
 
     return _build_report_detail_response(report, db, for_police_viewer=False)
 
@@ -4373,7 +4257,6 @@ def add_review(
         longitude=getattr(report, "longitude", None),
         gps_accuracy=getattr(report, "gps_accuracy", None),
         location_label=_human_location_chain_from_report(report),
-        description_credibility=_description_credibility_from_report(report),
     )
     validations_police = (
         report.feature_vector.get("evidence_validations")
@@ -5452,7 +5335,6 @@ async def upload_evidence(
             longitude=getattr(report_after, "longitude", None),
             gps_accuracy=getattr(report_after, "gps_accuracy", None),
             location_label=loc_chain,
-            description_credibility=_description_credibility_from_report(report_after),
         )
         snapshot_after = _build_ai_analysis_snapshot(
             verification_status=report_after.verification_status,
@@ -5748,29 +5630,25 @@ def _check_and_create_auto_case(report_id: str):
 def _try_add_to_existing_case(db: Session, report: Report, cluster_radius_km: float) -> bool:
     """Try to add report to existing compatible case.
 
-    Policy: one open case per (incident_type, station).  All verified reports
-    of the same type handled by the same station are consolidated into that
-    single case regardless of geographic spread.
+    Policy: one open case per (incident_type, station). All verified reports of
+    the same type handled by the same station are consolidated into that single
+    case regardless of geographic spread within the district.
     """
     try:
         from app.models.case import Case, CaseReport
         case_reports_table = CaseReport.__table__
 
-        # Find the single open/in-progress case for this incident type + station.
-        query = db.query(Case).filter(
-            Case.incident_type_id == report.incident_type_id,
-            Case.status.in_(["open", "assigned", "in_progress"]),
+        # Find the earliest open/in-progress case for this incident type.
+        # Station scoping is handled upstream by _create_auto_cases grouping.
+        case = (
+            db.query(Case)
+            .filter(
+                Case.incident_type_id == report.incident_type_id,
+                Case.status.in_(["open", "assigned", "in_progress"]),
+            )
+            .order_by(Case.created_at.asc())
+            .first()
         )
-        # Narrow to same station when the report carries a station assignment.
-        if report.handling_station_id:
-            # Match cases whose assigned officer belongs to the same station,
-            # or whose location_id originates from a report in that station.
-            # Simplest proxy: cases created from the same station's reports
-            # already share the same incident_type; just filter by it and
-            # pick the earliest open one.
-            pass  # station scoping handled by _create_auto_cases grouping
-
-        case = query.order_by(Case.created_at.asc()).first()
 
         if not case:
             return False
@@ -5791,7 +5669,6 @@ def _try_add_to_existing_case(db: Session, report: Report, cluster_radius_km: fl
         )
         case.report_count = (case.report_count or 0) + 1
         case.updated_at = datetime.now(timezone.utc)
-        # Escalate priority if this report is high/urgent
         if report.priority in ("high", "urgent") and case.priority == "medium":
             case.priority = "high"
         db.commit()
@@ -6046,124 +5923,90 @@ def _balance_report_workload_and_reassign(db: Session):
 
 
 def _balance_workload_and_reassign(db: Session):
-    """Smart workload balancing across multiple officers."""
-    from uuid import UUID
-
-    from app.models.case import Case
-    from app.models.police_user import PoliceUser
-    from sqlalchemy import func
-    from sqlalchemy.orm.exc import StaleDataError
-
+    """Smart workload balancing across multiple officers"""
     try:
+        from app.models.case import Case
+        from app.models.police_user import PoliceUser
+        from sqlalchemy import func
+        
+        # Get all active officers
         officers = db.query(PoliceUser).filter(
             PoliceUser.is_active == True,
-            PoliceUser.role == "officer",
+            PoliceUser.role == 'officer'
         ).all()
-
+        
         if len(officers) <= 1:
-            return
-
-        officer_ids = [o.police_user_id for o in officers]
-        case_counts = (
-            db.query(Case.assigned_to_id, func.count(Case.case_id).label("active_cases"))
-            .filter(
-                Case.status.in_(["open", "assigned", "in_progress"]),
-                Case.assigned_to_id.in_(officer_ids),
-            )
-            .group_by(Case.assigned_to_id)
-            .all()
-        )
-
-        workload = {officer_id: 0 for officer_id in officer_ids}
+            return  # No balancing needed with 0 or 1 officer
+        
+        # Get current case counts per officer
+        case_counts = db.query(
+            Case.assigned_to_id,
+            func.count(Case.case_id).label('active_cases')
+        ).filter(
+            Case.status.in_(['open', 'assigned', 'in_progress']),
+            Case.assigned_to_id.isnot(None)
+        ).group_by(Case.assigned_to_id).all()
+        
+        # Create workload dictionary
+        workload = {str(officer.police_user_id): 0 for officer in officers}
         for officer_id, count in case_counts:
-            if officer_id in workload:
-                workload[officer_id] = int(count)
-
+            workload[str(officer_id)] = count
+        
+        # Find overloaded and underloaded officers (aggressive balancing for equal distribution)
+        avg_cases = sum(workload.values()) / len(workload)
         max_cases = max(workload.values()) if workload else 0
         min_cases = min(workload.values()) if workload else 0
+        
+        # Trigger balancing if there's any imbalance (difference of 1 or more)
         if max_cases - min_cases <= 0:
-            return
-
-        overloaded_ids = [oid for oid, count in workload.items() if count > min_cases]
-        underloaded_ids = [oid for oid, count in workload.items() if count < max_cases]
-        if not overloaded_ids or not underloaded_ids:
-            return
-
-        recent_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-        candidate_cases = (
-            db.query(Case)
-            .filter(
-                Case.assigned_to_id.in_(overloaded_ids),
-                Case.status.in_(["assigned", "open", "in_progress"]),
-                Case.created_at >= recent_cutoff,
-            )
-            .order_by(Case.created_at.desc())
-            .all()
-        )
-
-        cases_by_officer: dict[int, list[Case]] = {oid: [] for oid in overloaded_ids}
-        for case in candidate_cases:
-            if case.assigned_to_id in cases_by_officer:
-                cases_by_officer[case.assigned_to_id].append(case)
-
+            return  # Already perfectly balanced
+        
+        overloaded = [oid for oid, count in workload.items() if count > min_cases]
+        underloaded = [oid for oid, count in workload.items() if count < max_cases]
+        
+        if not overloaded or not underloaded:
+            return  # No imbalance to fix
+        
+        # Reassign cases from overloaded to underloaded officers
         reassigned = 0
-        touched_case_ids: set[UUID] = set()
-
-        for overloaded_id in overloaded_ids:
-            for case in cases_by_officer.get(overloaded_id, [])[:5]:
-                if case.case_id in touched_case_ids:
-                    continue
-                if not underloaded_ids:
-                    break
-
-                target_officer_id = min(underloaded_ids, key=lambda oid: workload[oid])
-                still_exists = (
-                    db.query(Case.case_id)
-                    .filter(
-                        Case.case_id == case.case_id,
-                        Case.assigned_to_id == overloaded_id,
-                    )
-                    .first()
-                )
-                if not still_exists:
-                    db.expire(case)
-                    continue
-
-                old_officer_id = case.assigned_to_id
-                case.assigned_to_id = target_officer_id
-                case.status = "open"
-                case.updated_at = datetime.now(timezone.utc)
-                db.flush()
-
-                workload[overloaded_id] = max(0, workload.get(overloaded_id, 0) - 1)
-                workload[target_officer_id] = workload.get(target_officer_id, 0) + 1
-                touched_case_ids.add(case.case_id)
-                reassigned += 1
-
-                if workload[target_officer_id] >= min_cases:
-                    underloaded_ids = [
-                        oid for oid in underloaded_ids if workload[oid] < max_cases
-                    ]
-
-                logger.info(
-                    "Reassigned case %s from officer %s to officer %s",
-                    case.case_number,
-                    old_officer_id,
-                    target_officer_id,
-                )
-
+        for overloaded_officer in overloaded:
+            # Get cases from overloaded officer (aggressive rebalancing)
+            cases_to_reassign = db.query(Case).filter(
+                Case.assigned_to_id == overloaded_officer,
+                Case.status.in_(['assigned', 'open', 'in_progress']),  # Include more statuses
+                Case.created_at >= datetime.now(timezone.utc) - timedelta(days=7)  # Include last 7 days
+            ).order_by(Case.created_at.desc()).limit(5).all()  # Reassign up to 5 cases
+            
+            for case in cases_to_reassign:
+                if underloaded:
+                    # Find least loaded underloaded officer
+                    target_officer = min(underloaded, key=lambda oid: workload[oid])
+                    
+                    # Reassign case
+                    case.assigned_to_id = target_officer
+                    case.status = 'open'
+                    case.updated_at = datetime.now(timezone.utc)
+                    
+                    # Update workload tracking
+                    workload[overloaded_officer] -= 1
+                    workload[target_officer] += 1
+                    
+                    # Remove from underloaded if they're now balanced
+                    if workload[target_officer] >= avg_cases - 1:
+                        underloaded.remove(target_officer)
+                    
+                    reassigned += 1
+                    
+                    print(f"🔄 Reassigned case {case.case_number} from officer {overloaded_officer} to officer {target_officer}")
+        
         if reassigned > 0:
             db.commit()
-            logger.info(
-                "Workload balanced: %s cases reassigned across %s officers",
-                reassigned,
-                len(officers),
-            )
-
+            print(f" Workload balanced: {reassigned} cases reassigned across {len(officers)} officers")
+            
+            # Broadcast changes to keep clients synchronized
             try:
                 import asyncio
                 from app.api.v1.ws import manager
-
                 payload = {"type": "refresh_data", "entity": "case", "action": "reassigned"}
                 try:
                     loop = asyncio.get_running_loop()
@@ -6171,19 +6014,11 @@ def _balance_workload_and_reassign(db: Session):
                 except RuntimeError:
                     asyncio.run(manager.broadcast(payload))
             except Exception as broadcast_error:
-                logger.warning(
-                    "Could not broadcast case reassignments: %s", broadcast_error
-                )
-
-    except StaleDataError as e:
-        db.rollback()
-        logger.warning(
-            "Workload balancing skipped stale case update (case may have been deleted): %s",
-            e,
-        )
+                print(f"Warning: Could not broadcast case reassignments: {broadcast_error}")
+    
     except Exception as e:
+        print(f"Error in workload balancing: {e}")
         db.rollback()
-        logger.error("Error in workload balancing: %s", e)
 
 
 def _handle_officer_case_finalization(db: Session, officer_id: str):
@@ -6382,19 +6217,19 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
             .first()
         )
         type_name = itype.type_name if itype else f"Incident Type {report.incident_type_id}"
-
-        # Case title = incident type name; all same-type reports from same station
-        # are consolidated here as new reports arrive.
-        title = f"{type_name} Cases"
-        description = (
-            f"Auto-generated consolidated case for {type_name} incidents. "
-            f"Currently tracking {len(reports)} verified report(s). "
-            f"New reports of the same type will be added automatically."
-        )
         default_unit = None
         if itype is not None:
             raw_u = getattr(itype, "default_special_assignment_unit", None) or ""
             default_unit = raw_u.strip() or None
+
+        # Case title = incident type name. All same-type reports from the same
+        # station are consolidated here; new arrivals are appended automatically.
+        title = f"{type_name} Cases"
+        description = (
+            f"Consolidated case for {type_name} incidents. "
+            f"Currently tracking {len(reports)} verified report(s). "
+            f"New reports of the same type will be added automatically."
+        )
 
         # Collision-safe case number allocation under concurrent auto-case runs.
         case = None
@@ -6464,6 +6299,12 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
         db.commit()
         stats['cases_created'] += 1
         stats['case_number'] = case_number
+        
+        # Trigger workload balancing after case creation to ensure fair distribution
+        try:
+            _continuous_workload_balancing(db)
+        except Exception as e:
+            print(f"Warning: Could not trigger continuous workload balancing: {e}")
         print(f"Created auto-case {case.case_number} with {len(reports)} reports")
         
         # Broadcast case creation to all connected clients for real-time updates
@@ -6584,9 +6425,9 @@ def _create_auto_cases(db: Session) -> Dict[str, int]:
             len(reports_for_new_case_eval),
         )
         
-        # Group remaining reports by station + incident type.
-        # One case per (station, incident_type) — all same-type reports from the
-        # same station are consolidated into a single case regardless of village.
+        # Group remaining reports by (station, incident_type).
+        # One case per station+type — all same-type reports from the same station
+        # are consolidated into a single case regardless of village spread.
         station_type_clusters: dict = {}
         for report in reports_for_new_case_eval:
             station_key = f"{report.handling_station_id or 'none'}_{report.incident_type_id}"
@@ -6660,21 +6501,14 @@ def _create_auto_cases(db: Session) -> Dict[str, int]:
                             f"Created ONE geo-clustered case for {len(cluster)} reports of incident type {incident_type_id} within {cluster_radius_meters}m"
                         )
         
-        if stats["cases_created"] > 0:
-            try:
-                _balance_workload_and_reassign(db)
-            except Exception as balance_error:
-                logger.warning(
-                    "Workload balancing after auto-case creation failed: %s",
-                    balance_error,
-                )
-
+        if stats['cases_created'] > 0:
+            db.commit()
         return stats
-
+        
     except Exception as e:
-        logger.error("Auto-case creation error: %s", e)
-        db.rollback()
+        logger.error(f"Auto-case creation error: {e}")
         return stats
+        db.commit()
 
 
 def _automatic_incident_consolidation(db: Session, report: Report):
@@ -6919,11 +6753,6 @@ def _build_report_detail_response(
         hotspot_incident_count=getattr(report, "hotspot_incident_count", None),
         hotspot_label=getattr(report, "hotspot_label", None),
         ml_predictions=[],
-        **report_credibility_api_fields(
-            report,
-            trust_score=float(trust_score) if trust_score is not None else None,
-            evidence_count=len(getattr(report, "evidence_files", []) or []),
-        ),
     )
 
 
@@ -7066,11 +6895,6 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         leader_verification_status=getattr(report, "leader_verification_status", None),
         leader_verified_at=getattr(report, "leader_verified_at", None),
         submitted_by_local_leader_id=getattr(report, "submitted_by_local_leader_id", None),
-        **report_credibility_api_fields(
-            report,
-            trust_score=float(trust_score) if trust_score is not None else None,
-            evidence_count=len(report.evidence_files or []),
-        ),
     )
 
 
