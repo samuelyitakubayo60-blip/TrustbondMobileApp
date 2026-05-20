@@ -2,10 +2,8 @@
 -- PostgreSQL database dump
 --
 
-\restrict 7cxwegkkuEnRdwnUxBWMutIg501UoLREzRreDZehMBEgmUSqxiOxnWQIb7aefqG
-
--- Dumped from database version 18.3 (Debian 18.3-1.pgdg12+1)
--- Dumped by pg_dump version 18.2
+-- Dumped from database version 17.5 (Debian 17.5-1.pgdg110+1)
+-- Dumped by pg_dump version 17.5 (Debian 17.5-1.pgdg110+1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -20,19 +18,59 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: public; Type: SCHEMA; Schema: -; Owner: trustbond_z1r9_user
+-- Name: public; Type: SCHEMA; Schema: -; Owner: -
 --
 
 -- *not* creating schema, since initdb creates it
 
 
-ALTER SCHEMA public OWNER TO trustbond_z1r9_user;
-
 --
--- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: trustbond_z1r9_user
+-- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
 --
 
 COMMENT ON SCHEMA public IS '';
+
+
+--
+-- Name: tiger; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA tiger;
+
+
+--
+-- Name: tiger_data; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA tiger_data;
+
+
+--
+-- Name: topology; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA topology;
+
+
+--
+-- Name: SCHEMA topology; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON SCHEMA topology IS 'PostGIS Topology schema';
+
+
+--
+-- Name: fuzzystrmatch; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS fuzzystrmatch WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION fuzzystrmatch; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION fuzzystrmatch IS 'determine similarities and distance between strings';
 
 
 --
@@ -43,7 +81,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 
 
 --
--- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: 
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: -
 --
 
 COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
@@ -57,14 +95,42 @@ CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
 
 
 --
--- Name: EXTENSION postgis; Type: COMMENT; Schema: -; Owner: 
+-- Name: EXTENSION postgis; Type: COMMENT; Schema: -; Owner: -
 --
 
 COMMENT ON EXTENSION postgis IS 'PostGIS geometry and geography spatial types and functions';
 
 
 --
--- Name: assignment_status; Type: TYPE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: postgis_tiger_geocoder; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS postgis_tiger_geocoder WITH SCHEMA tiger;
+
+
+--
+-- Name: EXTENSION postgis_tiger_geocoder; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION postgis_tiger_geocoder IS 'PostGIS tiger geocoder and reverse geocoder';
+
+
+--
+-- Name: postgis_topology; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS postgis_topology WITH SCHEMA topology;
+
+
+--
+-- Name: EXTENSION postgis_topology; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION postgis_topology IS 'PostGIS topology spatial types and functions';
+
+
+--
+-- Name: assignment_status; Type: TYPE; Schema: public; Owner: -
 --
 
 CREATE TYPE public.assignment_status AS ENUM (
@@ -75,10 +141,8 @@ CREATE TYPE public.assignment_status AS ENUM (
 );
 
 
-ALTER TYPE public.assignment_status OWNER TO trustbond_z1r9_user;
-
 --
--- Name: evidence_quality; Type: TYPE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: evidence_quality; Type: TYPE; Schema: public; Owner: -
 --
 
 CREATE TYPE public.evidence_quality AS ENUM (
@@ -89,10 +153,8 @@ CREATE TYPE public.evidence_quality AS ENUM (
 );
 
 
-ALTER TYPE public.evidence_quality OWNER TO trustbond_z1r9_user;
-
 --
--- Name: hotspot_risk; Type: TYPE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: hotspot_risk; Type: TYPE; Schema: public; Owner: -
 --
 
 CREATE TYPE public.hotspot_risk AS ENUM (
@@ -103,10 +165,8 @@ CREATE TYPE public.hotspot_risk AS ENUM (
 );
 
 
-ALTER TYPE public.hotspot_risk OWNER TO trustbond_z1r9_user;
-
 --
--- Name: notification_type; Type: TYPE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: notification_type; Type: TYPE; Schema: public; Owner: -
 --
 
 CREATE TYPE public.notification_type AS ENUM (
@@ -118,10 +178,8 @@ CREATE TYPE public.notification_type AS ENUM (
 );
 
 
-ALTER TYPE public.notification_type OWNER TO trustbond_z1r9_user;
-
 --
--- Name: report_priority; Type: TYPE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: report_priority; Type: TYPE; Schema: public; Owner: -
 --
 
 CREATE TYPE public.report_priority AS ENUM (
@@ -132,10 +190,8 @@ CREATE TYPE public.report_priority AS ENUM (
 );
 
 
-ALTER TYPE public.report_priority OWNER TO trustbond_z1r9_user;
-
 --
--- Name: report_status; Type: TYPE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: report_status; Type: TYPE; Schema: public; Owner: -
 --
 
 CREATE TYPE public.report_status AS ENUM (
@@ -146,10 +202,8 @@ CREATE TYPE public.report_status AS ENUM (
 );
 
 
-ALTER TYPE public.report_status OWNER TO trustbond_z1r9_user;
-
 --
--- Name: user_role; Type: TYPE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: user_role; Type: TYPE; Schema: public; Owner: -
 --
 
 CREATE TYPE public.user_role AS ENUM (
@@ -160,10 +214,8 @@ CREATE TYPE public.user_role AS ENUM (
 );
 
 
-ALTER TYPE public.user_role OWNER TO trustbond_z1r9_user;
-
 --
--- Name: verification_status; Type: TYPE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: verification_status; Type: TYPE; Schema: public; Owner: -
 --
 
 CREATE TYPE public.verification_status AS ENUM (
@@ -174,10 +226,8 @@ CREATE TYPE public.verification_status AS ENUM (
 );
 
 
-ALTER TYPE public.verification_status OWNER TO trustbond_z1r9_user;
-
 --
--- Name: update_device_trust(); Type: FUNCTION; Schema: public; Owner: trustbond_z1r9_user
+-- Name: update_device_trust(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.update_device_trust() RETURNS trigger
@@ -212,10 +262,8 @@ END;
 $$;
 
 
-ALTER FUNCTION public.update_device_trust() OWNER TO trustbond_z1r9_user;
-
 --
--- Name: update_updated_at_column(); Type: FUNCTION; Schema: public; Owner: trustbond_z1r9_user
+-- Name: update_updated_at_column(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.update_updated_at_column() RETURNS trigger
@@ -228,14 +276,12 @@ END;
 $$;
 
 
-ALTER FUNCTION public.update_updated_at_column() OWNER TO trustbond_z1r9_user;
-
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
 
 --
--- Name: alembic_version; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: alembic_version; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.alembic_version (
@@ -243,10 +289,8 @@ CREATE TABLE public.alembic_version (
 );
 
 
-ALTER TABLE public.alembic_version OWNER TO trustbond_z1r9_user;
-
 --
--- Name: audit_logs; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: audit_logs; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.audit_logs (
@@ -268,10 +312,8 @@ CREATE TABLE public.audit_logs (
 );
 
 
-ALTER TABLE public.audit_logs OWNER TO trustbond_z1r9_user;
-
 --
--- Name: audit_logs_log_id_seq; Type: SEQUENCE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: audit_logs_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 ALTER TABLE public.audit_logs ALTER COLUMN log_id ADD GENERATED ALWAYS AS IDENTITY (
@@ -285,7 +327,7 @@ ALTER TABLE public.audit_logs ALTER COLUMN log_id ADD GENERATED ALWAYS AS IDENTI
 
 
 --
--- Name: case_reports; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: case_reports; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.case_reports (
@@ -296,10 +338,8 @@ CREATE TABLE public.case_reports (
 );
 
 
-ALTER TABLE public.case_reports OWNER TO trustbond_z1r9_user;
-
 --
--- Name: cases; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: cases; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.cases (
@@ -332,10 +372,8 @@ CREATE TABLE public.cases (
 );
 
 
-ALTER TABLE public.cases OWNER TO trustbond_z1r9_user;
-
 --
--- Name: devices; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: devices; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.devices (
@@ -357,10 +395,8 @@ CREATE TABLE public.devices (
 );
 
 
-ALTER TABLE public.devices OWNER TO trustbond_z1r9_user;
-
 --
--- Name: evidence_files; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: evidence_files; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.evidence_files (
@@ -391,10 +427,8 @@ CREATE TABLE public.evidence_files (
 );
 
 
-ALTER TABLE public.evidence_files OWNER TO trustbond_z1r9_user;
-
 --
--- Name: hotspot_reports; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: hotspot_reports; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.hotspot_reports (
@@ -403,10 +437,8 @@ CREATE TABLE public.hotspot_reports (
 );
 
 
-ALTER TABLE public.hotspot_reports OWNER TO trustbond_z1r9_user;
-
 --
--- Name: hotspots; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: hotspots; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.hotspots (
@@ -427,10 +459,8 @@ CREATE TABLE public.hotspots (
 );
 
 
-ALTER TABLE public.hotspots OWNER TO trustbond_z1r9_user;
-
 --
--- Name: hotspots_hotspot_id_seq; Type: SEQUENCE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: hotspots_hotspot_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 ALTER TABLE public.hotspots ALTER COLUMN hotspot_id ADD GENERATED ALWAYS AS IDENTITY (
@@ -444,7 +474,7 @@ ALTER TABLE public.hotspots ALTER COLUMN hotspot_id ADD GENERATED ALWAYS AS IDEN
 
 
 --
--- Name: incident_types; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: incident_types; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.incident_types (
@@ -459,10 +489,8 @@ CREATE TABLE public.incident_types (
 );
 
 
-ALTER TABLE public.incident_types OWNER TO trustbond_z1r9_user;
-
 --
--- Name: incident_types_incident_type_id_seq; Type: SEQUENCE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: incident_types_incident_type_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 ALTER TABLE public.incident_types ALTER COLUMN incident_type_id ADD GENERATED ALWAYS AS IDENTITY (
@@ -476,7 +504,7 @@ ALTER TABLE public.incident_types ALTER COLUMN incident_type_id ADD GENERATED AL
 
 
 --
--- Name: local_leader_auth_codes; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_auth_codes; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.local_leader_auth_codes (
@@ -491,10 +519,8 @@ CREATE TABLE public.local_leader_auth_codes (
 );
 
 
-ALTER TABLE public.local_leader_auth_codes OWNER TO trustbond_z1r9_user;
-
 --
--- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.local_leader_auth_codes_local_leader_auth_code_id_seq
@@ -506,30 +532,26 @@ CREATE SEQUENCE public.local_leader_auth_codes_local_leader_auth_code_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.local_leader_auth_codes_local_leader_auth_code_id_seq OWNER TO trustbond_z1r9_user;
-
 --
--- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.local_leader_auth_codes_local_leader_auth_code_id_seq OWNED BY public.local_leader_auth_codes.local_leader_auth_code_id;
 
 
 --
--- Name: local_leader_coverage_locations; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_coverage_locations; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.local_leader_coverage_locations (
-    local_leader_coverage_location_id integer CONSTRAINT local_leader_coverage_locat_local_leader_coverage_loca_not_null NOT NULL,
+    local_leader_coverage_location_id integer NOT NULL,
     local_leader_id integer NOT NULL,
     location_id integer NOT NULL
 );
 
 
-ALTER TABLE public.local_leader_coverage_locations OWNER TO trustbond_z1r9_user;
-
 --
--- Name: local_leader_coverage_locatio_local_leader_coverage_locatio_seq; Type: SEQUENCE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_coverage_locatio_local_leader_coverage_locatio_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.local_leader_coverage_locatio_local_leader_coverage_locatio_seq
@@ -541,17 +563,15 @@ CREATE SEQUENCE public.local_leader_coverage_locatio_local_leader_coverage_locat
     CACHE 1;
 
 
-ALTER SEQUENCE public.local_leader_coverage_locatio_local_leader_coverage_locatio_seq OWNER TO trustbond_z1r9_user;
-
 --
--- Name: local_leader_coverage_locatio_local_leader_coverage_locatio_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_coverage_locatio_local_leader_coverage_locatio_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.local_leader_coverage_locatio_local_leader_coverage_locatio_seq OWNED BY public.local_leader_coverage_locations.local_leader_coverage_location_id;
 
 
 --
--- Name: local_leaders; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leaders; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.local_leaders (
@@ -568,10 +588,8 @@ CREATE TABLE public.local_leaders (
 );
 
 
-ALTER TABLE public.local_leaders OWNER TO trustbond_z1r9_user;
-
 --
--- Name: local_leaders_local_leader_id_seq; Type: SEQUENCE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leaders_local_leader_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.local_leaders_local_leader_id_seq
@@ -583,17 +601,15 @@ CREATE SEQUENCE public.local_leaders_local_leader_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.local_leaders_local_leader_id_seq OWNER TO trustbond_z1r9_user;
-
 --
--- Name: local_leaders_local_leader_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leaders_local_leader_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.local_leaders_local_leader_id_seq OWNED BY public.local_leaders.local_leader_id;
 
 
 --
--- Name: locations; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: locations; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.locations (
@@ -610,10 +626,8 @@ CREATE TABLE public.locations (
 );
 
 
-ALTER TABLE public.locations OWNER TO trustbond_z1r9_user;
-
 --
--- Name: locations_location_id_seq; Type: SEQUENCE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: locations_location_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 ALTER TABLE public.locations ALTER COLUMN location_id ADD GENERATED ALWAYS AS IDENTITY (
@@ -627,7 +641,7 @@ ALTER TABLE public.locations ALTER COLUMN location_id ADD GENERATED ALWAYS AS ID
 
 
 --
--- Name: ml_predictions; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ml_predictions; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.ml_predictions (
@@ -646,10 +660,8 @@ CREATE TABLE public.ml_predictions (
 );
 
 
-ALTER TABLE public.ml_predictions OWNER TO trustbond_z1r9_user;
-
 --
--- Name: notifications; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: notifications; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.notifications (
@@ -669,10 +681,8 @@ CREATE TABLE public.notifications (
 );
 
 
-ALTER TABLE public.notifications OWNER TO trustbond_z1r9_user;
-
 --
--- Name: password_reset_codes; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: password_reset_codes; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.password_reset_codes (
@@ -684,10 +694,8 @@ CREATE TABLE public.password_reset_codes (
 );
 
 
-ALTER TABLE public.password_reset_codes OWNER TO trustbond_z1r9_user;
-
 --
--- Name: password_reset_codes_id_seq; Type: SEQUENCE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: password_reset_codes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.password_reset_codes_id_seq
@@ -699,17 +707,15 @@ CREATE SEQUENCE public.password_reset_codes_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.password_reset_codes_id_seq OWNER TO trustbond_z1r9_user;
-
 --
--- Name: password_reset_codes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: trustbond_z1r9_user
+-- Name: password_reset_codes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.password_reset_codes_id_seq OWNED BY public.password_reset_codes.id;
 
 
 --
--- Name: police_reviews; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_reviews; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.police_reviews (
@@ -727,10 +733,8 @@ CREATE TABLE public.police_reviews (
 );
 
 
-ALTER TABLE public.police_reviews OWNER TO trustbond_z1r9_user;
-
 --
--- Name: police_users; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_users; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.police_users (
@@ -756,10 +760,8 @@ CREATE TABLE public.police_users (
 );
 
 
-ALTER TABLE public.police_users OWNER TO trustbond_z1r9_user;
-
 --
--- Name: police_users_police_user_id_seq; Type: SEQUENCE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_users_police_user_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 ALTER TABLE public.police_users ALTER COLUMN police_user_id ADD GENERATED ALWAYS AS IDENTITY (
@@ -773,7 +775,7 @@ ALTER TABLE public.police_users ALTER COLUMN police_user_id ADD GENERATED ALWAYS
 
 
 --
--- Name: report_assignments; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: report_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.report_assignments (
@@ -788,10 +790,8 @@ CREATE TABLE public.report_assignments (
 );
 
 
-ALTER TABLE public.report_assignments OWNER TO trustbond_z1r9_user;
-
 --
--- Name: reports; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: reports; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.reports (
@@ -836,17 +836,15 @@ CREATE TABLE public.reports (
 );
 
 
-ALTER TABLE public.reports OWNER TO trustbond_z1r9_user;
-
 --
--- Name: COLUMN reports.context_tags; Type: COMMENT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: COLUMN reports.context_tags; Type: COMMENT; Schema: public; Owner: -
 --
 
 COMMENT ON COLUMN public.reports.context_tags IS 'Contextual tags from reporter (e.g. Night-time, Weapons involved, Multiple suspects).';
 
 
 --
--- Name: station_coverage_cells; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: station_coverage_cells; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.station_coverage_cells (
@@ -856,10 +854,8 @@ CREATE TABLE public.station_coverage_cells (
 );
 
 
-ALTER TABLE public.station_coverage_cells OWNER TO trustbond_z1r9_user;
-
 --
--- Name: station_coverage_cells_station_coverage_cell_id_seq; Type: SEQUENCE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: station_coverage_cells_station_coverage_cell_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.station_coverage_cells_station_coverage_cell_id_seq
@@ -871,17 +867,15 @@ CREATE SEQUENCE public.station_coverage_cells_station_coverage_cell_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.station_coverage_cells_station_coverage_cell_id_seq OWNER TO trustbond_z1r9_user;
-
 --
--- Name: station_coverage_cells_station_coverage_cell_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: trustbond_z1r9_user
+-- Name: station_coverage_cells_station_coverage_cell_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.station_coverage_cells_station_coverage_cell_id_seq OWNED BY public.station_coverage_cells.station_coverage_cell_id;
 
 
 --
--- Name: stations; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: stations; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.stations (
@@ -901,10 +895,8 @@ CREATE TABLE public.stations (
 );
 
 
-ALTER TABLE public.stations OWNER TO trustbond_z1r9_user;
-
 --
--- Name: stations_station_id_seq; Type: SEQUENCE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: stations_station_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 ALTER TABLE public.stations ALTER COLUMN station_id ADD GENERATED ALWAYS AS IDENTITY (
@@ -918,7 +910,7 @@ ALTER TABLE public.stations ALTER COLUMN station_id ADD GENERATED ALWAYS AS IDEN
 
 
 --
--- Name: system_config; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: system_config; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.system_config (
@@ -930,10 +922,8 @@ CREATE TABLE public.system_config (
 );
 
 
-ALTER TABLE public.system_config OWNER TO trustbond_z1r9_user;
-
 --
--- Name: user_sessions; Type: TABLE; Schema: public; Owner: trustbond_z1r9_user
+-- Name: user_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.user_sessions (
@@ -948,45 +938,43 @@ CREATE TABLE public.user_sessions (
 );
 
 
-ALTER TABLE public.user_sessions OWNER TO trustbond_z1r9_user;
-
 --
--- Name: local_leader_auth_codes local_leader_auth_code_id; Type: DEFAULT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_auth_codes local_leader_auth_code_id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.local_leader_auth_codes ALTER COLUMN local_leader_auth_code_id SET DEFAULT nextval('public.local_leader_auth_codes_local_leader_auth_code_id_seq'::regclass);
 
 
 --
--- Name: local_leader_coverage_locations local_leader_coverage_location_id; Type: DEFAULT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_coverage_locations local_leader_coverage_location_id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.local_leader_coverage_locations ALTER COLUMN local_leader_coverage_location_id SET DEFAULT nextval('public.local_leader_coverage_locatio_local_leader_coverage_locatio_seq'::regclass);
 
 
 --
--- Name: local_leaders local_leader_id; Type: DEFAULT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leaders local_leader_id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.local_leaders ALTER COLUMN local_leader_id SET DEFAULT nextval('public.local_leaders_local_leader_id_seq'::regclass);
 
 
 --
--- Name: password_reset_codes id; Type: DEFAULT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: password_reset_codes id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.password_reset_codes ALTER COLUMN id SET DEFAULT nextval('public.password_reset_codes_id_seq'::regclass);
 
 
 --
--- Name: station_coverage_cells station_coverage_cell_id; Type: DEFAULT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: station_coverage_cells station_coverage_cell_id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.station_coverage_cells ALTER COLUMN station_coverage_cell_id SET DEFAULT nextval('public.station_coverage_cells_station_coverage_cell_id_seq'::regclass);
 
 
 --
--- Data for Name: alembic_version; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: alembic_version; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.alembic_version (version_num) FROM stdin;
@@ -994,7 +982,7 @@ COPY public.alembic_version (version_num) FROM stdin;
 
 
 --
--- Data for Name: audit_logs; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: audit_logs; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.audit_logs (log_id, actor_type, actor_id, action_type, entity_type, entity_id, action_details, ip_address, user_agent, success, created_at, actor_role, masked_details, sensitivity_level) FROM stdin;
@@ -1009,30 +997,149 @@ COPY public.audit_logs (log_id, actor_type, actor_id, action_type, entity_type, 
 
 
 --
--- Data for Name: case_reports; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: case_reports; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.case_reports (case_id, report_id, added_at, added_by) FROM stdin;
-254f9582-bec4-4928-9d8c-b8d20adcf40a	079828c3-6f2b-44be-b8f0-2a5cf6202471	2026-05-10 14:55:57.487098	\N
-254f9582-bec4-4928-9d8c-b8d20adcf40a	ed3dc2d5-91cb-4107-90c0-95c2ba6cdfa7	2026-05-10 14:55:57.487098	\N
-254f9582-bec4-4928-9d8c-b8d20adcf40a	a278c066-a5dd-43bb-9d20-4ed14f0c8dce	2026-05-10 14:55:57.487098	\N
-254f9582-bec4-4928-9d8c-b8d20adcf40a	6a9b8e8b-3409-4dc1-829c-1fa62c5d3e93	2026-05-10 14:55:57.487098	\N
-8ed913fe-bb0c-4bbe-85c2-9daeb57fe241	b74ce4e2-848c-457a-87b9-ef919d1c54db	2026-05-10 15:06:44.514089	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	4fca6507-70a5-4953-889a-fe58885ef80f	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	61d9ad11-79ad-438c-88cf-7ad75fd823e4	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	1d00d3f6-2d0b-40a7-b345-39e0aa8d9eb8	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	66658237-5d9e-48d9-b903-94eb50420598	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	be9b3ccd-a2e8-43d3-97b8-4d0e73792a3e	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	41ba8864-1d44-4804-b828-cb69cd46ee1d	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	ac105b65-8376-4b66-a216-e7416b7af3f4	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	b20d17b7-2209-41cd-9ad9-371547051207	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	5eef1033-aab3-4663-8470-79fcdc8c75ad	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	afcf74ac-dab4-4032-af3d-8f3fa1ab4180	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	5e58ba28-e778-4044-b0e2-8ba3e502b1a5	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	9b529720-5e42-4f66-af44-0b77bbd4bbe3	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	fe6aadb6-e284-49c7-b0f0-9d9ce80513ae	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	0cd3f80f-39c2-4687-8c4f-30377a03de91	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	c701470d-5fcf-48ee-8342-89715e1c9e31	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	7a4e96e5-98f8-48dd-8e8d-8af76c077df4	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	0ba983ef-69ae-443a-a5e4-c65c1173a43e	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	3c1cdd3b-27e2-4988-8047-dcfcd65c67d4	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	e8283412-db82-47a4-b8b5-51ced9b592da	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	c16b2c81-f1ef-40ed-8487-5f8c78952c20	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	43c922b5-3b25-4cd3-9304-1ba0e352f0d2	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	db6f45ac-2549-4f77-82dd-a2a14f5a8d3b	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	3b873ffb-9df9-47ae-991d-ba51c0fdd5bc	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	a21f9dc5-a6bd-4e25-8edd-713c8d9dda68	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	ff211874-f382-4e5e-8ba9-36af7acf774e	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	4da8719b-9c5b-462c-9faa-9d37e248a1d7	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	521af58e-775c-49c8-b126-25fca94d953b	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	2b162d7b-eb05-40dd-86a1-ce9ea8765bd3	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	367bb793-df5e-4524-862b-a727f309d6cb	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	488a857a-f17e-4882-ac00-d152d8103282	2026-05-19 12:55:46.602748	\N
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	874e0f76-66a9-4c89-b67f-3664767de16a	2026-05-19 12:55:46.602748	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	debc3ac3-1471-4968-b832-138bb2bfa3aa	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	263dc1a6-bf49-4879-936b-b4d803736044	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	8479f8e2-d885-427f-a385-e28c74af3de4	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	81dc465d-4c4b-4527-86df-3ffa1be00899	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	27b81e6f-1aad-4ced-98ed-7d7182bc89e9	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	cb2ab766-e7df-4626-94bc-ba4274f3501a	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	0d3500ea-6e1f-4fe9-8435-a0e57632290b	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	8449550e-f9ca-45cb-83f1-b8837e28b0e9	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	8d3ed732-d698-464e-813b-d04aae3f7e5a	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	94ef45a1-e92e-44bb-965a-5a6477547241	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	561328ac-bd36-4d85-accd-68d23afd0367	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	fade6b34-7576-44aa-b1aa-c3dc755c2448	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	99fab3dd-5a63-436b-82bf-b5fc8b0f5f37	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	12c9b4bb-c718-4448-94b7-e511c514601c	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	8f5e81e4-67c1-4e2c-ab72-be0359dee24e	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	13ffd6aa-4d5e-4223-8a63-c5ed027b5701	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	657d370d-237f-42b7-8327-7260fc799839	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	13f22cb9-1d45-4dba-8fe5-41081b904d94	2026-05-19 12:55:52.846701	\N
+d466c90b-c1e2-490f-95d6-1c0354a12550	5a1dd1bb-df91-4951-9a39-ee7b5989e92b	2026-05-19 12:55:52.846701	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	b27e6bb7-1166-402b-9428-2c965c11c77d	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	aaef4b7e-b9ad-4073-be2c-ffcb61c81ecc	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	a8168200-bffd-4d4b-847c-69e1e4418b26	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	685b2c28-757c-44e9-b8be-8e1273c435ff	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	9cf848fb-a5f6-4f85-8fe7-b8a5f46e3fb9	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	7d88181b-65c4-47a8-9e1d-b1a74d5cec02	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	3dd73568-0c54-445b-9b26-31ae2aa55ed2	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	f679c63f-4d00-4ba6-bc9c-c175a4f12124	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	804515a3-79b1-4ca7-9e07-d4a06d924def	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	8259a0a7-7536-4276-9477-e8921202ccc3	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	059bfa85-f021-4703-9c06-e3f2b0ff052b	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	d0e97796-c317-4380-bc5f-5f7a5d16212e	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	b5e1d340-eb9e-45d7-a761-e56ed2fd378d	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	a9b60d0a-1675-44eb-9711-11dc2e9ed7e7	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	4bd3cbe6-96e7-40db-879e-e1253807136c	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	0df5fdc1-d660-48ba-ba0d-7ac2602e7b4f	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	b432a023-6880-402d-a1bb-3fab54effae8	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	410f4d8c-9330-45e1-9917-7400e86425fa	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	220ec952-367e-4d55-b984-b726188582d8	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	0107b6fa-6ea2-4379-98aa-3913f4127df0	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	c1a88496-8c45-4827-a01b-353fd77a79a0	2026-05-19 12:56:01.245098	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	9e573a15-c87c-4704-be6e-96cc6d460972	2026-05-19 12:56:01.245098	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	5ba5d790-9984-473d-b123-128c4c404913	2026-05-19 12:56:08.707294	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	a2dcc7fc-9366-445b-a694-36023416d620	2026-05-19 12:56:08.707294	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	4b9b9b42-c441-4952-867f-c1b5cad45a9b	2026-05-19 12:56:08.707294	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	177cd3f3-cb1d-4734-8713-0d641474a3f7	2026-05-19 12:56:08.707294	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	c8c0517a-9b70-4f20-9402-474b81828778	2026-05-19 12:56:08.707294	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	2e717511-2176-4ee5-b756-b1b847c639c9	2026-05-19 12:56:08.707294	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	f9c9a76a-b614-4739-a931-86cd208ad7c4	2026-05-19 12:56:08.707294	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	3bfb0023-830e-45cd-8de7-6321c0929221	2026-05-19 12:56:08.707294	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	6f294ecd-5940-4d82-b5b6-115ea98c655b	2026-05-19 12:56:08.707294	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	5eb53144-5b27-4caa-89d0-84eba188a8ca	2026-05-19 12:56:08.707294	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	b7b40b95-03f0-4dc2-b19c-6f13fb9d3a4a	2026-05-19 12:56:08.707294	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	35482682-9afe-4ece-a338-5133914a378c	2026-05-19 12:56:08.707294	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	f71e70fc-03f6-4974-b1b6-c18c54059881	2026-05-19 12:56:08.707294	\N
+39864d04-c7e5-4a88-94b6-a388dcc24287	7e58550c-e5ce-4f24-a819-1c82703c99cd	2026-05-19 12:56:08.707294	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	34d3bf12-4202-410b-b8c7-91d2eb5ce37f	2026-05-19 12:56:22.253502	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	454202a9-176b-4782-8110-801289df5697	2026-05-19 12:56:22.253502	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	68d5c579-68bf-41da-8103-f5f20ba7c9b6	2026-05-19 12:56:22.253502	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	e9c404f9-6ae3-47ea-9fd7-4124be2334ff	2026-05-19 12:56:22.253502	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	0929509a-02de-4a0e-9026-d94050ea9811	2026-05-19 12:56:22.253502	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	e5903ad3-798b-492e-8264-cdc976c88942	2026-05-19 12:56:22.253502	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	cec42b29-571e-481d-92af-4749dd69d0a3	2026-05-19 12:56:22.253502	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	b1dbaac7-0683-4aa6-932b-ccb5ac8e4fbb	2026-05-19 12:56:22.253502	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	fc4d219a-62f6-4f1e-92cc-d88812f65fc0	2026-05-19 12:56:22.253502	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	448fedee-e9b4-4259-b9b4-e66abb11d758	2026-05-19 12:56:22.253502	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	971d5453-7ede-4c0c-b2be-64909de63e8c	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	7fbfde89-0df5-43a2-a905-97a59870a8f8	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	bf923512-ff26-41b1-867a-c44977cc8966	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	eb2b0bba-15ad-4942-9c3d-f2a2916f11ae	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	3c81bd92-2568-4ec4-9680-4512879f6438	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	c0eb46eb-dff8-48c1-89d6-2ec53a2dd491	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	1a26d484-e69e-4f5e-8fa5-43d2e7833e81	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	7e74b351-d3f1-4d59-be2e-07f097419099	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	dd2f22a0-67f9-4523-83e1-665b3a108ce4	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	d9a429b2-5ece-4821-adc1-d30e2e731376	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	675857fc-907b-4ffc-9eb8-5e5bbb011169	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	dd7a12ba-3e8a-4576-8feb-34216be7446c	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	b8055d3b-ddc7-4152-8a72-adb6f28858aa	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	d1b846b8-4104-4a0f-a898-ae8067435897	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	69b392fb-24e1-4bfe-a34f-7585ac9b7831	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	50ffa3cd-3c59-4ae5-990a-a556f63cdd76	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	dca91abe-5b7a-41a1-9e1b-c19d2d265e58	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	80268a4e-f890-43f6-b596-38b15b5f8187	2026-05-19 12:56:04.130543	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	97c01e9d-34bf-4ec7-a90f-b5244c3eef4a	2026-05-19 12:56:04.130543	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	b74ce4e2-848c-457a-87b9-ef919d1c54db	2026-05-19 12:55:35.984386	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	079828c3-6f2b-44be-b8f0-2a5cf6202471	2026-05-19 12:55:39.905131	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	ed3dc2d5-91cb-4107-90c0-95c2ba6cdfa7	2026-05-19 12:55:39.905131	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	a278c066-a5dd-43bb-9d20-4ed14f0c8dce	2026-05-19 12:55:39.905131	\N
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	6a9b8e8b-3409-4dc1-829c-1fa62c5d3e93	2026-05-19 12:55:39.905131	\N
 \.
 
 
 --
--- Data for Name: cases; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: cases; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.cases (case_id, case_number, title, description, incident_type_id, priority, status, assigned_to, assigned_by, created_by, created_at, updated_at, closed_at, closure_notes, latitude, longitude, location_id, report_count, assigned_to_id, opened_at, outcome, special_assignment_unit, rib_handed_over_at, rib_handover_summary, rib_handover_prerequisites_acknowledged) FROM stdin;
-254f9582-bec4-4928-9d8c-b8d20adcf40a	CASE-2026-0002	Incident Type 4 case - Multiple Reports	Auto-generated case from 4 verified reports	4	medium	open	\N	\N	1	2026-05-10 14:55:58.529147	2026-05-10 14:59:12.294509	\N	\N	-1.5055785	29.6386186	282	4	6	2026-05-10 14:55:57.487098+00		\N	\N	\N	f
-8ed913fe-bb0c-4bbe-85c2-9daeb57fe241	CASE-2026-0003	Incident Type 1 case - Single Report	Auto-generated case from 1 verified report	1	medium	open	\N	\N	1	2026-05-10 15:06:45.36673	2026-05-10 15:06:45.366737	\N	\N	-1.5500000	29.6300000	301	1	27	2026-05-10 15:06:44.514089+00	\N	\N	\N	\N	f
+27316bb4-2d1f-45c9-a044-0e57c3a4f40d	CASE-2026-0003	Traffic Incident Cases	Consolidated case for Traffic Incident incidents. Currently tracking 31 verified report(s). New reports of the same type will be added automatically.	9	high	open	\N	\N	1	2026-05-19 12:55:49.518321	2026-05-19 12:55:49.518323	\N	\N	-1.4790771	29.6225916	292	31	6	2026-05-19 12:55:46.602748+00	\N	\N	\N	\N	f
+d466c90b-c1e2-490f-95d6-1c0354a12550	CASE-2026-0004	Vandalism Cases	Consolidated case for Vandalism incidents. Currently tracking 19 verified report(s). New reports of the same type will be added automatically.	3	high	open	\N	\N	1	2026-05-19 12:55:55.888203	2026-05-19 12:56:33.361772	\N	\N	-1.4827577	29.6342529	133	19	28	2026-05-19 12:55:52.846701+00	\N	\N	\N	\N	f
+9c918772-0b74-495c-95d8-7f9bf8355372	CASE-2026-0006	Theft Cases	Consolidated case for Theft incidents. Currently tracking 23 verified report(s). New reports of the same type will be added automatically.	1	high	open	\N	\N	1	2026-05-19 12:56:05.118325	2026-05-19 12:56:36.007071	\N	\N	-1.4604368	29.5931478	231	23	6	2026-05-19 12:56:01.245098+00	\N	\N	\N	\N	f
+39864d04-c7e5-4a88-94b6-a388dcc24287	CASE-2026-0008	Domestic Violence Cases	Consolidated case for Domestic Violence incidents. Currently tracking 14 verified report(s). New reports of the same type will be added automatically.	5	high	open	\N	\N	1	2026-05-19 12:56:11.847547	2026-05-19 12:56:36.007071	\N	\N	-1.4819495	29.6288520	286	14	28	2026-05-19 12:56:08.707294+00	\N	\N	\N	\N	f
+3970f0b9-b3d6-4ebb-bae9-8991922f4612	CASE-2026-0010	Suspicious Activity Cases	Consolidated case for Suspicious Activity incidents. Currently tracking 14 verified report(s). New reports of the same type will be added automatically.	4	high	open	\N	\N	1	2026-05-19 12:56:25.491876	2026-05-19 12:56:36.007071	\N	\N	-1.4681155	29.6227350	279	14	6	2026-05-19 12:56:22.253502+00	\N	\N	\N	\N	f
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	CASE-2026-0007	Assault Cases	Consolidated case for Assault incidents. Currently tracking 19 verified report(s). New reports of the same type will be added automatically.	2	high	open	\N	\N	1	2026-05-19 12:56:07.332738	2026-05-19 12:56:36.007071	\N	\N	-1.4618780	29.5914127	241	19	6	2026-05-19 12:56:04.130543+00	\N	\N	\N	\N	f
 \.
 
 
 --
--- Data for Name: devices; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: devices; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.devices (device_id, device_hash, first_seen_at, last_seen_at, total_reports, trusted_reports, flagged_reports, spam_flags, device_trust_score, is_blacklisted, blacklist_reason, metadata, is_banned, mobile_token, sector_location_id) FROM stdin;
@@ -1041,41 +1148,262 @@ COPY public.devices (device_id, device_hash, first_seen_at, last_seen_at, total_
 1e743b98-3caf-44da-b28d-b9fbdb06e483	d58a8252c224235ed403748fe8240fe19ee68706802c36639297c9883662b5f7	2026-05-06 16:34:15.653608	2026-05-06 16:37:20.546107	1	0	0	0	0.50	f	\N	{"ml": {"window": 30, "fake_rate": 0.0, "distribution": {"fake": 0, "uncertain": 0, "suspicious": 0, "likely_real": 0}, "avg_confidence": null, "model_versions": [], "avg_trust_score": null, "last_confidence": null, "suspicious_rate": 0.0, "last_prediction_at": null}, "behavior": {"spam_signal": 0, "behavior_score": 50.0, "confirmation_rate": 0.5, "location_diversity": 0.5, "location_quality_score": 50.0}, "trust_formula": {"weights": {"history": 0.2608695652173913, "spam_penalty": 0.1739130434782609, "location_quality": 0.13043478260869565, "confirmation_rate": 0.3478260869565218, "location_diversity": 0.08695652173913045}, "computed_score": 52.5}, "location_history": [], "last_aggregate_update_at": "2026-05-06T16:37:23.469964+00:00"}	f	\N	\N
 e2deed05-da6f-4d16-9b7a-db365fac29d5	1de3e75f68c2ec3a1a9870c90ef33169949c51af4bd97b7e44e3322138884ded	2026-05-01 15:41:30.414263	\N	0	0	0	0	70.00	f	\N	{"ml": {"window": 30, "fake_rate": 0.0, "distribution": {"fake": 0, "uncertain": 0, "suspicious": 0, "likely_real": 0}, "avg_confidence": null, "model_versions": [], "avg_trust_score": null, "last_confidence": null, "suspicious_rate": 0.0, "last_prediction_at": null}, "behavior": {"spam_signal": 0, "behavior_score": 50.0, "confirmation_rate": 0.5, "location_diversity": 0.0}, "trust_formula": {"weights": {"history": 0.2608695652173913, "spam_penalty": 0.1739130434782609, "location_quality": 0.13043478260869565, "confirmation_rate": 0.3478260869565218, "location_diversity": 0.08695652173913045}, "computed_score": 54.35}, "last_aggregate_update_at": "2026-05-01T21:18:06.910710+00:00"}	f	\N	\N
 b293449d-20ed-4145-9ca8-7020ae0966f2	793e84d58c9a49ecc9fe71cdec0f1a30d1f5b93e10c969a5d83fe606623baa23	2026-05-01 16:42:29.628433	\N	0	0	0	0	70.00	f	\N	{"ml": {"window": 30, "fake_rate": 0.0, "distribution": {"fake": 0, "uncertain": 0, "suspicious": 0, "likely_real": 0}, "avg_confidence": null, "model_versions": [], "avg_trust_score": null, "last_confidence": null, "suspicious_rate": 0.0, "last_prediction_at": null}, "behavior": {"spam_signal": 0, "behavior_score": 50.0, "confirmation_rate": 0.5, "location_diversity": 0.0}, "trust_formula": {"weights": {"history": 0.2608695652173913, "spam_penalty": 0.1739130434782609, "location_quality": 0.13043478260869565, "confirmation_rate": 0.3478260869565218, "location_diversity": 0.08695652173913045}, "computed_score": 54.35}, "last_aggregate_update_at": "2026-05-01T21:18:10.238235+00:00"}	f	\N	\N
+00ef4c2d-c9d2-48e6-8901-b7f57ba1c51f	24f313cd7a2618868bf8c0b5d598fe0fdfd366e016c118342627b6bb7d2779e2	2026-04-16 12:16:48.951408	2026-05-17 12:57:42	8	8	0	0	85.00	f	\N	\N	f	\N	\N
+1178321c-e412-4be5-9a52-3d0b1a3a762d	5b7b091d08dca13c04e95e21475875c4b607abcf63a303715432bd4b8a106c3b	2026-01-22 12:16:48.948801	2026-05-16 10:57:55	6	6	0	0	72.00	f	\N	\N	f	\N	\N
+185101d1-a6c0-4efc-8266-dec4f87af389	7ef5f1afe2933db44d113c3df44df2506f82cc3dd87cae52bce04ca19ee638b2	2026-02-03 12:16:48.946932	2026-05-17 22:17:14	7	7	0	0	76.50	f	\N	\N	f	\N	\N
+22e6fd3f-4c6d-490a-b73a-3266ea52faf2	7f59c1622907b3385ac6e9d1414ae9d9b48c72665a11208fbdeb490a6a6ace27	2026-04-18 12:16:48.942641	2026-05-12 11:56:19	6	6	0	0	74.00	f	\N	\N	f	\N	\N
+2659dc6a-7b14-4e2a-81a3-0c9a58395056	dfe55fb385ee077862ed767ef115a7af9ad39735272cfb2a6598210b96b89f79	2026-04-08 12:16:48.945483	2026-05-09 19:58:03	4	4	0	0	84.00	f	\N	\N	f	\N	\N
+2be85ca7-3ad3-482f-9aa5-35f08f6041a3	9f01c5b1662958d905e3b1819e66377a9125059f33902f3efbf8cb928d01046b	2026-02-13 12:16:48.940929	2026-05-16 17:55:58	3	3	0	0	59.50	f	\N	\N	f	\N	\N
+3acb63d9-4e1c-4de3-a57f-ad994dcde4e8	60bd30f5e53e1843052fef7fa8ea5700eb47b9d468e538658ba1325de08bf5e4	2026-02-23 12:16:48.946389	2026-05-17 12:11:13	4	4	0	0	78.00	f	\N	\N	f	\N	\N
+3af0b36c-8921-4a19-8217-a5920f4e83ef	c4a477a898e79c6b24bebf8b8a30581d2547448e44046d8facb604e344af4a55	2026-04-22 12:16:48.943083	2026-05-09 16:29:00	5	5	0	0	75.50	f	\N	\N	f	\N	\N
+5cc9fa7d-305b-487d-abec-3212c0be094a	ecaf89db4330f44315845aa9c14f6cc2b4cb61f05cdcdcf5f58acd25f3303394	2026-03-12 12:16:48.944559	2026-05-13 17:09:00	6	6	0	0	83.00	f	\N	\N	f	\N	\N
+634821ae-59a5-4bf8-b64d-939c3b2d1717	6fe43fed01b89c73dc7690b2291db3271c7e05df9cca7e3cbe5580ea20cff286	2026-01-31 12:16:48.943588	2026-05-13 10:23:00	4	4	0	0	77.00	f	\N	\N	f	\N	\N
+6751960b-edf7-4947-9103-60411f4a4f73	de759c4e09a2c5cdf9dc1c4be51711a2dfefe5fc8c4615a9307e655ffcc3b4ad	2026-03-13 12:16:48.947845	2026-05-13 13:18:29	3	3	0	0	79.50	f	\N	\N	f	\N	\N
+72b42191-3da3-4df1-9b49-86f6dfea2578	c2ba55fb981b7f2ff04bbda1b9958f64aaf838d391727c317e9e2f3d0b222a1c	2026-05-02 12:16:48.94156	2026-05-12 17:01:03	3	3	0	0	62.50	f	\N	\N	f	\N	\N
+7dc6f614-fc40-4e31-937f-a0ea3195ecd4	d33cecde344d1ef27290049cea0fc69aa03d6d03b356d99cc6f0dd67f99eef53	2026-02-05 12:16:48.950476	2026-05-08 17:23:15	4	4	0	0	70.00	f	\N	\N	f	\N	\N
+82a10997-3687-4c21-a393-a56f861d1b44	f7b2b83316516df7f300489d42f1ca189798173acfdaa592d555f9a8a8079a22	2026-02-05 12:16:48.947402	2026-05-16 15:00:52	4	4	0	0	75.00	f	\N	\N	f	\N	\N
+93da6e1b-5cca-4577-afdd-c9f6b7e4e0d9	3f8476f33fd108f97bf9f13f6fcc9e838ac3a38334c1bee972623df8458c09df	2026-05-02 12:16:48.94506	2026-05-13 07:14:57	4	4	0	0	82.00	f	\N	\N	f	\N	\N
+98b07cbf-4272-4f34-88a3-ae992c605640	6e816b60367b2bbf0c713f7748d5c414abc14cd052e1a8a4ff35c5cf63ce37a9	2026-01-22 12:16:48.949737	2026-05-13 18:29:00	8	8	0	0	91.00	f	\N	\N	f	\N	\N
+9c4c15be-6111-44d6-b52d-b167dfd3565d	bcc5ee3dff02f8bc3d0432ba7d21afbff364c1b66b8dc264a5d2ab33476b3e0b	2026-03-23 12:16:48.950958	2026-05-17 08:33:13	15	15	0	0	82.00	f	\N	\N	f	\N	\N
+ab5d0550-2350-4ac8-8d37-95607e267bb4	855bd5aaa88ca305311719b08ac0fd52fd7cfc79f23cf971affe5fef3f9dfa46	2026-04-04 12:16:48.942105	2026-05-18 22:13:41	8	8	0	0	74.00	f	\N	\N	f	\N	\N
+ababc889-2467-42cc-8cee-3645e74ad622	b9a4e25096a52fa2cbd4ce30f393306e1f46b3352ce25a5861759bd3eb6aa1f3	2026-03-02 12:16:48.945953	2026-05-09 16:04:00	4	4	0	0	86.00	f	\N	\N	f	\N	\N
+e697bd51-052a-4832-9506-2d6a26968d36	8bdfd7ebf901e7f5fa2a8bb805b5ab6fc26136da56318ac52c7542142adbfb1c	2026-04-24 12:16:48.94409	2026-05-05 15:33:00	4	4	0	0	79.00	f	\N	\N	f	\N	\N
+e739dea9-68c2-48f6-abfd-ae05173eecbe	49899a99987c3bb06ec5bbf816ad9a0f48c610137f97951b74323d9c3cfb9ef9	2026-03-09 12:16:48.948291	2026-05-13 18:29:00	2	2	0	0	80.00	f	\N	\N	f	\N	\N
+fd9eb538-6fe2-4009-a7ad-69f66c2e8243	3281dc8b0b9713583fd16a686296b4823ff36cfd341326c6a3c44d7763d7726b	2026-05-05 12:16:48.949247	2026-04-30 12:05:20	3	3	0	0	74.50	f	\N	\N	f	\N	\N
 \.
 
 
 --
--- Data for Name: evidence_files; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: evidence_files; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.evidence_files (evidence_id, report_id, file_url, file_type, file_size, duration, media_latitude, media_longitude, captured_at, uploaded_at, is_live_capture, perceptual_hash, blur_score, tamper_score, quality_label, ai_checked_at, cloudinary_public_id, cloudinary_url, ground_truth_label, evidence_verified_by, evidence_verified_at, verification_confidence, used_for_evidence_training) FROM stdin;
 727fb0b3-e903-454e-803b-daa119f98353	5fc6e0b5-625b-4f37-8c3a-4cfe887b721f	https://res.cloudinary.com/dfofgjnys/image/upload/v1778003776/trustbond/evidence/fwgvjogy5jkxjeowubpr.jpg	photo	1447065	\N	-1.5042908	29.6380502	2026-05-05 19:49:11	2026-05-05 17:56:16.209354	t	b8722ec8a6e30a47f362314c2f0593265142354df74ad5ff8aa0e14d5be8984a	2.203	0.644	fair	2026-05-05 17:56:17.054305	trustbond/evidence/fwgvjogy5jkxjeowubpr	https://res.cloudinary.com/dfofgjnys/image/upload/v1778003776/trustbond/evidence/fwgvjogy5jkxjeowubpr.jpg	\N	\N	\N	\N	f
+5fca633b-c756-4296-9d2c-a0b0dd6a8ddd	4fca6507-70a5-4953-889a-fe58885ef80f	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/4fca6507/img_0001.jpg	photo	614638	\N	-1.5029786	29.6189032	2026-05-13 09:43:00	2026-05-13 09:45:00	t	\N	0.061	0.074	good	2026-05-13 09:45:00	evidence/4fca6507/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/4fca6507/evidence_0001.jpg	real	\N	\N	83.66	f
+7f65a45c-55c4-4dac-b40a-0bb971373dd1	4fca6507-70a5-4953-889a-fe58885ef80f	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/4fca6507/capture_0002.jpg	photo	3176316	\N	-1.5030478	29.6188759	2026-05-13 09:29:00	2026-05-13 09:45:00	t	\N	0.092	0.049	good	2026-05-13 09:45:00	evidence/4fca6507/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/4fca6507/evidence_0002.jpg	real	\N	\N	85.71	f
+8807eaeb-e849-453b-83b3-6ca4cbf538c3	1d00d3f6-2d0b-40a7-b345-39e0aa8d9eb8	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/1d00d3f6/img_0001.jpg	photo	1018512	\N	-1.5032434	29.6195051	2026-05-13 10:05:00	2026-05-13 10:23:00	t	\N	0.078	0.047	good	2026-05-13 10:23:00	evidence/1d00d3f6/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/1d00d3f6/img_0001.jpg	real	\N	\N	94.72	f
+f8b14041-2b5c-4eb3-96fe-5b127e00dda5	66658237-5d9e-48d9-b903-94eb50420598	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/66658237/capture_0001.jpg	photo	2187333	\N	-1.5034983	29.6191828	2026-05-13 09:45:00	2026-05-13 09:53:00	t	\N	0.123	0.040	good	2026-05-13 09:53:00	evidence/66658237/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/66658237/evidence_0001.jpg	real	\N	\N	78.98	f
+4f05cff7-3b4b-4d94-89e9-24605974c0d4	66658237-5d9e-48d9-b903-94eb50420598	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/66658237/img_0002.jpg	photo	2168716	\N	-1.5033908	29.6193236	2026-05-13 09:49:00	2026-05-13 09:53:00	t	\N	0.069	0.023	good	2026-05-13 09:53:00	evidence/66658237/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/66658237/img_0002.jpg	real	\N	\N	85.59	f
+3c5db237-ad98-488f-a106-5b921102ee80	66658237-5d9e-48d9-b903-94eb50420598	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/66658237/capture_0003.jpg	photo	1527764	\N	-1.5033615	29.6191785	2026-05-13 09:44:00	2026-05-13 09:53:00	t	\N	0.187	0.070	good	2026-05-13 09:53:00	evidence/66658237/img_0003	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/66658237/evidence_0003.jpg	real	\N	\N	95.99	f
+374ca7dd-267b-43d1-a393-b02cc54a1806	be9b3ccd-a2e8-43d3-97b8-4d0e73792a3e	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/be9b3ccd/img_0001.jpg	photo	718570	\N	-1.5028265	29.6189210	2026-05-13 10:13:00	2026-05-13 10:30:00	t	\N	0.082	0.052	fair	2026-05-13 10:30:00	evidence/be9b3ccd/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/be9b3ccd/img_0001.jpg	real	\N	\N	85.27	f
+f80d4aaf-ff1f-4ff1-aa02-ea2a3ad9bd7e	41ba8864-1d44-4804-b828-cb69cd46ee1d	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/41ba8864/capture_0001.jpg	photo	768531	\N	-1.5044879	29.6691215	2026-05-05 15:28:00	2026-05-05 15:33:00	t	\N	0.077	0.068	fair	2026-05-05 15:33:00	evidence/41ba8864/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/41ba8864/evidence_0001.jpg	real	\N	\N	95.71	f
+7ff2e4dc-8025-4a2b-8165-763a2ee1d07c	41ba8864-1d44-4804-b828-cb69cd46ee1d	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/41ba8864/img_0002.jpg	photo	3281221	\N	-1.5045003	29.6691074	2026-05-05 15:16:00	2026-05-05 15:33:00	t	\N	0.163	0.076	good	2026-05-05 15:33:00	evidence/41ba8864/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/41ba8864/img_0002.jpg	real	\N	\N	94.01	f
+23ba36e7-edde-409f-b0b3-f6217627a3e9	ac105b65-8376-4b66-a216-e7416b7af3f4	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/ac105b65/evidence_0001.jpg	photo	1101150	\N	-1.5050397	29.6691434	2026-05-05 15:24:00	2026-05-05 15:43:00	t	\N	0.112	0.075	fair	2026-05-05 15:43:00	evidence/ac105b65/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/ac105b65/img_0001.jpg	real	\N	\N	94.18	f
+ca2b5cb6-ef88-4646-b6f5-ee1510549844	ac105b65-8376-4b66-a216-e7416b7af3f4	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/ac105b65/evidence_0002.jpg	photo	1526603	\N	-1.5049923	29.6692058	2026-05-05 15:36:00	2026-05-05 15:43:00	t	\N	0.145	0.071	fair	2026-05-05 15:43:00	evidence/ac105b65/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/ac105b65/evidence_0002.jpg	real	\N	\N	80.78	f
+5eef3132-d3fa-40f9-aeb7-0840df2dfccd	b20d17b7-2209-41cd-9ad9-371547051207	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/b20d17b7/img_0001.jpg	photo	3723567	\N	-1.5049302	29.6695544	2026-05-05 15:20:00	2026-05-05 15:29:00	t	\N	0.118	0.079	good	2026-05-05 15:29:00	evidence/b20d17b7/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/b20d17b7/img_0001.jpg	real	\N	\N	80.08	f
+4880b4d3-73b0-4c42-9d5b-25d472453bef	b20d17b7-2209-41cd-9ad9-371547051207	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/b20d17b7/img_0002.jpg	photo	2915169	\N	-1.5047935	29.6694792	2026-05-05 15:20:00	2026-05-05 15:29:00	t	\N	0.068	0.040	fair	2026-05-05 15:29:00	evidence/b20d17b7/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/b20d17b7/capture_0002.jpg	real	\N	\N	85.86	f
+96022a38-b814-45ed-9b2c-fcd239b85bb9	5eef1033-aab3-4663-8470-79fcdc8c75ad	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/5eef1033/evidence_0001.jpg	photo	2867000	\N	-1.5043802	29.6696424	2026-05-05 16:37:00	2026-05-05 16:43:00	t	\N	0.050	0.030	good	2026-05-05 16:43:00	evidence/5eef1033/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/5eef1033/evidence_0001.jpg	real	\N	\N	88.92	f
+9793ecb7-f521-490c-b3b7-c88c7915de5b	5eef1033-aab3-4663-8470-79fcdc8c75ad	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/5eef1033/capture_0002.jpg	photo	2332984	\N	-1.5043520	29.6695756	2026-05-05 16:32:00	2026-05-05 16:43:00	t	\N	0.130	0.073	fair	2026-05-05 16:43:00	evidence/5eef1033/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/5eef1033/img_0002.jpg	real	\N	\N	89.86	f
+3d31e19e-e654-44e3-9c71-92c9ee3b142d	debc3ac3-1471-4968-b832-138bb2bfa3aa	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/debc3ac3/capture_0001.jpg	photo	690631	\N	-1.4678899	29.6446197	2026-05-13 16:52:00	2026-05-13 17:09:00	t	\N	0.071	0.019	good	2026-05-13 17:09:00	evidence/debc3ac3/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/debc3ac3/evidence_0001.jpg	real	\N	\N	95.78	f
+01d9cf17-8dd1-4ef6-8252-777f41ed6339	8479f8e2-d885-427f-a385-e28c74af3de4	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/8479f8e2/evidence_0001.jpg	photo	1172247	\N	-1.4678635	29.6441467	2026-05-13 18:16:00	2026-05-13 18:29:00	t	\N	0.217	0.047	fair	2026-05-13 18:29:00	evidence/8479f8e2/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/8479f8e2/evidence_0001.jpg	real	\N	\N	88.16	f
+1e2befe1-72f9-4777-b9d2-6a52de96d1ee	afcf74ac-dab4-4032-af3d-8f3fa1ab4180	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/afcf74ac/img_0001.jpg	photo	2853693	\N	-1.4949898	29.6359932	2026-05-05 14:00:00	2026-05-05 14:20:00	t	\N	0.123	0.036	good	2026-05-05 14:20:00	evidence/afcf74ac/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/afcf74ac/capture_0001.jpg	real	\N	\N	78.23	f
+461cecf9-adac-4fef-a5aa-9bb4e990493b	afcf74ac-dab4-4032-af3d-8f3fa1ab4180	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/afcf74ac/capture_0002.jpg	photo	922662	\N	-1.4950596	29.6359962	2026-05-05 14:06:00	2026-05-05 14:20:00	t	\N	0.202	0.042	good	2026-05-05 14:20:00	evidence/afcf74ac/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/afcf74ac/img_0002.jpg	real	\N	\N	91.21	f
+ce175d1a-2f81-4cde-ae5b-7742084402ae	5e58ba28-e778-4044-b0e2-8ba3e502b1a5	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/5e58ba28/img_0001.jpg	photo	839086	\N	-1.4952044	29.6354997	2026-05-05 14:48:00	2026-05-05 15:05:00	t	\N	0.144	0.027	good	2026-05-05 15:05:00	evidence/5e58ba28/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/5e58ba28/evidence_0001.jpg	real	\N	\N	86.83	f
+ba756a60-23a9-480d-8446-cbc708df92be	5e58ba28-e778-4044-b0e2-8ba3e502b1a5	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/5e58ba28/img_0002.jpg	photo	1714113	\N	-1.4952084	29.6355568	2026-05-05 15:04:00	2026-05-05 15:05:00	t	\N	0.102	0.051	good	2026-05-05 15:05:00	evidence/5e58ba28/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/5e58ba28/evidence_0002.jpg	real	\N	\N	84.19	f
+6f640225-db82-44ff-be91-3e965138bbcc	5e58ba28-e778-4044-b0e2-8ba3e502b1a5	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/5e58ba28/capture_0003.jpg	photo	1955600	\N	-1.4951121	29.6354726	2026-05-05 14:47:00	2026-05-05 15:05:00	t	\N	0.093	0.018	good	2026-05-05 15:05:00	evidence/5e58ba28/img_0003	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/5e58ba28/img_0003.jpg	real	\N	\N	91.37	f
+023bb3e4-5374-4670-a8f1-bf1be3453320	9b529720-5e42-4f66-af44-0b77bbd4bbe3	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/9b529720/img_0001.jpg	photo	1538971	\N	-1.4954921	29.6357334	2026-05-05 14:48:00	2026-05-05 14:54:00	t	\N	0.190	0.038	good	2026-05-05 14:54:00	evidence/9b529720/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/9b529720/evidence_0001.jpg	real	\N	\N	90.36	f
+0f033a96-047e-4908-a8d7-b89a12b8b465	9b529720-5e42-4f66-af44-0b77bbd4bbe3	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/9b529720/img_0002.jpg	photo	2840720	\N	-1.4954905	29.6356548	2026-05-05 14:49:00	2026-05-05 14:54:00	t	\N	0.092	0.049	good	2026-05-05 14:54:00	evidence/9b529720/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/9b529720/evidence_0002.jpg	real	\N	\N	92.23	f
+8b394ef9-6903-4758-b8c3-4eb60bfe91ac	0cd3f80f-39c2-4687-8c4f-30377a03de91	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/0cd3f80f/img_0001.jpg	photo	2988347	\N	-1.4953912	29.6361622	2026-05-05 14:35:00	2026-05-05 14:50:00	t	\N	0.105	0.028	good	2026-05-05 14:50:00	evidence/0cd3f80f/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/0cd3f80f/evidence_0001.jpg	real	\N	\N	93.05	f
+7755000c-c800-4251-9645-21ce8f430a20	0cd3f80f-39c2-4687-8c4f-30377a03de91	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/0cd3f80f/evidence_0002.jpg	photo	567012	\N	-1.4951993	29.6362103	2026-05-05 14:31:00	2026-05-05 14:50:00	t	\N	0.096	0.013	fair	2026-05-05 14:50:00	evidence/0cd3f80f/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/0cd3f80f/capture_0002.jpg	real	\N	\N	87.34	f
+63cab69b-75a1-4783-b18e-13776380ffa0	b27e6bb7-1166-402b-9428-2c965c11c77d	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/b27e6bb7/evidence_0001.jpg	photo	1125801	\N	-1.4586147	29.5180810	2026-05-09 16:25:00	2026-05-09 16:29:00	t	\N	0.137	0.029	fair	2026-05-09 16:29:00	evidence/b27e6bb7/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/b27e6bb7/capture_0001.jpg	real	\N	\N	82.39	f
+0b059059-815b-4c41-ae4a-95cdffc3dc6f	aaef4b7e-b9ad-4073-be2c-ffcb61c81ecc	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/aaef4b7e/capture_0001.jpg	photo	663070	\N	-1.4591791	29.5176838	2026-05-09 15:38:00	2026-05-09 15:46:00	t	\N	0.205	0.037	fair	2026-05-09 15:46:00	evidence/aaef4b7e/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/aaef4b7e/evidence_0001.jpg	real	\N	\N	95.65	f
+688ea932-4f39-4e78-8db0-431b10052fab	aaef4b7e-b9ad-4073-be2c-ffcb61c81ecc	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/aaef4b7e/img_0002.jpg	photo	1009515	\N	-1.4591423	29.5177073	2026-05-09 15:30:00	2026-05-09 15:46:00	t	\N	0.198	0.071	good	2026-05-09 15:46:00	evidence/aaef4b7e/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/aaef4b7e/evidence_0002.jpg	real	\N	\N	94.39	f
+5a956fbf-9d8d-44ad-bd4f-1e65ca2b1d3f	a8168200-bffd-4d4b-847c-69e1e4418b26	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/a8168200/img_0001.jpg	photo	672900	\N	-1.4587098	29.5182859	2026-05-09 15:54:00	2026-05-09 16:04:00	t	\N	0.111	0.040	good	2026-05-09 16:04:00	evidence/a8168200/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/a8168200/capture_0001.jpg	real	\N	\N	88.19	f
+35d6e8c9-2b6e-41f9-9c06-5431f1de1cd1	a8168200-bffd-4d4b-847c-69e1e4418b26	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/a8168200/img_0002.jpg	photo	1214294	\N	-1.4587588	29.5184488	2026-05-09 15:58:00	2026-05-09 16:04:00	t	\N	0.155	0.027	fair	2026-05-09 16:04:00	evidence/a8168200/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/a8168200/img_0002.jpg	real	\N	\N	82.18	f
+44db1231-3292-4fdb-bf40-5e34b64bf196	685b2c28-757c-44e9-b8be-8e1273c435ff	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/685b2c28/capture_0001.jpg	photo	513965	\N	-1.4585532	29.5179637	2026-05-09 16:05:00	2026-05-09 16:18:00	t	\N	0.177	0.013	good	2026-05-09 16:18:00	evidence/685b2c28/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/685b2c28/capture_0001.jpg	real	\N	\N	92.99	f
+f2beae9c-282a-4919-a576-e9c3e8b393ae	685b2c28-757c-44e9-b8be-8e1273c435ff	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/685b2c28/img_0002.jpg	photo	3026215	\N	-1.4585060	29.5178703	2026-05-09 16:08:00	2026-05-09 16:18:00	t	\N	0.082	0.028	fair	2026-05-09 16:18:00	evidence/685b2c28/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/685b2c28/evidence_0002.jpg	real	\N	\N	90.26	f
+39093bc0-1740-4190-ba2e-3782963269d6	685b2c28-757c-44e9-b8be-8e1273c435ff	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/685b2c28/evidence_0003.jpg	photo	887535	\N	-1.4584857	29.5179558	2026-05-09 16:13:00	2026-05-09 16:18:00	t	\N	0.103	0.041	good	2026-05-09 16:18:00	evidence/685b2c28/img_0003	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/685b2c28/evidence_0003.jpg	real	\N	\N	80.37	f
+05cb0756-3c09-47de-ac66-d7e84f5e796b	7d88181b-65c4-47a8-9e1d-b1a74d5cec02	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/7d88181b/evidence_0001.jpg	photo	1049016	\N	-1.4377318	29.5490290	2026-05-04 16:11:00	2026-05-04 16:19:00	t	\N	0.211	0.059	good	2026-05-04 16:19:00	evidence/7d88181b/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/7d88181b/evidence_0001.jpg	real	\N	\N	91.36	f
+456f40f3-6e44-4f58-b20d-3e0941c26d3c	7d88181b-65c4-47a8-9e1d-b1a74d5cec02	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/7d88181b/capture_0002.jpg	photo	3226941	\N	-1.4377897	29.5490527	2026-05-04 16:14:00	2026-05-04 16:19:00	t	\N	0.119	0.077	good	2026-05-04 16:19:00	evidence/7d88181b/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/7d88181b/capture_0002.jpg	real	\N	\N	81.91	f
+270b6150-2af1-4740-ad05-1cb3d11a7466	7d88181b-65c4-47a8-9e1d-b1a74d5cec02	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/7d88181b/img_0003.jpg	photo	2001215	\N	-1.4377896	29.5490919	2026-05-04 16:04:00	2026-05-04 16:19:00	t	\N	0.143	0.078	good	2026-05-04 16:19:00	evidence/7d88181b/img_0003	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/7d88181b/capture_0003.jpg	real	\N	\N	82.97	f
+f1ceefea-4c3a-41ab-8c39-261c48ec3bbf	3dd73568-0c54-445b-9b26-31ae2aa55ed2	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/3dd73568/img_0001.jpg	photo	542328	\N	-1.4375937	29.5490689	2026-05-04 16:25:00	2026-05-04 16:26:00	t	\N	0.150	0.011	good	2026-05-04 16:26:00	evidence/3dd73568/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/3dd73568/img_0001.jpg	real	\N	\N	91.35	f
+6e6c4351-45d6-4289-a7fa-692f6e86f649	3dd73568-0c54-445b-9b26-31ae2aa55ed2	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/3dd73568/img_0002.jpg	photo	3607546	\N	-1.4376526	29.5490009	2026-05-04 16:09:00	2026-05-04 16:26:00	t	\N	0.112	0.052	good	2026-05-04 16:26:00	evidence/3dd73568/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/3dd73568/img_0002.jpg	real	\N	\N	95.02	f
+f4c0dd4f-1d12-43bd-9d0b-abd277a6ee9b	f679c63f-4d00-4ba6-bc9c-c175a4f12124	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/f679c63f/evidence_0001.jpg	photo	1381872	\N	-1.4376847	29.5484897	2026-05-04 16:23:00	2026-05-04 16:41:00	t	\N	0.120	0.068	good	2026-05-04 16:41:00	evidence/f679c63f/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/f679c63f/evidence_0001.jpg	real	\N	\N	79.71	f
+aad341a1-ac81-48db-b846-d722cd11af1d	f679c63f-4d00-4ba6-bc9c-c175a4f12124	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/f679c63f/capture_0002.jpg	photo	3269664	\N	-1.4377197	29.5485028	2026-05-04 16:27:00	2026-05-04 16:41:00	t	\N	0.167	0.043	good	2026-05-04 16:41:00	evidence/f679c63f/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/f679c63f/img_0002.jpg	real	\N	\N	79.68	f
+919c10b7-8e2c-4dff-bc43-0fd217453791	804515a3-79b1-4ca7-9e07-d4a06d924def	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/804515a3/img_0001.jpg	photo	2279827	\N	-1.4369076	29.5487807	2026-05-04 15:19:00	2026-05-04 15:38:00	t	\N	0.189	0.053	good	2026-05-04 15:38:00	evidence/804515a3/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/804515a3/img_0001.jpg	real	\N	\N	88.96	f
+3ab7636c-c293-47b2-bac1-4a571c0f7ca7	5ba5d790-9984-473d-b123-128c4c404913	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/5ba5d790/capture_0001.jpg	photo	3026261	\N	-1.4975318	29.6434571	2026-05-17 08:19:13	2026-05-17 08:33:13	t	\N	0.178	0.018	good	2026-05-17 08:33:13	evidence/5ba5d790/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/5ba5d790/capture_0001.jpg	real	\N	\N	90.21	f
+05389084-72c1-4256-9606-1f3f2653d94c	a2dcc7fc-9366-445b-a694-36023416d620	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/a2dcc7fc/capture_0001.jpg	photo	963072	\N	-1.4703432	29.6839945	2026-05-07 09:20:45	2026-05-07 09:34:45	t	\N	0.079	0.076	good	2026-05-07 09:34:45	evidence/a2dcc7fc/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/a2dcc7fc/evidence_0001.jpg	real	\N	\N	94.56	f
+bef0eb5d-37a2-40d8-8c8d-d256eaf624f3	a2dcc7fc-9366-445b-a694-36023416d620	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/a2dcc7fc/capture_0002.jpg	photo	924022	\N	-1.4703755	29.6839190	2026-05-07 09:31:45	2026-05-07 09:34:45	t	\N	0.139	0.038	good	2026-05-07 09:34:45	evidence/a2dcc7fc/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/a2dcc7fc/capture_0002.jpg	real	\N	\N	81.99	f
+6dd29bf3-629a-440d-bb8b-38419979f7b1	971d5453-7ede-4c0c-b2be-64909de63e8c	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/971d5453/evidence_0001.jpg	photo	791178	\N	-1.4494768	29.5413352	2026-05-14 09:37:40	2026-05-14 09:49:40	t	\N	0.060	0.068	good	2026-05-14 09:49:40	evidence/971d5453/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/971d5453/img_0001.jpg	real	\N	\N	89.07	f
+080049da-51f3-488c-90ce-a4352bfb13e0	971d5453-7ede-4c0c-b2be-64909de63e8c	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/971d5453/capture_0002.jpg	photo	2420753	\N	-1.4494228	29.5414356	2026-05-14 09:32:40	2026-05-14 09:49:40	t	\N	0.176	0.013	fair	2026-05-14 09:49:40	evidence/971d5453/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/971d5453/evidence_0002.jpg	real	\N	\N	89.73	f
+07c28dee-423d-4005-a817-9f29fc01ae75	cb2ab766-e7df-4626-94bc-ba4274f3501a	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/cb2ab766/img_0001.jpg	photo	3386005	\N	-1.4635712	29.6523912	2026-05-17 12:05:13	2026-05-17 12:11:13	t	\N	0.078	0.041	good	2026-05-17 12:11:13	evidence/cb2ab766/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/cb2ab766/evidence_0001.jpg	real	\N	\N	90.95	f
+568dd540-4381-413f-9cda-3f85a5212dfd	7a4e96e5-98f8-48dd-8e8d-8af76c077df4	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/7a4e96e5/capture_0001.jpg	photo	864674	\N	-1.4331663	29.5871318	2026-04-16 15:05:52	2026-04-16 15:10:52	t	\N	0.127	0.034	good	2026-04-16 15:10:52	evidence/7a4e96e5/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/7a4e96e5/img_0001.jpg	real	\N	\N	85.14	f
+7be14487-6448-4006-880b-f8708be53d99	7a4e96e5-98f8-48dd-8e8d-8af76c077df4	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/7a4e96e5/img_0002.jpg	photo	2099698	\N	-1.4331566	29.5871624	2026-04-16 14:58:52	2026-04-16 15:10:52	t	\N	0.055	0.075	fair	2026-04-16 15:10:52	evidence/7a4e96e5/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/7a4e96e5/evidence_0002.jpg	real	\N	\N	84.04	f
+d4bf89dc-b386-4a36-bbfb-37f1d8582303	7a4e96e5-98f8-48dd-8e8d-8af76c077df4	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/7a4e96e5/img_0003.jpg	photo	640655	\N	-1.4332982	29.5872534	2026-04-16 15:05:52	2026-04-16 15:10:52	t	\N	0.168	0.020	fair	2026-04-16 15:10:52	evidence/7a4e96e5/img_0003	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/7a4e96e5/capture_0003.jpg	real	\N	\N	89.08	f
+28f7ae96-9158-4681-be21-e34baf35322a	34d3bf12-4202-410b-b8c7-91d2eb5ce37f	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/34d3bf12/img_0001.jpg	photo	2686453	\N	-1.5094877	29.6331168	2026-04-09 13:55:53	2026-04-09 14:07:53	t	\N	0.136	0.011	fair	2026-04-09 14:07:53	evidence/34d3bf12/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/34d3bf12/img_0001.jpg	real	\N	\N	89.44	f
+3375dce5-7c1a-4c75-bd4c-712d1f327c63	7fbfde89-0df5-43a2-a905-97a59870a8f8	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/7fbfde89/capture_0001.jpg	photo	1977258	\N	-1.4735540	29.6233524	2026-04-19 02:23:40	2026-04-19 02:30:40	t	\N	0.161	0.029	fair	2026-04-19 02:30:40	evidence/7fbfde89/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/7fbfde89/capture_0001.jpg	real	\N	\N	94.01	f
+fd14d329-2cfd-4ac0-9ccd-83adc03eb28c	bf923512-ff26-41b1-867a-c44977cc8966	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/bf923512/img_0001.jpg	photo	1078860	\N	-1.4084561	29.5579427	2026-04-30 11:59:20	2026-04-30 12:05:20	t	\N	0.124	0.019	good	2026-04-30 12:05:20	evidence/bf923512/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/bf923512/evidence_0001.jpg	real	\N	\N	84.59	f
+a6a106f6-0a3d-4d82-8d76-d165e45ecd95	8259a0a7-7536-4276-9477-e8921202ccc3	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/8259a0a7/img_0001.jpg	photo	3340218	\N	-1.5137308	29.6450317	2026-05-07 14:09:58	2026-05-07 14:24:58	t	\N	0.164	0.060	good	2026-05-07 14:24:58	evidence/8259a0a7/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/8259a0a7/capture_0001.jpg	real	\N	\N	94.04	f
+1e5229c7-e80c-414a-b2ee-38e7435a364d	8259a0a7-7536-4276-9477-e8921202ccc3	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/8259a0a7/evidence_0002.jpg	photo	3456126	\N	-1.5137388	29.6449619	2026-05-07 14:18:58	2026-05-07 14:24:58	t	\N	0.185	0.046	good	2026-05-07 14:24:58	evidence/8259a0a7/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/8259a0a7/img_0002.jpg	real	\N	\N	92.26	f
+a6542ff4-3b42-4a10-8732-a2142f0e749c	8259a0a7-7536-4276-9477-e8921202ccc3	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/8259a0a7/capture_0003.jpg	photo	590243	\N	-1.5138521	29.6449488	2026-05-07 14:16:58	2026-05-07 14:24:58	t	\N	0.129	0.079	good	2026-05-07 14:24:58	evidence/8259a0a7/img_0003	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/8259a0a7/img_0003.jpg	real	\N	\N	79.18	f
+c5a1cd3f-6780-43b0-a8b1-d09b0c4e78da	0d3500ea-6e1f-4fe9-8435-a0e57632290b	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/0d3500ea/capture_0001.jpg	photo	1005002	\N	-1.4629979	29.6528503	2026-04-11 08:50:27	2026-04-11 09:08:27	t	\N	0.066	0.055	good	2026-04-11 09:08:27	evidence/0d3500ea/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/0d3500ea/evidence_0001.jpg	real	\N	\N	80.78	f
+2920fd57-b30b-4521-992d-2b79da7e758f	454202a9-176b-4782-8110-801289df5697	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/454202a9/evidence_0001.jpg	photo	1928589	\N	-1.4345233	29.5875391	2026-04-14 11:08:30	2026-04-14 11:19:30	t	\N	0.113	0.049	good	2026-04-14 11:19:30	evidence/454202a9/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/454202a9/capture_0001.jpg	real	\N	\N	80.21	f
+83cd6d5e-4449-450a-9ab2-d090a6f9b5da	454202a9-176b-4782-8110-801289df5697	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/454202a9/img_0002.jpg	photo	1070883	\N	-1.4346990	29.5875710	2026-04-14 11:04:30	2026-04-14 11:19:30	t	\N	0.115	0.053	good	2026-04-14 11:19:30	evidence/454202a9/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/454202a9/img_0002.jpg	real	\N	\N	92.64	f
+496e4a2e-58da-44b4-a1f2-1867c8eb45b7	eb2b0bba-15ad-4942-9c3d-f2a2916f11ae	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/eb2b0bba/evidence_0001.jpg	photo	1296443	\N	-1.5133932	29.6465433	2026-04-26 06:59:31	2026-04-26 07:18:31	t	\N	0.116	0.042	good	2026-04-26 07:18:31	evidence/eb2b0bba/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/eb2b0bba/evidence_0001.jpg	real	\N	\N	90.25	f
+378b5f42-3597-48a8-b5b6-b2d3ea846ef7	eb2b0bba-15ad-4942-9c3d-f2a2916f11ae	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/eb2b0bba/img_0002.jpg	photo	885511	\N	-1.5133870	29.6466445	2026-04-26 07:14:31	2026-04-26 07:18:31	t	\N	0.108	0.076	fair	2026-04-26 07:18:31	evidence/eb2b0bba/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/eb2b0bba/img_0002.jpg	real	\N	\N	88.84	f
+b4bc087d-8fa7-4ea3-9e96-4161bc4f8e25	8449550e-f9ca-45cb-83f1-b8837e28b0e9	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/8449550e/evidence_0001.jpg	photo	1434385	\N	-1.4967218	29.6315375	2026-04-11 12:34:32	2026-04-11 12:53:32	t	\N	0.079	0.054	good	2026-04-11 12:53:32	evidence/8449550e/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/8449550e/capture_0001.jpg	real	\N	\N	80.66	f
+da54b94d-6102-441e-8f9d-671496378880	68d5c579-68bf-41da-8103-f5f20ba7c9b6	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/68d5c579/img_0001.jpg	photo	1728285	\N	-1.4303535	29.5467241	2026-05-10 15:25:20	2026-05-10 15:35:20	t	\N	0.167	0.044	good	2026-05-10 15:35:20	evidence/68d5c579/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/68d5c579/evidence_0001.jpg	real	\N	\N	94.81	f
+7c53f8db-5930-4a19-bfda-c73588facb99	68d5c579-68bf-41da-8103-f5f20ba7c9b6	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/68d5c579/capture_0002.jpg	photo	991177	\N	-1.4303930	29.5466918	2026-05-10 15:26:20	2026-05-10 15:35:20	t	\N	0.202	0.038	good	2026-05-10 15:35:20	evidence/68d5c579/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/68d5c579/img_0002.jpg	real	\N	\N	83.23	f
+83a8f6ce-da01-4dc4-8e45-9cdbc30bc236	4b9b9b42-c441-4952-867f-c1b5cad45a9b	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/4b9b9b42/capture_0001.jpg	photo	1827074	\N	-1.5077644	29.6251118	2026-05-03 10:35:57	2026-05-03 10:42:57	t	\N	0.181	0.056	good	2026-05-03 10:42:57	evidence/4b9b9b42/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/4b9b9b42/evidence_0001.jpg	real	\N	\N	91.02	f
+15fa7fa1-6e8e-4734-a0aa-1a0a236818cf	4b9b9b42-c441-4952-867f-c1b5cad45a9b	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/4b9b9b42/img_0002.jpg	photo	2232736	\N	-1.5076451	29.6251351	2026-05-03 10:40:57	2026-05-03 10:42:57	t	\N	0.206	0.080	good	2026-05-03 10:42:57	evidence/4b9b9b42/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/4b9b9b42/capture_0002.jpg	real	\N	\N	81.35	f
+bbfa57f7-82af-4124-a726-1c88d37335d6	3c81bd92-2568-4ec4-9680-4512879f6438	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/3c81bd92/img_0001.jpg	photo	1069768	\N	-1.4523178	29.6487247	2026-04-19 11:47:07	2026-04-19 11:51:07	t	\N	0.051	0.037	good	2026-04-19 11:51:07	evidence/3c81bd92/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/3c81bd92/capture_0001.jpg	real	\N	\N	95.17	f
+49fbb730-618e-4e77-b1b3-7dbabfdd9264	0ba983ef-69ae-443a-a5e4-c65c1173a43e	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/0ba983ef/img_0001.jpg	photo	2684134	\N	-1.4228360	29.5631410	2026-04-08 20:58:23	2026-04-08 21:18:23	t	\N	0.063	0.049	good	2026-04-08 21:18:23	evidence/0ba983ef/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/0ba983ef/evidence_0001.jpg	real	\N	\N	94.25	f
+09d01d1a-78fc-4cec-8f17-454935990c70	0ba983ef-69ae-443a-a5e4-c65c1173a43e	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/0ba983ef/evidence_0002.jpg	photo	2730915	\N	-1.4228954	29.5630658	2026-04-08 21:11:23	2026-04-08 21:18:23	t	\N	0.138	0.018	good	2026-04-08 21:18:23	evidence/0ba983ef/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/0ba983ef/evidence_0002.jpg	real	\N	\N	86.80	f
+e419b863-6eb3-4eaa-bc1b-0d68c4c9b665	059bfa85-f021-4703-9c06-e3f2b0ff052b	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/059bfa85/capture_0001.jpg	photo	816592	\N	-1.5133049	29.6387140	2026-04-11 07:14:22	2026-04-11 07:27:22	t	\N	0.142	0.056	good	2026-04-11 07:27:22	evidence/059bfa85/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/059bfa85/img_0001.jpg	real	\N	\N	95.87	f
+feeb8724-221f-400d-a7c9-4766f34cc15c	059bfa85-f021-4703-9c06-e3f2b0ff052b	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/059bfa85/evidence_0002.jpg	photo	1014132	\N	-1.5132959	29.6386262	2026-04-11 07:14:22	2026-04-11 07:27:22	t	\N	0.051	0.012	good	2026-04-11 07:27:22	evidence/059bfa85/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/059bfa85/evidence_0002.jpg	real	\N	\N	90.94	f
+dde4f62b-fc82-4c17-a44f-c4f153404a2d	d0e97796-c317-4380-bc5f-5f7a5d16212e	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/d0e97796/capture_0001.jpg	photo	2902104	\N	-1.4884920	29.6381650	2026-05-05 07:19:02	2026-05-05 07:38:02	t	\N	0.105	0.031	good	2026-05-05 07:38:02	evidence/d0e97796/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/d0e97796/evidence_0001.jpg	real	\N	\N	87.38	f
+4dcb977d-07f7-4ca4-8f16-4428e4626b9a	d0e97796-c317-4380-bc5f-5f7a5d16212e	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/d0e97796/capture_0002.jpg	photo	1634079	\N	-1.4885994	29.6382202	2026-05-05 07:24:02	2026-05-05 07:38:02	t	\N	0.200	0.074	good	2026-05-05 07:38:02	evidence/d0e97796/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/d0e97796/capture_0002.jpg	real	\N	\N	88.01	f
+a8026f0d-df82-4245-bbab-dccb2a12f105	c0eb46eb-dff8-48c1-89d6-2ec53a2dd491	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/c0eb46eb/evidence_0001.jpg	photo	645874	\N	-1.4543135	29.5270541	2026-05-09 19:38:03	2026-05-09 19:58:03	t	\N	0.179	0.061	good	2026-05-09 19:58:03	evidence/c0eb46eb/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/c0eb46eb/capture_0001.jpg	real	\N	\N	81.76	f
+d7cb9362-70c8-4176-aa13-0d204829dd59	8d3ed732-d698-464e-813b-d04aae3f7e5a	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/8d3ed732/capture_0001.jpg	photo	2800756	\N	-1.5077956	29.6271499	2026-04-30 13:33:41	2026-04-30 13:34:41	t	\N	0.121	0.021	good	2026-04-30 13:34:41	evidence/8d3ed732/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/8d3ed732/capture_0001.jpg	real	\N	\N	88.26	f
+9c0c8f52-2f31-4119-97ff-cd52bc86b914	8d3ed732-d698-464e-813b-d04aae3f7e5a	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/8d3ed732/capture_0002.jpg	photo	2789562	\N	-1.5078516	29.6271711	2026-04-30 13:26:41	2026-04-30 13:34:41	t	\N	0.094	0.068	fair	2026-04-30 13:34:41	evidence/8d3ed732/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/8d3ed732/evidence_0002.jpg	real	\N	\N	91.31	f
+eadf94b7-9db3-4140-a930-9b26d9e7556a	8d3ed732-d698-464e-813b-d04aae3f7e5a	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/8d3ed732/img_0003.jpg	photo	3553469	\N	-1.5078236	29.6270680	2026-04-30 13:19:41	2026-04-30 13:34:41	t	\N	0.172	0.044	fair	2026-04-30 13:34:41	evidence/8d3ed732/img_0003	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/8d3ed732/evidence_0003.jpg	real	\N	\N	95.83	f
+63beabb5-30f9-4b9f-bcbc-8e6f8e2161c8	1a26d484-e69e-4f5e-8fa5-43d2e7833e81	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/1a26d484/img_0001.jpg	photo	928859	\N	-1.4639473	29.6836348	2026-04-19 12:25:40	2026-04-19 12:39:40	t	\N	0.091	0.053	good	2026-04-19 12:39:40	evidence/1a26d484/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/1a26d484/capture_0001.jpg	real	\N	\N	82.81	f
+3e857db3-2780-45ac-bbfe-639db904d892	1a26d484-e69e-4f5e-8fa5-43d2e7833e81	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/1a26d484/img_0002.jpg	photo	2044691	\N	-1.4639390	29.6836218	2026-04-19 12:26:40	2026-04-19 12:39:40	t	\N	0.091	0.059	good	2026-04-19 12:39:40	evidence/1a26d484/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/1a26d484/img_0002.jpg	real	\N	\N	89.77	f
+a3c4fb3f-52ba-497f-bf38-7f435f1364d1	b5e1d340-eb9e-45d7-a761-e56ed2fd378d	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/b5e1d340/img_0001.jpg	photo	1735258	\N	-1.4072350	29.5572043	2026-05-16 10:44:55	2026-05-16 10:57:55	t	\N	0.192	0.037	fair	2026-05-16 10:57:55	evidence/b5e1d340/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/b5e1d340/capture_0001.jpg	real	\N	\N	84.91	f
+be71ef11-7976-4b9f-a502-e81fc5b5c662	b5e1d340-eb9e-45d7-a761-e56ed2fd378d	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/b5e1d340/evidence_0002.jpg	photo	3517362	\N	-1.4072518	29.5573053	2026-05-16 10:52:55	2026-05-16 10:57:55	t	\N	0.109	0.017	good	2026-05-16 10:57:55	evidence/b5e1d340/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/b5e1d340/img_0002.jpg	real	\N	\N	84.13	f
+0a764d70-c219-43b5-9d1d-0bf1059b4f4f	177cd3f3-cb1d-4734-8713-0d641474a3f7	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/177cd3f3/img_0001.jpg	photo	1035774	\N	-1.5136249	29.6458830	2026-05-13 19:09:51	2026-05-13 19:18:51	t	\N	0.145	0.046	good	2026-05-13 19:18:51	evidence/177cd3f3/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/177cd3f3/img_0001.jpg	real	\N	\N	84.37	f
+318a240a-32b1-45e8-bace-7d9a12663194	177cd3f3-cb1d-4734-8713-0d641474a3f7	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/177cd3f3/evidence_0002.jpg	photo	2988377	\N	-1.5134855	29.6459695	2026-05-13 19:15:51	2026-05-13 19:18:51	t	\N	0.052	0.039	fair	2026-05-13 19:18:51	evidence/177cd3f3/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/177cd3f3/evidence_0002.jpg	real	\N	\N	94.22	f
+3e0b0237-47dc-4934-900a-f8e8af15d6a4	e9c404f9-6ae3-47ea-9fd7-4124be2334ff	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/e9c404f9/evidence_0001.jpg	photo	3396267	\N	-1.4843146	29.6595682	2026-04-25 10:04:46	2026-04-25 10:15:46	t	\N	0.214	0.078	good	2026-04-25 10:15:46	evidence/e9c404f9/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/e9c404f9/evidence_0001.jpg	real	\N	\N	89.39	f
+bcf53d42-fb45-494a-bc93-ceca45fec2bf	c8c0517a-9b70-4f20-9402-474b81828778	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/c8c0517a/evidence_0001.jpg	photo	2161098	\N	-1.4374371	29.5792615	2026-04-20 19:37:44	2026-04-20 19:53:44	t	\N	0.198	0.039	good	2026-04-20 19:53:44	evidence/c8c0517a/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/c8c0517a/capture_0001.jpg	real	\N	\N	90.63	f
+f35115f9-03be-43fd-93e7-ee15cc5d4356	c8c0517a-9b70-4f20-9402-474b81828778	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/c8c0517a/evidence_0002.jpg	photo	3156722	\N	-1.4373611	29.5790987	2026-04-20 19:35:44	2026-04-20 19:53:44	t	\N	0.092	0.057	good	2026-04-20 19:53:44	evidence/c8c0517a/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/c8c0517a/evidence_0002.jpg	real	\N	\N	78.80	f
+b163c7e8-5eb2-4e85-a983-d063ad7ec803	7e74b351-d3f1-4d59-be2e-07f097419099	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/7e74b351/capture_0001.jpg	photo	889460	\N	-1.4962652	29.6486567	2026-04-25 13:37:43	2026-04-25 13:49:43	t	\N	0.104	0.031	fair	2026-04-25 13:49:43	evidence/7e74b351/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/7e74b351/img_0001.jpg	real	\N	\N	78.41	f
+99034f97-4f1f-4d6f-b27a-3e8dea776497	0929509a-02de-4a0e-9026-d94050ea9811	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/0929509a/img_0001.jpg	photo	2399105	\N	-1.4555501	29.6571209	2026-05-07 09:31:27	2026-05-07 09:42:27	t	\N	0.133	0.078	good	2026-05-07 09:42:27	evidence/0929509a/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/0929509a/capture_0001.jpg	real	\N	\N	89.00	f
+95073a52-52c2-449f-9211-f0396a7d09b7	dd2f22a0-67f9-4523-83e1-665b3a108ce4	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/dd2f22a0/img_0001.jpg	photo	2512597	\N	-1.4463801	29.5846291	2026-05-09 15:14:38	2026-05-09 15:26:38	t	\N	0.214	0.045	good	2026-05-09 15:26:38	evidence/dd2f22a0/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/dd2f22a0/evidence_0001.jpg	real	\N	\N	86.85	f
+78650adc-698c-460e-afe0-3916251e177d	dd2f22a0-67f9-4523-83e1-665b3a108ce4	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/dd2f22a0/capture_0002.jpg	photo	1181511	\N	-1.4463909	29.5844722	2026-05-09 15:11:38	2026-05-09 15:26:38	t	\N	0.179	0.030	good	2026-05-09 15:26:38	evidence/dd2f22a0/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/dd2f22a0/evidence_0002.jpg	real	\N	\N	83.20	f
+9d78659e-6cd0-466b-a59b-dbe2dc567682	4bd3cbe6-96e7-40db-879e-e1253807136c	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/4bd3cbe6/evidence_0001.jpg	photo	3704934	\N	-1.4555516	29.6485804	2026-04-22 21:14:55	2026-04-22 21:17:55	t	\N	0.097	0.076	good	2026-04-22 21:17:55	evidence/4bd3cbe6/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/4bd3cbe6/capture_0001.jpg	real	\N	\N	83.89	f
+6e27c2a8-5314-4421-b577-be0e5c3a871c	3c1cdd3b-27e2-4988-8047-dcfcd65c67d4	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/3c1cdd3b/evidence_0001.jpg	photo	1746115	\N	-1.4068039	29.5577351	2026-04-27 15:03:36	2026-04-27 15:08:36	t	\N	0.097	0.056	good	2026-04-27 15:08:36	evidence/3c1cdd3b/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/3c1cdd3b/capture_0001.jpg	real	\N	\N	89.96	f
+c2247fb7-3b35-4560-a85a-d9289c65310d	3c1cdd3b-27e2-4988-8047-dcfcd65c67d4	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/3c1cdd3b/img_0002.jpg	photo	2142377	\N	-1.4067105	29.5576937	2026-04-27 15:02:36	2026-04-27 15:08:36	t	\N	0.178	0.040	good	2026-04-27 15:08:36	evidence/3c1cdd3b/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/3c1cdd3b/img_0002.jpg	real	\N	\N	78.02	f
+81442778-d203-4308-94eb-b048484c6087	e8283412-db82-47a4-b8b5-51ced9b592da	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/e8283412/evidence_0001.jpg	photo	2971122	\N	-1.4571042	29.6569436	2026-05-13 10:22:38	2026-05-13 10:38:38	t	\N	0.052	0.035	good	2026-05-13 10:38:38	evidence/e8283412/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/e8283412/capture_0001.jpg	real	\N	\N	93.49	f
+dd5403c3-0d4e-4d69-b337-3407f08c9cc7	e8283412-db82-47a4-b8b5-51ced9b592da	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/e8283412/capture_0002.jpg	photo	2012650	\N	-1.4570091	29.6568004	2026-05-13 10:19:38	2026-05-13 10:38:38	t	\N	0.130	0.079	good	2026-05-13 10:38:38	evidence/e8283412/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/e8283412/evidence_0002.jpg	real	\N	\N	79.22	f
+eeae9498-6479-46bc-8872-54f547b5ca26	94ef45a1-e92e-44bb-965a-5a6477547241	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/94ef45a1/img_0001.jpg	photo	2381579	\N	-1.4397624	29.5278550	2026-05-01 07:51:32	2026-05-01 08:05:32	t	\N	0.163	0.056	good	2026-05-01 08:05:32	evidence/94ef45a1/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/94ef45a1/img_0001.jpg	real	\N	\N	90.74	f
+bfb1a8c3-d5e8-4222-819c-4ac36065dfad	94ef45a1-e92e-44bb-965a-5a6477547241	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/94ef45a1/img_0002.jpg	photo	2562106	\N	-1.4396943	29.5279486	2026-05-01 08:04:32	2026-05-01 08:05:32	t	\N	0.183	0.060	good	2026-05-01 08:05:32	evidence/94ef45a1/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/94ef45a1/img_0002.jpg	real	\N	\N	91.50	f
+dec44ea7-eb4e-4516-9f2f-eda38ddc21d8	0df5fdc1-d660-48ba-ba0d-7ac2602e7b4f	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/0df5fdc1/evidence_0001.jpg	photo	2772435	\N	-1.4825500	29.6801381	2026-05-14 20:48:18	2026-05-14 20:55:18	t	\N	0.051	0.039	good	2026-05-14 20:55:18	evidence/0df5fdc1/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/0df5fdc1/capture_0001.jpg	real	\N	\N	89.45	f
+84a8da79-48ca-490f-96f3-3d0e0038e5d9	fade6b34-7576-44aa-b1aa-c3dc755c2448	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/fade6b34/img_0001.jpg	photo	862574	\N	-1.5099978	29.6335251	2026-05-09 08:17:29	2026-05-09 08:28:29	t	\N	0.117	0.013	good	2026-05-09 08:28:29	evidence/fade6b34/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/fade6b34/img_0001.jpg	real	\N	\N	78.56	f
+8f67feca-2eba-4454-8020-0358f3d72811	c16b2c81-f1ef-40ed-8487-5f8c78952c20	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/c16b2c81/capture_0001.jpg	photo	3518483	\N	-1.4639013	29.6851502	2026-04-08 21:46:37	2026-04-08 22:05:37	t	\N	0.166	0.022	good	2026-04-08 22:05:37	evidence/c16b2c81/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/c16b2c81/img_0001.jpg	real	\N	\N	82.95	f
+ff4075bb-5b16-4e09-a8e4-5c7b008428d3	f9c9a76a-b614-4739-a931-86cd208ad7c4	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/f9c9a76a/img_0001.jpg	photo	2458387	\N	-1.4480245	29.5812977	2026-05-03 17:42:34	2026-05-03 17:51:34	t	\N	0.220	0.078	good	2026-05-03 17:51:34	evidence/f9c9a76a/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/f9c9a76a/evidence_0001.jpg	real	\N	\N	82.34	f
+dccf0007-144e-4e8d-b352-0375dbaeed18	f9c9a76a-b614-4739-a931-86cd208ad7c4	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/f9c9a76a/evidence_0002.jpg	photo	714497	\N	-1.4479776	29.5813339	2026-05-03 17:33:34	2026-05-03 17:51:34	t	\N	0.148	0.079	good	2026-05-03 17:51:34	evidence/f9c9a76a/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/f9c9a76a/img_0002.jpg	real	\N	\N	81.17	f
+a3072103-c4b7-4e80-9499-80dccc6757d0	43c922b5-3b25-4cd3-9304-1ba0e352f0d2	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/43c922b5/img_0001.jpg	photo	2687440	\N	-1.5086969	29.6176284	2026-04-17 05:58:14	2026-04-17 06:03:14	t	\N	0.114	0.076	good	2026-04-17 06:03:14	evidence/43c922b5/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/43c922b5/img_0001.jpg	real	\N	\N	84.06	f
+0f7d53a6-26f8-479f-8c5e-9e3ca5787b0b	43c922b5-3b25-4cd3-9304-1ba0e352f0d2	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/43c922b5/img_0002.jpg	photo	1140619	\N	-1.5087225	29.6175236	2026-04-17 05:52:14	2026-04-17 06:03:14	t	\N	0.159	0.044	good	2026-04-17 06:03:14	evidence/43c922b5/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/43c922b5/evidence_0002.jpg	real	\N	\N	95.44	f
+7f20ca50-bba8-406e-b621-022d85116cad	43c922b5-3b25-4cd3-9304-1ba0e352f0d2	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/43c922b5/capture_0003.jpg	photo	1416324	\N	-1.5087359	29.6175991	2026-04-17 05:43:14	2026-04-17 06:03:14	t	\N	0.114	0.061	good	2026-04-17 06:03:14	evidence/43c922b5/img_0003	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/43c922b5/img_0003.jpg	real	\N	\N	91.12	f
+03fcde0d-bfa3-48ca-adfe-8274694ef2d3	3bfb0023-830e-45cd-8de7-6321c0929221	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/3bfb0023/img_0001.jpg	photo	2216522	\N	-1.4738469	29.6472961	2026-05-03 12:06:10	2026-05-03 12:20:10	t	\N	0.143	0.017	good	2026-05-03 12:20:10	evidence/3bfb0023/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/3bfb0023/evidence_0001.jpg	real	\N	\N	89.72	f
+795da34b-8513-4486-b313-943bc5a65140	b432a023-6880-402d-a1bb-3fab54effae8	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/b432a023/capture_0001.jpg	photo	1476349	\N	-1.4165926	29.5497524	2026-04-10 03:47:30	2026-04-10 03:57:30	t	\N	0.143	0.044	good	2026-04-10 03:57:30	evidence/b432a023/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/b432a023/img_0001.jpg	real	\N	\N	85.70	f
+e67db191-158e-47c6-8727-f2aeb8641914	db6f45ac-2549-4f77-82dd-a2a14f5a8d3b	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/db6f45ac/img_0001.jpg	photo	2801974	\N	-1.5135363	29.6463906	2026-04-07 14:52:23	2026-04-07 15:11:23	t	\N	0.139	0.078	fair	2026-04-07 15:11:23	evidence/db6f45ac/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/db6f45ac/capture_0001.jpg	real	\N	\N	88.31	f
+db47ded5-3374-4bed-b7a3-626d4ec76d79	db6f45ac-2549-4f77-82dd-a2a14f5a8d3b	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/db6f45ac/capture_0002.jpg	photo	1733476	\N	-1.5135327	29.6464938	2026-04-07 15:03:23	2026-04-07 15:11:23	t	\N	0.171	0.045	fair	2026-04-07 15:11:23	evidence/db6f45ac/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/db6f45ac/evidence_0002.jpg	real	\N	\N	90.20	f
+17416492-8b0e-4c51-a8c2-e7e4a76f178f	6f294ecd-5940-4d82-b5b6-115ea98c655b	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/6f294ecd/evidence_0001.jpg	photo	2923924	\N	-1.4940474	29.6692507	2026-04-10 11:39:46	2026-04-10 11:58:46	t	\N	0.207	0.049	good	2026-04-10 11:58:46	evidence/6f294ecd/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/6f294ecd/capture_0001.jpg	real	\N	\N	93.61	f
+998c0973-b4fa-498a-ab79-4168c755a384	6f294ecd-5940-4d82-b5b6-115ea98c655b	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/6f294ecd/capture_0002.jpg	photo	1587869	\N	-1.4941224	29.6691599	2026-04-10 11:46:46	2026-04-10 11:58:46	t	\N	0.154	0.013	good	2026-04-10 11:58:46	evidence/6f294ecd/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/6f294ecd/img_0002.jpg	real	\N	\N	89.13	f
+b478667f-4b84-4dac-9cd1-c4ee9bcbf2f9	3b873ffb-9df9-47ae-991d-ba51c0fdd5bc	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/3b873ffb/img_0001.jpg	photo	2641197	\N	-1.4550004	29.5059386	2026-04-17 20:31:06	2026-04-17 20:43:06	t	\N	0.171	0.038	fair	2026-04-17 20:43:06	evidence/3b873ffb/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/3b873ffb/evidence_0001.jpg	real	\N	\N	93.83	f
+fb126053-3dfd-4a5b-ae4f-a0aa4d0c73e6	410f4d8c-9330-45e1-9917-7400e86425fa	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/410f4d8c/img_0001.jpg	photo	3195308	\N	-1.5043714	29.6401261	2026-05-17 10:24:38	2026-05-17 10:31:38	t	\N	0.161	0.046	fair	2026-05-17 10:31:38	evidence/410f4d8c/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/410f4d8c/evidence_0001.jpg	real	\N	\N	78.16	f
+ea921c41-9d62-442b-ba10-a295ddc86cc4	a21f9dc5-a6bd-4e25-8edd-713c8d9dda68	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/a21f9dc5/evidence_0001.jpg	photo	3462543	\N	-1.4737449	29.6220444	2026-04-15 19:16:37	2026-04-15 19:25:37	t	\N	0.082	0.046	good	2026-04-15 19:25:37	evidence/a21f9dc5/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/a21f9dc5/img_0001.jpg	real	\N	\N	92.50	f
+aca561a1-dbcd-4799-a005-2c8c5c14779e	a21f9dc5-a6bd-4e25-8edd-713c8d9dda68	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/a21f9dc5/capture_0002.jpg	photo	3250464	\N	-1.4738714	29.6219421	2026-04-15 19:05:37	2026-04-15 19:25:37	t	\N	0.054	0.045	good	2026-04-15 19:25:37	evidence/a21f9dc5/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/a21f9dc5/capture_0002.jpg	real	\N	\N	85.28	f
+a42e3b7a-f18b-401d-84e2-9bb289eb0f5e	675857fc-907b-4ffc-9eb8-5e5bbb011169	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/675857fc/evidence_0001.jpg	photo	3083214	\N	-1.4371596	29.5777436	2026-04-13 18:52:43	2026-04-13 19:11:43	t	\N	0.135	0.071	good	2026-04-13 19:11:43	evidence/675857fc/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/675857fc/capture_0001.jpg	real	\N	\N	85.44	f
+964cead6-b8af-4bf9-a232-da639e22c402	675857fc-907b-4ffc-9eb8-5e5bbb011169	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/675857fc/img_0002.jpg	photo	1320104	\N	-1.4371053	29.5777632	2026-04-13 19:06:43	2026-04-13 19:11:43	t	\N	0.202	0.079	good	2026-04-13 19:11:43	evidence/675857fc/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/675857fc/evidence_0002.jpg	real	\N	\N	81.25	f
+e0431d71-c4e6-43c2-90cc-7a14594dc3e7	675857fc-907b-4ffc-9eb8-5e5bbb011169	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/675857fc/capture_0003.jpg	photo	1875149	\N	-1.4370477	29.5776011	2026-04-13 19:08:43	2026-04-13 19:11:43	t	\N	0.158	0.010	good	2026-04-13 19:11:43	evidence/675857fc/img_0003	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/675857fc/img_0003.jpg	real	\N	\N	88.37	f
+4df62877-612c-4fa9-b117-7c84a3ee1f9b	ff211874-f382-4e5e-8ba9-36af7acf774e	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/ff211874/capture_0001.jpg	photo	3360564	\N	-1.5005889	29.6511997	2026-05-06 05:49:40	2026-05-06 06:00:40	t	\N	0.203	0.035	good	2026-05-06 06:00:40	evidence/ff211874/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/ff211874/capture_0001.jpg	real	\N	\N	78.34	f
+5849b096-9bcd-4c62-a4ef-7d3970056d63	99fab3dd-5a63-436b-82bf-b5fc8b0f5f37	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/99fab3dd/evidence_0001.jpg	photo	1055305	\N	-1.4613653	29.6652089	2026-05-12 16:41:03	2026-05-12 17:01:03	t	\N	0.137	0.053	good	2026-05-12 17:01:03	evidence/99fab3dd/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/99fab3dd/img_0001.jpg	real	\N	\N	86.96	f
+b47960c9-dd18-4c77-8720-cfe05c600328	99fab3dd-5a63-436b-82bf-b5fc8b0f5f37	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/99fab3dd/img_0002.jpg	photo	3742996	\N	-1.4613965	29.6651339	2026-05-12 16:41:03	2026-05-12 17:01:03	t	\N	0.084	0.059	good	2026-05-12 17:01:03	evidence/99fab3dd/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/99fab3dd/img_0002.jpg	real	\N	\N	87.87	f
+3aefcdd4-86c6-499f-9f0b-8c58ab0e55d3	4da8719b-9c5b-462c-9faa-9d37e248a1d7	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/4da8719b/capture_0001.jpg	photo	1979578	\N	-1.4247818	29.5627971	2026-05-04 14:12:16	2026-05-04 14:18:16	t	\N	0.096	0.061	good	2026-05-04 14:18:16	evidence/4da8719b/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/4da8719b/capture_0001.jpg	real	\N	\N	81.29	f
+767caa9b-063f-4744-a42e-ad2da0b31df3	4da8719b-9c5b-462c-9faa-9d37e248a1d7	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/4da8719b/capture_0002.jpg	photo	2394862	\N	-1.4249063	29.5626832	2026-05-04 14:05:16	2026-05-04 14:18:16	t	\N	0.195	0.066	good	2026-05-04 14:18:16	evidence/4da8719b/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/4da8719b/img_0002.jpg	real	\N	\N	80.04	f
+02bbe648-33b0-4867-8e8f-ab35bb558076	4da8719b-9c5b-462c-9faa-9d37e248a1d7	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/4da8719b/img_0003.jpg	photo	915004	\N	-1.4248775	29.5627242	2026-05-04 14:16:16	2026-05-04 14:18:16	t	\N	0.186	0.057	good	2026-05-04 14:18:16	evidence/4da8719b/img_0003	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/4da8719b/capture_0003.jpg	real	\N	\N	92.02	f
+7d661c3a-0174-4379-9c7a-df497560d24b	5eb53144-5b27-4caa-89d0-84eba188a8ca	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/5eb53144/capture_0001.jpg	photo	1173754	\N	-1.5223046	29.6241975	2026-05-04 01:26:55	2026-05-04 01:42:55	t	\N	0.091	0.078	good	2026-05-04 01:42:55	evidence/5eb53144/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/5eb53144/img_0001.jpg	real	\N	\N	87.91	f
+370bb071-95a5-4c7c-9c97-cfda5b9102d5	e5903ad3-798b-492e-8264-cdc976c88942	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/e5903ad3/capture_0001.jpg	photo	3485881	\N	-1.4653507	29.6379342	2026-05-16 14:40:52	2026-05-16 15:00:52	t	\N	0.069	0.063	good	2026-05-16 15:00:52	evidence/e5903ad3/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/e5903ad3/capture_0001.jpg	real	\N	\N	84.39	f
+50df56a2-f7f0-427e-bd39-a26bd4fea161	e5903ad3-798b-492e-8264-cdc976c88942	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/e5903ad3/evidence_0002.jpg	photo	2669364	\N	-1.4654073	29.6378123	2026-05-16 14:50:52	2026-05-16 15:00:52	t	\N	0.202	0.044	fair	2026-05-16 15:00:52	evidence/e5903ad3/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/e5903ad3/evidence_0002.jpg	real	\N	\N	90.99	f
+133b0b96-a68d-47ee-ae50-dbd677bbe167	b7b40b95-03f0-4dc2-b19c-6f13fb9d3a4a	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/b7b40b95/evidence_0001.jpg	photo	1829910	\N	-1.4314997	29.5467123	2026-05-11 19:08:29	2026-05-11 19:28:29	t	\N	0.217	0.074	fair	2026-05-11 19:28:29	evidence/b7b40b95/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/b7b40b95/capture_0001.jpg	real	\N	\N	85.16	f
+4385324e-0c40-4a71-a632-cdcd2203837c	b7b40b95-03f0-4dc2-b19c-6f13fb9d3a4a	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/b7b40b95/capture_0002.jpg	photo	2379372	\N	-1.4314395	29.5466630	2026-05-11 19:17:29	2026-05-11 19:28:29	t	\N	0.152	0.072	good	2026-05-11 19:28:29	evidence/b7b40b95/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/b7b40b95/evidence_0002.jpg	real	\N	\N	87.86	f
+85dbdca4-ef60-44b4-8a50-f410a54c94f9	521af58e-775c-49c8-b126-25fca94d953b	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/521af58e/img_0001.jpg	photo	740184	\N	-1.5068068	29.6266017	2026-04-18 16:33:45	2026-04-18 16:42:45	t	\N	0.178	0.012	fair	2026-04-18 16:42:45	evidence/521af58e/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/521af58e/img_0001.jpg	real	\N	\N	89.09	f
+1991f3c2-76be-4942-b0b3-5b1a977efde2	521af58e-775c-49c8-b126-25fca94d953b	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/521af58e/img_0002.jpg	photo	3593904	\N	-1.5068155	29.6266204	2026-04-18 16:24:45	2026-04-18 16:42:45	t	\N	0.137	0.066	fair	2026-04-18 16:42:45	evidence/521af58e/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/521af58e/evidence_0002.jpg	real	\N	\N	89.96	f
+cbb004bf-fbad-4f4e-9941-7002e06b78ad	35482682-9afe-4ece-a338-5133914a378c	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/35482682/img_0001.jpg	photo	1154984	\N	-1.4543980	29.6386821	2026-04-25 18:25:47	2026-04-25 18:34:47	t	\N	0.106	0.060	good	2026-04-25 18:34:47	evidence/35482682/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/35482682/img_0001.jpg	real	\N	\N	94.72	f
+f377e9a1-91a0-4a23-9d7c-596e62fc3a3e	35482682-9afe-4ece-a338-5133914a378c	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/35482682/img_0002.jpg	photo	3724969	\N	-1.4543284	29.6387542	2026-04-25 18:14:47	2026-04-25 18:34:47	t	\N	0.163	0.044	good	2026-04-25 18:34:47	evidence/35482682/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/35482682/capture_0002.jpg	real	\N	\N	79.31	f
+11dc7ac8-559f-4aa5-aa38-276f97d38c11	35482682-9afe-4ece-a338-5133914a378c	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/35482682/evidence_0003.jpg	photo	1402587	\N	-1.4543234	29.6387352	2026-04-25 18:23:47	2026-04-25 18:34:47	t	\N	0.184	0.021	good	2026-04-25 18:34:47	evidence/35482682/img_0003	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/35482682/capture_0003.jpg	real	\N	\N	79.66	f
+5f5d5290-29d6-44a2-8b0a-17452aec4f8f	dd7a12ba-3e8a-4576-8feb-34216be7446c	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/dd7a12ba/capture_0001.jpg	photo	2635430	\N	-1.4665319	29.5187656	2026-04-09 21:08:02	2026-04-09 21:15:02	t	\N	0.215	0.064	good	2026-04-09 21:15:02	evidence/dd7a12ba/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/dd7a12ba/evidence_0001.jpg	real	\N	\N	79.18	f
+c82f01fd-2b50-472a-b078-1a523e0bd212	dd7a12ba-3e8a-4576-8feb-34216be7446c	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/dd7a12ba/evidence_0002.jpg	photo	2259263	\N	-1.4663812	29.5187875	2026-04-09 21:08:02	2026-04-09 21:15:02	t	\N	0.191	0.072	fair	2026-04-09 21:15:02	evidence/dd7a12ba/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/dd7a12ba/capture_0002.jpg	real	\N	\N	89.64	f
+4048b968-626c-44e6-b1ae-8555bdb86edf	f71e70fc-03f6-4974-b1b6-c18c54059881	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/f71e70fc/img_0001.jpg	photo	1155091	\N	-1.4840125	29.6532318	2026-04-25 22:43:35	2026-04-25 23:00:35	t	\N	0.093	0.018	fair	2026-04-25 23:00:35	evidence/f71e70fc/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/f71e70fc/evidence_0001.jpg	real	\N	\N	93.34	f
+4931283a-dd5e-47d5-9dcd-7ddec90340d9	f71e70fc-03f6-4974-b1b6-c18c54059881	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/f71e70fc/capture_0002.jpg	photo	3183960	\N	-1.4839393	29.6531666	2026-04-25 22:42:35	2026-04-25 23:00:35	t	\N	0.061	0.017	fair	2026-04-25 23:00:35	evidence/f71e70fc/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/f71e70fc/capture_0002.jpg	real	\N	\N	95.13	f
+07da0b30-ef17-4fd3-bfe0-5c9f7da7279f	12c9b4bb-c718-4448-94b7-e511c514601c	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/12c9b4bb/evidence_0001.jpg	photo	1481938	\N	-1.4960065	29.6489786	2026-04-11 10:01:35	2026-04-11 10:02:35	t	\N	0.154	0.022	good	2026-04-11 10:02:35	evidence/12c9b4bb/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/12c9b4bb/capture_0001.jpg	real	\N	\N	80.87	f
+62eba5ae-c030-4f28-a060-22b969f1c08c	367bb793-df5e-4524-862b-a727f309d6cb	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/367bb793/img_0001.jpg	photo	2645820	\N	-1.4641101	29.6838272	2026-04-18 21:43:02	2026-04-18 21:56:02	t	\N	0.109	0.065	fair	2026-04-18 21:56:02	evidence/367bb793/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/367bb793/img_0001.jpg	real	\N	\N	87.03	f
+28409832-d191-4cfc-b98e-b087018974dd	b1dbaac7-0683-4aa6-932b-ccb5ac8e4fbb	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/b1dbaac7/evidence_0001.jpg	photo	2843929	\N	-1.4296378	29.5470199	2026-04-18 14:24:10	2026-04-18 14:37:10	t	\N	0.174	0.067	fair	2026-04-18 14:37:10	evidence/b1dbaac7/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/b1dbaac7/img_0001.jpg	real	\N	\N	86.09	f
+041ac3b3-c0cc-4782-b514-21a7c04c05ea	b1dbaac7-0683-4aa6-932b-ccb5ac8e4fbb	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/b1dbaac7/capture_0002.jpg	photo	1195408	\N	-1.4297214	29.5469264	2026-04-18 14:21:10	2026-04-18 14:37:10	t	\N	0.074	0.051	fair	2026-04-18 14:37:10	evidence/b1dbaac7/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/b1dbaac7/evidence_0002.jpg	real	\N	\N	89.87	f
+7e9b3873-d0f6-4164-bd76-054a416a6fd3	220ec952-367e-4d55-b984-b726188582d8	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/220ec952/capture_0001.jpg	photo	1575983	\N	-1.4619840	29.6641764	2026-04-10 20:07:16	2026-04-10 20:26:16	t	\N	0.112	0.029	fair	2026-04-10 20:26:16	evidence/220ec952/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/220ec952/img_0001.jpg	real	\N	\N	85.44	f
+f5f35a87-3f35-42e6-b9e9-53e725895e9a	220ec952-367e-4d55-b984-b726188582d8	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/220ec952/capture_0002.jpg	photo	1229604	\N	-1.4620809	29.6642027	2026-04-10 20:08:16	2026-04-10 20:26:16	t	\N	0.093	0.031	good	2026-04-10 20:26:16	evidence/220ec952/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/220ec952/evidence_0002.jpg	real	\N	\N	85.17	f
+b552e8c9-89b6-4578-b792-2a45ce17c435	b8055d3b-ddc7-4152-8a72-adb6f28858aa	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/b8055d3b/evidence_0001.jpg	photo	1940017	\N	-1.5094766	29.6176560	2026-05-08 17:05:15	2026-05-08 17:23:15	t	\N	0.088	0.077	good	2026-05-08 17:23:15	evidence/b8055d3b/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/b8055d3b/capture_0001.jpg	real	\N	\N	88.35	f
+d446ef2c-3f87-4148-a229-f69f9c742347	fc4d219a-62f6-4f1e-92cc-d88812f65fc0	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/fc4d219a/evidence_0001.jpg	photo	1584568	\N	-1.4936153	29.6389636	2026-04-18 19:47:21	2026-04-18 19:48:21	t	\N	0.165	0.067	good	2026-04-18 19:48:21	evidence/fc4d219a/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/fc4d219a/img_0001.jpg	real	\N	\N	86.58	f
+8cce98b4-e3a9-4e62-843b-09adff3797dd	d1b846b8-4104-4a0f-a898-ae8067435897	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/d1b846b8/capture_0001.jpg	photo	2148827	\N	-1.4450880	29.5503469	2026-04-26 08:49:07	2026-04-26 09:06:07	t	\N	0.059	0.066	good	2026-04-26 09:06:07	evidence/d1b846b8/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/d1b846b8/evidence_0001.jpg	real	\N	\N	78.59	f
+056247b3-513b-46d5-9c2c-b527d9a4e18c	d1b846b8-4104-4a0f-a898-ae8067435897	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/d1b846b8/capture_0002.jpg	photo	3358712	\N	-1.4449773	29.5503230	2026-04-26 08:54:07	2026-04-26 09:06:07	t	\N	0.070	0.046	good	2026-04-26 09:06:07	evidence/d1b846b8/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/d1b846b8/img_0002.jpg	real	\N	\N	78.21	f
+62e96bd2-0364-4ddf-b9e1-4a1569700449	69b392fb-24e1-4bfe-a34f-7585ac9b7831	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/69b392fb/img_0001.jpg	photo	3125146	\N	-1.5212633	29.6599800	2026-04-25 12:09:17	2026-04-25 12:25:17	t	\N	0.184	0.031	good	2026-04-25 12:25:17	evidence/69b392fb/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/69b392fb/evidence_0001.jpg	real	\N	\N	78.86	f
+f5b17cf2-ab62-42b6-b57e-f4aa05f3e458	69b392fb-24e1-4bfe-a34f-7585ac9b7831	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/69b392fb/evidence_0002.jpg	photo	1165105	\N	-1.5213547	29.6599986	2026-04-25 12:21:17	2026-04-25 12:25:17	t	\N	0.131	0.054	good	2026-04-25 12:25:17	evidence/69b392fb/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/69b392fb/capture_0002.jpg	real	\N	\N	82.68	f
+2dbff1ff-1cff-47f2-9095-f75d502f12c3	448fedee-e9b4-4259-b9b4-e66abb11d758	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/448fedee/evidence_0001.jpg	photo	1601860	\N	-1.4702384	29.6854775	2026-05-13 13:08:29	2026-05-13 13:18:29	t	\N	0.201	0.065	fair	2026-05-13 13:18:29	evidence/448fedee/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/448fedee/evidence_0001.jpg	real	\N	\N	88.56	f
+80945708-4df4-40d8-9cf3-3c588c6dd928	448fedee-e9b4-4259-b9b4-e66abb11d758	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/448fedee/capture_0002.jpg	photo	1181783	\N	-1.4703227	29.6854030	2026-05-13 13:03:29	2026-05-13 13:18:29	t	\N	0.174	0.056	fair	2026-05-13 13:18:29	evidence/448fedee/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/448fedee/evidence_0002.jpg	real	\N	\N	91.50	f
+35b9e47f-bdc2-4b0e-8a01-a8c23519a524	448fedee-e9b4-4259-b9b4-e66abb11d758	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/448fedee/img_0003.jpg	photo	2145329	\N	-1.4703388	29.6854111	2026-05-13 13:11:29	2026-05-13 13:18:29	t	\N	0.199	0.048	good	2026-05-13 13:18:29	evidence/448fedee/img_0003	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/448fedee/capture_0003.jpg	real	\N	\N	87.43	f
+e740220c-9cfc-4808-bf45-aa09dc6ccbfc	50ffa3cd-3c59-4ae5-990a-a556f63cdd76	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/50ffa3cd/capture_0001.jpg	photo	2743532	\N	-1.4164533	29.5427094	2026-05-16 17:43:58	2026-05-16 17:55:58	t	\N	0.102	0.039	good	2026-05-16 17:55:58	evidence/50ffa3cd/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/50ffa3cd/img_0001.jpg	real	\N	\N	78.00	f
+b1268d55-8552-4798-8cfc-a5b6929d09ac	50ffa3cd-3c59-4ae5-990a-a556f63cdd76	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/50ffa3cd/capture_0002.jpg	photo	1682768	\N	-1.4164049	29.5426931	2026-05-16 17:50:58	2026-05-16 17:55:58	t	\N	0.207	0.076	good	2026-05-16 17:55:58	evidence/50ffa3cd/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/50ffa3cd/img_0002.jpg	real	\N	\N	91.79	f
+e9b6ff0e-753e-42d1-8192-04dd74441c9a	50ffa3cd-3c59-4ae5-990a-a556f63cdd76	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/50ffa3cd/evidence_0003.jpg	photo	1449787	\N	-1.4163394	29.5428011	2026-05-16 17:45:58	2026-05-16 17:55:58	t	\N	0.082	0.072	good	2026-05-16 17:55:58	evidence/50ffa3cd/img_0003	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/50ffa3cd/img_0003.jpg	real	\N	\N	80.94	f
+1a5df327-dbda-46b3-acd3-133ee8040046	dca91abe-5b7a-41a1-9e1b-c19d2d265e58	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/dca91abe/img_0001.jpg	photo	1112013	\N	-1.5209624	29.6290444	2026-05-07 08:59:40	2026-05-07 09:07:40	t	\N	0.121	0.065	good	2026-05-07 09:07:40	evidence/dca91abe/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/dca91abe/capture_0001.jpg	real	\N	\N	86.35	f
+e8a231d7-e9db-416c-b2cb-ddd8e8830fe9	488a857a-f17e-4882-ac00-d152d8103282	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/488a857a/img_0001.jpg	photo	1007758	\N	-1.4079389	29.5568262	2026-05-11 12:57:00	2026-05-11 13:15:00	t	\N	0.145	0.055	good	2026-05-11 13:15:00	evidence/488a857a/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/488a857a/capture_0001.jpg	real	\N	\N	91.20	f
+243be2a3-0560-4908-8ec2-92806cf0d478	488a857a-f17e-4882-ac00-d152d8103282	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/488a857a/evidence_0002.jpg	photo	2064477	\N	-1.4079648	29.5567898	2026-05-11 13:14:00	2026-05-11 13:15:00	t	\N	0.203	0.044	good	2026-05-11 13:15:00	evidence/488a857a/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/488a857a/capture_0002.jpg	real	\N	\N	87.77	f
+16060b72-5cd6-4cd7-9e90-313cafc5b4a5	13ffd6aa-4d5e-4223-8a63-c5ed027b5701	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/13ffd6aa/evidence_0001.jpg	photo	1126474	\N	-1.5059413	29.6486873	2026-04-19 06:24:32	2026-04-19 06:40:32	t	\N	0.159	0.018	good	2026-04-19 06:40:32	evidence/13ffd6aa/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/13ffd6aa/img_0001.jpg	real	\N	\N	78.79	f
+3c880a53-c8f9-44a9-9633-f4e4abc1e439	80268a4e-f890-43f6-b596-38b15b5f8187	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/80268a4e/capture_0001.jpg	photo	2787208	\N	-1.4215676	29.5744122	2026-04-13 12:54:49	2026-04-13 13:06:49	t	\N	0.113	0.063	good	2026-04-13 13:06:49	evidence/80268a4e/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/80268a4e/evidence_0001.jpg	real	\N	\N	83.82	f
+d619a8a8-719f-4e34-95e2-0f5737c6b3fd	13f22cb9-1d45-4dba-8fe5-41081b904d94	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/13f22cb9/img_0001.jpg	photo	1457248	\N	-1.5096609	29.6508901	2026-04-29 05:55:13	2026-04-29 06:14:13	t	\N	0.147	0.050	good	2026-04-29 06:14:13	evidence/13f22cb9/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/13f22cb9/img_0001.jpg	real	\N	\N	91.02	f
+d590f95e-cd4f-427a-8413-8f83355b65c6	13f22cb9-1d45-4dba-8fe5-41081b904d94	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/13f22cb9/img_0002.jpg	photo	2527979	\N	-1.5095470	29.6509679	2026-04-29 05:58:13	2026-04-29 06:14:13	t	\N	0.148	0.074	good	2026-04-29 06:14:13	evidence/13f22cb9/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/13f22cb9/capture_0002.jpg	real	\N	\N	78.67	f
+dc16cbf3-00df-4fb3-8a1a-ce434d05e3b2	9e573a15-c87c-4704-be6e-96cc6d460972	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/9e573a15/img_0001.jpg	photo	1034441	\N	-1.4624323	29.6853014	2026-04-08 13:06:33	2026-04-08 13:19:33	t	\N	0.177	0.048	good	2026-04-08 13:19:33	evidence/9e573a15/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/9e573a15/capture_0001.jpg	real	\N	\N	87.03	f
+cada28e0-1416-443c-b47d-1e091b4a0b38	5a1dd1bb-df91-4951-9a39-ee7b5989e92b	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/5a1dd1bb/img_0001.jpg	photo	3582030	\N	-1.4471744	29.5811042	2026-05-11 17:24:23	2026-05-11 17:27:23	t	\N	0.208	0.071	fair	2026-05-11 17:27:23	evidence/5a1dd1bb/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/5a1dd1bb/img_0001.jpg	real	\N	\N	84.18	f
+fc316c44-4ae6-4295-834f-5d605cbffc99	7e58550c-e5ce-4f24-a819-1c82703c99cd	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/7e58550c/img_0001.jpg	photo	560020	\N	-1.5130193	29.6252260	2026-05-17 12:45:42	2026-05-17 12:57:42	t	\N	0.116	0.079	good	2026-05-17 12:57:42	evidence/7e58550c/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/uploads/v1/7e58550c/evidence_0001.jpg	real	\N	\N	79.79	f
+c4b55679-56dc-4a8e-921b-ee6b1b355b68	7e58550c-e5ce-4f24-a819-1c82703c99cd	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/7e58550c/capture_0002.jpg	photo	2984445	\N	-1.5129715	29.6250866	2026-05-17 12:46:42	2026-05-17 12:57:42	t	\N	0.135	0.042	fair	2026-05-17 12:57:42	evidence/7e58550c/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/7e58550c/img_0002.jpg	real	\N	\N	78.72	f
+187792df-1651-4b9b-961c-e8023d7a9e9f	874e0f76-66a9-4c89-b67f-3664767de16a	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/874e0f76/capture_0001.jpg	photo	2754293	\N	-1.4572469	29.6471263	2026-05-17 22:06:14	2026-05-17 22:17:14	t	\N	0.149	0.058	good	2026-05-17 22:17:14	evidence/874e0f76/img_0001	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/874e0f76/img_0001.jpg	real	\N	\N	83.56	f
+846b197c-8aad-42a9-9298-0c4acd2e3d98	874e0f76-66a9-4c89-b67f-3664767de16a	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/evidence/v1/874e0f76/img_0002.jpg	photo	2283820	\N	-1.4570742	29.6471910	2026-05-17 22:00:14	2026-05-17 22:17:14	t	\N	0.075	0.075	fair	2026-05-17 22:17:14	evidence/874e0f76/img_0002	https://res.cloudinary.com/trustbond-musanze/image/upload/c_limit,w_1920,h_1080,q_auto:good,f_auto/reports/v2/874e0f76/capture_0002.jpg	real	\N	\N	79.22	f
 \.
 
 
 --
--- Data for Name: hotspot_reports; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: hotspot_reports; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.hotspot_reports (hotspot_id, report_id) FROM stdin;
-129	ed3dc2d5-91cb-4107-90c0-95c2ba6cdfa7
-129	079828c3-6f2b-44be-b8f0-2a5cf6202471
-129	a278c066-a5dd-43bb-9d20-4ed14f0c8dce
-129	6a9b8e8b-3409-4dc1-829c-1fa62c5d3e93
+130	debc3ac3-1471-4968-b832-138bb2bfa3aa
+130	81dc465d-4c4b-4527-86df-3ffa1be00899
+130	263dc1a6-bf49-4879-936b-b4d803736044
+130	8479f8e2-d885-427f-a385-e28c74af3de4
+131	afcf74ac-dab4-4032-af3d-8f3fa1ab4180
+131	0cd3f80f-39c2-4687-8c4f-30377a03de91
+131	fe6aadb6-e284-49c7-b0f0-9d9ce80513ae
+131	9b529720-5e42-4f66-af44-0b77bbd4bbe3
+131	5e58ba28-e778-4044-b0e2-8ba3e502b1a5
+131	c701470d-5fcf-48ee-8342-89715e1c9e31
+132	aaef4b7e-b9ad-4073-be2c-ffcb61c81ecc
+132	a8168200-bffd-4d4b-847c-69e1e4418b26
+132	685b2c28-757c-44e9-b8be-8e1273c435ff
+132	b27e6bb7-1166-402b-9428-2c965c11c77d
+133	9cf848fb-a5f6-4f85-8fe7-b8a5f46e3fb9
+133	804515a3-79b1-4ca7-9e07-d4a06d924def
+133	7d88181b-65c4-47a8-9e1d-b1a74d5cec02
+133	3dd73568-0c54-445b-9b26-31ae2aa55ed2
+133	f679c63f-4d00-4ba6-bc9c-c175a4f12124
+134	b20d17b7-2209-41cd-9ad9-371547051207
+134	41ba8864-1d44-4804-b828-cb69cd46ee1d
+134	ac105b65-8376-4b66-a216-e7416b7af3f4
+134	5eef1033-aab3-4663-8470-79fcdc8c75ad
+135	4fca6507-70a5-4953-889a-fe58885ef80f
+135	66658237-5d9e-48d9-b903-94eb50420598
+135	61d9ad11-79ad-438c-88cf-7ad75fd823e4
+135	1d00d3f6-2d0b-40a7-b345-39e0aa8d9eb8
+135	be9b3ccd-a2e8-43d3-97b8-4d0e73792a3e
 \.
 
 
 --
--- Data for Name: hotspots; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: hotspots; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.hotspots (hotspot_id, hotspot_name, center_lat, center_long, radius_meters, incident_count, report_ids, risk_level, incident_type_distribution, time_window_hours, detected_at, expires_at, is_active, incident_type_id) FROM stdin;
-129	\N	-1.5055785	29.6386186	500.00	4	\N	medium	\N	720	2026-05-08 17:26:28.434333	\N	t	4
+130	\N	-1.4681569	29.6445140	500.00	4	\N	medium	\N	720	2026-05-19 12:26:45.586475	\N	t	3
+131	\N	-1.4952365	29.6358677	500.00	6	\N	high	\N	720	2026-05-19 12:26:45.734281	\N	t	9
+132	\N	-1.4587496	29.5180071	500.00	4	\N	medium	\N	720	2026-05-19 12:26:45.890306	\N	t	1
+133	\N	-1.4373841	29.5488533	500.00	5	\N	medium	\N	720	2026-05-19 12:26:46.05113	\N	t	1
+134	\N	-1.5047040	29.6693854	500.00	4	\N	medium	\N	720	2026-05-19 12:26:46.258819	\N	t	9
+135	\N	-1.5032079	29.6190901	500.00	5	\N	medium	\N	720	2026-05-19 12:26:46.417277	\N	t	9
 \.
 
 
 --
--- Data for Name: incident_types; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: incident_types; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.incident_types (incident_type_id, type_name, description, severity_weight, color_code, is_active, created_at, default_special_assignment_unit) FROM stdin;
@@ -1092,7 +1420,7 @@ COPY public.incident_types (incident_type_id, type_name, description, severity_w
 
 
 --
--- Data for Name: local_leader_auth_codes; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: local_leader_auth_codes; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.local_leader_auth_codes (local_leader_auth_code_id, local_leader_id, phone_number, code, purpose, expires_at, used_at, created_at) FROM stdin;
@@ -1101,7 +1429,7 @@ COPY public.local_leader_auth_codes (local_leader_auth_code_id, local_leader_id,
 
 
 --
--- Data for Name: local_leader_coverage_locations; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: local_leader_coverage_locations; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.local_leader_coverage_locations (local_leader_coverage_location_id, local_leader_id, location_id) FROM stdin;
@@ -1110,7 +1438,7 @@ COPY public.local_leader_coverage_locations (local_leader_coverage_location_id, 
 
 
 --
--- Data for Name: local_leaders; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: local_leaders; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.local_leaders (local_leader_id, full_name, phone_number, email, password_hash, is_active, created_at, last_login_at, fcm_device_token, role) FROM stdin;
@@ -1119,7 +1447,7 @@ COPY public.local_leaders (local_leader_id, full_name, phone_number, email, pass
 
 
 --
--- Data for Name: locations; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: locations; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.locations (location_id, location_type, location_name, parent_location_id, geometry, centroid_lat, centroid_long, is_active, created_at) FROM stdin;
@@ -1642,7 +1970,7 @@ COPY public.locations (location_id, location_type, location_name, parent_locatio
 
 
 --
--- Data for Name: ml_predictions; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: ml_predictions; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.ml_predictions (prediction_id, report_id, trust_score, prediction_label, confidence, model_version, model_type, explanation, processing_time, is_final, evaluated_at) FROM stdin;
@@ -1661,11 +1989,126 @@ c2d5b586-4187-4750-98ea-90aa2322dad5	5fc6e0b5-625b-4f37-8c3a-4cfe887b721f	0.05	\
 ab43ca2b-6996-463f-99d0-542dbf9d68f7	6a9b8e8b-3409-4dc1-829c-1fa62c5d3e93	100.00	likely_real	0.95	trustbond_v2_no_desc_length_20260501_082231	xgboost	{"cluster_score": 0.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 33.5, "coordination_penalty": 0.0}	\N	t	2026-05-05 18:19:56.030264
 820b19c6-f51f-4463-9fad-cf95444b51ea	7dda61c0-7d8d-431c-acd3-9b45b7b16c41	0.10	\N	0.00	trustbond_v2_no_desc_length_20260501_082231	xgboost	{"cluster_score": 0.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 50.0, "coordination_penalty": 0.0}	\N	f	2026-05-06 16:37:20.546107
 801f2cc7-fe57-4720-a10e-067f05feb92c	54da7040-71ff-426a-b270-a6098d8d7601	0.05	\N	0.00	trustbond_v2_no_desc_length_20260501_082231	xgboost	{"cluster_score": 80.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 33.0, "coordination_penalty": 0.0}	\N	f	2026-05-09 11:40:06.445096
+b2de2dde-6a72-4fe6-b7e5-ce1e1d986ead	4fca6507-70a5-4953-889a-fe58885ef80f	81.59	likely_real	0.82	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 76.86, "trustbond": 87.57, "natural_language": 79.7}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 70.05}, "incident_category": "accident", "contributing_models": 3}	168	t	2026-05-13 09:45:14
+ca281902-2a32-4395-a2fc-5a1bfc6f9403	61d9ad11-79ad-438c-88cf-7ad75fd823e4	88.62	likely_real	0.96	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 84.11, "trustbond": 92.24, "natural_language": 86.71}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 73.79}, "incident_category": "accident", "contributing_models": 3}	760	t	2026-05-13 09:56:11
+39ca6f4d-d076-41f7-9b0c-bb943d00c7b4	1d00d3f6-2d0b-40a7-b345-39e0aa8d9eb8	84.85	likely_real	0.92	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 84.08, "trustbond": 84.84, "natural_language": 84.91}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 67.87}, "incident_category": "accident", "contributing_models": 3}	649	t	2026-05-13 10:23:09
+7b200f5f-36f3-4c45-8c0a-4246457539dc	66658237-5d9e-48d9-b903-94eb50420598	86.38	likely_real	0.96	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 87.18, "trustbond": 90.87, "natural_language": 80.38}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 72.69}, "incident_category": "accident", "contributing_models": 3}	338	t	2026-05-13 09:53:05
+4729fb62-7578-4059-b09f-14968f07d589	be9b3ccd-a2e8-43d3-97b8-4d0e73792a3e	88.39	likely_real	0.89	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 91.59, "trustbond": 84.79, "natural_language": 81.37}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 67.83}, "incident_category": "accident", "contributing_models": 3}	698	t	2026-05-13 10:30:10
+50f2257d-38dd-40c5-b855-08f3e7a90b2f	41ba8864-1d44-4804-b828-cb69cd46ee1d	84.61	likely_real	0.83	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 81.46, "trustbond": 86.66, "natural_language": 85.22}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 69.33}, "incident_category": "accident", "contributing_models": 3}	769	t	2026-05-05 15:33:07
+6c7ceaff-67ee-4f1c-9ca2-882e8161745d	ac105b65-8376-4b66-a216-e7416b7af3f4	88.17	likely_real	0.97	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 82.52, "trustbond": 92.28, "natural_language": 90.75}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 73.82}, "incident_category": "accident", "contributing_models": 3}	874	t	2026-05-05 15:43:08
+4a5b0ef1-3cbe-4d83-94d2-9fb7fb6dc91b	b20d17b7-2209-41cd-9ad9-371547051207	89.20	likely_real	0.85	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 93.12, "trustbond": 90.97, "natural_language": 84.26}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 72.77}, "incident_category": "accident", "contributing_models": 3}	121	t	2026-05-05 15:29:06
+a4093e0c-844c-49fd-915a-4984774ff3fd	5eef1033-aab3-4663-8470-79fcdc8c75ad	75.89	likely_real	0.80	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 74.24, "trustbond": 81.41, "natural_language": 70.71}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.13}, "incident_category": "accident", "contributing_models": 3}	945	t	2026-05-05 16:43:13
+977538e0-ca06-4885-ba53-a6a159d631f4	debc3ac3-1471-4968-b832-138bb2bfa3aa	81.81	likely_real	0.90	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 87.44, "trustbond": 85.0, "natural_language": 79.87}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 68.0}, "incident_category": "vandalism", "contributing_models": 3}	681	t	2026-05-13 17:09:17
+815c8723-eebf-48ba-8125-d972f6c13692	263dc1a6-bf49-4879-936b-b4d803736044	83.69	likely_real	0.79	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 83.51, "trustbond": 83.77, "natural_language": 82.2}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 67.01}, "incident_category": "vandalism", "contributing_models": 3}	331	t	2026-05-13 18:29:09
+5f574e89-32b7-4b53-bcb1-38b047cb18cc	8479f8e2-d885-427f-a385-e28c74af3de4	71.01	likely_real	0.81	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 70.32, "trustbond": 71.63, "natural_language": 63.61}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 57.3}, "incident_category": "vandalism", "contributing_models": 3}	336	t	2026-05-13 18:29:16
+8b7a72cf-c371-4296-93c2-a4ec6dcde3ab	81dc465d-4c4b-4527-86df-3ffa1be00899	82.31	likely_real	0.80	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 79.36, "trustbond": 85.0, "natural_language": 81.08}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 68.0}, "incident_category": "vandalism", "contributing_models": 3}	836	t	2026-05-13 18:17:10
+7a34bdf1-2baa-40ce-9def-0bec11a747f4	afcf74ac-dab4-4032-af3d-8f3fa1ab4180	88.84	likely_real	0.90	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 89.35, "trustbond": 94.04, "natural_language": 90.14}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 75.23}, "incident_category": "accident", "contributing_models": 3}	868	t	2026-05-05 14:20:11
+a5fcf731-6fe3-4f59-b85c-e061230ca7f8	5e58ba28-e778-4044-b0e2-8ba3e502b1a5	88.57	likely_real	0.82	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 90.82, "trustbond": 91.96, "natural_language": 83.89}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 73.56}, "incident_category": "accident", "contributing_models": 3}	898	t	2026-05-05 15:05:08
+c1b71011-48e3-4f36-aee5-3ed7c1d156b4	9b529720-5e42-4f66-af44-0b77bbd4bbe3	74.79	likely_real	0.87	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 82.65, "trustbond": 75.22, "natural_language": 77.11}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 60.17}, "incident_category": "accident", "contributing_models": 3}	432	t	2026-05-05 14:54:15
+a413ee45-01a2-4f54-9aec-7b385ee74432	fe6aadb6-e284-49c7-b0f0-9d9ce80513ae	83.86	likely_real	0.79	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 88.94, "trustbond": 82.19, "natural_language": 79.03}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.76}, "incident_category": "accident", "contributing_models": 3}	723	t	2026-05-05 14:51:17
+d8bbe6c7-91d4-43ba-abb9-3ebc76eec2dd	0cd3f80f-39c2-4687-8c4f-30377a03de91	78.90	likely_real	0.81	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 79.78, "trustbond": 80.75, "natural_language": 78.52}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 64.6}, "incident_category": "accident", "contributing_models": 3}	213	t	2026-05-05 14:50:11
+1222cc67-70a3-4fc4-8f4c-3160a9efd428	c701470d-5fcf-48ee-8342-89715e1c9e31	80.81	likely_real	0.79	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 81.79, "trustbond": 81.99, "natural_language": 80.28}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.6}, "incident_category": "accident", "contributing_models": 3}	572	t	2026-05-05 15:22:16
+1bb95aa7-ce74-4257-a2d1-9c2a5b4a16e0	b27e6bb7-1166-402b-9428-2c965c11c77d	80.97	likely_real	0.82	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 76.88, "trustbond": 82.96, "natural_language": 81.93}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 66.37}, "incident_category": "theft", "contributing_models": 3}	191	t	2026-05-09 16:29:15
+568e4308-f386-4044-88ed-d37171984e91	aaef4b7e-b9ad-4073-be2c-ffcb61c81ecc	70.79	likely_real	0.86	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 71.36, "trustbond": 73.34, "natural_language": 64.64}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 58.67}, "incident_category": "theft", "contributing_models": 3}	391	t	2026-05-09 15:46:07
+58e21343-a59a-460e-b7cf-e309f3cfc5d2	a8168200-bffd-4d4b-847c-69e1e4418b26	82.62	likely_real	0.83	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 89.24, "trustbond": 78.71, "natural_language": 84.28}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 62.97}, "incident_category": "theft", "contributing_models": 3}	813	t	2026-05-09 16:04:17
+b527609a-4b43-4d93-a93e-5a18d34438a9	685b2c28-757c-44e9-b8be-8e1273c435ff	87.78	likely_real	0.92	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 89.33, "trustbond": 85.54, "natural_language": 81.37}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 68.43}, "incident_category": "theft", "contributing_models": 3}	494	t	2026-05-09 16:18:13
+1c85f641-b45c-4ced-8956-afd5abbd8b2b	9cf848fb-a5f6-4f85-8fe7-b8a5f46e3fb9	80.69	likely_real	0.85	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 80.02, "trustbond": 84.18, "natural_language": 75.84}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 67.34}, "incident_category": "theft", "contributing_models": 3}	773	t	2026-05-04 15:37:17
+a445c496-26ef-494d-96b3-32d79214e6d9	7d88181b-65c4-47a8-9e1d-b1a74d5cec02	88.90	likely_real	0.80	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 96.5, "trustbond": 87.02, "natural_language": 88.57}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 69.62}, "incident_category": "theft", "contributing_models": 3}	171	t	2026-05-04 16:19:17
+2b297e3c-f9e7-435b-ba4c-17024f7128cc	3dd73568-0c54-445b-9b26-31ae2aa55ed2	71.32	likely_real	0.87	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 72.03, "trustbond": 76.96, "natural_language": 64.05}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 61.57}, "incident_category": "theft", "contributing_models": 3}	531	t	2026-05-04 16:26:12
+95c0be8c-8854-404f-a3a6-afa509d850be	f679c63f-4d00-4ba6-bc9c-c175a4f12124	72.33	likely_real	0.93	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 74.19, "trustbond": 73.89, "natural_language": 71.37}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 59.11}, "incident_category": "theft", "contributing_models": 3}	457	t	2026-05-04 16:41:14
+527a161d-aceb-4123-b3a7-956e6351a75f	804515a3-79b1-4ca7-9e07-d4a06d924def	83.00	likely_real	0.79	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 89.9, "trustbond": 81.73, "natural_language": 84.15}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.39}, "incident_category": "theft", "contributing_models": 3}	479	t	2026-05-04 15:38:11
+143ed3b6-c68c-44c9-9501-122226410451	5ba5d790-9984-473d-b123-128c4c404913	81.77	likely_real	0.79	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 75.88, "trustbond": 81.72, "natural_language": 80.96}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.38}, "incident_category": "domestic", "contributing_models": 3}	428	t	2026-05-17 08:33:25
+79b4bfc3-535a-46b6-abb1-763cce61f448	a2dcc7fc-9366-445b-a694-36023416d620	85.30	likely_real	0.88	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 91.98, "trustbond": 82.44, "natural_language": 83.42}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.95}, "incident_category": "domestic", "contributing_models": 3}	477	t	2026-05-07 09:34:50
+7021f927-a68b-440b-8798-1be09a978ba0	971d5453-7ede-4c0c-b2be-64909de63e8c	76.61	likely_real	0.88	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 81.96, "trustbond": 82.19, "natural_language": 74.02}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.75}, "incident_category": "assault", "contributing_models": 3}	471	t	2026-05-14 09:49:58
+c7687c7b-1e33-457f-a7fd-75ef0ea462c4	27b81e6f-1aad-4ced-98ed-7d7182bc89e9	76.39	likely_real	0.80	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 78.21, "trustbond": 79.48, "natural_language": 69.41}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 63.58}, "incident_category": "vandalism", "contributing_models": 3}	778	t	2026-05-08 12:58:33
+ea73cfd7-1c5f-4513-95d7-65310035aaa3	cb2ab766-e7df-4626-94bc-ba4274f3501a	88.92	likely_real	0.92	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 86.27, "trustbond": 92.76, "natural_language": 83.73}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 74.21}, "incident_category": "vandalism", "contributing_models": 3}	948	t	2026-05-17 12:11:25
+8a184e94-ef21-4388-a211-5e968af016ee	7a4e96e5-98f8-48dd-8e8d-8af76c077df4	87.71	likely_real	0.83	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 91.89, "trustbond": 92.06, "natural_language": 86.3}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 73.65}, "incident_category": "accident", "contributing_models": 3}	660	t	2026-04-16 15:10:55
+33312700-eebd-48f9-a5bd-ae5a5514d6e7	34d3bf12-4202-410b-b8c7-91d2eb5ce37f	89.14	likely_real	0.92	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 86.52, "trustbond": 88.71, "natural_language": 81.95}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 70.97}, "incident_category": "suspicious", "contributing_models": 3}	792	t	2026-04-09 14:08:04
+8a8e7872-866a-4338-8afd-954243fc18d6	7fbfde89-0df5-43a2-a905-97a59870a8f8	84.62	likely_real	0.84	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 83.76, "trustbond": 82.49, "natural_language": 84.92}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.99}, "incident_category": "assault", "contributing_models": 3}	936	t	2026-04-19 02:30:55
+f622921f-405b-47d4-8c21-6127c963f7f5	bf923512-ff26-41b1-867a-c44977cc8966	77.77	likely_real	0.89	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 76.98, "trustbond": 80.56, "natural_language": 81.16}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 64.45}, "incident_category": "assault", "contributing_models": 3}	901	t	2026-04-30 12:05:24
+406bac6c-a205-4e50-b73a-477fe0c06153	8259a0a7-7536-4276-9477-e8921202ccc3	78.07	likely_real	0.88	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 73.1, "trustbond": 81.76, "natural_language": 79.95}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.41}, "incident_category": "theft", "contributing_models": 3}	444	t	2026-05-07 14:25:16
+c3cdbed7-3d14-470b-9f7e-cad5561cced2	0d3500ea-6e1f-4fe9-8435-a0e57632290b	83.02	likely_real	0.94	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 77.42, "trustbond": 84.66, "natural_language": 84.92}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 67.72}, "incident_category": "vandalism", "contributing_models": 3}	166	t	2026-04-11 09:08:40
+026740e5-5721-435f-aef5-2033639f1b51	454202a9-176b-4782-8110-801289df5697	88.24	likely_real	0.82	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 88.78, "trustbond": 85.83, "natural_language": 92.19}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 68.67}, "incident_category": "suspicious", "contributing_models": 3}	435	t	2026-04-14 11:19:43
+5c5353c4-3aa4-4c6f-a34f-58496d0293a5	eb2b0bba-15ad-4942-9c3d-f2a2916f11ae	78.13	likely_real	0.79	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 78.76, "trustbond": 75.5, "natural_language": 74.13}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 60.4}, "incident_category": "assault", "contributing_models": 3}	587	t	2026-04-26 07:18:35
+aa896d07-32e4-4abf-ac31-e3e94b52d691	8449550e-f9ca-45cb-83f1-b8837e28b0e9	83.43	likely_real	0.89	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 83.6, "trustbond": 86.44, "natural_language": 77.72}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 69.15}, "incident_category": "vandalism", "contributing_models": 3}	548	t	2026-04-11 12:53:36
+6755e4ef-ea93-4ef2-bddc-07af002608b7	68d5c579-68bf-41da-8103-f5f20ba7c9b6	75.96	likely_real	0.85	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 76.67, "trustbond": 76.38, "natural_language": 71.04}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 61.11}, "incident_category": "suspicious", "contributing_models": 3}	326	t	2026-05-10 15:35:25
+dd0c8a52-e30d-4760-98b2-808de42aabc6	4b9b9b42-c441-4952-867f-c1b5cad45a9b	84.73	likely_real	0.95	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 80.23, "trustbond": 80.82, "natural_language": 83.55}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 64.66}, "incident_category": "domestic", "contributing_models": 3}	463	t	2026-05-03 10:43:09
+f8273517-df89-44c5-8888-08a497cddf08	3c81bd92-2568-4ec4-9680-4512879f6438	76.24	likely_real	0.83	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 79.59, "trustbond": 75.84, "natural_language": 71.08}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 60.67}, "incident_category": "assault", "contributing_models": 3}	596	t	2026-04-19 11:51:10
+eb2cffae-c7d7-47cf-98e6-1657b87674a1	0ba983ef-69ae-443a-a5e4-c65c1173a43e	87.58	likely_real	0.93	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 87.98, "trustbond": 88.11, "natural_language": 85.74}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 70.49}, "incident_category": "accident", "contributing_models": 3}	179	t	2026-04-08 21:18:40
+772592e8-88f7-4c52-b906-f9bc3643ab2a	059bfa85-f021-4703-9c06-e3f2b0ff052b	78.56	likely_real	0.94	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 76.42, "trustbond": 77.04, "natural_language": 74.71}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 61.63}, "incident_category": "theft", "contributing_models": 3}	862	t	2026-04-11 07:27:37
+f6900934-ae14-4d89-9488-a9cdb9da6e93	d0e97796-c317-4380-bc5f-5f7a5d16212e	71.39	likely_real	0.96	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 69.85, "trustbond": 74.1, "natural_language": 72.82}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 59.28}, "incident_category": "theft", "contributing_models": 3}	546	t	2026-05-05 07:38:16
+122d8935-ae8d-46aa-a696-dce6e873d537	c0eb46eb-dff8-48c1-89d6-2ec53a2dd491	87.73	likely_real	0.96	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 95.2, "trustbond": 83.88, "natural_language": 90.98}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 67.11}, "incident_category": "assault", "contributing_models": 3}	240	t	2026-05-09 19:58:15
+c5ad043d-246a-45c2-9654-2abd46c1a1ec	8d3ed732-d698-464e-813b-d04aae3f7e5a	88.69	likely_real	0.94	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 83.37, "trustbond": 85.43, "natural_language": 90.51}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 68.35}, "incident_category": "vandalism", "contributing_models": 3}	126	t	2026-04-30 13:34:45
+cc9e5934-2cbc-41cd-843f-571bfd5fab9a	1a26d484-e69e-4f5e-8fa5-43d2e7833e81	86.81	likely_real	0.80	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 81.6, "trustbond": 86.6, "natural_language": 85.44}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 69.28}, "incident_category": "assault", "contributing_models": 3}	129	t	2026-04-19 12:39:44
+ed13e26d-39e4-48f5-8438-3a4e512e0cbc	b5e1d340-eb9e-45d7-a761-e56ed2fd378d	85.11	likely_real	0.96	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 90.08, "trustbond": 84.37, "natural_language": 84.72}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 67.5}, "incident_category": "theft", "contributing_models": 3}	581	t	2026-05-16 10:58:10
+476f4112-45e6-4edc-b056-55e8c0424844	177cd3f3-cb1d-4734-8713-0d641474a3f7	87.70	likely_real	0.89	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 83.64, "trustbond": 85.4, "natural_language": 84.27}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 68.32}, "incident_category": "domestic", "contributing_models": 3}	428	t	2026-05-13 19:19:01
+b4413379-1dd7-4bdc-ab89-6ad8eb3e93ca	e9c404f9-6ae3-47ea-9fd7-4124be2334ff	88.89	likely_real	0.84	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 88.0, "trustbond": 87.69, "natural_language": 90.32}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 70.15}, "incident_category": "suspicious", "contributing_models": 3}	697	t	2026-04-25 10:15:56
+a4a74578-4209-4bef-a0e7-86c2ab016fc2	c8c0517a-9b70-4f20-9402-474b81828778	89.19	likely_real	0.96	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 84.67, "trustbond": 88.51, "natural_language": 90.74}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 70.8}, "incident_category": "domestic", "contributing_models": 3}	220	t	2026-04-20 19:53:59
+c0e78cd9-6231-44c0-bee3-0a93acba4ae1	7e74b351-d3f1-4d59-be2e-07f097419099	77.02	likely_real	0.91	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 74.43, "trustbond": 74.66, "natural_language": 80.83}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 59.73}, "incident_category": "assault", "contributing_models": 3}	298	t	2026-04-25 13:49:49
+a247f705-36e4-43f3-a80b-39934223f76e	0929509a-02de-4a0e-9026-d94050ea9811	81.65	likely_real	0.85	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 85.08, "trustbond": 82.23, "natural_language": 75.72}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.78}, "incident_category": "suspicious", "contributing_models": 3}	939	t	2026-05-07 09:42:41
+f13eedea-0466-4df9-ab26-d2bbd4a2874c	dd2f22a0-67f9-4523-83e1-665b3a108ce4	85.33	likely_real	0.88	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 90.18, "trustbond": 82.46, "natural_language": 78.7}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.97}, "incident_category": "assault", "contributing_models": 3}	495	t	2026-05-09 15:26:56
+8c5e366a-0379-4ad5-86b5-21ae3b405ad8	a9b60d0a-1675-44eb-9711-11dc2e9ed7e7	85.80	likely_real	0.88	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 93.51, "trustbond": 87.77, "natural_language": 79.82}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 70.21}, "incident_category": "theft", "contributing_models": 3}	419	t	2026-05-03 11:02:42
+7a282ab5-d9a6-477f-b590-f271572f0b32	4bd3cbe6-96e7-40db-879e-e1253807136c	70.55	likely_real	0.92	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 69.57, "trustbond": 71.13, "natural_language": 70.52}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 56.91}, "incident_category": "theft", "contributing_models": 3}	184	t	2026-04-22 21:18:00
+9777642d-7e83-4698-83b7-10b83937d32a	3c1cdd3b-27e2-4988-8047-dcfcd65c67d4	79.56	likely_real	0.89	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 73.67, "trustbond": 80.75, "natural_language": 76.9}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 64.6}, "incident_category": "accident", "contributing_models": 3}	471	t	2026-04-27 15:08:43
+e73aae0a-2278-471e-acb7-c1301b04adbe	2e717511-2176-4ee5-b756-b1b847c639c9	73.38	likely_real	0.90	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 79.93, "trustbond": 73.8, "natural_language": 67.99}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 59.04}, "incident_category": "domestic", "contributing_models": 3}	263	t	2026-05-12 11:56:35
+c70125c8-91de-44a6-8b97-6e2229748022	e8283412-db82-47a4-b8b5-51ced9b592da	75.48	likely_real	0.96	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 73.49, "trustbond": 80.97, "natural_language": 72.26}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 64.77}, "incident_category": "accident", "contributing_models": 3}	849	t	2026-05-13 10:38:42
+b5cd588c-2304-438c-99a9-c0de3fc6cc19	94ef45a1-e92e-44bb-965a-5a6477547241	87.10	likely_real	0.93	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 84.91, "trustbond": 83.39, "natural_language": 88.79}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 66.71}, "incident_category": "vandalism", "contributing_models": 3}	185	t	2026-05-01 08:05:38
+4a80a8b6-6ef3-4b8b-9e15-91b8df24490a	561328ac-bd36-4d85-accd-68d23afd0367	87.87	likely_real	0.82	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 86.35, "trustbond": 86.35, "natural_language": 90.86}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 69.08}, "incident_category": "vandalism", "contributing_models": 3}	199	t	2026-04-25 09:49:22
+856f0b3a-5170-4455-916a-08e27e3a383d	0df5fdc1-d660-48ba-ba0d-7ac2602e7b4f	83.68	likely_real	0.96	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 89.57, "trustbond": 79.69, "natural_language": 83.57}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 63.76}, "incident_category": "theft", "contributing_models": 3}	864	t	2026-05-14 20:55:21
+bdb2e9ec-37c4-4e39-add3-54bb3e07acf2	d9a429b2-5ece-4821-adc1-d30e2e731376	88.82	likely_real	0.84	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 88.32, "trustbond": 93.33, "natural_language": 91.93}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 74.66}, "incident_category": "assault", "contributing_models": 3}	873	t	2026-05-13 07:15:07
+999d3373-17cc-4994-ae84-1fd08eed76e8	fade6b34-7576-44aa-b1aa-c3dc755c2448	78.18	likely_real	0.89	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 73.61, "trustbond": 79.68, "natural_language": 71.32}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 63.74}, "incident_category": "vandalism", "contributing_models": 3}	932	t	2026-05-09 08:28:46
+2a8e75a6-4368-4e06-ac44-62fad9c9dfd0	c16b2c81-f1ef-40ed-8487-5f8c78952c20	78.97	likely_real	0.79	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 77.1, "trustbond": 81.16, "natural_language": 73.92}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 64.93}, "incident_category": "accident", "contributing_models": 3}	541	t	2026-04-08 22:05:44
+f8dc3754-0765-4eb3-aded-77cdb4764d83	f9c9a76a-b614-4739-a931-86cd208ad7c4	81.76	likely_real	0.95	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 89.03, "trustbond": 78.04, "natural_language": 82.17}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 62.43}, "incident_category": "domestic", "contributing_models": 3}	697	t	2026-05-03 17:51:48
+9c321ff9-7ad5-408d-8547-48ed8f090c41	43c922b5-3b25-4cd3-9304-1ba0e352f0d2	88.53	likely_real	0.94	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 85.08, "trustbond": 92.24, "natural_language": 87.34}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 73.79}, "incident_category": "accident", "contributing_models": 3}	445	t	2026-04-17 06:03:29
+5f7e63da-9ca9-4c48-97a5-c7d2e6220120	3bfb0023-830e-45cd-8de7-6321c0929221	83.56	likely_real	0.87	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 77.84, "trustbond": 87.55, "natural_language": 75.96}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 70.04}, "incident_category": "domestic", "contributing_models": 3}	387	t	2026-05-03 12:20:18
+ab23f77d-b6bb-47e1-8d79-0f6d52cfe817	b432a023-6880-402d-a1bb-3fab54effae8	76.10	likely_real	0.82	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 74.19, "trustbond": 72.36, "natural_language": 70.15}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 57.89}, "incident_category": "theft", "contributing_models": 3}	203	t	2026-04-10 03:57:48
+dd4ab55a-0352-4bff-bf7b-fb2a33abd571	db6f45ac-2549-4f77-82dd-a2a14f5a8d3b	82.29	likely_real	0.96	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 78.63, "trustbond": 82.78, "natural_language": 85.68}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 66.22}, "incident_category": "accident", "contributing_models": 3}	336	t	2026-04-07 15:11:29
+48d56ab0-e8b1-46b8-8dd8-3b01f8af4217	6f294ecd-5940-4d82-b5b6-115ea98c655b	83.44	likely_real	0.79	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 80.77, "trustbond": 88.34, "natural_language": 79.42}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 70.67}, "incident_category": "domestic", "contributing_models": 3}	883	t	2026-04-10 11:59:01
+a265abc5-0e8d-4404-bc32-c6578e7fa705	3b873ffb-9df9-47ae-991d-ba51c0fdd5bc	71.05	likely_real	0.95	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 65.51, "trustbond": 69.06, "natural_language": 63.74}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 55.25}, "incident_category": "accident", "contributing_models": 3}	171	t	2026-04-17 20:43:15
+8a33cd0a-345d-4ab6-9cd1-7ec3dd6abacc	410f4d8c-9330-45e1-9917-7400e86425fa	87.82	likely_real	0.89	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 93.09, "trustbond": 83.9, "natural_language": 82.85}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 67.12}, "incident_category": "theft", "contributing_models": 3}	432	t	2026-05-17 10:31:46
+5b7a898e-af10-46cf-869f-e66d2f135249	a21f9dc5-a6bd-4e25-8edd-713c8d9dda68	84.50	likely_real	0.85	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 87.44, "trustbond": 87.63, "natural_language": 84.74}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 70.11}, "incident_category": "accident", "contributing_models": 3}	607	t	2026-04-15 19:25:46
+d606d7a0-9724-4072-8241-0ac75eceeb06	675857fc-907b-4ffc-9eb8-5e5bbb011169	73.51	likely_real	0.80	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 73.52, "trustbond": 73.85, "natural_language": 70.66}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 59.08}, "incident_category": "assault", "contributing_models": 3}	608	t	2026-04-13 19:11:48
+0f479139-0577-4031-93eb-1b58d3d58ff0	ff211874-f382-4e5e-8ba9-36af7acf774e	74.76	likely_real	0.82	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 70.48, "trustbond": 70.98, "natural_language": 72.82}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 56.78}, "incident_category": "accident", "contributing_models": 3}	848	t	2026-05-06 06:00:47
+b8dd9920-0bd3-4a56-969c-c1164417e3ed	99fab3dd-5a63-436b-82bf-b5fc8b0f5f37	87.80	likely_real	0.84	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 94.5, "trustbond": 83.83, "natural_language": 87.86}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 67.06}, "incident_category": "vandalism", "contributing_models": 3}	707	t	2026-05-12 17:01:21
+5c04f135-0306-4429-a593-c2cd4df02106	4da8719b-9c5b-462c-9faa-9d37e248a1d7	82.12	likely_real	0.87	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 82.29, "trustbond": 83.0, "natural_language": 84.77}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 66.4}, "incident_category": "accident", "contributing_models": 3}	184	t	2026-05-04 14:18:23
+455d91d1-9dfa-4099-97bc-2acbdc0ce2b4	5eb53144-5b27-4caa-89d0-84eba188a8ca	77.69	likely_real	0.79	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 72.92, "trustbond": 78.13, "natural_language": 76.57}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 62.51}, "incident_category": "domestic", "contributing_models": 3}	630	t	2026-05-04 01:43:05
+eec4bb5a-147f-4f28-8770-c7bee4b3ba4d	e5903ad3-798b-492e-8264-cdc976c88942	72.53	likely_real	0.82	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 72.93, "trustbond": 77.83, "natural_language": 69.24}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 62.27}, "incident_category": "suspicious", "contributing_models": 3}	920	t	2026-05-16 15:01:01
+4288a5e4-63c4-4c37-baac-70af9ef6b65e	b7b40b95-03f0-4dc2-b19c-6f13fb9d3a4a	76.46	likely_real	0.82	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 75.29, "trustbond": 78.7, "natural_language": 71.95}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 62.96}, "incident_category": "domestic", "contributing_models": 3}	808	t	2026-05-11 19:28:38
+c5876369-5301-4c1a-95c7-29a1eae07078	521af58e-775c-49c8-b126-25fca94d953b	88.10	likely_real	0.86	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 95.62, "trustbond": 91.98, "natural_language": 88.32}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 73.58}, "incident_category": "accident", "contributing_models": 3}	175	t	2026-04-18 16:43:00
+9f6865a0-d10e-4c4b-a6f8-aa2371ab8ec9	35482682-9afe-4ece-a338-5133914a378c	74.70	likely_real	0.91	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 82.0, "trustbond": 74.01, "natural_language": 70.22}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 59.21}, "incident_category": "domestic", "contributing_models": 3}	753	t	2026-04-25 18:34:56
+45a36427-9248-413f-abc3-23f1aaf07787	dd7a12ba-3e8a-4576-8feb-34216be7446c	88.36	likely_real	0.78	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 83.39, "trustbond": 91.53, "natural_language": 80.81}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 73.22}, "incident_category": "assault", "contributing_models": 3}	302	t	2026-04-09 21:15:09
+f0d1b792-94de-4c33-a5a2-a67829969929	cec42b29-571e-481d-92af-4749dd69d0a3	86.12	likely_real	0.87	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 85.59, "trustbond": 87.45, "natural_language": 79.76}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 69.96}, "incident_category": "suspicious", "contributing_models": 3}	936	t	2026-04-23 13:01:27
+bb1d0bb6-3d18-4601-abe5-9e2c29f3294f	f71e70fc-03f6-4974-b1b6-c18c54059881	77.29	likely_real	0.80	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 75.74, "trustbond": 79.49, "natural_language": 80.09}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 63.59}, "incident_category": "domestic", "contributing_models": 3}	581	t	2026-04-25 23:00:45
+60f8d42f-9a5d-4ff2-888a-b9723ac30c19	2b162d7b-eb05-40dd-86a1-ce9ea8765bd3	82.77	likely_real	0.94	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 84.31, "trustbond": 87.36, "natural_language": 76.45}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 69.89}, "incident_category": "accident", "contributing_models": 3}	389	t	2026-05-08 06:15:55
+a8599661-42af-467b-97c6-047b02c7d204	12c9b4bb-c718-4448-94b7-e511c514601c	81.26	likely_real	0.92	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 78.32, "trustbond": 82.1, "natural_language": 77.57}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.68}, "incident_category": "vandalism", "contributing_models": 3}	619	t	2026-04-11 10:02:42
+048fb0fa-ec7c-4dbe-ae20-b7d8206e907b	367bb793-df5e-4524-862b-a727f309d6cb	73.14	likely_real	0.82	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 69.24, "trustbond": 74.29, "natural_language": 68.51}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 59.43}, "incident_category": "accident", "contributing_models": 3}	281	t	2026-04-18 21:56:10
+c11c896c-90b4-4821-9e01-abe798df7241	b1dbaac7-0683-4aa6-932b-ccb5ac8e4fbb	75.53	likely_real	0.96	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 74.82, "trustbond": 77.5, "natural_language": 68.36}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 62.0}, "incident_category": "suspicious", "contributing_models": 3}	255	t	2026-04-18 14:37:23
+521bfb16-17df-4f2a-ba39-0b51fedb947b	8f5e81e4-67c1-4e2c-ab72-be0359dee24e	78.65	likely_real	0.93	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 83.03, "trustbond": 78.46, "natural_language": 77.72}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 62.77}, "incident_category": "vandalism", "contributing_models": 3}	899	t	2026-05-07 14:39:56
+d001b4b2-a6b8-47f8-9e2b-92243b0d7507	220ec952-367e-4d55-b984-b726188582d8	73.12	likely_real	0.92	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 69.39, "trustbond": 73.59, "natural_language": 73.51}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 58.87}, "incident_category": "theft", "contributing_models": 3}	339	t	2026-04-10 20:26:22
+db3e1699-ba76-4773-b76e-aa7b3e3d227c	0107b6fa-6ea2-4379-98aa-3913f4127df0	88.81	likely_real	0.96	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 88.96, "trustbond": 93.01, "natural_language": 88.49}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 74.41}, "incident_category": "theft", "contributing_models": 3}	326	t	2026-04-24 23:00:55
+0251d997-5ce5-47af-912e-b32505896315	b8055d3b-ddc7-4152-8a72-adb6f28858aa	75.46	likely_real	0.88	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 74.22, "trustbond": 77.05, "natural_language": 73.5}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 61.64}, "incident_category": "assault", "contributing_models": 3}	239	t	2026-05-08 17:23:31
+10921614-1c2c-4407-9eda-c052c12d0e7b	fc4d219a-62f6-4f1e-92cc-d88812f65fc0	77.22	likely_real	0.81	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 73.88, "trustbond": 80.68, "natural_language": 80.38}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 64.55}, "incident_category": "suspicious", "contributing_models": 3}	874	t	2026-04-18 19:48:32
+2e871fb7-6c6d-4e9a-91b9-c9e3ef77298b	d1b846b8-4104-4a0f-a898-ae8067435897	74.50	likely_real	0.84	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 76.18, "trustbond": 76.63, "natural_language": 69.62}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 61.3}, "incident_category": "assault", "contributing_models": 3}	362	t	2026-04-26 09:06:13
+8ef51f08-090e-4b1b-a63f-eca5126b5533	69b392fb-24e1-4bfe-a34f-7585ac9b7831	77.35	likely_real	0.85	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 80.86, "trustbond": 77.47, "natural_language": 73.56}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 61.97}, "incident_category": "assault", "contributing_models": 3}	740	t	2026-04-25 12:25:28
+f9cabc30-7a03-40c4-a375-cf30edecc972	448fedee-e9b4-4259-b9b4-e66abb11d758	89.42	likely_real	0.83	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 95.82, "trustbond": 86.97, "natural_language": 89.28}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 69.58}, "incident_category": "suspicious", "contributing_models": 3}	436	t	2026-05-13 13:18:35
+037641d9-6b59-4615-90c2-0ce5689a62fa	50ffa3cd-3c59-4ae5-990a-a556f63cdd76	84.51	likely_real	0.94	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 87.26, "trustbond": 82.72, "natural_language": 77.46}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 66.17}, "incident_category": "assault", "contributing_models": 3}	649	t	2026-05-16 17:56:13
+f96d51db-b3af-4520-ae31-1c89a7c0c476	dca91abe-5b7a-41a1-9e1b-c19d2d265e58	85.54	likely_real	0.80	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 83.27, "trustbond": 89.05, "natural_language": 79.29}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 71.24}, "incident_category": "assault", "contributing_models": 3}	521	t	2026-05-07 09:07:53
+1f3b69cd-4e50-41b5-b48d-4a8c8d8f2313	c1a88496-8c45-4827-a01b-353fd77a79a0	80.94	likely_real	0.83	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 87.37, "trustbond": 83.33, "natural_language": 75.32}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 66.66}, "incident_category": "theft", "contributing_models": 3}	802	t	2026-04-24 19:28:21
+bacd0bc6-58bd-499c-aa61-406105b56cce	488a857a-f17e-4882-ac00-d152d8103282	79.81	likely_real	0.88	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 85.96, "trustbond": 79.05, "natural_language": 77.43}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 63.24}, "incident_category": "accident", "contributing_models": 3}	733	t	2026-05-11 13:15:08
+bb72cce0-f12e-4279-aefc-2319f4453f90	13ffd6aa-4d5e-4223-8a63-c5ed027b5701	88.32	likely_real	0.95	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 83.7, "trustbond": 86.34, "natural_language": 86.14}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 69.07}, "incident_category": "vandalism", "contributing_models": 3}	704	t	2026-04-19 06:40:40
+a319da6b-2977-4736-b8f1-b219754ba365	657d370d-237f-42b7-8327-7260fc799839	84.45	likely_real	0.79	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 79.87, "trustbond": 82.61, "natural_language": 82.68}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 66.09}, "incident_category": "vandalism", "contributing_models": 3}	356	t	2026-05-18 22:13:53
+26f56d08-362f-4108-8e12-846e07a7c021	80268a4e-f890-43f6-b596-38b15b5f8187	75.07	likely_real	0.85	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 74.11, "trustbond": 76.57, "natural_language": 76.0}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 61.26}, "incident_category": "assault", "contributing_models": 3}	583	t	2026-04-13 13:06:58
+a423d404-9bc4-446c-9f59-8fd7cec5b5a7	13f22cb9-1d45-4dba-8fe5-41081b904d94	85.86	likely_real	0.79	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 84.73, "trustbond": 82.42, "natural_language": 87.11}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.94}, "incident_category": "vandalism", "contributing_models": 3}	564	t	2026-04-29 06:14:28
+f34eb021-02c3-4bd5-aea8-9b8915203895	9e573a15-c87c-4704-be6e-96cc6d460972	85.20	likely_real	0.92	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 84.73, "trustbond": 86.01, "natural_language": 79.58}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 68.81}, "incident_category": "theft", "contributing_models": 3}	705	t	2026-04-08 13:19:40
+62e702f7-c8b7-4754-88da-e139c66b82b4	5a1dd1bb-df91-4951-9a39-ee7b5989e92b	85.78	likely_real	0.87	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 87.31, "trustbond": 82.01, "natural_language": 80.29}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 65.61}, "incident_category": "vandalism", "contributing_models": 3}	328	t	2026-05-11 17:27:35
+c671001a-a82f-4260-b89f-f37f5dd435fe	7e58550c-e5ce-4f24-a819-1c82703c99cd	88.02	likely_real	0.84	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 86.87, "trustbond": 87.95, "natural_language": 81.9}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 70.36}, "incident_category": "domestic", "contributing_models": 3}	480	t	2026-05-17 12:57:54
+26e8b4c7-5178-4c85-9fb6-1b0362b77b88	874e0f76-66a9-4c89-b67f-3664767de16a	80.63	likely_real	0.81	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 75.04, "trustbond": 85.03, "natural_language": 74.38}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 68.02}, "incident_category": "accident", "contributing_models": 3}	446	t	2026-05-17 22:17:20
+dc0a728b-7ceb-4a6c-83ed-e02a1f242ba9	97c01e9d-34bf-4ec7-a90f-b5244c3eef4a	77.86	likely_real	0.81	trustbond_v2_no_desc_length_20260501	xgboost_ensemble	{"trust_band": "HIGH_CONFIDENCE", "model_scores": {"volo": 82.56, "trustbond": 75.79, "natural_language": 70.25}, "top_features": {"is_flagged": 0, "semantic_match": 1, "gps_accuracy_ok": 1, "evidence_present": 1, "device_trust_score": 60.63}, "incident_category": "assault", "contributing_models": 3}	135	t	2026-05-10 09:48:57
 \.
 
 
 --
--- Data for Name: notifications; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: notifications; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.notifications (notification_id, police_user_id, title, message, type, priority, related_entity_type, related_entity_id, action_url, is_read, read_at, created_at, expires_at) FROM stdin;
@@ -1701,6 +2144,7 @@ a7f07459-7011-45eb-bcfe-0a887dc00c7b	1	Auto-Generated Case: CASE-2026-0002	A new
 7abaf586-e6f3-4529-b926-625dff2b4feb	1	Auto-Generated Case: CASE-2026-0002	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	f327f8d8-9165-4d9f-98c1-782cea2810ae	\N	f	\N	2026-05-10 14:28:35.304783	\N
 b633b33a-001a-496f-b763-f01b6530c9b1	26	Auto-Generated Case: CASE-2026-0001	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	1bff7f82-a4e2-4d4b-9abe-28e6082f1a61	\N	f	\N	2026-05-10 14:28:47.1813	\N
 8884f14f-a001-457e-9d94-081d83ebc6c3	7	Auto-Generated Case: CASE-2026-0001	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	1bff7f82-a4e2-4d4b-9abe-28e6082f1a61	\N	f	\N	2026-05-10 14:28:47.1813	\N
+9022c887-c5a6-402f-b4a7-05d00110e3e5	6	Case Assigned: CASE-2026-0021	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	b1b7b78a-f448-42c7-9fe2-db72d490d355	\N	f	\N	2026-05-19 12:31:51.871782	\N
 4f074060-8319-476f-9b8f-b4795c7d2ccc	1	Auto-Generated Case: CASE-2026-0001	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	1bff7f82-a4e2-4d4b-9abe-28e6082f1a61	\N	f	\N	2026-05-10 14:28:47.1813	\N
 1c10d963-ae5a-4e28-b9b7-fdadb180c08e	27	Case Assigned: CASE-2026-0002	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	f327f8d8-9165-4d9f-98c1-782cea2810ae	\N	f	\N	2026-05-10 14:28:35.767772	\N
 fd4df955-8160-492b-8938-66573d0b3216	27	Case Assigned: CASE-2026-0001	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	1bff7f82-a4e2-4d4b-9abe-28e6082f1a61	\N	f	\N	2026-05-10 14:28:47.649487	\N
@@ -1723,11 +2167,750 @@ be658793-b336-4737-b12e-c867c3c30d15	27	Case Assigned: CASE-2026-0001	You have b
 65faacf0-62d5-41ad-8110-0229d62ece3b	7	Auto-Generated Case: CASE-2026-0003	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	8ed913fe-bb0c-4bbe-85c2-9daeb57fe241	\N	f	\N	2026-05-10 15:06:45.731784	\N
 827fab2d-84af-42f1-9abe-dc445fac62d2	1	Auto-Generated Case: CASE-2026-0003	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	8ed913fe-bb0c-4bbe-85c2-9daeb57fe241	\N	f	\N	2026-05-10 15:06:45.731784	\N
 c7eaa2f6-00c9-426d-890b-fecd3c8659bc	27	Case Assigned: CASE-2026-0003	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	8ed913fe-bb0c-4bbe-85c2-9daeb57fe241	\N	f	\N	2026-05-10 15:06:46.216142	\N
+eb025196-d4cc-4f59-a575-8aaf16682859	7	Auto-Generated Case: CASE-2026-0004	A new case has been automatically created from 5 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	ff61aae7-77be-4a91-a158-ede56d7e5738	\N	f	\N	2026-05-19 12:29:44.792302	\N
+78254efd-22dd-47f0-904a-b2109937325c	1	Auto-Generated Case: CASE-2026-0004	A new case has been automatically created from 5 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	ff61aae7-77be-4a91-a158-ede56d7e5738	\N	f	\N	2026-05-19 12:29:44.792302	\N
+989af51d-610a-4d83-b76b-96f740282011	26	Auto-Generated Case: CASE-2026-0004	A new case has been automatically created from 5 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	ff61aae7-77be-4a91-a158-ede56d7e5738	\N	f	\N	2026-05-19 12:29:44.792302	\N
+b0f9147e-b231-444e-99a0-ebc67da64167	6	Case Assigned: CASE-2026-0004	You have been assigned to auto-generated case: Incident Type 9 case - Multiple Reports	assignment	medium	case	ff61aae7-77be-4a91-a158-ede56d7e5738	\N	f	\N	2026-05-19 12:29:44.803549	\N
+b970247a-9c14-4130-81bb-fa5ef3288962	7	Auto-Generated Case: CASE-2026-0005	A new case has been automatically created from 4 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	7c9d2d43-54a8-4c67-9f78-0b81de04bf27	\N	f	\N	2026-05-19 12:29:52.552014	\N
+05c25432-bf1a-465d-9223-2312e7564c2d	1	Auto-Generated Case: CASE-2026-0005	A new case has been automatically created from 4 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	7c9d2d43-54a8-4c67-9f78-0b81de04bf27	\N	f	\N	2026-05-19 12:29:52.552014	\N
+ce1beb68-c262-4e56-b7eb-b3783e703a1a	26	Auto-Generated Case: CASE-2026-0005	A new case has been automatically created from 4 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	7c9d2d43-54a8-4c67-9f78-0b81de04bf27	\N	f	\N	2026-05-19 12:29:52.552014	\N
+f76337b5-a053-40b6-983f-f5b78cd0b990	27	Case Assigned: CASE-2026-0005	You have been assigned to auto-generated case: Incident Type 9 case - Multiple Reports	assignment	medium	case	7c9d2d43-54a8-4c67-9f78-0b81de04bf27	\N	f	\N	2026-05-19 12:29:52.556401	\N
+76e243b2-459c-4d35-82b1-ed071a4329ab	7	Auto-Generated Case: CASE-2026-0006	A new case has been automatically created from 4 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	a7abfdf7-3e2a-47fa-a41e-882604e7b81f	\N	f	\N	2026-05-19 12:30:01.163428	\N
+f3400d10-a879-4d62-b4c0-90fb21f13562	1	Auto-Generated Case: CASE-2026-0006	A new case has been automatically created from 4 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	a7abfdf7-3e2a-47fa-a41e-882604e7b81f	\N	f	\N	2026-05-19 12:30:01.163428	\N
+e4bc9cab-68d7-4bbb-b014-e1d9bca3b314	26	Auto-Generated Case: CASE-2026-0006	A new case has been automatically created from 4 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	a7abfdf7-3e2a-47fa-a41e-882604e7b81f	\N	f	\N	2026-05-19 12:30:01.163428	\N
+794ed058-b910-4382-bc64-74b7f9048023	6	Case Assigned: CASE-2026-0006	You have been assigned to auto-generated case: Incident Type 3 case - Multiple Reports	assignment	medium	case	a7abfdf7-3e2a-47fa-a41e-882604e7b81f	\N	f	\N	2026-05-19 12:30:01.168371	\N
+3a9c9071-6a88-4333-8cf9-a83702fa1241	7	Auto-Generated Case: CASE-2026-0007	A new case has been automatically created from 6 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	4a509029-0c2b-46da-a0b5-1facf9dbbd95	\N	f	\N	2026-05-19 12:30:08.519882	\N
+36b5d476-db75-4c86-a9ba-8126f1965f79	1	Auto-Generated Case: CASE-2026-0007	A new case has been automatically created from 6 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	4a509029-0c2b-46da-a0b5-1facf9dbbd95	\N	f	\N	2026-05-19 12:30:08.519882	\N
+db551235-851b-4973-88b0-d9f58c8e3ee2	26	Auto-Generated Case: CASE-2026-0007	A new case has been automatically created from 6 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	4a509029-0c2b-46da-a0b5-1facf9dbbd95	\N	f	\N	2026-05-19 12:30:08.519882	\N
+ad481876-cc88-48b0-931e-4044a05049dc	27	Case Assigned: CASE-2026-0007	You have been assigned to auto-generated case: Incident Type 9 case - Multiple Reports	assignment	medium	case	4a509029-0c2b-46da-a0b5-1facf9dbbd95	\N	f	\N	2026-05-19 12:30:08.524013	\N
+36691b76-0267-4c86-b931-56342ff40d0b	7	Auto-Generated Case: CASE-2026-0008	A new case has been automatically created from 4 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	6d93cfdc-5614-49cd-bb1a-c14f39a851bd	\N	f	\N	2026-05-19 12:30:16.184401	\N
+338d3576-6aa9-4e75-aa98-3bbccea64704	1	Auto-Generated Case: CASE-2026-0008	A new case has been automatically created from 4 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	6d93cfdc-5614-49cd-bb1a-c14f39a851bd	\N	f	\N	2026-05-19 12:30:16.184401	\N
+76eb89eb-5637-4db8-99ef-98ac8d9f2a56	26	Auto-Generated Case: CASE-2026-0008	A new case has been automatically created from 4 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	6d93cfdc-5614-49cd-bb1a-c14f39a851bd	\N	f	\N	2026-05-19 12:30:16.184401	\N
+7cc846bf-321c-4334-b1bc-94c59aab1d5a	27	Case Assigned: CASE-2026-0008	You have been assigned to auto-generated case: Incident Type 1 case - Multiple Reports	assignment	medium	case	6d93cfdc-5614-49cd-bb1a-c14f39a851bd	\N	f	\N	2026-05-19 12:30:16.191743	\N
+7d539cec-317b-4760-9ac5-feedcffb6e3f	7	Auto-Generated Case: CASE-2026-0009	A new case has been automatically created from 5 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	652437e9-6af6-4a04-8d70-67303f2f1437	\N	f	\N	2026-05-19 12:30:23.814214	\N
+37fed4fb-244c-48ae-9d16-da15ef659137	1	Auto-Generated Case: CASE-2026-0009	A new case has been automatically created from 5 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	652437e9-6af6-4a04-8d70-67303f2f1437	\N	f	\N	2026-05-19 12:30:23.814214	\N
+de7ef412-a483-45b1-8a9d-8b35661065f1	26	Auto-Generated Case: CASE-2026-0009	A new case has been automatically created from 5 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	652437e9-6af6-4a04-8d70-67303f2f1437	\N	f	\N	2026-05-19 12:30:23.814214	\N
+103fad0a-eeed-432f-9be1-e10c7e3f4f55	6	Case Assigned: CASE-2026-0009	You have been assigned to auto-generated case: Incident Type 1 case - Multiple Reports	assignment	medium	case	652437e9-6af6-4a04-8d70-67303f2f1437	\N	f	\N	2026-05-19 12:30:23.818289	\N
+271b7177-3ef6-45bb-9a5c-fd1409b4795e	7	Auto-Generated Case: CASE-2026-0010	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	bff20aa5-eb84-4211-ae91-258d9497da80	\N	f	\N	2026-05-19 12:30:31.519865	\N
+44815294-55b9-417c-81b9-2582fbbaa9ef	1	Auto-Generated Case: CASE-2026-0010	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	bff20aa5-eb84-4211-ae91-258d9497da80	\N	f	\N	2026-05-19 12:30:31.519865	\N
+c406a1a0-26fc-494b-88a9-6468c8f797af	26	Auto-Generated Case: CASE-2026-0010	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	bff20aa5-eb84-4211-ae91-258d9497da80	\N	f	\N	2026-05-19 12:30:31.519865	\N
+639a4cf0-6aa6-48b4-8f16-534999fd4927	6	Case Assigned: CASE-2026-0010	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	bff20aa5-eb84-4211-ae91-258d9497da80	\N	f	\N	2026-05-19 12:30:31.524439	\N
+20dc7f20-4c1d-4d42-8b74-2010e7d927dc	7	Auto-Generated Case: CASE-2026-0011	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	3b7b8763-ca3a-4711-ae58-25fb1bf23634	\N	f	\N	2026-05-19 12:30:38.851708	\N
+c5ae72cf-767e-44cd-b0c4-bce1448b4d1c	1	Auto-Generated Case: CASE-2026-0011	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	3b7b8763-ca3a-4711-ae58-25fb1bf23634	\N	f	\N	2026-05-19 12:30:38.851708	\N
+1a045e8f-8c76-42de-a1d6-a991caaeab34	26	Auto-Generated Case: CASE-2026-0011	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	3b7b8763-ca3a-4711-ae58-25fb1bf23634	\N	f	\N	2026-05-19 12:30:38.851708	\N
+b174cf41-a78a-4760-ab8f-cccc4ffedb14	27	Case Assigned: CASE-2026-0011	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	3b7b8763-ca3a-4711-ae58-25fb1bf23634	\N	f	\N	2026-05-19 12:30:38.855853	\N
+cbfc988b-3f57-4889-9da2-36fad09247c5	7	Auto-Generated Case: CASE-2026-0012	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	4115804c-628f-46a7-a94a-c3850683b192	\N	f	\N	2026-05-19 12:30:46.959994	\N
+bc6de442-4791-4841-95e5-114c11ad79fb	1	Auto-Generated Case: CASE-2026-0012	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	4115804c-628f-46a7-a94a-c3850683b192	\N	f	\N	2026-05-19 12:30:46.959994	\N
+27863b9a-2b15-466d-9ec7-2f59b1458a94	26	Auto-Generated Case: CASE-2026-0012	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	4115804c-628f-46a7-a94a-c3850683b192	\N	f	\N	2026-05-19 12:30:46.959994	\N
+0038bbcf-bcb0-46fa-9c27-4fd015a02bb2	6	Case Assigned: CASE-2026-0012	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	4115804c-628f-46a7-a94a-c3850683b192	\N	f	\N	2026-05-19 12:30:46.964484	\N
+bb8dfbc9-26ec-4513-a5a8-beab7cc1de69	7	Auto-Generated Case: CASE-2026-0013	A new case has been automatically created from 2 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	740e41ac-411d-45d2-81a3-5455aa336a5e	\N	f	\N	2026-05-19 12:30:54.107145	\N
+e5d85b62-cd47-4b80-9690-9fb2f9e02c2a	1	Auto-Generated Case: CASE-2026-0013	A new case has been automatically created from 2 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	740e41ac-411d-45d2-81a3-5455aa336a5e	\N	f	\N	2026-05-19 12:30:54.107145	\N
+d9a634ac-307f-4f52-b6a6-46baf519c990	26	Auto-Generated Case: CASE-2026-0013	A new case has been automatically created from 2 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	740e41ac-411d-45d2-81a3-5455aa336a5e	\N	f	\N	2026-05-19 12:30:54.107145	\N
+3a3d687a-8d1e-4732-b4d9-80eb4fdf2f29	27	Case Assigned: CASE-2026-0013	You have been assigned to auto-generated case: Incident Type 3 case - Multiple Reports	assignment	medium	case	740e41ac-411d-45d2-81a3-5455aa336a5e	\N	f	\N	2026-05-19 12:30:54.113507	\N
+5c834d8d-05b9-4dea-ab04-d786bcc06ba3	7	Auto-Generated Case: CASE-2026-0014	A new case has been automatically created from 2 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	c49bfc00-ccdc-4c28-bddc-106b020b116c	\N	f	\N	2026-05-19 12:31:01.5565	\N
+0504b8dc-84c1-4869-b930-75a4324103a7	1	Auto-Generated Case: CASE-2026-0014	A new case has been automatically created from 2 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	c49bfc00-ccdc-4c28-bddc-106b020b116c	\N	f	\N	2026-05-19 12:31:01.5565	\N
+a7bc6ba3-5ab4-40b4-b1de-8123c7954a2b	26	Auto-Generated Case: CASE-2026-0014	A new case has been automatically created from 2 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	c49bfc00-ccdc-4c28-bddc-106b020b116c	\N	f	\N	2026-05-19 12:31:01.5565	\N
+845c6ecd-6263-4837-9ba1-0265ca7c8af2	6	Case Assigned: CASE-2026-0014	You have been assigned to auto-generated case: Incident Type 3 case - Multiple Reports	assignment	medium	case	c49bfc00-ccdc-4c28-bddc-106b020b116c	\N	f	\N	2026-05-19 12:31:01.56201	\N
+2b677a7f-6e74-4607-8647-b09a07ddd6ae	7	Auto-Generated Case: CASE-2026-0015	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	5f080eab-ede9-461c-b4d6-985dbc6363af	\N	f	\N	2026-05-19 12:31:09.262848	\N
+bdf8ef76-0aec-463b-a44c-00de1eec4e0d	1	Auto-Generated Case: CASE-2026-0015	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	5f080eab-ede9-461c-b4d6-985dbc6363af	\N	f	\N	2026-05-19 12:31:09.262848	\N
+abba5154-3ee6-42a8-8fa4-4ac8a0e5be7f	26	Auto-Generated Case: CASE-2026-0015	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	5f080eab-ede9-461c-b4d6-985dbc6363af	\N	f	\N	2026-05-19 12:31:09.262848	\N
+970fbbd6-eb0c-4517-9443-7d8a8777942e	27	Case Assigned: CASE-2026-0015	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	5f080eab-ede9-461c-b4d6-985dbc6363af	\N	f	\N	2026-05-19 12:31:09.268708	\N
+caa03af2-6f38-4bc5-87df-28700c9aa45f	7	Auto-Generated Case: CASE-2026-0016	A new case has been automatically created from 2 verified reports. Case: Incident Type 4 case - Multiple Reports	system	medium	case	cd99b909-669e-4e59-949b-e2c4f137d51b	\N	f	\N	2026-05-19 12:31:16.774696	\N
+b69b38fc-709b-401b-8db0-a328a5dba9d6	1	Auto-Generated Case: CASE-2026-0016	A new case has been automatically created from 2 verified reports. Case: Incident Type 4 case - Multiple Reports	system	medium	case	cd99b909-669e-4e59-949b-e2c4f137d51b	\N	f	\N	2026-05-19 12:31:16.774696	\N
+2c3ff840-6aab-464e-93b0-22c9c9924f09	26	Auto-Generated Case: CASE-2026-0016	A new case has been automatically created from 2 verified reports. Case: Incident Type 4 case - Multiple Reports	system	medium	case	cd99b909-669e-4e59-949b-e2c4f137d51b	\N	f	\N	2026-05-19 12:31:16.774696	\N
+21d790e2-0948-407c-b326-36fc5416f48c	6	Case Assigned: CASE-2026-0016	You have been assigned to auto-generated case: Incident Type 4 case - Multiple Reports	assignment	medium	case	cd99b909-669e-4e59-949b-e2c4f137d51b	\N	f	\N	2026-05-19 12:31:16.779936	\N
+7879a15f-e786-4b59-b6cf-f0a591401c6d	7	Auto-Generated Case: CASE-2026-0017	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	e6a668fb-4c23-4860-8ea6-180c098a3c02	\N	f	\N	2026-05-19 12:31:23.399087	\N
+64c290ed-e79a-46ec-a2b0-5686446c65ae	1	Auto-Generated Case: CASE-2026-0017	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	e6a668fb-4c23-4860-8ea6-180c098a3c02	\N	f	\N	2026-05-19 12:31:23.399087	\N
+f55020c6-beac-4a04-9250-c11692f28232	26	Auto-Generated Case: CASE-2026-0017	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	e6a668fb-4c23-4860-8ea6-180c098a3c02	\N	f	\N	2026-05-19 12:31:23.399087	\N
+e8fd9344-62d1-4b5e-b8e7-f287de7703b6	27	Case Assigned: CASE-2026-0017	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	e6a668fb-4c23-4860-8ea6-180c098a3c02	\N	f	\N	2026-05-19 12:31:23.403737	\N
+ec740e10-2995-412f-8238-15f663f6ae25	7	Auto-Generated Case: CASE-2026-0018	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	f758fe74-2ae1-4df6-b4f4-8cc3664c7517	\N	f	\N	2026-05-19 12:31:30.305961	\N
+c6fafe99-a295-419c-ba1f-df088e6f5a74	1	Auto-Generated Case: CASE-2026-0018	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	f758fe74-2ae1-4df6-b4f4-8cc3664c7517	\N	f	\N	2026-05-19 12:31:30.305961	\N
+1123b098-a416-4324-ae41-adf4ea53afc0	26	Auto-Generated Case: CASE-2026-0018	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	f758fe74-2ae1-4df6-b4f4-8cc3664c7517	\N	f	\N	2026-05-19 12:31:30.305961	\N
+e73520d0-8ab6-47b7-8fa8-a04cfbb8b861	6	Case Assigned: CASE-2026-0018	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	f758fe74-2ae1-4df6-b4f4-8cc3664c7517	\N	f	\N	2026-05-19 12:31:30.312073	\N
+82fb8b07-5f25-4bcb-9008-71168fccbdb8	7	Auto-Generated Case: CASE-2026-0019	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	b052b493-481b-48e4-a49c-710f4231b740	\N	f	\N	2026-05-19 12:31:37.335387	\N
+a4121be3-d7db-4e73-9b4f-97a21f727a7a	1	Auto-Generated Case: CASE-2026-0019	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	b052b493-481b-48e4-a49c-710f4231b740	\N	f	\N	2026-05-19 12:31:37.335387	\N
+3594d4b3-1397-46d0-b824-570e682f9056	26	Auto-Generated Case: CASE-2026-0019	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	b052b493-481b-48e4-a49c-710f4231b740	\N	f	\N	2026-05-19 12:31:37.335387	\N
+07b2526e-b98d-4942-a8a7-c1050cb5070b	27	Case Assigned: CASE-2026-0019	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	b052b493-481b-48e4-a49c-710f4231b740	\N	f	\N	2026-05-19 12:31:37.34507	\N
+48bc2b16-5535-4a8a-9ca0-af8bc22f0c84	7	Auto-Generated Case: CASE-2026-0020	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	2330e612-3cb1-4e8c-ad78-9204c2772f11	\N	f	\N	2026-05-19 12:31:44.947759	\N
+6cdb798a-921c-4dec-baec-5541d5045974	1	Auto-Generated Case: CASE-2026-0020	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	2330e612-3cb1-4e8c-ad78-9204c2772f11	\N	f	\N	2026-05-19 12:31:44.947759	\N
+cfaaf3ab-159c-433d-b09a-b9d4d1712561	26	Auto-Generated Case: CASE-2026-0020	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	2330e612-3cb1-4e8c-ad78-9204c2772f11	\N	f	\N	2026-05-19 12:31:44.947759	\N
+96d0107e-2901-4c3e-b1ee-c3c6dfc4961a	27	Case Assigned: CASE-2026-0020	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	2330e612-3cb1-4e8c-ad78-9204c2772f11	\N	f	\N	2026-05-19 12:31:44.952045	\N
+b44d6d15-8458-4325-8cd0-754a3d57b676	7	Auto-Generated Case: CASE-2026-0021	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	b1b7b78a-f448-42c7-9fe2-db72d490d355	\N	f	\N	2026-05-19 12:31:51.8474	\N
+a5391934-0c65-41c3-8570-6976178c958b	1	Auto-Generated Case: CASE-2026-0021	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	b1b7b78a-f448-42c7-9fe2-db72d490d355	\N	f	\N	2026-05-19 12:31:51.8474	\N
+354862af-26be-4c6c-9429-a6bee255b98e	26	Auto-Generated Case: CASE-2026-0021	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	b1b7b78a-f448-42c7-9fe2-db72d490d355	\N	f	\N	2026-05-19 12:31:51.8474	\N
+af4fb9ec-e260-4dde-acec-679f923f441b	7	Auto-Generated Case: CASE-2026-0022	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	89725aa6-4818-4c55-be10-61089c351b53	\N	f	\N	2026-05-19 12:32:00.617739	\N
+7780b1af-844e-4467-94ab-c2f4d21fb70b	1	Auto-Generated Case: CASE-2026-0022	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	89725aa6-4818-4c55-be10-61089c351b53	\N	f	\N	2026-05-19 12:32:00.617739	\N
+4c520942-7b87-48e6-bfcb-9ffdcaac9adf	26	Auto-Generated Case: CASE-2026-0022	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	89725aa6-4818-4c55-be10-61089c351b53	\N	f	\N	2026-05-19 12:32:00.617739	\N
+db12e6bc-f182-4071-b82f-6d41b54696ce	6	Case Assigned: CASE-2026-0022	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	89725aa6-4818-4c55-be10-61089c351b53	\N	f	\N	2026-05-19 12:32:00.65939	\N
+4aadfb8f-93f6-4a9c-a16e-1e5f90ab3dce	7	Auto-Generated Case: CASE-2026-0023	A new case has been automatically created from 2 verified reports. Case: Incident Type 4 case - Multiple Reports	system	medium	case	2378b584-fbcb-40b5-9f1d-9dc2638f9bbf	\N	f	\N	2026-05-19 12:32:08.186367	\N
+736c5477-f892-4336-91f4-dd16b828b0df	1	Auto-Generated Case: CASE-2026-0023	A new case has been automatically created from 2 verified reports. Case: Incident Type 4 case - Multiple Reports	system	medium	case	2378b584-fbcb-40b5-9f1d-9dc2638f9bbf	\N	f	\N	2026-05-19 12:32:08.186367	\N
+4c93bb92-cb4a-4691-b0fa-1b6887c8ed78	26	Auto-Generated Case: CASE-2026-0023	A new case has been automatically created from 2 verified reports. Case: Incident Type 4 case - Multiple Reports	system	medium	case	2378b584-fbcb-40b5-9f1d-9dc2638f9bbf	\N	f	\N	2026-05-19 12:32:08.186367	\N
+bfa4efac-2e46-4e00-8435-aeb9dd133e9f	27	Case Assigned: CASE-2026-0023	You have been assigned to auto-generated case: Incident Type 4 case - Multiple Reports	assignment	medium	case	2378b584-fbcb-40b5-9f1d-9dc2638f9bbf	\N	f	\N	2026-05-19 12:32:08.230553	\N
+afcc7910-e04f-4c86-a096-78c1a35086b0	7	Auto-Generated Case: CASE-2026-0024	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	ec6866ef-3503-487f-9fbc-45e4cf78395b	\N	f	\N	2026-05-19 12:32:15.151608	\N
+85c93be9-7a61-4308-ad11-4c028d9b7b49	1	Auto-Generated Case: CASE-2026-0024	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	ec6866ef-3503-487f-9fbc-45e4cf78395b	\N	f	\N	2026-05-19 12:32:15.151608	\N
+ffed4742-0425-4fde-85df-06ca1281ed45	26	Auto-Generated Case: CASE-2026-0024	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	ec6866ef-3503-487f-9fbc-45e4cf78395b	\N	f	\N	2026-05-19 12:32:15.151608	\N
+e7aefe20-8e67-42b2-812a-2686941b9b61	6	Case Assigned: CASE-2026-0024	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	ec6866ef-3503-487f-9fbc-45e4cf78395b	\N	f	\N	2026-05-19 12:32:15.168473	\N
+fbedc780-2194-4f68-aa85-14c1290c5782	7	Auto-Generated Case: CASE-2026-0025	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	8d7c1927-aff3-4010-9ead-6b23cd2406cb	\N	f	\N	2026-05-19 12:32:23.518208	\N
+d777907a-4949-4e49-b006-d49eedf774cf	1	Auto-Generated Case: CASE-2026-0025	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	8d7c1927-aff3-4010-9ead-6b23cd2406cb	\N	f	\N	2026-05-19 12:32:23.518208	\N
+fd67e240-c3b7-40b4-9500-49c71f3ac352	26	Auto-Generated Case: CASE-2026-0025	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	8d7c1927-aff3-4010-9ead-6b23cd2406cb	\N	f	\N	2026-05-19 12:32:23.518208	\N
+ce8f7296-f548-475d-8457-480ddfabf63b	27	Case Assigned: CASE-2026-0025	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	8d7c1927-aff3-4010-9ead-6b23cd2406cb	\N	f	\N	2026-05-19 12:32:23.563357	\N
+ff6a7a2b-4bdd-4962-9310-ff0dfb1c12d5	7	Auto-Generated Case: CASE-2026-0026	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	b9dbae90-1fb9-4f0f-9b80-97e7cc860628	\N	f	\N	2026-05-19 12:32:27.519898	\N
+a9d8d623-9fdc-4ab8-8476-6e21fac493e1	1	Auto-Generated Case: CASE-2026-0026	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	b9dbae90-1fb9-4f0f-9b80-97e7cc860628	\N	f	\N	2026-05-19 12:32:27.519898	\N
+6809479a-18a4-495e-a433-fad416b111a6	26	Auto-Generated Case: CASE-2026-0026	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	b9dbae90-1fb9-4f0f-9b80-97e7cc860628	\N	f	\N	2026-05-19 12:32:27.519898	\N
+addfd7bf-53d2-4a79-9412-78f2de95ea3a	7	Auto-Generated Case: CASE-2026-0027	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	6d55892e-7508-468a-a213-6e634d2e8d74	\N	f	\N	2026-05-19 12:32:30.710198	\N
+9f9327a0-503c-4db1-b6a4-d050bff74e99	1	Auto-Generated Case: CASE-2026-0027	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	6d55892e-7508-468a-a213-6e634d2e8d74	\N	f	\N	2026-05-19 12:32:30.710198	\N
+49b8ea3e-f655-44fc-8105-dab220ffd9a4	26	Auto-Generated Case: CASE-2026-0027	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	6d55892e-7508-468a-a213-6e634d2e8d74	\N	f	\N	2026-05-19 12:32:30.710198	\N
+3b7ef346-5e37-480e-abfc-54e07c86e888	6	Case Assigned: CASE-2026-0026	You have been assigned to auto-generated case: Incident Type 9 case - Multiple Reports	assignment	medium	case	b9dbae90-1fb9-4f0f-9b80-97e7cc860628	\N	f	\N	2026-05-19 12:32:27.553475	\N
+825152a4-1afb-413d-8bb0-82177afb991c	27	Case Assigned: CASE-2026-0027	You have been assigned to auto-generated case: Incident Type 9 case - Multiple Reports	assignment	medium	case	6d55892e-7508-468a-a213-6e634d2e8d74	\N	f	\N	2026-05-19 12:32:30.723903	\N
+786edb09-d4e8-4921-abcd-ad67d2df47f7	7	Auto-Generated Case: CASE-2026-0028	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	41341f42-c888-4e8d-b095-a2dd88dfd8db	\N	f	\N	2026-05-19 12:32:36.196147	\N
+42485e26-c16a-45cc-9a4b-32d91873b4d0	1	Auto-Generated Case: CASE-2026-0028	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	41341f42-c888-4e8d-b095-a2dd88dfd8db	\N	f	\N	2026-05-19 12:32:36.196147	\N
+a625e68a-0c71-4483-b0cc-a95c9b7afd65	26	Auto-Generated Case: CASE-2026-0028	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	41341f42-c888-4e8d-b095-a2dd88dfd8db	\N	f	\N	2026-05-19 12:32:36.196147	\N
+55453d58-972f-4f62-b6c0-bf167fdb6c03	7	Auto-Generated Case: CASE-2026-0029	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	765d5e7c-0c4d-4273-8388-606ab5497ab8	\N	f	\N	2026-05-19 12:32:37.778338	\N
+1c9267d1-e65b-47ba-9f66-2ca40fdbaf08	1	Auto-Generated Case: CASE-2026-0029	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	765d5e7c-0c4d-4273-8388-606ab5497ab8	\N	f	\N	2026-05-19 12:32:37.778338	\N
+b0d97ec2-7cd6-4d96-b52a-c796c66053cd	26	Auto-Generated Case: CASE-2026-0029	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	765d5e7c-0c4d-4273-8388-606ab5497ab8	\N	f	\N	2026-05-19 12:32:37.778338	\N
+f12cc9c1-2bef-4f87-b667-f1b7b0f2e8af	6	Case Assigned: CASE-2026-0029	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	765d5e7c-0c4d-4273-8388-606ab5497ab8	\N	f	\N	2026-05-19 12:32:37.794107	\N
+a4121177-e0fc-4a19-aa7e-70f7f42f88db	27	Case Assigned: CASE-2026-0028	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	41341f42-c888-4e8d-b095-a2dd88dfd8db	\N	f	\N	2026-05-19 12:32:36.212557	\N
+f804cfb7-6dde-4e30-b9c7-332f602fa9a4	7	Auto-Generated Case: CASE-2026-0031	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	0656e4a5-abcc-4db1-bdee-d56810eac4ef	\N	f	\N	2026-05-19 12:32:45.357651	\N
+939263f0-0ac0-4d79-b94b-aa5497a13792	1	Auto-Generated Case: CASE-2026-0031	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	0656e4a5-abcc-4db1-bdee-d56810eac4ef	\N	f	\N	2026-05-19 12:32:45.357651	\N
+76c70c3f-1b6b-4144-9b1d-cbd7678c3e22	26	Auto-Generated Case: CASE-2026-0031	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	0656e4a5-abcc-4db1-bdee-d56810eac4ef	\N	f	\N	2026-05-19 12:32:45.357651	\N
+bd0e2252-326e-406e-bee3-83668ce1d073	7	Auto-Generated Case: CASE-2026-0030	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	511f7965-1418-4d54-8d4f-dd8f0ab4c002	\N	f	\N	2026-05-19 12:32:45.04371	\N
+d8c004aa-fd75-475f-b335-25fdf75f9871	1	Auto-Generated Case: CASE-2026-0030	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	511f7965-1418-4d54-8d4f-dd8f0ab4c002	\N	f	\N	2026-05-19 12:32:45.04371	\N
+ab46ced3-c926-4f66-9ac6-384ced9f1ca2	26	Auto-Generated Case: CASE-2026-0030	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	511f7965-1418-4d54-8d4f-dd8f0ab4c002	\N	f	\N	2026-05-19 12:32:45.04371	\N
+a4f4eec2-ff70-45f9-b051-f9269e06f2f0	6	Case Assigned: CASE-2026-0031	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	0656e4a5-abcc-4db1-bdee-d56810eac4ef	\N	f	\N	2026-05-19 12:32:45.362138	\N
+87cc220f-7c33-4dc3-8735-ec8ce522e570	27	Case Assigned: CASE-2026-0030	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	511f7965-1418-4d54-8d4f-dd8f0ab4c002	\N	f	\N	2026-05-19 12:32:45.048438	\N
+2f97a879-7254-48ea-846c-f63c6cde7ec8	7	Auto-Generated Case: CASE-2026-0032	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	0ed269ca-d1b7-4cc8-b6d1-37fe38b36651	\N	f	\N	2026-05-19 12:32:52.554591	\N
+ebd66c18-4b48-46ea-b52d-11b59b4b3d5c	1	Auto-Generated Case: CASE-2026-0032	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	0ed269ca-d1b7-4cc8-b6d1-37fe38b36651	\N	f	\N	2026-05-19 12:32:52.554591	\N
+1f53d869-65c0-40ec-839e-92f0ff427adf	26	Auto-Generated Case: CASE-2026-0032	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	0ed269ca-d1b7-4cc8-b6d1-37fe38b36651	\N	f	\N	2026-05-19 12:32:52.554591	\N
+8bf69b08-2c51-42ad-9fe7-1e7cf0047836	7	Auto-Generated Case: CASE-2026-0033	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	8c606e3d-bb5e-40e8-bd05-60d57d921408	\N	f	\N	2026-05-19 12:32:53.597586	\N
+09d7a88f-8c47-467b-b701-0294f663052c	1	Auto-Generated Case: CASE-2026-0033	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	8c606e3d-bb5e-40e8-bd05-60d57d921408	\N	f	\N	2026-05-19 12:32:53.597586	\N
+962ba26d-4365-48d7-afa6-8e3724d28734	26	Auto-Generated Case: CASE-2026-0033	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	8c606e3d-bb5e-40e8-bd05-60d57d921408	\N	f	\N	2026-05-19 12:32:53.597586	\N
+f3af48be-5a89-4b6b-a04a-5c0e05c28048	27	Case Assigned: CASE-2026-0032	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	0ed269ca-d1b7-4cc8-b6d1-37fe38b36651	\N	f	\N	2026-05-19 12:32:52.558506	\N
+ed099b11-6370-4086-8324-f0f8d59df7c4	6	Case Assigned: CASE-2026-0033	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	8c606e3d-bb5e-40e8-bd05-60d57d921408	\N	f	\N	2026-05-19 12:32:53.605051	\N
+5e006bac-2c58-4437-a1c0-8499adcc4b0c	7	Auto-Generated Case: CASE-2026-0034	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	87c7ff82-ee9b-4715-af21-ee5638391180	\N	f	\N	2026-05-19 12:32:59.490032	\N
+656449dc-793a-4445-92e2-062832508412	1	Auto-Generated Case: CASE-2026-0034	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	87c7ff82-ee9b-4715-af21-ee5638391180	\N	f	\N	2026-05-19 12:32:59.490032	\N
+504c2604-787d-4bd0-817d-8faa186ee631	26	Auto-Generated Case: CASE-2026-0034	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	87c7ff82-ee9b-4715-af21-ee5638391180	\N	f	\N	2026-05-19 12:32:59.490032	\N
+1bd52006-e1d6-4f41-bd52-8710f64c8667	27	Case Assigned: CASE-2026-0034	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	87c7ff82-ee9b-4715-af21-ee5638391180	\N	f	\N	2026-05-19 12:32:59.494785	\N
+9804f414-aea1-4aed-88f8-c0e5fd3e932e	7	Auto-Generated Case: CASE-2026-0035	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	b02ff86f-9874-4625-a732-a9850cfde21f	\N	f	\N	2026-05-19 12:33:06.171558	\N
+649609e7-5d5c-4f69-aced-a34c543ce369	1	Auto-Generated Case: CASE-2026-0035	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	b02ff86f-9874-4625-a732-a9850cfde21f	\N	f	\N	2026-05-19 12:33:06.171558	\N
+807e2f42-f18b-425a-a468-bcd1f353f899	26	Auto-Generated Case: CASE-2026-0035	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	b02ff86f-9874-4625-a732-a9850cfde21f	\N	f	\N	2026-05-19 12:33:06.171558	\N
+f8b7b0ae-6c4f-4e71-94ec-958badebe2f5	7	Auto-Generated Case: CASE-2026-0036	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	d634eeae-0d08-4521-ab1a-b3bba3bafc08	\N	f	\N	2026-05-19 12:33:08.180144	\N
+987429ba-b9e9-4909-bd98-e2b8c07658d1	1	Auto-Generated Case: CASE-2026-0036	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	d634eeae-0d08-4521-ab1a-b3bba3bafc08	\N	f	\N	2026-05-19 12:33:08.180144	\N
+09ef4759-a1d5-4ae9-8e06-466001be4085	26	Auto-Generated Case: CASE-2026-0036	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	d634eeae-0d08-4521-ab1a-b3bba3bafc08	\N	f	\N	2026-05-19 12:33:08.180144	\N
+1eba7b05-7833-411f-a8a7-b43a401821f7	6	Case Assigned: CASE-2026-0035	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	b02ff86f-9874-4625-a732-a9850cfde21f	\N	f	\N	2026-05-19 12:33:06.177993	\N
+c2e8fd50-ec0b-4a4c-80e2-c0f18a964a20	27	Case Assigned: CASE-2026-0036	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	d634eeae-0d08-4521-ab1a-b3bba3bafc08	\N	f	\N	2026-05-19 12:33:08.186152	\N
+c6903c90-97de-4547-a913-2c5030d3c0f0	7	Auto-Generated Case: CASE-2026-0037	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	bafd66ca-cd63-4133-8ce0-fcd745deda12	\N	f	\N	2026-05-19 12:33:15.468824	\N
+73007154-5212-4164-baf1-6d48f82ebfc0	1	Auto-Generated Case: CASE-2026-0037	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	bafd66ca-cd63-4133-8ce0-fcd745deda12	\N	f	\N	2026-05-19 12:33:15.468824	\N
+452fbd14-44b6-4481-806d-136a4be3efd7	26	Auto-Generated Case: CASE-2026-0037	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	bafd66ca-cd63-4133-8ce0-fcd745deda12	\N	f	\N	2026-05-19 12:33:15.468824	\N
+05d002f5-34c3-4ccf-bf66-73295d6fe0b7	7	Auto-Generated Case: CASE-2026-0038	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	54c22ba1-7766-47f7-a281-09797dac985f	\N	f	\N	2026-05-19 12:33:16.944492	\N
+8bb8eb6a-4682-4998-a099-7ef75356e30a	1	Auto-Generated Case: CASE-2026-0038	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	54c22ba1-7766-47f7-a281-09797dac985f	\N	f	\N	2026-05-19 12:33:16.944492	\N
+911ebcab-2c58-4449-87aa-f711d701dc28	26	Auto-Generated Case: CASE-2026-0038	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	54c22ba1-7766-47f7-a281-09797dac985f	\N	f	\N	2026-05-19 12:33:16.944492	\N
+d8a5730b-0592-4f23-bf12-c23f280ac009	6	Case Assigned: CASE-2026-0037	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	bafd66ca-cd63-4133-8ce0-fcd745deda12	\N	f	\N	2026-05-19 12:33:15.473269	\N
+9208295d-36ae-4ffc-b2fc-8d9fe3c0099d	7	Auto-Generated Case: CASE-2026-0039	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	00141bd6-b00c-4736-813f-251d43661967	\N	f	\N	2026-05-19 12:33:23.092854	\N
+cae761b5-774c-4643-a7bd-bbfbf45c1ebb	1	Auto-Generated Case: CASE-2026-0039	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	00141bd6-b00c-4736-813f-251d43661967	\N	f	\N	2026-05-19 12:33:23.092854	\N
+60bff685-3283-4e38-b374-9253f8ee8d51	26	Auto-Generated Case: CASE-2026-0039	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	00141bd6-b00c-4736-813f-251d43661967	\N	f	\N	2026-05-19 12:33:23.092854	\N
+95094dc4-e71c-4166-90cb-d65625ce8e0b	6	Case Assigned: CASE-2026-0039	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	00141bd6-b00c-4736-813f-251d43661967	\N	f	\N	2026-05-19 12:33:23.097156	\N
+3bc16fdc-d594-472a-ad7e-8218b71a90ce	7	Auto-Generated Case: CASE-2026-0041	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	e0b6c7b5-048e-49ab-bdb4-deb5abdbf44d	\N	f	\N	2026-05-19 12:33:30.813054	\N
+f415b36b-33ad-47d5-8f8e-4917aa394798	1	Auto-Generated Case: CASE-2026-0041	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	e0b6c7b5-048e-49ab-bdb4-deb5abdbf44d	\N	f	\N	2026-05-19 12:33:30.813054	\N
+6a18dc07-da71-41fc-bcdd-519b11649cca	26	Auto-Generated Case: CASE-2026-0041	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	e0b6c7b5-048e-49ab-bdb4-deb5abdbf44d	\N	f	\N	2026-05-19 12:33:30.813054	\N
+d9eb278a-f25b-4397-81ec-a16eeaeae9d6	6	Case Assigned: CASE-2026-0041	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	e0b6c7b5-048e-49ab-bdb4-deb5abdbf44d	\N	f	\N	2026-05-19 12:33:30.817609	\N
+5eab38a9-ba66-4232-9bd7-bdf5ecbaeb3b	7	Auto-Generated Case: CASE-2026-0043	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	13574ee2-03b0-4a6b-b436-6a6df2e603a4	\N	f	\N	2026-05-19 12:33:37.822091	\N
+e651b576-e5cb-4efb-971b-089a7b4c5756	1	Auto-Generated Case: CASE-2026-0043	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	13574ee2-03b0-4a6b-b436-6a6df2e603a4	\N	f	\N	2026-05-19 12:33:37.822091	\N
+fc4ec745-171b-4f22-a137-8e653b361e18	26	Auto-Generated Case: CASE-2026-0043	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	13574ee2-03b0-4a6b-b436-6a6df2e603a4	\N	f	\N	2026-05-19 12:33:37.822091	\N
+04bbf9da-e123-4184-ab86-b0714afc3c18	6	Case Assigned: CASE-2026-0043	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	13574ee2-03b0-4a6b-b436-6a6df2e603a4	\N	f	\N	2026-05-19 12:33:37.82685	\N
+b2b3b69e-367b-4c89-87a0-95e1a1f54305	7	Auto-Generated Case: CASE-2026-0045	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	dd1eaa38-a993-4c55-aa1e-45bfbe203bbc	\N	f	\N	2026-05-19 12:33:45.358039	\N
+43d8948e-6852-48c7-a995-c21cbd2e901a	1	Auto-Generated Case: CASE-2026-0045	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	dd1eaa38-a993-4c55-aa1e-45bfbe203bbc	\N	f	\N	2026-05-19 12:33:45.358039	\N
+3dc40f38-52d6-4141-b692-b42cda86ef52	26	Auto-Generated Case: CASE-2026-0045	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	dd1eaa38-a993-4c55-aa1e-45bfbe203bbc	\N	f	\N	2026-05-19 12:33:45.358039	\N
+6aa2e038-2a65-4e46-b6b4-e1395ba0bae1	6	Case Assigned: CASE-2026-0045	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	dd1eaa38-a993-4c55-aa1e-45bfbe203bbc	\N	f	\N	2026-05-19 12:33:45.36254	\N
+a302752a-066a-42ec-8958-f336f5c433d2	7	Auto-Generated Case: CASE-2026-0047	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	b851e8db-5dec-4d98-9fa7-ba06b6e5dcff	\N	f	\N	2026-05-19 12:33:52.532764	\N
+a9e154f5-e2e9-4466-b77e-603363c02edc	1	Auto-Generated Case: CASE-2026-0047	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	b851e8db-5dec-4d98-9fa7-ba06b6e5dcff	\N	f	\N	2026-05-19 12:33:52.532764	\N
+aadc800e-f91c-4e6e-afde-c79a83607d4d	26	Auto-Generated Case: CASE-2026-0047	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	b851e8db-5dec-4d98-9fa7-ba06b6e5dcff	\N	f	\N	2026-05-19 12:33:52.532764	\N
+9a87acc1-2a08-40b4-bd7e-f80dc1abb6e9	6	Case Assigned: CASE-2026-0047	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	b851e8db-5dec-4d98-9fa7-ba06b6e5dcff	\N	f	\N	2026-05-19 12:33:52.537305	\N
+f5215891-5595-4b54-affc-e3c0135c7b71	7	Auto-Generated Case: CASE-2026-0049	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	410c13c0-2ccc-4fec-9948-2eb13bb22fa1	\N	f	\N	2026-05-19 12:33:59.58179	\N
+ac4257be-3871-490c-b0b2-09c83908f00b	1	Auto-Generated Case: CASE-2026-0049	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	410c13c0-2ccc-4fec-9948-2eb13bb22fa1	\N	f	\N	2026-05-19 12:33:59.58179	\N
+d50a6bf7-ca38-4bba-8550-b7f4f167f2d3	26	Auto-Generated Case: CASE-2026-0049	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	410c13c0-2ccc-4fec-9948-2eb13bb22fa1	\N	f	\N	2026-05-19 12:33:59.58179	\N
+2d4dadbd-7aa6-4a06-bd2a-7cf543a36dcb	6	Case Assigned: CASE-2026-0049	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	410c13c0-2ccc-4fec-9948-2eb13bb22fa1	\N	f	\N	2026-05-19 12:33:59.586545	\N
+285a34df-0d8c-4bb7-a7b5-98da68e4d06d	7	Auto-Generated Case: CASE-2026-0051	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	a49b4ed2-4810-4c33-9c4f-0fba5c706999	\N	f	\N	2026-05-19 12:34:06.600288	\N
+43d35fd4-52cd-44f0-adf2-17adc04bdc52	1	Auto-Generated Case: CASE-2026-0051	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	a49b4ed2-4810-4c33-9c4f-0fba5c706999	\N	f	\N	2026-05-19 12:34:06.600288	\N
+464f60f0-5ab1-4e15-b832-579d6dca8696	26	Auto-Generated Case: CASE-2026-0051	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	a49b4ed2-4810-4c33-9c4f-0fba5c706999	\N	f	\N	2026-05-19 12:34:06.600288	\N
+7c6ed6df-f6c8-47f3-9017-2ff7d1bdaec8	6	Case Assigned: CASE-2026-0051	You have been assigned to auto-generated case: Incident Type 1 case - Multiple Reports	assignment	medium	case	a49b4ed2-4810-4c33-9c4f-0fba5c706999	\N	f	\N	2026-05-19 12:34:06.604767	\N
+d42a4895-f846-4da1-ab86-d99709ba4f89	7	Auto-Generated Case: CASE-2026-0053	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	e2c10d37-9c76-4146-b372-211d8f494dfe	\N	f	\N	2026-05-19 12:34:13.966836	\N
+bdcd8d6c-29bf-4061-ba69-02dc61011266	1	Auto-Generated Case: CASE-2026-0053	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	e2c10d37-9c76-4146-b372-211d8f494dfe	\N	f	\N	2026-05-19 12:34:13.966836	\N
+52838d3b-bbbb-45fb-878e-231a695d5278	27	Case Assigned: CASE-2026-0038	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	54c22ba1-7766-47f7-a281-09797dac985f	\N	f	\N	2026-05-19 12:33:16.948321	\N
+79b7af43-f62d-4fc7-9172-3145b3739aa7	7	Auto-Generated Case: CASE-2026-0040	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	3bac02c7-3e0f-45b1-91ae-d8e04794cb27	\N	f	\N	2026-05-19 12:33:26.150979	\N
+171c7a88-34b5-447d-be21-97b3f70f7309	1	Auto-Generated Case: CASE-2026-0040	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	3bac02c7-3e0f-45b1-91ae-d8e04794cb27	\N	f	\N	2026-05-19 12:33:26.150979	\N
+245b5b2e-526b-477b-8c13-5074f2418322	26	Auto-Generated Case: CASE-2026-0040	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	3bac02c7-3e0f-45b1-91ae-d8e04794cb27	\N	f	\N	2026-05-19 12:33:26.150979	\N
+f79e268d-0537-4bb1-96fc-bb3be007b52f	27	Case Assigned: CASE-2026-0040	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	3bac02c7-3e0f-45b1-91ae-d8e04794cb27	\N	f	\N	2026-05-19 12:33:26.157935	\N
+135729d5-720b-4c51-9bc9-5257e2dd37a3	7	Auto-Generated Case: CASE-2026-0042	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	2911a7f5-065a-4962-beb9-b3bc1265c44f	\N	f	\N	2026-05-19 12:33:34.946254	\N
+4e6eedcd-42f9-4bc9-ba7a-180ac3a89ae0	1	Auto-Generated Case: CASE-2026-0042	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	2911a7f5-065a-4962-beb9-b3bc1265c44f	\N	f	\N	2026-05-19 12:33:34.946254	\N
+dd02e31d-3d65-432e-b263-fa3781276acf	26	Auto-Generated Case: CASE-2026-0042	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	2911a7f5-065a-4962-beb9-b3bc1265c44f	\N	f	\N	2026-05-19 12:33:34.946254	\N
+69926131-55ba-40bd-b539-24190a50827e	27	Case Assigned: CASE-2026-0042	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	2911a7f5-065a-4962-beb9-b3bc1265c44f	\N	f	\N	2026-05-19 12:33:34.953226	\N
+d2302897-83df-4af7-ad72-6814155fce89	7	Auto-Generated Case: CASE-2026-0044	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	8c97c74f-270b-4962-bbf9-cd1c8584cf5a	\N	f	\N	2026-05-19 12:33:42.135295	\N
+4c7d44ff-540e-4e1f-b5cd-eeb4949987ba	1	Auto-Generated Case: CASE-2026-0044	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	8c97c74f-270b-4962-bbf9-cd1c8584cf5a	\N	f	\N	2026-05-19 12:33:42.135295	\N
+4739ce14-04cc-4086-a7f9-150bc4114757	26	Auto-Generated Case: CASE-2026-0044	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	8c97c74f-270b-4962-bbf9-cd1c8584cf5a	\N	f	\N	2026-05-19 12:33:42.135295	\N
+51bbb725-9bdc-41e4-a67a-71e467b629d8	27	Case Assigned: CASE-2026-0044	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	8c97c74f-270b-4962-bbf9-cd1c8584cf5a	\N	f	\N	2026-05-19 12:33:42.139698	\N
+5428cd31-b1d3-469c-8eb5-0271ed6461f2	7	Auto-Generated Case: CASE-2026-0046	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	1ef27690-4bae-4bd2-b484-044711bc4b3e	\N	f	\N	2026-05-19 12:33:49.434558	\N
+12b44014-aeb9-4ffa-8bcf-37ba65d21086	1	Auto-Generated Case: CASE-2026-0046	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	1ef27690-4bae-4bd2-b484-044711bc4b3e	\N	f	\N	2026-05-19 12:33:49.434558	\N
+6fe68eb8-76c2-494e-9a19-2ff89b70bf67	26	Auto-Generated Case: CASE-2026-0046	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	1ef27690-4bae-4bd2-b484-044711bc4b3e	\N	f	\N	2026-05-19 12:33:49.434558	\N
+b3ae655b-1996-4c22-960a-715d0da7acb4	27	Case Assigned: CASE-2026-0046	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	1ef27690-4bae-4bd2-b484-044711bc4b3e	\N	f	\N	2026-05-19 12:33:49.438508	\N
+660b06b6-1f64-4038-a76e-ef23a14bb67e	7	Auto-Generated Case: CASE-2026-0048	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	613f015d-2983-48bb-bd0c-d38388084fc3	\N	f	\N	2026-05-19 12:33:58.356164	\N
+dd7dce81-b2e1-4d6e-bf3e-2c0c25202a6c	1	Auto-Generated Case: CASE-2026-0048	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	613f015d-2983-48bb-bd0c-d38388084fc3	\N	f	\N	2026-05-19 12:33:58.356164	\N
+759d7a5a-55be-4120-9b89-f5881e49f2ba	26	Auto-Generated Case: CASE-2026-0048	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	613f015d-2983-48bb-bd0c-d38388084fc3	\N	f	\N	2026-05-19 12:33:58.356164	\N
+239e6bbd-53de-450f-973f-f7dd3f9bdaa1	27	Case Assigned: CASE-2026-0048	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	613f015d-2983-48bb-bd0c-d38388084fc3	\N	f	\N	2026-05-19 12:33:58.360944	\N
+ac33ad12-5d88-489b-aea9-0a327ba91e81	7	Auto-Generated Case: CASE-2026-0050	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	6bcafeb6-8504-45ce-9f26-ec6cf1c024b0	\N	f	\N	2026-05-19 12:34:05.174401	\N
+582a5240-6d86-4e6f-8258-dc672d5fb904	1	Auto-Generated Case: CASE-2026-0050	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	6bcafeb6-8504-45ce-9f26-ec6cf1c024b0	\N	f	\N	2026-05-19 12:34:05.174401	\N
+77634fa2-5364-4822-95b3-33658fbc5df6	26	Auto-Generated Case: CASE-2026-0050	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	6bcafeb6-8504-45ce-9f26-ec6cf1c024b0	\N	f	\N	2026-05-19 12:34:05.174401	\N
+0afdc87a-d8b2-416c-a6b6-9333a6f4061d	27	Case Assigned: CASE-2026-0050	You have been assigned to auto-generated case: Incident Type 1 case - Multiple Reports	assignment	medium	case	6bcafeb6-8504-45ce-9f26-ec6cf1c024b0	\N	f	\N	2026-05-19 12:34:05.179819	\N
+ef372e4d-f2b0-4994-a208-3783c8ed16e7	7	Auto-Generated Case: CASE-2026-0052	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	c3411660-3cdd-4fd4-bed0-fc4421c1dc6a	\N	f	\N	2026-05-19 12:34:12.495653	\N
+be2a7391-61f8-418d-ba52-361641495039	1	Auto-Generated Case: CASE-2026-0052	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	c3411660-3cdd-4fd4-bed0-fc4421c1dc6a	\N	f	\N	2026-05-19 12:34:12.495653	\N
+dbde4c93-ebb7-46af-9c5e-b31d0b2667ff	26	Auto-Generated Case: CASE-2026-0052	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	c3411660-3cdd-4fd4-bed0-fc4421c1dc6a	\N	f	\N	2026-05-19 12:34:12.495653	\N
+383dc413-7770-4a96-907f-e1bec34f59bd	6	Case Assigned: CASE-2026-0052	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	c3411660-3cdd-4fd4-bed0-fc4421c1dc6a	\N	f	\N	2026-05-19 12:34:12.499496	\N
+32ed6583-92ee-47a6-a2ea-2baeb72b1cb5	7	Auto-Generated Case: CASE-2026-0054	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	02f2f793-c07b-4e63-ba7e-2174f32187bb	\N	f	\N	2026-05-19 12:34:18.777534	\N
+b40bd2bf-4978-45c9-a5a0-ac31271351e4	1	Auto-Generated Case: CASE-2026-0054	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	02f2f793-c07b-4e63-ba7e-2174f32187bb	\N	f	\N	2026-05-19 12:34:18.777534	\N
+9a31b9d6-2a4c-4d9a-a24b-b215d426e274	26	Auto-Generated Case: CASE-2026-0053	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	e2c10d37-9c76-4146-b372-211d8f494dfe	\N	f	\N	2026-05-19 12:34:13.966836	\N
+3b61832b-87a5-4e2b-98f1-dce26b41d253	27	Case Assigned: CASE-2026-0053	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	e2c10d37-9c76-4146-b372-211d8f494dfe	\N	f	\N	2026-05-19 12:34:13.973095	\N
+c57edba2-da7d-4100-a115-73095ae857d9	7	Auto-Generated Case: CASE-2026-0055	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	62bca070-903c-47c1-989e-9dc937c034d0	\N	f	\N	2026-05-19 12:34:20.672188	\N
+822dca06-8bc6-403e-88e3-e59f3884531b	1	Auto-Generated Case: CASE-2026-0055	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	62bca070-903c-47c1-989e-9dc937c034d0	\N	f	\N	2026-05-19 12:34:20.672188	\N
+34c78c30-ff57-47a3-a090-74e3182e8270	26	Auto-Generated Case: CASE-2026-0055	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	62bca070-903c-47c1-989e-9dc937c034d0	\N	f	\N	2026-05-19 12:34:20.672188	\N
+a1638493-28da-4153-b8fb-2cdd7e2f8e03	27	Case Assigned: CASE-2026-0055	You have been assigned to auto-generated case: Incident Type 9 case - Multiple Reports	assignment	medium	case	62bca070-903c-47c1-989e-9dc937c034d0	\N	f	\N	2026-05-19 12:34:20.675968	\N
+a9b37a18-dbd9-4508-9532-1741a642dcf5	7	Auto-Generated Case: CASE-2026-0057	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	b0a73673-47a6-4ec8-b005-33154e7af213	\N	f	\N	2026-05-19 12:34:28.846334	\N
+a33db10e-7e9b-412e-9ee8-ac76a72980cf	1	Auto-Generated Case: CASE-2026-0057	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	b0a73673-47a6-4ec8-b005-33154e7af213	\N	f	\N	2026-05-19 12:34:28.846334	\N
+b51febe7-43e6-4e2b-bff4-ab273c5e0cd0	26	Auto-Generated Case: CASE-2026-0057	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	b0a73673-47a6-4ec8-b005-33154e7af213	\N	f	\N	2026-05-19 12:34:28.846334	\N
+85d9db9c-01fc-4069-8991-ef1c57ea8841	6	Case Assigned: CASE-2026-0057	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	b0a73673-47a6-4ec8-b005-33154e7af213	\N	f	\N	2026-05-19 12:34:28.851625	\N
+a9825298-b4a2-455d-8655-28f0861c1554	7	Auto-Generated Case: CASE-2026-0059	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	80db2bc4-b5d4-4875-b151-e7579c4ed806	\N	f	\N	2026-05-19 12:34:35.907144	\N
+5a37c3be-777d-4e7c-ac26-48f133346cd8	1	Auto-Generated Case: CASE-2026-0059	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	80db2bc4-b5d4-4875-b151-e7579c4ed806	\N	f	\N	2026-05-19 12:34:35.907144	\N
+197c58f9-6b70-4ad2-adc6-0ead8697cc14	26	Auto-Generated Case: CASE-2026-0059	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	80db2bc4-b5d4-4875-b151-e7579c4ed806	\N	f	\N	2026-05-19 12:34:35.907144	\N
+0449d7f0-3971-4ed4-882f-bd138262f533	27	Case Assigned: CASE-2026-0059	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	80db2bc4-b5d4-4875-b151-e7579c4ed806	\N	f	\N	2026-05-19 12:34:35.911218	\N
+f9f8c101-3901-4fef-9092-8862cd4bcd8a	7	Auto-Generated Case: CASE-2026-0061	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	734228ff-d859-4a3a-9852-0c71bc80034d	\N	f	\N	2026-05-19 12:34:42.682225	\N
+19326d4a-ca6b-416b-a55d-5d09630c7014	1	Auto-Generated Case: CASE-2026-0061	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	734228ff-d859-4a3a-9852-0c71bc80034d	\N	f	\N	2026-05-19 12:34:42.682225	\N
+5d5db346-4537-412d-b70e-c5014f520258	26	Auto-Generated Case: CASE-2026-0061	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	734228ff-d859-4a3a-9852-0c71bc80034d	\N	f	\N	2026-05-19 12:34:42.682225	\N
+16bd1fad-66de-47c2-97a8-6c4652af4e6d	6	Case Assigned: CASE-2026-0061	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	734228ff-d859-4a3a-9852-0c71bc80034d	\N	f	\N	2026-05-19 12:34:42.687457	\N
+7a63ec35-688f-4208-99dc-3a3adcf9999e	26	Auto-Generated Case: CASE-2026-0054	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	02f2f793-c07b-4e63-ba7e-2174f32187bb	\N	f	\N	2026-05-19 12:34:18.777534	\N
+a8640c15-7c76-4bd9-ad79-328ed9009f37	6	Case Assigned: CASE-2026-0054	You have been assigned to auto-generated case: Incident Type 9 case - Multiple Reports	assignment	medium	case	02f2f793-c07b-4e63-ba7e-2174f32187bb	\N	f	\N	2026-05-19 12:34:18.782295	\N
+d55ef7b6-c38a-4ebd-ab72-bde329f562cf	7	Auto-Generated Case: CASE-2026-0056	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	46256976-b414-4d3b-abf5-76b2ebc6f585	\N	f	\N	2026-05-19 12:34:25.432672	\N
+d9423e4b-8025-42d6-a938-460c8d01caf4	1	Auto-Generated Case: CASE-2026-0056	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	46256976-b414-4d3b-abf5-76b2ebc6f585	\N	f	\N	2026-05-19 12:34:25.432672	\N
+6fd7c822-0a4b-4024-a22f-ea825c0961f1	26	Auto-Generated Case: CASE-2026-0056	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	46256976-b414-4d3b-abf5-76b2ebc6f585	\N	f	\N	2026-05-19 12:34:25.432672	\N
+2c8edd8f-bbe0-44d4-82e2-1a061aa855d4	27	Case Assigned: CASE-2026-0056	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	46256976-b414-4d3b-abf5-76b2ebc6f585	\N	f	\N	2026-05-19 12:34:25.436573	\N
+a301b365-b1aa-4776-b4ef-aee979b56eda	7	Auto-Generated Case: CASE-2026-0058	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	8236278e-829d-4f76-ae03-120405ddacda	\N	f	\N	2026-05-19 12:34:32.716522	\N
+45c074fb-81a9-46b8-b73a-ce08ddd873fb	1	Auto-Generated Case: CASE-2026-0058	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	8236278e-829d-4f76-ae03-120405ddacda	\N	f	\N	2026-05-19 12:34:32.716522	\N
+550181d7-7118-4556-bd84-f9394de5020e	26	Auto-Generated Case: CASE-2026-0058	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	8236278e-829d-4f76-ae03-120405ddacda	\N	f	\N	2026-05-19 12:34:32.716522	\N
+3680c35d-667b-48cd-89ad-bbb6536b09df	6	Case Assigned: CASE-2026-0058	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	8236278e-829d-4f76-ae03-120405ddacda	\N	f	\N	2026-05-19 12:34:32.723255	\N
+dabed6f5-9289-4380-be2c-031486c19e20	7	Auto-Generated Case: CASE-2026-0060	A new case has been automatically created from 3 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	18ed5802-6e2a-4425-ad27-8118d1a1e554	\N	f	\N	2026-05-19 12:34:40.577244	\N
+e9fc10f8-8492-4ac9-a5ae-f61890ed3d4b	1	Auto-Generated Case: CASE-2026-0060	A new case has been automatically created from 3 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	18ed5802-6e2a-4425-ad27-8118d1a1e554	\N	f	\N	2026-05-19 12:34:40.577244	\N
+bc65e6b4-1341-40e7-b601-135818102ffe	26	Auto-Generated Case: CASE-2026-0060	A new case has been automatically created from 3 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	18ed5802-6e2a-4425-ad27-8118d1a1e554	\N	f	\N	2026-05-19 12:34:40.577244	\N
+db1b9055-e5bb-4aa3-82ee-8f8bfcb01517	27	Case Assigned: CASE-2026-0060	You have been assigned to auto-generated case: Incident Type 3 case - Multiple Reports	assignment	medium	case	18ed5802-6e2a-4425-ad27-8118d1a1e554	\N	f	\N	2026-05-19 12:34:40.582467	\N
+8d70a579-ba9a-4267-922e-b3d70a25158e	7	Auto-Generated Case: CASE-2026-0062	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	f5dd5637-6e33-4918-8656-ce5abda2bb09	\N	f	\N	2026-05-19 12:34:47.741835	\N
+2b54638c-7ec2-4f51-bdfe-81ea08109cdc	1	Auto-Generated Case: CASE-2026-0062	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	f5dd5637-6e33-4918-8656-ce5abda2bb09	\N	f	\N	2026-05-19 12:34:47.741835	\N
+e4b71757-41b7-4620-a62f-10cf551f51ed	26	Auto-Generated Case: CASE-2026-0062	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	f5dd5637-6e33-4918-8656-ce5abda2bb09	\N	f	\N	2026-05-19 12:34:47.741835	\N
+42fcba3a-562b-4742-92ed-2da67ae695f8	7	Auto-Generated Case: CASE-2026-0063	A new case has been automatically created from 3 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	68845881-dd0b-4768-9aef-718e780f0426	\N	f	\N	2026-05-19 12:34:51.036281	\N
+1de23ea3-be7c-480a-a586-5bce4a232b8d	1	Auto-Generated Case: CASE-2026-0063	A new case has been automatically created from 3 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	68845881-dd0b-4768-9aef-718e780f0426	\N	f	\N	2026-05-19 12:34:51.036281	\N
+097703bb-530f-40d7-9620-40eeeda00842	26	Auto-Generated Case: CASE-2026-0063	A new case has been automatically created from 3 verified reports. Case: Incident Type 3 case - Multiple Reports	system	medium	case	68845881-dd0b-4768-9aef-718e780f0426	\N	f	\N	2026-05-19 12:34:51.036281	\N
+b422d930-599e-4049-b3be-ccd1dd3a0dff	27	Case Assigned: CASE-2026-0062	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	f5dd5637-6e33-4918-8656-ce5abda2bb09	\N	f	\N	2026-05-19 12:34:47.745462	\N
+1534306c-ab27-4188-b4e6-7cd47ce27326	7	Auto-Generated Case: CASE-2026-0064	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	d8830ad0-89a2-462d-b84c-77e8c0fb7b65	\N	f	\N	2026-05-19 12:34:54.777795	\N
+ac8ae349-0555-46ce-84c5-c22cfcfb6adc	1	Auto-Generated Case: CASE-2026-0064	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	d8830ad0-89a2-462d-b84c-77e8c0fb7b65	\N	f	\N	2026-05-19 12:34:54.777795	\N
+bc1e7b86-158c-40ea-b9ed-99ae213ed12b	26	Auto-Generated Case: CASE-2026-0064	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	d8830ad0-89a2-462d-b84c-77e8c0fb7b65	\N	f	\N	2026-05-19 12:34:54.777795	\N
+23ac90c8-7cfa-4d08-b102-cb0a98113882	6	Case Assigned: CASE-2026-0063	You have been assigned to auto-generated case: Incident Type 3 case - Multiple Reports	assignment	medium	case	68845881-dd0b-4768-9aef-718e780f0426	\N	f	\N	2026-05-19 12:34:51.041948	\N
+c156399a-d8da-4215-a283-449fc8f83699	27	Case Assigned: CASE-2026-0064	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	d8830ad0-89a2-462d-b84c-77e8c0fb7b65	\N	f	\N	2026-05-19 12:34:54.785072	\N
+bb4068e3-ed2d-4f08-8a33-8ea72b1b60a0	7	Auto-Generated Case: CASE-2026-0065	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	3162a451-fc7a-422a-830f-cae2cca9bcb3	\N	f	\N	2026-05-19 12:35:00.281665	\N
+366c8fb4-7669-4fbc-875d-e002869d56ca	1	Auto-Generated Case: CASE-2026-0065	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	3162a451-fc7a-422a-830f-cae2cca9bcb3	\N	f	\N	2026-05-19 12:35:00.281665	\N
+2b1b1378-7690-4ea0-9af0-f24f982bb623	26	Auto-Generated Case: CASE-2026-0065	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	3162a451-fc7a-422a-830f-cae2cca9bcb3	\N	f	\N	2026-05-19 12:35:00.281665	\N
+c2c29900-f0c0-457a-b7f3-a717a31f68d8	7	Auto-Generated Case: CASE-2026-0066	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	9388dcd7-4034-4369-8178-fd96f3332a98	\N	f	\N	2026-05-19 12:35:01.619482	\N
+c28317dc-b4c7-4b6f-8bc7-d02cf599e3d7	1	Auto-Generated Case: CASE-2026-0066	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	9388dcd7-4034-4369-8178-fd96f3332a98	\N	f	\N	2026-05-19 12:35:01.619482	\N
+bb43dd46-38c7-46eb-88ba-9c881a8e0376	26	Auto-Generated Case: CASE-2026-0066	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	9388dcd7-4034-4369-8178-fd96f3332a98	\N	f	\N	2026-05-19 12:35:01.619482	\N
+d61105ac-6c25-404b-8a0d-4e87aafed5e6	6	Case Assigned: CASE-2026-0066	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	9388dcd7-4034-4369-8178-fd96f3332a98	\N	f	\N	2026-05-19 12:35:01.623625	\N
+0a412af3-339c-4804-b213-9a11e16eac51	7	Auto-Generated Case: CASE-2026-0068	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	ae5188fd-e061-43eb-be58-be3b1ea3b48f	\N	f	\N	2026-05-19 12:35:08.334857	\N
+53edf938-f75e-4051-a523-f888c2b1a631	1	Auto-Generated Case: CASE-2026-0068	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	ae5188fd-e061-43eb-be58-be3b1ea3b48f	\N	f	\N	2026-05-19 12:35:08.334857	\N
+b4e3cf1e-7394-42b7-b860-e80fe31d794e	26	Auto-Generated Case: CASE-2026-0068	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	ae5188fd-e061-43eb-be58-be3b1ea3b48f	\N	f	\N	2026-05-19 12:35:08.334857	\N
+c4266223-8266-4e45-b375-f7cd55edbf92	6	Case Assigned: CASE-2026-0068	You have been assigned to auto-generated case: Incident Type 9 case - Multiple Reports	assignment	medium	case	ae5188fd-e061-43eb-be58-be3b1ea3b48f	\N	f	\N	2026-05-19 12:35:08.339024	\N
+7d7bcd4e-f0a0-4a27-873a-777edac61d1d	7	Auto-Generated Case: CASE-2026-0070	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	e3273612-2336-4391-b40a-228764100feb	\N	f	\N	2026-05-19 12:35:11.535387	\N
+83fd1272-ea57-4e9e-a96c-716ede0408a4	1	Auto-Generated Case: CASE-2026-0070	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	e3273612-2336-4391-b40a-228764100feb	\N	f	\N	2026-05-19 12:35:11.535387	\N
+16f86ac5-9391-4e2a-8253-c371f175d319	26	Auto-Generated Case: CASE-2026-0070	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	e3273612-2336-4391-b40a-228764100feb	\N	f	\N	2026-05-19 12:35:11.535387	\N
+8c73f00a-1203-41fb-92e6-19ebc2fc5477	6	Case Assigned: CASE-2026-0070	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	e3273612-2336-4391-b40a-228764100feb	\N	f	\N	2026-05-19 12:35:11.540687	\N
+a19cd87e-948e-4ecd-8268-8610709895ee	7	Auto-Generated Case: CASE-2026-0074	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	ffe5637c-d9dc-41dd-8c6c-75645c1db1a7	\N	f	\N	2026-05-19 12:35:17.475088	\N
+dff38b0b-9029-43dd-8089-ea7bbd036d34	1	Auto-Generated Case: CASE-2026-0074	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	ffe5637c-d9dc-41dd-8c6c-75645c1db1a7	\N	f	\N	2026-05-19 12:35:17.475088	\N
+4fc6ce04-4890-4e9d-80fd-6be29c09fabe	26	Auto-Generated Case: CASE-2026-0074	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	ffe5637c-d9dc-41dd-8c6c-75645c1db1a7	\N	f	\N	2026-05-19 12:35:17.475088	\N
+fc1dbb00-234b-4a7f-8096-36d2cfff23e2	27	Case Assigned: CASE-2026-0074	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	ffe5637c-d9dc-41dd-8c6c-75645c1db1a7	\N	f	\N	2026-05-19 12:35:17.482695	\N
+29255671-48d7-4bb8-822f-37489630205e	7	Auto-Generated Case: CASE-2026-0075	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	a190c8a4-cdf9-4319-8c72-df033394a456	\N	f	\N	2026-05-19 12:35:21.175427	\N
+667ce902-fdaa-4849-a779-60537f2b79e2	1	Auto-Generated Case: CASE-2026-0075	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	a190c8a4-cdf9-4319-8c72-df033394a456	\N	f	\N	2026-05-19 12:35:21.175427	\N
+c7d1d79b-5470-4849-9245-b01838b67d3e	26	Auto-Generated Case: CASE-2026-0075	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	a190c8a4-cdf9-4319-8c72-df033394a456	\N	f	\N	2026-05-19 12:35:21.175427	\N
+3327be52-f91f-4f28-94f2-e22e59befe69	6	Case Assigned: CASE-2026-0075	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	a190c8a4-cdf9-4319-8c72-df033394a456	\N	f	\N	2026-05-19 12:35:21.181226	\N
+313cf465-4a47-4ef2-95f8-3c264790afe9	7	Auto-Generated Case: CASE-2026-0078	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	0f856bd0-3f72-404a-90d1-e7f1f28d165c	\N	f	\N	2026-05-19 12:35:24.9232	\N
+18a9511a-9dd7-49d9-ae78-14be9392e41d	1	Auto-Generated Case: CASE-2026-0078	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	0f856bd0-3f72-404a-90d1-e7f1f28d165c	\N	f	\N	2026-05-19 12:35:24.9232	\N
+f15786a2-6d2d-4b60-8c0e-f367072bfb91	26	Auto-Generated Case: CASE-2026-0078	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	0f856bd0-3f72-404a-90d1-e7f1f28d165c	\N	f	\N	2026-05-19 12:35:24.9232	\N
+1b4cb40f-881a-47db-8290-63b9d086cde1	27	Case Assigned: CASE-2026-0078	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	0f856bd0-3f72-404a-90d1-e7f1f28d165c	\N	f	\N	2026-05-19 12:35:24.927929	\N
+3ee2c1f1-7e30-475a-96c7-ef25d47310a6	7	Auto-Generated Case: CASE-2026-0081	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	3d2d2bf6-e654-4436-9b21-155db4d562a6	\N	f	\N	2026-05-19 12:35:28.410255	\N
+76eb34c4-162e-49b7-9c9a-ceda6b29107c	1	Auto-Generated Case: CASE-2026-0081	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	3d2d2bf6-e654-4436-9b21-155db4d562a6	\N	f	\N	2026-05-19 12:35:28.410255	\N
+f7efc332-2aa2-47d3-8e29-d374cd86eff4	26	Auto-Generated Case: CASE-2026-0081	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	3d2d2bf6-e654-4436-9b21-155db4d562a6	\N	f	\N	2026-05-19 12:35:28.410255	\N
+5cd65379-f44f-45c0-a1ff-709051bd833b	27	Case Assigned: CASE-2026-0081	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	3d2d2bf6-e654-4436-9b21-155db4d562a6	\N	f	\N	2026-05-19 12:35:28.41607	\N
+75e9614e-64f1-41d4-9a87-2c125b2b8e0a	7	Auto-Generated Case: CASE-2026-0084	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	e94671e8-f7d6-46b0-b730-04c39e5bf19f	\N	f	\N	2026-05-19 12:35:33.190492	\N
+fb944018-25b7-4735-83be-0b4a9f525b8d	1	Auto-Generated Case: CASE-2026-0084	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	e94671e8-f7d6-46b0-b730-04c39e5bf19f	\N	f	\N	2026-05-19 12:35:33.190492	\N
+b18b6bd9-486c-4179-9a09-f2ce42919a58	26	Auto-Generated Case: CASE-2026-0084	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	e94671e8-f7d6-46b0-b730-04c39e5bf19f	\N	f	\N	2026-05-19 12:35:33.190492	\N
+6cc29c35-7f8d-4b58-abbb-6029989c11db	27	Case Assigned: CASE-2026-0084	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	e94671e8-f7d6-46b0-b730-04c39e5bf19f	\N	f	\N	2026-05-19 12:35:33.195298	\N
+154e5d50-4811-4308-a251-6dc837f6f2e5	6	Case Assigned: CASE-2026-0065	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	3162a451-fc7a-422a-830f-cae2cca9bcb3	\N	f	\N	2026-05-19 12:35:00.285688	\N
+fafef50f-81dd-4b01-968c-58d2a92a3637	7	Auto-Generated Case: CASE-2026-0067	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	c475eed3-908d-49b8-8d1b-dbcbaffa104c	\N	f	\N	2026-05-19 12:35:07.075144	\N
+85bee6fb-99e8-40f9-99a2-bd38b2bce972	1	Auto-Generated Case: CASE-2026-0067	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	c475eed3-908d-49b8-8d1b-dbcbaffa104c	\N	f	\N	2026-05-19 12:35:07.075144	\N
+28f5c7d8-20dc-40e3-af7d-4f3fa854f3f3	26	Auto-Generated Case: CASE-2026-0067	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	c475eed3-908d-49b8-8d1b-dbcbaffa104c	\N	f	\N	2026-05-19 12:35:07.075144	\N
+30dd7d6b-47b3-43b4-a012-f6f8c3dae266	27	Case Assigned: CASE-2026-0067	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	c475eed3-908d-49b8-8d1b-dbcbaffa104c	\N	f	\N	2026-05-19 12:35:07.08111	\N
+af9f2bb2-b37a-4384-8be6-21fb8f0bbf32	7	Auto-Generated Case: CASE-2026-0069	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	130f5733-79eb-4415-8f1a-51dd98e736ab	\N	f	\N	2026-05-19 12:35:10.987566	\N
+60b41a6c-8afe-4222-8616-3fff283a60ce	1	Auto-Generated Case: CASE-2026-0069	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	130f5733-79eb-4415-8f1a-51dd98e736ab	\N	f	\N	2026-05-19 12:35:10.987566	\N
+53f9a52a-0355-4f63-ad43-773570f05787	26	Auto-Generated Case: CASE-2026-0069	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	130f5733-79eb-4415-8f1a-51dd98e736ab	\N	f	\N	2026-05-19 12:35:10.987566	\N
+aacd6653-5538-4cbd-bf49-2e3a02bbbf68	7	Auto-Generated Case: CASE-2026-0071	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	8c7ae245-9931-445c-a8ce-ecc4221ea3c7	\N	f	\N	2026-05-19 12:35:13.570864	\N
+02f49501-7325-4ed7-9bfd-1f681814b77d	1	Auto-Generated Case: CASE-2026-0071	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	8c7ae245-9931-445c-a8ce-ecc4221ea3c7	\N	f	\N	2026-05-19 12:35:13.570864	\N
+a508e30d-5fc2-4e69-97e6-57dfc472ae7c	26	Auto-Generated Case: CASE-2026-0071	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	8c7ae245-9931-445c-a8ce-ecc4221ea3c7	\N	f	\N	2026-05-19 12:35:13.570864	\N
+bd1ce1b2-b64a-4b71-9e7b-0e6c056073c6	27	Case Assigned: CASE-2026-0069	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	130f5733-79eb-4415-8f1a-51dd98e736ab	\N	f	\N	2026-05-19 12:35:10.991521	\N
+d8be79e0-9586-4fad-aa66-1f9cad37135c	27	Case Assigned: CASE-2026-0071	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	8c7ae245-9931-445c-a8ce-ecc4221ea3c7	\N	f	\N	2026-05-19 12:35:13.579135	\N
+bf2b5334-abac-493f-a985-a495f8275622	7	Auto-Generated Case: CASE-2026-0072	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	6c94c5d4-88f4-4912-8299-fe4731c2d2e8	\N	f	\N	2026-05-19 12:35:15.709813	\N
+90a322d3-0c85-4957-97ed-9268a6c4148c	1	Auto-Generated Case: CASE-2026-0072	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	6c94c5d4-88f4-4912-8299-fe4731c2d2e8	\N	f	\N	2026-05-19 12:35:15.709813	\N
+56af0e34-5482-49c1-bdcf-0d57b4ee1fee	26	Auto-Generated Case: CASE-2026-0072	A new case has been automatically created from 2 verified reports. Case: Incident Type 9 case - Multiple Reports	system	medium	case	6c94c5d4-88f4-4912-8299-fe4731c2d2e8	\N	f	\N	2026-05-19 12:35:15.709813	\N
+10a9ae36-4c5d-4fbe-9e71-5acce060a576	7	Auto-Generated Case: CASE-2026-0073	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	6269c1e3-db89-4035-a060-dc6363b2de1d	\N	f	\N	2026-05-19 12:35:17.043266	\N
+2d04702d-9efc-453b-bf41-3e9699935d87	1	Auto-Generated Case: CASE-2026-0073	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	6269c1e3-db89-4035-a060-dc6363b2de1d	\N	f	\N	2026-05-19 12:35:17.043266	\N
+b661dc9d-3620-4ea1-961c-a4029e6e8353	26	Auto-Generated Case: CASE-2026-0073	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	6269c1e3-db89-4035-a060-dc6363b2de1d	\N	f	\N	2026-05-19 12:35:17.043266	\N
+fa826dcd-0b7c-40d4-952b-c9d76a9dfeea	27	Case Assigned: CASE-2026-0072	You have been assigned to auto-generated case: Incident Type 9 case - Multiple Reports	assignment	medium	case	6c94c5d4-88f4-4912-8299-fe4731c2d2e8	\N	f	\N	2026-05-19 12:35:15.715491	\N
+3abfd433-7e96-4279-b4e7-c94917bd3bdd	6	Case Assigned: CASE-2026-0073	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	6269c1e3-db89-4035-a060-dc6363b2de1d	\N	f	\N	2026-05-19 12:35:17.05162	\N
+b9317188-0b59-47b8-abb8-d74e8d37c3a5	7	Auto-Generated Case: CASE-2026-0076	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	3b8df3bd-b2d5-440d-a343-fecce6bb3d28	\N	f	\N	2026-05-19 12:35:22.612728	\N
+ca67fbf0-0ec1-4ca8-be81-25bd99d9fd4d	1	Auto-Generated Case: CASE-2026-0076	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	3b8df3bd-b2d5-440d-a343-fecce6bb3d28	\N	f	\N	2026-05-19 12:35:22.612728	\N
+e618124f-d68d-4e6b-ab1d-ea36a02a1cc1	26	Auto-Generated Case: CASE-2026-0076	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	3b8df3bd-b2d5-440d-a343-fecce6bb3d28	\N	f	\N	2026-05-19 12:35:22.612728	\N
+070e95e1-92a1-43d4-af8b-c95b4e559c78	7	Auto-Generated Case: CASE-2026-0077	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	c5e44217-d729-4a59-b18f-8adf69d0fe53	\N	f	\N	2026-05-19 12:35:23.250556	\N
+f05fa72d-95ad-4604-930f-4e07e3076ec6	1	Auto-Generated Case: CASE-2026-0077	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	c5e44217-d729-4a59-b18f-8adf69d0fe53	\N	f	\N	2026-05-19 12:35:23.250556	\N
+0f93a0ce-d57c-4b06-8792-052097e2ad9f	26	Auto-Generated Case: CASE-2026-0077	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	c5e44217-d729-4a59-b18f-8adf69d0fe53	\N	f	\N	2026-05-19 12:35:23.250556	\N
+96cf13d7-1303-4f56-9841-c9f32378e097	27	Case Assigned: CASE-2026-0076	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	3b8df3bd-b2d5-440d-a343-fecce6bb3d28	\N	f	\N	2026-05-19 12:35:22.61705	\N
+81e9de84-bef7-4aa3-abb1-d4e4fab70de2	6	Case Assigned: CASE-2026-0077	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	c5e44217-d729-4a59-b18f-8adf69d0fe53	\N	f	\N	2026-05-19 12:35:23.255458	\N
+e6f27002-bae4-4cb0-b785-4230fa89a8ae	7	Auto-Generated Case: CASE-2026-0079	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	41a7c083-95f5-40e3-8d5e-741a856d946f	\N	f	\N	2026-05-19 12:35:25.887919	\N
+cd7b221c-0df1-463e-bf9d-a4edaf1a2694	1	Auto-Generated Case: CASE-2026-0079	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	41a7c083-95f5-40e3-8d5e-741a856d946f	\N	f	\N	2026-05-19 12:35:25.887919	\N
+4b6142a0-01b8-4c36-a40a-b99358bdb360	26	Auto-Generated Case: CASE-2026-0079	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	41a7c083-95f5-40e3-8d5e-741a856d946f	\N	f	\N	2026-05-19 12:35:25.887919	\N
+1a96360a-e929-48bb-8f8e-9459a129073a	6	Case Assigned: CASE-2026-0079	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	41a7c083-95f5-40e3-8d5e-741a856d946f	\N	f	\N	2026-05-19 12:35:25.891897	\N
+e474c6eb-8ef3-4ddc-ba9e-80fb57fc4ee9	7	Auto-Generated Case: CASE-2026-0082	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	88c43854-9b53-46fb-bca2-5efee082559c	\N	f	\N	2026-05-19 12:35:29.208922	\N
+a4335586-7931-4242-800b-503d578703af	1	Auto-Generated Case: CASE-2026-0082	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	88c43854-9b53-46fb-bca2-5efee082559c	\N	f	\N	2026-05-19 12:35:29.208922	\N
+6ffed0cc-3d90-45b4-9dac-c92171ad7aa2	26	Auto-Generated Case: CASE-2026-0082	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	88c43854-9b53-46fb-bca2-5efee082559c	\N	f	\N	2026-05-19 12:35:29.208922	\N
+88cc3ace-67eb-47a5-9c69-17452549d182	27	Case Assigned: CASE-2026-0082	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	88c43854-9b53-46fb-bca2-5efee082559c	\N	f	\N	2026-05-19 12:35:29.214944	\N
+a8e27308-e758-4475-a009-df1aa70f8a39	7	Auto-Generated Case: CASE-2026-0086	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	33ffc00c-c633-4f34-9a50-7e2c7a544a83	\N	f	\N	2026-05-19 12:35:33.858551	\N
+6553e5d0-4df3-4a3b-87f2-3e0f33ae38dd	1	Auto-Generated Case: CASE-2026-0086	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	33ffc00c-c633-4f34-9a50-7e2c7a544a83	\N	f	\N	2026-05-19 12:35:33.858551	\N
+06536443-e3f8-4540-81d0-972b98b4a570	26	Auto-Generated Case: CASE-2026-0086	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	33ffc00c-c633-4f34-9a50-7e2c7a544a83	\N	f	\N	2026-05-19 12:35:33.858551	\N
+b5b4572b-77db-4216-875b-f33f2b7bca76	6	Case Assigned: CASE-2026-0086	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	33ffc00c-c633-4f34-9a50-7e2c7a544a83	\N	f	\N	2026-05-19 12:35:33.864209	\N
+25599ff0-dfa1-4e51-af28-fb19127d0a3f	7	Auto-Generated Case: CASE-2026-0087	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	a011b815-8675-4109-a45f-eaf838b5890a	\N	f	\N	2026-05-19 12:35:37.552156	\N
+35fdc09d-a614-4d87-bfe9-8b7e9b09a7ac	1	Auto-Generated Case: CASE-2026-0087	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	a011b815-8675-4109-a45f-eaf838b5890a	\N	f	\N	2026-05-19 12:35:37.552156	\N
+232db40d-c948-4a92-b80c-ff32294ee839	26	Auto-Generated Case: CASE-2026-0087	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	a011b815-8675-4109-a45f-eaf838b5890a	\N	f	\N	2026-05-19 12:35:37.552156	\N
+e8ae6d08-d1b4-41fd-9d48-78fb5f8145cb	27	Case Assigned: CASE-2026-0087	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	a011b815-8675-4109-a45f-eaf838b5890a	\N	f	\N	2026-05-19 12:35:37.5564	\N
+3604d682-9265-4db7-968e-be132b1a78b3	7	Auto-Generated Case: CASE-2026-0088	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	384915e8-108b-4bd7-bd13-b56ff4635f44	\N	f	\N	2026-05-19 12:35:40.801324	\N
+5db6b882-5e90-4005-a2c9-a52dc7ef2725	1	Auto-Generated Case: CASE-2026-0088	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	384915e8-108b-4bd7-bd13-b56ff4635f44	\N	f	\N	2026-05-19 12:35:40.801324	\N
+373ba8f5-d5b0-4d88-ae82-25409ae86b37	26	Auto-Generated Case: CASE-2026-0088	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	384915e8-108b-4bd7-bd13-b56ff4635f44	\N	f	\N	2026-05-19 12:35:40.801324	\N
+e2a7fc05-4708-4568-b997-74cc8db74c44	6	Case Assigned: CASE-2026-0088	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	384915e8-108b-4bd7-bd13-b56ff4635f44	\N	f	\N	2026-05-19 12:35:40.80635	\N
+bee9502b-2dbd-40bc-ac2b-961aa1ebbc54	7	Auto-Generated Case: CASE-2026-0089	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	14986a50-d8cf-47cb-87d0-645928806d8f	\N	f	\N	2026-05-19 12:35:44.582995	\N
+23d44e66-0595-45a6-b527-856f6de2e440	1	Auto-Generated Case: CASE-2026-0089	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	14986a50-d8cf-47cb-87d0-645928806d8f	\N	f	\N	2026-05-19 12:35:44.582995	\N
+c91c6661-5d61-4082-9f69-869ead40d334	26	Auto-Generated Case: CASE-2026-0089	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	14986a50-d8cf-47cb-87d0-645928806d8f	\N	f	\N	2026-05-19 12:35:44.582995	\N
+57479210-84ed-40fd-95c1-cc2b4a9cca98	7	Auto-Generated Case: CASE-2026-0080	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	03b1998d-f899-47ad-b586-7a1001b51f03	\N	f	\N	2026-05-19 12:35:26.673825	\N
+7b4d3d68-8b4c-4c19-b0e2-acab037b81d1	1	Auto-Generated Case: CASE-2026-0080	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	03b1998d-f899-47ad-b586-7a1001b51f03	\N	f	\N	2026-05-19 12:35:26.673825	\N
+6e9d929c-ca28-48ec-8c20-478da8fec25f	26	Auto-Generated Case: CASE-2026-0080	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	03b1998d-f899-47ad-b586-7a1001b51f03	\N	f	\N	2026-05-19 12:35:26.673825	\N
+09ab1ac2-d67f-476f-a5a2-421261ea8ab4	6	Case Assigned: CASE-2026-0080	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	03b1998d-f899-47ad-b586-7a1001b51f03	\N	f	\N	2026-05-19 12:35:26.681087	\N
+e55bc80e-fe25-49ce-b699-badf93dc9a9a	7	Auto-Generated Case: CASE-2026-0083	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	b31600b0-5381-4045-828b-fee3ea61ee0f	\N	f	\N	2026-05-19 12:35:30.168292	\N
+8869d230-d5cc-4c9b-b459-4d3a36060c8b	1	Auto-Generated Case: CASE-2026-0083	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	b31600b0-5381-4045-828b-fee3ea61ee0f	\N	f	\N	2026-05-19 12:35:30.168292	\N
+334a2370-957c-4a1e-b4c9-73a4f4b676c8	26	Auto-Generated Case: CASE-2026-0083	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	b31600b0-5381-4045-828b-fee3ea61ee0f	\N	f	\N	2026-05-19 12:35:30.168292	\N
+2ed45d4d-cfc7-4ca4-a299-d5a40f535bdd	6	Case Assigned: CASE-2026-0083	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	b31600b0-5381-4045-828b-fee3ea61ee0f	\N	f	\N	2026-05-19 12:35:30.17274	\N
+8120b92e-9c40-480f-bb0e-a4a85c6d2944	7	Auto-Generated Case: CASE-2026-0085	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	2c16bfd8-05a7-4311-9b4b-12bc68706fc4	\N	f	\N	2026-05-19 12:35:33.457088	\N
+72fc7389-3102-434e-84c0-0bd435fc4027	1	Auto-Generated Case: CASE-2026-0085	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	2c16bfd8-05a7-4311-9b4b-12bc68706fc4	\N	f	\N	2026-05-19 12:35:33.457088	\N
+482940d1-7331-46cf-838d-cd6212168413	26	Auto-Generated Case: CASE-2026-0085	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	2c16bfd8-05a7-4311-9b4b-12bc68706fc4	\N	f	\N	2026-05-19 12:35:33.457088	\N
+ade5cfe3-4ac6-45d1-bfaa-94d4eb49f70c	6	Case Assigned: CASE-2026-0085	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	2c16bfd8-05a7-4311-9b4b-12bc68706fc4	\N	f	\N	2026-05-19 12:35:33.462726	\N
+7951e755-6755-4c71-a808-5593e1d52712	27	Case Assigned: CASE-2026-0089	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	14986a50-d8cf-47cb-87d0-645928806d8f	\N	f	\N	2026-05-19 12:35:44.588859	\N
+3cd0238d-d5ad-4be9-bdb2-86a64af58f5f	7	Auto-Generated Case: CASE-2026-0090	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	b72ad016-b7a6-417d-8bc4-0e45803de7c0	\N	f	\N	2026-05-19 12:35:51.063906	\N
+447e5248-ecec-41f7-8c16-8cd40db9d8f7	1	Auto-Generated Case: CASE-2026-0090	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	b72ad016-b7a6-417d-8bc4-0e45803de7c0	\N	f	\N	2026-05-19 12:35:51.063906	\N
+70b91981-5c3e-4e92-b040-cee0f245d851	26	Auto-Generated Case: CASE-2026-0090	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	b72ad016-b7a6-417d-8bc4-0e45803de7c0	\N	f	\N	2026-05-19 12:35:51.063906	\N
+f92d4fe1-0481-4787-a3ab-af1721d8ee36	6	Case Assigned: CASE-2026-0090	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	b72ad016-b7a6-417d-8bc4-0e45803de7c0	\N	f	\N	2026-05-19 12:35:51.069089	\N
+7b1ec5d8-973e-497d-b52d-a9af88d8f9a6	7	Auto-Generated Case: CASE-2026-0091	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	638cc31d-6618-4765-8941-95dbee4be807	\N	f	\N	2026-05-19 12:35:56.477478	\N
+ca9e6a6f-4f6d-4775-93d0-17dd41a3216d	1	Auto-Generated Case: CASE-2026-0091	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	638cc31d-6618-4765-8941-95dbee4be807	\N	f	\N	2026-05-19 12:35:56.477478	\N
+219b6f0c-e823-4ef7-b415-6f343719dc2a	26	Auto-Generated Case: CASE-2026-0091	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	638cc31d-6618-4765-8941-95dbee4be807	\N	f	\N	2026-05-19 12:35:56.477478	\N
+989c1555-8b8d-4c44-948c-9387a2391ae9	27	Case Assigned: CASE-2026-0091	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	638cc31d-6618-4765-8941-95dbee4be807	\N	f	\N	2026-05-19 12:35:56.484371	\N
+d076691c-7775-4eff-989a-755ea5cfef68	7	Auto-Generated Case: CASE-2026-0092	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	989d29cd-0b25-4326-9752-f23cf0967741	\N	f	\N	2026-05-19 12:35:59.844423	\N
+319e796a-bbce-41d0-9cb2-0f7dfb72c5d0	1	Auto-Generated Case: CASE-2026-0092	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	989d29cd-0b25-4326-9752-f23cf0967741	\N	f	\N	2026-05-19 12:35:59.844423	\N
+87c027d5-efcf-40f2-8827-291f325d37b1	26	Auto-Generated Case: CASE-2026-0092	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	989d29cd-0b25-4326-9752-f23cf0967741	\N	f	\N	2026-05-19 12:35:59.844423	\N
+4a9f71db-ee8e-4952-a26b-e6490a209291	27	Case Assigned: CASE-2026-0092	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	989d29cd-0b25-4326-9752-f23cf0967741	\N	f	\N	2026-05-19 12:35:59.854125	\N
+2b441329-3e16-4f74-977e-9d88d43ffda8	7	Auto-Generated Case: CASE-2026-0093	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	8fd9cc93-d59e-4a1e-8ec6-ac39f4fd3c67	\N	f	\N	2026-05-19 12:36:03.279316	\N
+c5408465-7c86-4685-8e72-18a5f453c4d8	1	Auto-Generated Case: CASE-2026-0093	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	8fd9cc93-d59e-4a1e-8ec6-ac39f4fd3c67	\N	f	\N	2026-05-19 12:36:03.279316	\N
+fca3484b-8939-4486-8b19-8f3d1022b9d2	26	Auto-Generated Case: CASE-2026-0093	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	8fd9cc93-d59e-4a1e-8ec6-ac39f4fd3c67	\N	f	\N	2026-05-19 12:36:03.279316	\N
+6a15b119-2fe5-4f33-bce1-31dc59de64f8	6	Case Assigned: CASE-2026-0093	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	8fd9cc93-d59e-4a1e-8ec6-ac39f4fd3c67	\N	f	\N	2026-05-19 12:36:03.284294	\N
+2ba9bae6-f89b-4075-9a38-3208c2eded4c	7	Auto-Generated Case: CASE-2026-0094	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	a56d2e49-01ec-4d23-9bf7-cf2927c66f67	\N	f	\N	2026-05-19 12:36:06.974637	\N
+c6ddf7ae-75c9-4bf8-8842-299eda738c38	1	Auto-Generated Case: CASE-2026-0094	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	a56d2e49-01ec-4d23-9bf7-cf2927c66f67	\N	f	\N	2026-05-19 12:36:06.974637	\N
+21404b17-9369-4507-8a94-84e2e3bdef34	26	Auto-Generated Case: CASE-2026-0094	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	a56d2e49-01ec-4d23-9bf7-cf2927c66f67	\N	f	\N	2026-05-19 12:36:06.974637	\N
+df18596d-111e-49c3-a015-99df30fafa14	6	Case Assigned: CASE-2026-0094	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	a56d2e49-01ec-4d23-9bf7-cf2927c66f67	\N	f	\N	2026-05-19 12:36:06.980522	\N
+c1d4a521-d650-4732-9636-399c4c953814	7	Auto-Generated Case: CASE-2026-0095	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	c4bf57b2-a33a-4756-a065-28c38841590b	\N	f	\N	2026-05-19 12:36:12.492965	\N
+157cd234-7269-4678-9433-8da18018949d	1	Auto-Generated Case: CASE-2026-0095	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	c4bf57b2-a33a-4756-a065-28c38841590b	\N	f	\N	2026-05-19 12:36:12.492965	\N
+a1b59656-46af-45cb-9438-560802e180fe	26	Auto-Generated Case: CASE-2026-0095	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	c4bf57b2-a33a-4756-a065-28c38841590b	\N	f	\N	2026-05-19 12:36:12.492965	\N
+2204eeb0-1612-4ee8-94d6-6029067045c4	27	Case Assigned: CASE-2026-0095	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	c4bf57b2-a33a-4756-a065-28c38841590b	\N	f	\N	2026-05-19 12:36:12.499337	\N
+4fda69ea-538a-4b3d-8816-26a21fd1b8cd	7	Auto-Generated Case: CASE-2026-0096	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	9b6fe26f-4f82-4844-96a4-9f18e7f162db	\N	f	\N	2026-05-19 12:36:16.824615	\N
+01852b55-6475-48f5-b2a8-b324ce41c96b	1	Auto-Generated Case: CASE-2026-0096	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	9b6fe26f-4f82-4844-96a4-9f18e7f162db	\N	f	\N	2026-05-19 12:36:16.824615	\N
+30092bd1-59de-4086-a55a-5429e1b92dfc	26	Auto-Generated Case: CASE-2026-0096	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	9b6fe26f-4f82-4844-96a4-9f18e7f162db	\N	f	\N	2026-05-19 12:36:16.824615	\N
+92cfa0ec-7fa3-41f9-a689-a1e192e3f31a	6	Case Assigned: CASE-2026-0096	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	9b6fe26f-4f82-4844-96a4-9f18e7f162db	\N	f	\N	2026-05-19 12:36:16.829649	\N
+546e3032-2a3c-4a8f-b2ad-c887d4137e89	7	Auto-Generated Case: CASE-2026-0097	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	bc630fbc-0d5d-420f-9f4e-0b2071d7094a	\N	f	\N	2026-05-19 12:36:21.912934	\N
+d746ba6e-97a7-465f-8f7b-4b327aae75aa	1	Auto-Generated Case: CASE-2026-0097	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	bc630fbc-0d5d-420f-9f4e-0b2071d7094a	\N	f	\N	2026-05-19 12:36:21.912934	\N
+4c4e7f04-dfa2-4448-a12d-84f005c686b9	26	Auto-Generated Case: CASE-2026-0097	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	bc630fbc-0d5d-420f-9f4e-0b2071d7094a	\N	f	\N	2026-05-19 12:36:21.912934	\N
+dfda66f8-f483-4aa0-9439-cd6f88e422bc	27	Case Assigned: CASE-2026-0097	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	bc630fbc-0d5d-420f-9f4e-0b2071d7094a	\N	f	\N	2026-05-19 12:36:21.91766	\N
+5ea22769-eedf-420a-ad22-d7f96dab89aa	7	Auto-Generated Case: CASE-2026-0098	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	bd99d733-d92c-46ac-b5f1-aaf6c38220cd	\N	f	\N	2026-05-19 12:36:25.252871	\N
+c4412a5c-3cec-4127-accc-e122e3569934	1	Auto-Generated Case: CASE-2026-0098	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	bd99d733-d92c-46ac-b5f1-aaf6c38220cd	\N	f	\N	2026-05-19 12:36:25.252871	\N
+f1e5c90b-efba-40e1-805c-2a9bf4b69575	26	Auto-Generated Case: CASE-2026-0098	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	bd99d733-d92c-46ac-b5f1-aaf6c38220cd	\N	f	\N	2026-05-19 12:36:25.252871	\N
+ad38d02b-2ea6-4c03-b07b-1509160905b6	27	Case Assigned: CASE-2026-0098	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	bd99d733-d92c-46ac-b5f1-aaf6c38220cd	\N	f	\N	2026-05-19 12:36:25.257361	\N
+26c0fe52-2a35-40f0-b3b2-8f29c2f04611	7	Auto-Generated Case: CASE-2026-0099	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	6aa331f7-cfc7-43da-b33d-8115ed611f2a	\N	f	\N	2026-05-19 12:36:28.524026	\N
+ee7a2751-a139-4173-8d96-4107908b4612	1	Auto-Generated Case: CASE-2026-0099	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	6aa331f7-cfc7-43da-b33d-8115ed611f2a	\N	f	\N	2026-05-19 12:36:28.524026	\N
+97fa855a-0012-49b2-8139-a638f3e53e52	26	Auto-Generated Case: CASE-2026-0099	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	6aa331f7-cfc7-43da-b33d-8115ed611f2a	\N	f	\N	2026-05-19 12:36:28.524026	\N
+95da5b51-df4b-4978-89f1-9c57014fba8a	6	Case Assigned: CASE-2026-0099	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	6aa331f7-cfc7-43da-b33d-8115ed611f2a	\N	f	\N	2026-05-19 12:36:28.5309	\N
+d4bce1dd-406a-4d99-84fe-d967332e9d5e	7	Auto-Generated Case: CASE-2026-0100	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	4d7439ca-a742-4bf0-bc49-8eb795c2528e	\N	f	\N	2026-05-19 12:36:31.697126	\N
+f4db08b3-32bf-4f59-904e-b06c2d9e9f2e	1	Auto-Generated Case: CASE-2026-0100	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	4d7439ca-a742-4bf0-bc49-8eb795c2528e	\N	f	\N	2026-05-19 12:36:31.697126	\N
+a17e14af-cb6f-47c0-a64a-512aa8cc176c	26	Auto-Generated Case: CASE-2026-0100	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	4d7439ca-a742-4bf0-bc49-8eb795c2528e	\N	f	\N	2026-05-19 12:36:31.697126	\N
+dfde3bf6-061e-455b-ba74-5d97b6221c0f	27	Case Assigned: CASE-2026-0100	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	4d7439ca-a742-4bf0-bc49-8eb795c2528e	\N	f	\N	2026-05-19 12:36:31.701631	\N
+7c1a92ca-3f79-4371-992f-60dba6da3bf7	7	Auto-Generated Case: CASE-2026-0101	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	d9cfb08d-431f-40c7-846d-65db71ff8e9a	\N	f	\N	2026-05-19 12:36:34.683093	\N
+da029809-41b7-43b0-b7b2-e214fc22dcba	1	Auto-Generated Case: CASE-2026-0101	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	d9cfb08d-431f-40c7-846d-65db71ff8e9a	\N	f	\N	2026-05-19 12:36:34.683093	\N
+061331c1-7ade-4de6-852f-7445c679892c	26	Auto-Generated Case: CASE-2026-0101	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	d9cfb08d-431f-40c7-846d-65db71ff8e9a	\N	f	\N	2026-05-19 12:36:34.683093	\N
+4090d209-7327-47c6-9279-41c2f59a10dc	6	Case Assigned: CASE-2026-0101	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	d9cfb08d-431f-40c7-846d-65db71ff8e9a	\N	f	\N	2026-05-19 12:36:34.687129	\N
+b452001a-37f2-4a61-9233-f819f9c1589d	7	Auto-Generated Case: CASE-2026-0102	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	bb547fbe-7377-42a4-b858-3f47bd9a8374	\N	f	\N	2026-05-19 12:36:38.232814	\N
+a31b270f-46e8-4293-ab15-7e1d3da2b2cc	1	Auto-Generated Case: CASE-2026-0102	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	bb547fbe-7377-42a4-b858-3f47bd9a8374	\N	f	\N	2026-05-19 12:36:38.232814	\N
+8f129eb3-be22-4651-adf1-045738e06771	26	Auto-Generated Case: CASE-2026-0102	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	bb547fbe-7377-42a4-b858-3f47bd9a8374	\N	f	\N	2026-05-19 12:36:38.232814	\N
+0b6afbf6-a69a-47e7-bc5e-5cbada1408ce	27	Case Assigned: CASE-2026-0102	You have been assigned to auto-generated case: Incident Type 1 case - Multiple Reports	assignment	medium	case	bb547fbe-7377-42a4-b858-3f47bd9a8374	\N	f	\N	2026-05-19 12:36:38.237643	\N
+920b59f9-739b-4e79-9a61-f572612c3a26	7	Auto-Generated Case: CASE-2026-0103	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	63daed55-12bb-48ed-b8d8-07f8095f7967	\N	f	\N	2026-05-19 12:36:41.229836	\N
+414ad9db-a3de-4ec0-a332-7ebda207bed3	1	Auto-Generated Case: CASE-2026-0103	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	63daed55-12bb-48ed-b8d8-07f8095f7967	\N	f	\N	2026-05-19 12:36:41.229836	\N
+89c05114-e27a-4f53-a1da-be45b1d1770c	26	Auto-Generated Case: CASE-2026-0103	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	63daed55-12bb-48ed-b8d8-07f8095f7967	\N	f	\N	2026-05-19 12:36:41.229836	\N
+efeb5f97-c2c0-44b4-b84f-246a4839d50d	6	Case Assigned: CASE-2026-0103	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	63daed55-12bb-48ed-b8d8-07f8095f7967	\N	f	\N	2026-05-19 12:36:41.234604	\N
+f8fed1a8-da34-4cf5-8f11-a7b8217e40a3	7	Auto-Generated Case: CASE-2026-0104	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	fd3395ac-bef1-4c33-b441-eaadfcad342d	\N	f	\N	2026-05-19 12:36:44.812337	\N
+9fcd00c4-9ced-4893-a797-dd2b12e39f9c	1	Auto-Generated Case: CASE-2026-0104	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	fd3395ac-bef1-4c33-b441-eaadfcad342d	\N	f	\N	2026-05-19 12:36:44.812337	\N
+0c675137-80b5-4f72-a23b-41675e3261be	26	Auto-Generated Case: CASE-2026-0104	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	fd3395ac-bef1-4c33-b441-eaadfcad342d	\N	f	\N	2026-05-19 12:36:44.812337	\N
+274fae6b-d0d4-4e79-8ffa-6c99b9722ece	7	Auto-Generated Case: CASE-2026-0105	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	089555ce-00b1-434d-867e-cd0324592fcb	\N	f	\N	2026-05-19 12:36:45.182413	\N
+3c09d3d9-2a0d-46ed-930d-d0ea49614670	1	Auto-Generated Case: CASE-2026-0105	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	089555ce-00b1-434d-867e-cd0324592fcb	\N	f	\N	2026-05-19 12:36:45.182413	\N
+5ea7e924-e287-468c-8f44-2f48bdb6a1a8	26	Auto-Generated Case: CASE-2026-0105	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	089555ce-00b1-434d-867e-cd0324592fcb	\N	f	\N	2026-05-19 12:36:45.182413	\N
+f6517b1c-ea2e-4981-8f18-3fd59947a7e1	6	Case Assigned: CASE-2026-0104	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	fd3395ac-bef1-4c33-b441-eaadfcad342d	\N	f	\N	2026-05-19 12:36:44.816819	\N
+f276255f-7e82-4ef4-a7a2-dc72c64f1b60	27	Case Assigned: CASE-2026-0105	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	089555ce-00b1-434d-867e-cd0324592fcb	\N	f	\N	2026-05-19 12:36:45.186912	\N
+618a05df-d633-4f9a-9003-9ad931ccb8c1	7	Auto-Generated Case: CASE-2026-0106	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	1701d109-a15d-4c6b-b778-bc47ca6a4aa1	\N	f	\N	2026-05-19 12:36:47.291494	\N
+dd1c5ad8-6fb9-42bb-aad1-8cb0a984de17	1	Auto-Generated Case: CASE-2026-0106	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	1701d109-a15d-4c6b-b778-bc47ca6a4aa1	\N	f	\N	2026-05-19 12:36:47.291494	\N
+8a240843-a4a5-43de-97e9-b85812def65d	26	Auto-Generated Case: CASE-2026-0106	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	1701d109-a15d-4c6b-b778-bc47ca6a4aa1	\N	f	\N	2026-05-19 12:36:47.291494	\N
+77b618c0-e417-479a-b874-fa7e6f3cdcc6	7	Auto-Generated Case: CASE-2026-0107	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	625f1942-00c5-4a9a-989c-4736bff00e55	\N	f	\N	2026-05-19 12:36:48.301411	\N
+2ef76261-2d79-42b1-8334-31d9c80874b1	1	Auto-Generated Case: CASE-2026-0107	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	625f1942-00c5-4a9a-989c-4736bff00e55	\N	f	\N	2026-05-19 12:36:48.301411	\N
+64b11170-606c-42d8-ac80-7e27ff8de1b0	26	Auto-Generated Case: CASE-2026-0107	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	625f1942-00c5-4a9a-989c-4736bff00e55	\N	f	\N	2026-05-19 12:36:48.301411	\N
+17674339-41ca-40e6-a638-066c8ab20dc0	7	Auto-Generated Case: CASE-2026-0108	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	a2aeadf4-e9ed-4488-b5ca-705dfe4dde29	\N	f	\N	2026-05-19 12:36:48.354824	\N
+e68ca962-a20c-43f8-878c-729a5fa97a53	1	Auto-Generated Case: CASE-2026-0108	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	a2aeadf4-e9ed-4488-b5ca-705dfe4dde29	\N	f	\N	2026-05-19 12:36:48.354824	\N
+864402df-478f-4ad8-be07-5d248ab4f70a	26	Auto-Generated Case: CASE-2026-0108	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	a2aeadf4-e9ed-4488-b5ca-705dfe4dde29	\N	f	\N	2026-05-19 12:36:48.354824	\N
+c7772e0a-e721-4646-b2a2-a4a7333a73a9	6	Case Assigned: CASE-2026-0107	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	625f1942-00c5-4a9a-989c-4736bff00e55	\N	f	\N	2026-05-19 12:36:48.306049	\N
+8323ba1a-9d88-42fc-87c1-50d5e3620d1e	27	Case Assigned: CASE-2026-0108	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	a2aeadf4-e9ed-4488-b5ca-705dfe4dde29	\N	f	\N	2026-05-19 12:36:48.359005	\N
+de73ba9f-a845-4a83-817b-db41811869e7	27	Case Assigned: CASE-2026-0106	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	1701d109-a15d-4c6b-b778-bc47ca6a4aa1	\N	f	\N	2026-05-19 12:36:47.29642	\N
+2d7ce041-ced5-43cf-8664-65ad2a6b1e01	7	Auto-Generated Case: CASE-2026-0109	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	c0e2de0f-cec7-4bab-ac53-27ad79c27596	\N	f	\N	2026-05-19 12:36:51.548248	\N
+b87c4203-61da-400e-97c1-c1db9aa4a717	1	Auto-Generated Case: CASE-2026-0109	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	c0e2de0f-cec7-4bab-ac53-27ad79c27596	\N	f	\N	2026-05-19 12:36:51.548248	\N
+ddc7b5fb-187f-4aaf-8bc2-26942ff90718	26	Auto-Generated Case: CASE-2026-0109	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	c0e2de0f-cec7-4bab-ac53-27ad79c27596	\N	f	\N	2026-05-19 12:36:51.548248	\N
+34662ff9-5534-44ba-a6d4-fa478497cf6c	7	Auto-Generated Case: CASE-2026-0110	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	ece458f9-8580-452b-ad7f-695863b9e0ee	\N	f	\N	2026-05-19 12:36:51.741639	\N
+9f923779-39d1-4bb1-8d3f-f86ac015679a	1	Auto-Generated Case: CASE-2026-0110	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	ece458f9-8580-452b-ad7f-695863b9e0ee	\N	f	\N	2026-05-19 12:36:51.741639	\N
+fffd56b9-a6c4-43b8-8205-b6cc0af4de8e	26	Auto-Generated Case: CASE-2026-0110	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	ece458f9-8580-452b-ad7f-695863b9e0ee	\N	f	\N	2026-05-19 12:36:51.741639	\N
+2f8954a0-e16a-42f5-9598-151769788773	6	Case Assigned: CASE-2026-0110	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	ece458f9-8580-452b-ad7f-695863b9e0ee	\N	f	\N	2026-05-19 12:36:51.74571	\N
+496b0c14-aefb-4d78-84d9-70e02eb8bcc7	7	Auto-Generated Case: CASE-2026-0112	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	ec114c89-11e9-4752-a7a8-8bc79bf6d995	\N	f	\N	2026-05-19 12:36:55.069642	\N
+be828aca-dc07-449a-a057-be058cd22580	1	Auto-Generated Case: CASE-2026-0112	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	ec114c89-11e9-4752-a7a8-8bc79bf6d995	\N	f	\N	2026-05-19 12:36:55.069642	\N
+867146e6-f0a5-4760-a3e3-ddf41f560cb9	26	Auto-Generated Case: CASE-2026-0112	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	ec114c89-11e9-4752-a7a8-8bc79bf6d995	\N	f	\N	2026-05-19 12:36:55.069642	\N
+962a6d95-e9a0-4d09-b0fe-1883bf360329	6	Case Assigned: CASE-2026-0112	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	ec114c89-11e9-4752-a7a8-8bc79bf6d995	\N	f	\N	2026-05-19 12:36:55.073659	\N
+8b7f86a2-15aa-4e8f-b7aa-ccfba2f60993	7	Auto-Generated Case: CASE-2026-0115	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	97956b46-296c-4abd-8e9f-f77592a13507	\N	f	\N	2026-05-19 12:36:58.263573	\N
+83b165a7-87d0-479b-9acc-74974393bd4e	1	Auto-Generated Case: CASE-2026-0115	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	97956b46-296c-4abd-8e9f-f77592a13507	\N	f	\N	2026-05-19 12:36:58.263573	\N
+28ead3fa-be31-4d3f-9efc-2ce126e11aea	26	Auto-Generated Case: CASE-2026-0115	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	97956b46-296c-4abd-8e9f-f77592a13507	\N	f	\N	2026-05-19 12:36:58.263573	\N
+23a12cf8-87e8-4344-8459-d0ebf11e918d	27	Case Assigned: CASE-2026-0115	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	97956b46-296c-4abd-8e9f-f77592a13507	\N	f	\N	2026-05-19 12:36:58.267439	\N
+5cdec21c-5197-48cb-bf57-7f2cc3d627bb	7	Auto-Generated Case: CASE-2026-0118	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	b901e1ec-5aaa-41aa-809a-f9320258dbd4	\N	f	\N	2026-05-19 12:37:01.669777	\N
+a77a345f-6f59-4c36-b0b2-c1c0ab47577a	1	Auto-Generated Case: CASE-2026-0118	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	b901e1ec-5aaa-41aa-809a-f9320258dbd4	\N	f	\N	2026-05-19 12:37:01.669777	\N
+e5f47cb8-e885-41b9-b731-1d8831306a29	26	Auto-Generated Case: CASE-2026-0118	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	b901e1ec-5aaa-41aa-809a-f9320258dbd4	\N	f	\N	2026-05-19 12:37:01.669777	\N
+976e3fec-0526-419e-8597-4beba8bc168a	6	Case Assigned: CASE-2026-0118	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	b901e1ec-5aaa-41aa-809a-f9320258dbd4	\N	f	\N	2026-05-19 12:37:01.673508	\N
+3a55dde8-b573-4c70-835a-4c3f49517856	7	Auto-Generated Case: CASE-2026-0121	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	4210ed0c-7d95-414e-9fcd-3239764412b1	\N	f	\N	2026-05-19 12:37:05.803162	\N
+49c2b5a7-4e56-43f9-80ff-a1a3a45c4a4d	1	Auto-Generated Case: CASE-2026-0121	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	4210ed0c-7d95-414e-9fcd-3239764412b1	\N	f	\N	2026-05-19 12:37:05.803162	\N
+c6e6fdec-3927-43a4-9db4-15626ead718c	26	Auto-Generated Case: CASE-2026-0121	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	4210ed0c-7d95-414e-9fcd-3239764412b1	\N	f	\N	2026-05-19 12:37:05.803162	\N
+cd3b6743-d5bf-457d-8f73-3640b9d6d82c	27	Case Assigned: CASE-2026-0121	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	4210ed0c-7d95-414e-9fcd-3239764412b1	\N	f	\N	2026-05-19 12:37:05.811892	\N
+295be2e0-11b9-431e-9a87-9649f98d17da	7	Auto-Generated Case: CASE-2026-0126	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	a2a1db2a-6e40-4468-96f7-2bf14d132779	\N	f	\N	2026-05-19 12:37:12.131362	\N
+79fc6060-0415-46a7-8749-0ac03a80169a	1	Auto-Generated Case: CASE-2026-0126	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	a2a1db2a-6e40-4468-96f7-2bf14d132779	\N	f	\N	2026-05-19 12:37:12.131362	\N
+ee25599e-f382-4fe7-89ab-a583e2731425	26	Auto-Generated Case: CASE-2026-0126	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	a2a1db2a-6e40-4468-96f7-2bf14d132779	\N	f	\N	2026-05-19 12:37:12.131362	\N
+bbda5f1c-4938-4cd4-bcd0-48ccf0b80f3a	6	Case Assigned: CASE-2026-0126	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	a2a1db2a-6e40-4468-96f7-2bf14d132779	\N	f	\N	2026-05-19 12:37:12.136666	\N
+73110e79-384a-4abc-9fb8-ad134bb46977	7	Auto-Generated Case: CASE-2026-0111	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	bc6f32e5-25e6-4969-8009-54274f6adcdb	\N	f	\N	2026-05-19 12:36:53.059027	\N
+3b1282f8-e80b-4875-a2e7-64760fbab672	1	Auto-Generated Case: CASE-2026-0111	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	bc6f32e5-25e6-4969-8009-54274f6adcdb	\N	f	\N	2026-05-19 12:36:53.059027	\N
+f3c293f1-8291-4bf9-867a-41048f8c73ec	26	Auto-Generated Case: CASE-2026-0111	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	bc6f32e5-25e6-4969-8009-54274f6adcdb	\N	f	\N	2026-05-19 12:36:53.059027	\N
+d91408b2-4a69-41e3-a79b-27e58aa2d065	27	Case Assigned: CASE-2026-0111	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	bc6f32e5-25e6-4969-8009-54274f6adcdb	\N	f	\N	2026-05-19 12:36:53.063023	\N
+d4d23ae0-9ae7-4855-a503-b5de0cb0182f	7	Auto-Generated Case: CASE-2026-0114	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	73bf7155-5d72-4ad0-95e9-af67d2df134b	\N	f	\N	2026-05-19 12:36:56.558483	\N
+f93b9a5b-4f0e-41ee-93c8-14b94854bb29	1	Auto-Generated Case: CASE-2026-0114	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	73bf7155-5d72-4ad0-95e9-af67d2df134b	\N	f	\N	2026-05-19 12:36:56.558483	\N
+5680bf42-c907-425f-9941-447c9267426e	26	Auto-Generated Case: CASE-2026-0114	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	73bf7155-5d72-4ad0-95e9-af67d2df134b	\N	f	\N	2026-05-19 12:36:56.558483	\N
+3cd378c8-6660-4038-98e7-9fbedef160bc	6	Case Assigned: CASE-2026-0114	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	73bf7155-5d72-4ad0-95e9-af67d2df134b	\N	f	\N	2026-05-19 12:36:56.562858	\N
+0b75270c-e808-4e07-a9aa-e3d3a4a22d0d	7	Auto-Generated Case: CASE-2026-0117	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	ecebcd85-7a42-4d1f-8d70-ba227ee8a9f3	\N	f	\N	2026-05-19 12:36:59.774744	\N
+e646cc58-0b20-4862-9e31-914a02ea70a1	1	Auto-Generated Case: CASE-2026-0117	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	ecebcd85-7a42-4d1f-8d70-ba227ee8a9f3	\N	f	\N	2026-05-19 12:36:59.774744	\N
+64dbce20-211b-446b-bfde-50d76105d75e	26	Auto-Generated Case: CASE-2026-0117	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	ecebcd85-7a42-4d1f-8d70-ba227ee8a9f3	\N	f	\N	2026-05-19 12:36:59.774744	\N
+5d14b327-ffde-47b9-b2b7-4c808a883a22	6	Case Assigned: CASE-2026-0117	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	ecebcd85-7a42-4d1f-8d70-ba227ee8a9f3	\N	f	\N	2026-05-19 12:36:59.779423	\N
+795029ff-767e-42ff-ab1e-e2ec2824f640	7	Auto-Generated Case: CASE-2026-0119	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	1a6760a7-7e84-4b52-8e3c-a02a46645a7a	\N	f	\N	2026-05-19 12:37:03.260491	\N
+69ae008d-4124-4d4b-9c10-6dc2fbdb6dfc	1	Auto-Generated Case: CASE-2026-0119	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	1a6760a7-7e84-4b52-8e3c-a02a46645a7a	\N	f	\N	2026-05-19 12:37:03.260491	\N
+1afd6ec4-3492-4b67-945a-b927cc7aa904	26	Auto-Generated Case: CASE-2026-0119	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	1a6760a7-7e84-4b52-8e3c-a02a46645a7a	\N	f	\N	2026-05-19 12:37:03.260491	\N
+9b9a29a4-ae07-45ac-83c8-3fe871604cce	27	Case Assigned: CASE-2026-0119	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	1a6760a7-7e84-4b52-8e3c-a02a46645a7a	\N	f	\N	2026-05-19 12:37:03.264069	\N
+8ce63a22-b7bd-43b5-aed9-e99d7625807c	7	Auto-Generated Case: CASE-2026-0122	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	9fb84571-37db-42d1-b3fc-7ed1617ee2b7	\N	f	\N	2026-05-19 12:37:06.785263	\N
+b44518a1-9483-46b3-b6a2-bb7e184af499	1	Auto-Generated Case: CASE-2026-0122	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	9fb84571-37db-42d1-b3fc-7ed1617ee2b7	\N	f	\N	2026-05-19 12:37:06.785263	\N
+d9a7b7d4-df0a-4dbf-a9cd-2f83b7d3c599	26	Auto-Generated Case: CASE-2026-0122	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	9fb84571-37db-42d1-b3fc-7ed1617ee2b7	\N	f	\N	2026-05-19 12:37:06.785263	\N
+eaa6f4e5-275b-4fe2-8800-bd723a21bab4	27	Case Assigned: CASE-2026-0122	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	9fb84571-37db-42d1-b3fc-7ed1617ee2b7	\N	f	\N	2026-05-19 12:37:06.788992	\N
+2be51e2e-369d-4ac5-a13b-a10027c6787e	7	Auto-Generated Case: CASE-2026-0124	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	6e4177cd-4a11-478a-af36-6c25f646d46a	\N	f	\N	2026-05-19 12:37:10.199063	\N
+5aee7849-fce5-4577-9e6a-efaa9d80d1aa	1	Auto-Generated Case: CASE-2026-0124	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	6e4177cd-4a11-478a-af36-6c25f646d46a	\N	f	\N	2026-05-19 12:37:10.199063	\N
+ea154eea-99d8-40ba-bfa8-5ed0b1a39c67	26	Auto-Generated Case: CASE-2026-0124	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	6e4177cd-4a11-478a-af36-6c25f646d46a	\N	f	\N	2026-05-19 12:37:10.199063	\N
+8520de17-6cf2-4917-8ff3-5045d98f039e	6	Case Assigned: CASE-2026-0124	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	6e4177cd-4a11-478a-af36-6c25f646d46a	\N	f	\N	2026-05-19 12:37:10.203676	\N
+10af5f0c-b4b3-4d30-a65c-badb56ae5394	7	Auto-Generated Case: CASE-2026-0127	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	d9bb04d3-5cc1-4c54-9dd1-0f2f5a36aaf8	\N	f	\N	2026-05-19 12:37:13.532982	\N
+bcee186f-b608-4767-9e0f-32970b6d0910	1	Auto-Generated Case: CASE-2026-0127	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	d9bb04d3-5cc1-4c54-9dd1-0f2f5a36aaf8	\N	f	\N	2026-05-19 12:37:13.532982	\N
+acfc6b73-9f58-4802-81d9-402dc6fedb4f	26	Auto-Generated Case: CASE-2026-0127	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	d9bb04d3-5cc1-4c54-9dd1-0f2f5a36aaf8	\N	f	\N	2026-05-19 12:37:13.532982	\N
+5d5da3d7-2075-49ac-8c9d-4fc4f47ce726	27	Case Assigned: CASE-2026-0127	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	d9bb04d3-5cc1-4c54-9dd1-0f2f5a36aaf8	\N	f	\N	2026-05-19 12:37:13.538301	\N
+22ae313f-8a8e-4218-bb91-346928b9f0c1	6	Case Assigned: CASE-2026-0109	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	c0e2de0f-cec7-4bab-ac53-27ad79c27596	\N	f	\N	2026-05-19 12:36:51.552024	\N
+ecae44f1-8782-4965-b4c0-53697113c800	7	Auto-Generated Case: CASE-2026-0113	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	50a6cc18-f313-48f6-b3f8-febbccd351ff	\N	f	\N	2026-05-19 12:36:55.647498	\N
+cc08eb04-7ebb-4a0e-ba08-ebbce76b5c6c	1	Auto-Generated Case: CASE-2026-0113	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	50a6cc18-f313-48f6-b3f8-febbccd351ff	\N	f	\N	2026-05-19 12:36:55.647498	\N
+97ebd234-f7b2-4b27-bafd-775fd4fc0cfc	26	Auto-Generated Case: CASE-2026-0113	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	50a6cc18-f313-48f6-b3f8-febbccd351ff	\N	f	\N	2026-05-19 12:36:55.647498	\N
+23639429-84c3-4793-b0fc-0d30270272bf	27	Case Assigned: CASE-2026-0113	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	50a6cc18-f313-48f6-b3f8-febbccd351ff	\N	f	\N	2026-05-19 12:36:55.651959	\N
+efa8c33e-ef1d-4473-9ad2-311b3208bee9	7	Auto-Generated Case: CASE-2026-0116	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	15466dc1-0c83-4a58-a4ea-b31945c3273d	\N	f	\N	2026-05-19 12:36:59.060724	\N
+671a520a-2b4e-49f8-8f45-87b9fd45b8a4	1	Auto-Generated Case: CASE-2026-0116	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	15466dc1-0c83-4a58-a4ea-b31945c3273d	\N	f	\N	2026-05-19 12:36:59.060724	\N
+18760e14-d10a-44dd-bb1f-4633d4504f80	26	Auto-Generated Case: CASE-2026-0116	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	15466dc1-0c83-4a58-a4ea-b31945c3273d	\N	f	\N	2026-05-19 12:36:59.060724	\N
+832a95ed-e358-47c0-93fc-26e518511cb6	27	Case Assigned: CASE-2026-0116	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	15466dc1-0c83-4a58-a4ea-b31945c3273d	\N	f	\N	2026-05-19 12:36:59.064258	\N
+ad0bac3a-474e-4d46-86c1-52b5000a1010	7	Auto-Generated Case: CASE-2026-0120	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	5188b899-f763-45bc-afd5-30e477794898	\N	f	\N	2026-05-19 12:37:05.034668	\N
+a47ebf24-0cfe-4b13-a04d-0de019c6750b	1	Auto-Generated Case: CASE-2026-0120	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	5188b899-f763-45bc-afd5-30e477794898	\N	f	\N	2026-05-19 12:37:05.034668	\N
+fba68f6d-3da6-4ba5-be73-7cac1ff0b21f	26	Auto-Generated Case: CASE-2026-0120	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	5188b899-f763-45bc-afd5-30e477794898	\N	f	\N	2026-05-19 12:37:05.034668	\N
+2bdcdd2f-4498-413b-b252-7b251b08b9c0	6	Case Assigned: CASE-2026-0120	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	5188b899-f763-45bc-afd5-30e477794898	\N	f	\N	2026-05-19 12:37:05.039025	\N
+2ba588ff-0c28-4206-9cb1-64a5b2cc22e6	7	Auto-Generated Case: CASE-2026-0123	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	0a87c1b5-dce6-490c-acca-2bbcb4e69251	\N	f	\N	2026-05-19 12:37:08.535222	\N
+718bdcff-7083-4db3-b7f9-218da52e319a	1	Auto-Generated Case: CASE-2026-0123	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	0a87c1b5-dce6-490c-acca-2bbcb4e69251	\N	f	\N	2026-05-19 12:37:08.535222	\N
+1cf92a88-81bb-4c08-aab7-fcfa47f0686a	26	Auto-Generated Case: CASE-2026-0123	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	0a87c1b5-dce6-490c-acca-2bbcb4e69251	\N	f	\N	2026-05-19 12:37:08.535222	\N
+bc03605d-8462-4d71-a21a-98e76bcc6cf9	6	Case Assigned: CASE-2026-0123	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	0a87c1b5-dce6-490c-acca-2bbcb4e69251	\N	f	\N	2026-05-19 12:37:08.539479	\N
+56fc0f8f-47d8-4c8a-b4a4-eab4013ef2bb	7	Auto-Generated Case: CASE-2026-0125	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	630df1ab-8a72-4555-8bab-fe639b7aaba9	\N	f	\N	2026-05-19 12:37:11.810597	\N
+58d16ea8-8467-4aca-a78c-92ab8e15e1a4	1	Auto-Generated Case: CASE-2026-0125	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	630df1ab-8a72-4555-8bab-fe639b7aaba9	\N	f	\N	2026-05-19 12:37:11.810597	\N
+da5a6f96-63ba-431f-966a-80d8ada0bed2	26	Auto-Generated Case: CASE-2026-0125	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	630df1ab-8a72-4555-8bab-fe639b7aaba9	\N	f	\N	2026-05-19 12:37:11.810597	\N
+183fdc7d-b69b-4ad2-9807-05cdf24f7e32	27	Case Assigned: CASE-2026-0125	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	630df1ab-8a72-4555-8bab-fe639b7aaba9	\N	f	\N	2026-05-19 12:37:11.815443	\N
+8818122b-7c12-43b4-804f-7fab5efc51dc	7	Auto-Generated Case: CASE-2026-0128	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	383814dc-d562-4672-a6df-b5949c4be0c0	\N	f	\N	2026-05-19 12:38:23.644047	\N
+d15a8126-7775-442a-812f-d9c69e307ede	1	Auto-Generated Case: CASE-2026-0128	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	383814dc-d562-4672-a6df-b5949c4be0c0	\N	f	\N	2026-05-19 12:38:23.644047	\N
+95317acf-d375-47bb-a9fd-4daecc5f764d	26	Auto-Generated Case: CASE-2026-0128	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	383814dc-d562-4672-a6df-b5949c4be0c0	\N	f	\N	2026-05-19 12:38:23.644047	\N
+4b334a7c-a07b-46d0-91fa-2ccea856336b	7	Auto-Generated Case: CASE-2026-0129	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	e243b0d7-fd12-4af9-ab57-8ebe0df0b89b	\N	f	\N	2026-05-19 12:38:25.123555	\N
+1bf9fe29-77c2-4ebc-85eb-5bd2b28286ce	1	Auto-Generated Case: CASE-2026-0129	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	e243b0d7-fd12-4af9-ab57-8ebe0df0b89b	\N	f	\N	2026-05-19 12:38:25.123555	\N
+0f31ddd7-d13a-43bf-8381-51585139fe7e	26	Auto-Generated Case: CASE-2026-0129	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	e243b0d7-fd12-4af9-ab57-8ebe0df0b89b	\N	f	\N	2026-05-19 12:38:25.123555	\N
+a8c66dc7-0e27-402c-89c0-ac51b706fce7	6	Case Assigned: CASE-2026-0128	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	383814dc-d562-4672-a6df-b5949c4be0c0	\N	f	\N	2026-05-19 12:38:23.648396	\N
+f008f1b4-676f-43f0-9a99-4e30708db306	7	Auto-Generated Case: CASE-2026-0130	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	beaaadd0-d56d-4478-8aa9-29de25fe7c72	\N	f	\N	2026-05-19 12:38:26.792108	\N
+b4932df2-8eb4-462e-bd2c-0d35eedaa8d2	1	Auto-Generated Case: CASE-2026-0130	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	beaaadd0-d56d-4478-8aa9-29de25fe7c72	\N	f	\N	2026-05-19 12:38:26.792108	\N
+5972ef2d-0857-4019-ac41-ada2208b835e	26	Auto-Generated Case: CASE-2026-0130	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	beaaadd0-d56d-4478-8aa9-29de25fe7c72	\N	f	\N	2026-05-19 12:38:26.792108	\N
+d48d3ea4-7c7d-4876-be0d-c005ae0789be	27	Case Assigned: CASE-2026-0129	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	e243b0d7-fd12-4af9-ab57-8ebe0df0b89b	\N	f	\N	2026-05-19 12:38:25.128979	\N
+552b1dfd-e425-4cea-b01a-777bf55d36b3	7	Auto-Generated Case: CASE-2026-0131	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	fdbfb737-85fc-49ec-bd0b-383c30225c58	\N	f	\N	2026-05-19 12:38:27.682732	\N
+6590fb6c-6a64-4e63-a9c0-8fcf3933f944	1	Auto-Generated Case: CASE-2026-0131	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	fdbfb737-85fc-49ec-bd0b-383c30225c58	\N	f	\N	2026-05-19 12:38:27.682732	\N
+572dc8cc-b9df-47e6-b171-8e79197060b0	26	Auto-Generated Case: CASE-2026-0131	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	fdbfb737-85fc-49ec-bd0b-383c30225c58	\N	f	\N	2026-05-19 12:38:27.682732	\N
+648d732d-30ed-4fb6-8b17-a1c07a4d18b5	7	Auto-Generated Case: CASE-2026-0132	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	ee889081-c737-48b9-9df4-59f339b35c71	\N	f	\N	2026-05-19 12:38:28.628117	\N
+093fae17-7259-476a-aea8-1721a8aaff44	1	Auto-Generated Case: CASE-2026-0132	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	ee889081-c737-48b9-9df4-59f339b35c71	\N	f	\N	2026-05-19 12:38:28.628117	\N
+3876970d-dca7-4cd1-83d5-5954f298e21a	26	Auto-Generated Case: CASE-2026-0132	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	ee889081-c737-48b9-9df4-59f339b35c71	\N	f	\N	2026-05-19 12:38:28.628117	\N
+729d60e5-8326-4573-b39c-46fe1d279f62	27	Case Assigned: CASE-2026-0132	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	ee889081-c737-48b9-9df4-59f339b35c71	\N	f	\N	2026-05-19 12:38:28.633361	\N
+6b2c7fc3-1ea5-4391-bb92-debe7520380d	6	Case Assigned: CASE-2026-0131	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	fdbfb737-85fc-49ec-bd0b-383c30225c58	\N	f	\N	2026-05-19 12:38:27.688151	\N
+c5e3e32b-eaa4-450e-8702-3cbbdea83ecf	7	Auto-Generated Case: CASE-2026-0134	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	ca5db588-82d5-4385-9224-54d7bf883bc1	\N	f	\N	2026-05-19 12:38:32.381704	\N
+32bee1e4-cfdb-4671-a0e0-5e1e15c41dda	1	Auto-Generated Case: CASE-2026-0134	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	ca5db588-82d5-4385-9224-54d7bf883bc1	\N	f	\N	2026-05-19 12:38:32.381704	\N
+c7d855ef-b235-4848-8660-1312f4749213	26	Auto-Generated Case: CASE-2026-0134	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	ca5db588-82d5-4385-9224-54d7bf883bc1	\N	f	\N	2026-05-19 12:38:32.381704	\N
+6e78fb6a-2a69-4fe5-8d56-593355154cf0	7	Auto-Generated Case: CASE-2026-0135	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	7d2cebcd-26a1-474b-a098-7d7b5d0fda9b	\N	f	\N	2026-05-19 12:38:32.703906	\N
+bece3936-26d7-47e2-ba67-053819cd4ccf	1	Auto-Generated Case: CASE-2026-0135	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	7d2cebcd-26a1-474b-a098-7d7b5d0fda9b	\N	f	\N	2026-05-19 12:38:32.703906	\N
+19d05e2f-aac0-498c-9aa3-fb5e77370d9c	26	Auto-Generated Case: CASE-2026-0135	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	7d2cebcd-26a1-474b-a098-7d7b5d0fda9b	\N	f	\N	2026-05-19 12:38:32.703906	\N
+0f43d68c-42df-47e7-a4b7-271526bb85c6	27	Case Assigned: CASE-2026-0135	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	7d2cebcd-26a1-474b-a098-7d7b5d0fda9b	\N	f	\N	2026-05-19 12:38:32.70763	\N
+b614264b-fcbe-4f53-a870-4ff2a9025aaa	6	Case Assigned: CASE-2026-0134	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	ca5db588-82d5-4385-9224-54d7bf883bc1	\N	f	\N	2026-05-19 12:38:32.388347	\N
+452aa2c8-e901-4e8e-a926-185ff21d777d	7	Auto-Generated Case: CASE-2026-0137	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	d24ecb3c-3539-403e-a29e-f5b5ce08acf3	\N	f	\N	2026-05-19 12:38:36.166852	\N
+1f0ab9ea-5851-4d01-b49c-c6a5a564475d	1	Auto-Generated Case: CASE-2026-0137	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	d24ecb3c-3539-403e-a29e-f5b5ce08acf3	\N	f	\N	2026-05-19 12:38:36.166852	\N
+80d41323-02d5-44ac-8ad8-3a4ce385ceb7	26	Auto-Generated Case: CASE-2026-0137	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	d24ecb3c-3539-403e-a29e-f5b5ce08acf3	\N	f	\N	2026-05-19 12:38:36.166852	\N
+6e057a6c-1c70-44d0-8a1e-c4d70bfa2c29	7	Auto-Generated Case: CASE-2026-0138	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	6ace6c35-0a09-4755-a3c9-701d0c22724d	\N	f	\N	2026-05-19 12:38:36.537635	\N
+9c017e59-59dc-4b2c-b378-8a006f160b38	1	Auto-Generated Case: CASE-2026-0138	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	6ace6c35-0a09-4755-a3c9-701d0c22724d	\N	f	\N	2026-05-19 12:38:36.537635	\N
+59d2adb1-0820-467c-9c45-1620c0ba2a89	26	Auto-Generated Case: CASE-2026-0138	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	6ace6c35-0a09-4755-a3c9-701d0c22724d	\N	f	\N	2026-05-19 12:38:36.537635	\N
+f50e0a9f-20be-4aba-a590-242c8d224f33	6	Case Assigned: CASE-2026-0137	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	d24ecb3c-3539-403e-a29e-f5b5ce08acf3	\N	f	\N	2026-05-19 12:38:36.170451	\N
+a4aa8cd1-285a-4423-8a0f-06b015aad14d	27	Case Assigned: CASE-2026-0138	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	6ace6c35-0a09-4755-a3c9-701d0c22724d	\N	f	\N	2026-05-19 12:38:36.541735	\N
+70c9982f-b822-4651-86f3-e1111f154069	7	Auto-Generated Case: CASE-2026-0139	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	aa7bce4e-4049-491b-aad5-1bc69e0b0447	\N	f	\N	2026-05-19 12:38:41.337196	\N
+b71561ef-7b70-4ff8-9899-b5613893aa88	1	Auto-Generated Case: CASE-2026-0139	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	aa7bce4e-4049-491b-aad5-1bc69e0b0447	\N	f	\N	2026-05-19 12:38:41.337196	\N
+ec13990c-b822-4de2-9ce2-72a9d66ae49f	26	Auto-Generated Case: CASE-2026-0139	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	aa7bce4e-4049-491b-aad5-1bc69e0b0447	\N	f	\N	2026-05-19 12:38:41.337196	\N
+bcc384b8-8477-4787-91e9-c6cb7d53e677	7	Auto-Generated Case: CASE-2026-0140	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	9c9845c9-b136-49fc-b6a8-c3a509e3f883	\N	f	\N	2026-05-19 12:38:41.717303	\N
+467841ad-d800-4095-88a1-cd7ac26e7dec	1	Auto-Generated Case: CASE-2026-0140	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	9c9845c9-b136-49fc-b6a8-c3a509e3f883	\N	f	\N	2026-05-19 12:38:41.717303	\N
+3b58e03f-5d94-49c2-804d-12f69b409911	26	Auto-Generated Case: CASE-2026-0140	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	9c9845c9-b136-49fc-b6a8-c3a509e3f883	\N	f	\N	2026-05-19 12:38:41.717303	\N
+45828e0d-37e7-4322-99fd-ef51d4bd090d	27	Case Assigned: CASE-2026-0130	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	beaaadd0-d56d-4478-8aa9-29de25fe7c72	\N	f	\N	2026-05-19 12:38:26.797768	\N
+e7e1accc-04d3-4fd8-bff6-277ba4a0a12d	7	Auto-Generated Case: CASE-2026-0133	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	c722c0ef-b2ac-43e8-ba36-bc4644266299	\N	f	\N	2026-05-19 12:38:30.572212	\N
+78630d83-3b4c-411b-b920-0060e2286389	1	Auto-Generated Case: CASE-2026-0133	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	c722c0ef-b2ac-43e8-ba36-bc4644266299	\N	f	\N	2026-05-19 12:38:30.572212	\N
+5ba50b7b-8773-463c-8dfe-376423e1cfea	26	Auto-Generated Case: CASE-2026-0133	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	c722c0ef-b2ac-43e8-ba36-bc4644266299	\N	f	\N	2026-05-19 12:38:30.572212	\N
+5510cd41-ec42-4734-9d11-4ac15032b943	6	Case Assigned: CASE-2026-0133	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	c722c0ef-b2ac-43e8-ba36-bc4644266299	\N	f	\N	2026-05-19 12:38:30.576814	\N
+e1262b55-186b-437a-87b3-80e24aa5c6ee	7	Auto-Generated Case: CASE-2026-0136	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	8c59f96d-80d2-4ba5-8ef4-a4ffcf4661b7	\N	f	\N	2026-05-19 12:38:34.680196	\N
+3d662891-854a-405c-ae59-4de0d4bea3bf	1	Auto-Generated Case: CASE-2026-0136	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	8c59f96d-80d2-4ba5-8ef4-a4ffcf4661b7	\N	f	\N	2026-05-19 12:38:34.680196	\N
+d3673005-76dc-4d4d-a5c1-1a61673e03ba	26	Auto-Generated Case: CASE-2026-0136	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	8c59f96d-80d2-4ba5-8ef4-a4ffcf4661b7	\N	f	\N	2026-05-19 12:38:34.680196	\N
+f312c9a3-8f77-4ceb-b274-6860c9daa8cd	27	Case Assigned: CASE-2026-0136	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	8c59f96d-80d2-4ba5-8ef4-a4ffcf4661b7	\N	f	\N	2026-05-19 12:38:34.685946	\N
+a8e2e97b-b72c-4820-94ed-30fa7930316b	7	Auto-Generated Case: CASE-2026-0144	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	f81b3b51-ff22-49a2-9cde-c9bc788de519	\N	f	\N	2026-05-19 12:38:51.355628	\N
+15c6dfaf-0248-48c2-84e1-5be1321a8cbc	1	Auto-Generated Case: CASE-2026-0144	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	f81b3b51-ff22-49a2-9cde-c9bc788de519	\N	f	\N	2026-05-19 12:38:51.355628	\N
+06206e56-d9a4-45bd-8cdf-4519f5144799	26	Auto-Generated Case: CASE-2026-0144	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	f81b3b51-ff22-49a2-9cde-c9bc788de519	\N	f	\N	2026-05-19 12:38:51.355628	\N
+ca008d9a-2c93-4063-9e49-436abdeb62cb	6	Case Assigned: CASE-2026-0144	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	f81b3b51-ff22-49a2-9cde-c9bc788de519	\N	f	\N	2026-05-19 12:38:51.3595	\N
+acf1d415-32bf-40a5-80d3-226010c2d7cf	7	Auto-Generated Case: CASE-2026-0147	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	fb73d5f2-0c18-48d5-82aa-452bf9b09e32	\N	f	\N	2026-05-19 12:38:54.628042	\N
+18a829ea-43b9-4761-a400-220894e10406	1	Auto-Generated Case: CASE-2026-0147	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	fb73d5f2-0c18-48d5-82aa-452bf9b09e32	\N	f	\N	2026-05-19 12:38:54.628042	\N
+505ce827-d478-4dce-afd4-5916cc8747eb	26	Auto-Generated Case: CASE-2026-0147	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	fb73d5f2-0c18-48d5-82aa-452bf9b09e32	\N	f	\N	2026-05-19 12:38:54.628042	\N
+378e82ea-9b80-46ec-ab8c-844a547638f8	6	Case Assigned: CASE-2026-0147	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	fb73d5f2-0c18-48d5-82aa-452bf9b09e32	\N	f	\N	2026-05-19 12:38:54.633336	\N
+743b8b57-64dc-4414-8b3a-8d1ef59c459b	7	Auto-Generated Case: CASE-2026-0150	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	482fdad1-6092-45ab-830f-cec10784da58	\N	f	\N	2026-05-19 12:38:57.653147	\N
+d57259fc-1e97-4cb6-b5bf-aaacb8e92661	1	Auto-Generated Case: CASE-2026-0150	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	482fdad1-6092-45ab-830f-cec10784da58	\N	f	\N	2026-05-19 12:38:57.653147	\N
+77233359-4ee4-4040-a92b-3833d9030260	26	Auto-Generated Case: CASE-2026-0150	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	482fdad1-6092-45ab-830f-cec10784da58	\N	f	\N	2026-05-19 12:38:57.653147	\N
+ecd198ed-0383-4314-a63d-1da0366b399b	27	Case Assigned: CASE-2026-0150	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	482fdad1-6092-45ab-830f-cec10784da58	\N	f	\N	2026-05-19 12:38:57.657759	\N
+c052b259-edf2-4fc6-b885-b0057194ca0f	7	Auto-Generated Case: CASE-2026-0153	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	37a7e55a-707e-42dc-878a-83a5d6992c51	\N	f	\N	2026-05-19 12:39:01.345528	\N
+29fe2f69-f8a7-4bf9-ba92-122f1a81db6b	1	Auto-Generated Case: CASE-2026-0153	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	37a7e55a-707e-42dc-878a-83a5d6992c51	\N	f	\N	2026-05-19 12:39:01.345528	\N
+0797ec8d-5a13-4fb6-9747-3b68468e15a7	26	Auto-Generated Case: CASE-2026-0153	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	37a7e55a-707e-42dc-878a-83a5d6992c51	\N	f	\N	2026-05-19 12:39:01.345528	\N
+5155f8e7-765f-4b3b-9073-c4ed1cef665c	27	Case Assigned: CASE-2026-0153	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	37a7e55a-707e-42dc-878a-83a5d6992c51	\N	f	\N	2026-05-19 12:39:01.349809	\N
+067917ff-e1ad-4df0-b82d-6d6f4ee6ec53	6	Case Assigned: CASE-2026-0139	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	aa7bce4e-4049-491b-aad5-1bc69e0b0447	\N	f	\N	2026-05-19 12:38:41.342137	\N
+cf74099d-da63-4fa5-9fdc-12b144327a48	7	Auto-Generated Case: CASE-2026-0141	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	93355f4b-135b-4ca0-ba24-1a9b27c89596	\N	f	\N	2026-05-19 12:38:45.913409	\N
+332533b5-6d4e-4069-92bd-21127609ec6b	1	Auto-Generated Case: CASE-2026-0141	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	93355f4b-135b-4ca0-ba24-1a9b27c89596	\N	f	\N	2026-05-19 12:38:45.913409	\N
+76131c6b-65d3-4eb1-8279-98a455edc0ac	26	Auto-Generated Case: CASE-2026-0141	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	93355f4b-135b-4ca0-ba24-1a9b27c89596	\N	f	\N	2026-05-19 12:38:45.913409	\N
+f03ba4aa-61b1-42c9-95bd-0d23804a0be4	27	Case Assigned: CASE-2026-0141	You have been assigned to auto-generated case: Incident Type 1 case - Multiple Reports	assignment	medium	case	93355f4b-135b-4ca0-ba24-1a9b27c89596	\N	f	\N	2026-05-19 12:38:45.917392	\N
+d8a85546-81a8-4e5e-826d-cae15342a2f5	7	Auto-Generated Case: CASE-2026-0143	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	53aaf2cf-2463-455d-8764-82a4acf852e7	\N	f	\N	2026-05-19 12:38:49.464772	\N
+d477f075-f9eb-4226-bd84-240bc6ccf222	1	Auto-Generated Case: CASE-2026-0143	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	53aaf2cf-2463-455d-8764-82a4acf852e7	\N	f	\N	2026-05-19 12:38:49.464772	\N
+ee98dac7-9ba3-436c-a707-3d8d7b056da7	26	Auto-Generated Case: CASE-2026-0143	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	53aaf2cf-2463-455d-8764-82a4acf852e7	\N	f	\N	2026-05-19 12:38:49.464772	\N
+7f63dd77-4847-4d30-bbd8-3e1eb7346c60	27	Case Assigned: CASE-2026-0143	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	53aaf2cf-2463-455d-8764-82a4acf852e7	\N	f	\N	2026-05-19 12:38:49.470422	\N
+1b6fc6ad-0d32-4bd9-948a-8bb208e13bf2	7	Auto-Generated Case: CASE-2026-0146	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	e1106ed6-27cb-4aa5-84e3-6923f25019e9	\N	f	\N	2026-05-19 12:38:52.703094	\N
+844a3fbd-d519-4c99-8fe5-99409db7081c	1	Auto-Generated Case: CASE-2026-0146	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	e1106ed6-27cb-4aa5-84e3-6923f25019e9	\N	f	\N	2026-05-19 12:38:52.703094	\N
+4beacd10-b940-4925-834f-c4ff3c844f8d	26	Auto-Generated Case: CASE-2026-0146	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	e1106ed6-27cb-4aa5-84e3-6923f25019e9	\N	f	\N	2026-05-19 12:38:52.703094	\N
+9b47740f-9a3b-4cb4-9d6a-c647aa20c887	27	Case Assigned: CASE-2026-0146	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	e1106ed6-27cb-4aa5-84e3-6923f25019e9	\N	f	\N	2026-05-19 12:38:52.709221	\N
+01613e56-024b-4858-93df-c5c3c3ab95d1	7	Auto-Generated Case: CASE-2026-0149	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	40495dc9-b255-4021-b655-da190d452f71	\N	f	\N	2026-05-19 12:38:55.764437	\N
+80fc444f-2e34-420d-bff9-9d1a026f0762	1	Auto-Generated Case: CASE-2026-0149	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	40495dc9-b255-4021-b655-da190d452f71	\N	f	\N	2026-05-19 12:38:55.764437	\N
+f6506ef2-0439-42d3-a11d-ad81dc3bfab4	26	Auto-Generated Case: CASE-2026-0149	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	40495dc9-b255-4021-b655-da190d452f71	\N	f	\N	2026-05-19 12:38:55.764437	\N
+f4adb211-4e85-4d4f-8943-b24aee02eb83	6	Case Assigned: CASE-2026-0149	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	40495dc9-b255-4021-b655-da190d452f71	\N	f	\N	2026-05-19 12:38:55.768018	\N
+0377eb1c-f520-4840-88b7-6360940b46d5	7	Auto-Generated Case: CASE-2026-0152	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	45860b0a-156f-4b75-ab9c-c1cbaa13db0a	\N	f	\N	2026-05-19 12:39:00.503709	\N
+bd83471e-04d7-4cdf-8928-adb554d3cacf	1	Auto-Generated Case: CASE-2026-0152	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	45860b0a-156f-4b75-ab9c-c1cbaa13db0a	\N	f	\N	2026-05-19 12:39:00.503709	\N
+380f106f-ddb8-4b8d-bf6a-68ecc608189a	26	Auto-Generated Case: CASE-2026-0152	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	45860b0a-156f-4b75-ab9c-c1cbaa13db0a	\N	f	\N	2026-05-19 12:39:00.503709	\N
+e38d40c9-dc0b-4409-b8ed-7981176de2ea	6	Case Assigned: CASE-2026-0152	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	45860b0a-156f-4b75-ab9c-c1cbaa13db0a	\N	f	\N	2026-05-19 12:39:00.507428	\N
+4d7bb1e9-0494-4189-8fb8-4678d61ef91f	7	Auto-Generated Case: CASE-2026-0155	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	a236a9b4-3eda-4d3d-9201-53541db20d85	\N	f	\N	2026-05-19 12:39:04.12285	\N
+3a724dee-6764-41fb-95b7-5188d6d05a7c	1	Auto-Generated Case: CASE-2026-0155	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	a236a9b4-3eda-4d3d-9201-53541db20d85	\N	f	\N	2026-05-19 12:39:04.12285	\N
+cf88c9b9-5707-4cac-933b-b6588262c0f0	26	Auto-Generated Case: CASE-2026-0155	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	a236a9b4-3eda-4d3d-9201-53541db20d85	\N	f	\N	2026-05-19 12:39:04.12285	\N
+7921700d-f055-4e5f-8084-f881058b2f5a	27	Case Assigned: CASE-2026-0155	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	a236a9b4-3eda-4d3d-9201-53541db20d85	\N	f	\N	2026-05-19 12:39:04.126402	\N
+1775f4a4-1f2b-4aea-80bc-fa712a729e77	7	Auto-Generated Case: CASE-2026-0157	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	944aab29-098b-4e55-9241-5eca26f74b21	\N	f	\N	2026-05-19 12:39:07.274958	\N
+892c92e6-5aa4-4c8c-b0a3-f0a3c637132d	1	Auto-Generated Case: CASE-2026-0157	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	944aab29-098b-4e55-9241-5eca26f74b21	\N	f	\N	2026-05-19 12:39:07.274958	\N
+90db73e2-9007-43c8-8a05-5fb25b15b5dd	26	Auto-Generated Case: CASE-2026-0157	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	944aab29-098b-4e55-9241-5eca26f74b21	\N	f	\N	2026-05-19 12:39:07.274958	\N
+961812a1-aae3-497f-9daf-1c5474a2abef	6	Case Assigned: CASE-2026-0157	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	944aab29-098b-4e55-9241-5eca26f74b21	\N	f	\N	2026-05-19 12:39:07.279107	\N
+72e95889-2a40-4640-a52e-18d52cdbc28c	7	Auto-Generated Case: CASE-2026-0159	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	57b49554-8465-4edf-a5d9-b4d457d805d1	\N	f	\N	2026-05-19 12:39:11.171482	\N
+ee09fb1a-99a9-44d8-9af6-9ef36b100899	1	Auto-Generated Case: CASE-2026-0159	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	57b49554-8465-4edf-a5d9-b4d457d805d1	\N	f	\N	2026-05-19 12:39:11.171482	\N
+d823dbd3-6719-4845-a117-03301f244777	6	Case Assigned: CASE-2026-0140	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	9c9845c9-b136-49fc-b6a8-c3a509e3f883	\N	f	\N	2026-05-19 12:38:41.720986	\N
+e2a53872-a171-4ec2-80f3-f239e5d0f09d	7	Auto-Generated Case: CASE-2026-0142	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	a1c18377-0f31-4999-b225-8bdeb85e6768	\N	f	\N	2026-05-19 12:38:48.284774	\N
+c1179ba8-1ab8-45cf-ab1a-f880c2a3ecda	1	Auto-Generated Case: CASE-2026-0142	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	a1c18377-0f31-4999-b225-8bdeb85e6768	\N	f	\N	2026-05-19 12:38:48.284774	\N
+c10abbd3-8144-499e-acc2-8b4f603867e4	26	Auto-Generated Case: CASE-2026-0142	A new case has been automatically created from 2 verified reports. Case: Incident Type 1 case - Multiple Reports	system	medium	case	a1c18377-0f31-4999-b225-8bdeb85e6768	\N	f	\N	2026-05-19 12:38:48.284774	\N
+01b6a88f-79cb-4740-aa74-96bdeb63285c	6	Case Assigned: CASE-2026-0142	You have been assigned to auto-generated case: Incident Type 1 case - Multiple Reports	assignment	medium	case	a1c18377-0f31-4999-b225-8bdeb85e6768	\N	f	\N	2026-05-19 12:38:48.288937	\N
+1abf0602-80cb-4bad-b453-cd865064340e	7	Auto-Generated Case: CASE-2026-0145	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	0dab72cb-5ed2-40d0-a876-9afd4fa6c79d	\N	f	\N	2026-05-19 12:38:52.259806	\N
+13c7d226-7ac0-4e45-a518-c6874abec903	1	Auto-Generated Case: CASE-2026-0145	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	0dab72cb-5ed2-40d0-a876-9afd4fa6c79d	\N	f	\N	2026-05-19 12:38:52.259806	\N
+54940b46-b1f9-43f3-94a5-aeb37a10e512	26	Auto-Generated Case: CASE-2026-0145	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	0dab72cb-5ed2-40d0-a876-9afd4fa6c79d	\N	f	\N	2026-05-19 12:38:52.259806	\N
+d2d24aa6-c78e-4910-9206-10117d006f19	27	Case Assigned: CASE-2026-0145	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	0dab72cb-5ed2-40d0-a876-9afd4fa6c79d	\N	f	\N	2026-05-19 12:38:52.263922	\N
+ebb1283f-6912-4c4b-a34f-055077f393a1	7	Auto-Generated Case: CASE-2026-0148	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	ade6491d-a518-4d9d-86ad-fb731dad43bc	\N	f	\N	2026-05-19 12:38:55.469926	\N
+47174f4d-696c-4b8f-ac18-548a0306d05b	1	Auto-Generated Case: CASE-2026-0148	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	ade6491d-a518-4d9d-86ad-fb731dad43bc	\N	f	\N	2026-05-19 12:38:55.469926	\N
+26a60570-08f8-4f0f-b77c-9f4b333d0791	26	Auto-Generated Case: CASE-2026-0148	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	ade6491d-a518-4d9d-86ad-fb731dad43bc	\N	f	\N	2026-05-19 12:38:55.469926	\N
+8fa1b0ea-eeaa-4f89-adb2-0ba584dd5351	27	Case Assigned: CASE-2026-0148	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	ade6491d-a518-4d9d-86ad-fb731dad43bc	\N	f	\N	2026-05-19 12:38:55.473691	\N
+54f8fdbc-41f3-4654-b664-12d96d862064	7	Auto-Generated Case: CASE-2026-0151	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	f5d6a584-d7fc-40f1-9d4e-62b813afc071	\N	f	\N	2026-05-19 12:38:58.726218	\N
+60cea829-69b8-40b1-a594-6fce23e5e26b	1	Auto-Generated Case: CASE-2026-0151	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	f5d6a584-d7fc-40f1-9d4e-62b813afc071	\N	f	\N	2026-05-19 12:38:58.726218	\N
+a500e0b9-6c15-4c7a-8542-10fe770cd586	26	Auto-Generated Case: CASE-2026-0151	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	f5d6a584-d7fc-40f1-9d4e-62b813afc071	\N	f	\N	2026-05-19 12:38:58.726218	\N
+52d77892-e62e-4a83-adeb-efd42a7e6b4f	6	Case Assigned: CASE-2026-0151	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	f5d6a584-d7fc-40f1-9d4e-62b813afc071	\N	f	\N	2026-05-19 12:38:58.730986	\N
+69688888-d0bb-421c-99d9-55d18971b947	7	Auto-Generated Case: CASE-2026-0154	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	8c221741-02ea-40ac-ac11-4f4dfe469371	\N	f	\N	2026-05-19 12:39:01.895953	\N
+bdd50793-a901-4fbf-afc6-ecbc1077072b	1	Auto-Generated Case: CASE-2026-0154	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	8c221741-02ea-40ac-ac11-4f4dfe469371	\N	f	\N	2026-05-19 12:39:01.895953	\N
+528eac36-f017-4b90-86b9-ddedb9c78ba7	26	Auto-Generated Case: CASE-2026-0154	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	8c221741-02ea-40ac-ac11-4f4dfe469371	\N	f	\N	2026-05-19 12:39:01.895953	\N
+ba8c3c37-488d-4c73-86cb-83497221d6c4	6	Case Assigned: CASE-2026-0154	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	8c221741-02ea-40ac-ac11-4f4dfe469371	\N	f	\N	2026-05-19 12:39:01.89969	\N
+ea1d558a-cf7e-4bdf-90c3-79e61b62d1ce	7	Auto-Generated Case: CASE-2026-0156	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	5e439847-c5a8-4cd0-b1ad-18953f038e5c	\N	f	\N	2026-05-19 12:39:05.548777	\N
+3aaf92b4-4f5f-4f79-a9b6-eada472ad593	1	Auto-Generated Case: CASE-2026-0156	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	5e439847-c5a8-4cd0-b1ad-18953f038e5c	\N	f	\N	2026-05-19 12:39:05.548777	\N
+a5d0089d-f453-4ed6-af86-6504b100084e	26	Auto-Generated Case: CASE-2026-0156	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	5e439847-c5a8-4cd0-b1ad-18953f038e5c	\N	f	\N	2026-05-19 12:39:05.548777	\N
+49115159-a046-4408-880e-de79eefedc7b	27	Case Assigned: CASE-2026-0156	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	5e439847-c5a8-4cd0-b1ad-18953f038e5c	\N	f	\N	2026-05-19 12:39:05.553679	\N
+1d899fe7-7b22-44b8-a843-5b6f778ff8a8	7	Auto-Generated Case: CASE-2026-0158	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	d67a52d6-bf6e-4ff1-8e12-7128c36d5143	\N	f	\N	2026-05-19 12:39:08.825845	\N
+066374c9-0018-4ad5-8f41-fc8a3c94e92c	1	Auto-Generated Case: CASE-2026-0158	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	d67a52d6-bf6e-4ff1-8e12-7128c36d5143	\N	f	\N	2026-05-19 12:39:08.825845	\N
+ccd1da3d-d448-45ef-8680-dbafd36fc8f7	26	Auto-Generated Case: CASE-2026-0158	A new case has been automatically created from 1 verified reports. Case: Incident Type 4 case - Single Report	system	medium	case	d67a52d6-bf6e-4ff1-8e12-7128c36d5143	\N	f	\N	2026-05-19 12:39:08.825845	\N
+6d7ea76a-87c7-4149-8b16-e24145ade2a5	27	Case Assigned: CASE-2026-0158	You have been assigned to auto-generated case: Incident Type 4 case - Single Report	assignment	medium	case	d67a52d6-bf6e-4ff1-8e12-7128c36d5143	\N	f	\N	2026-05-19 12:39:08.829619	\N
+4c27cc6f-c7a3-4fd9-a23a-1a7798cf8821	7	Auto-Generated Case: CASE-2026-0160	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	326b75fe-5cd2-4115-89ed-b07d50486a47	\N	f	\N	2026-05-19 12:39:13.570578	\N
+c5fae505-c88f-46bd-889e-e6be0ec86565	1	Auto-Generated Case: CASE-2026-0160	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	326b75fe-5cd2-4115-89ed-b07d50486a47	\N	f	\N	2026-05-19 12:39:13.570578	\N
+c0be2926-8d1c-4c76-ac22-48ff6b1a4c6a	26	Auto-Generated Case: CASE-2026-0159	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	57b49554-8465-4edf-a5d9-b4d457d805d1	\N	f	\N	2026-05-19 12:39:11.171482	\N
+c81c3112-72fe-497c-8149-727321b51aad	6	Case Assigned: CASE-2026-0159	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	57b49554-8465-4edf-a5d9-b4d457d805d1	\N	f	\N	2026-05-19 12:39:11.175463	\N
+37ceb3a3-5f28-46d7-86b9-8712a2291b4f	7	Auto-Generated Case: CASE-2026-0161	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	4f03c541-f8ad-48f6-8b8e-999c2388e63c	\N	f	\N	2026-05-19 12:39:14.587428	\N
+c72b00b3-53ba-4110-9c0f-09e8829fa030	1	Auto-Generated Case: CASE-2026-0161	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	4f03c541-f8ad-48f6-8b8e-999c2388e63c	\N	f	\N	2026-05-19 12:39:14.587428	\N
+d7c1f2b7-765d-4720-a68e-c2530b8d64df	26	Auto-Generated Case: CASE-2026-0161	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	4f03c541-f8ad-48f6-8b8e-999c2388e63c	\N	f	\N	2026-05-19 12:39:14.587428	\N
+6d9e873b-57f3-4f46-aa15-36bd45ae2458	27	Case Assigned: CASE-2026-0161	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	4f03c541-f8ad-48f6-8b8e-999c2388e63c	\N	f	\N	2026-05-19 12:39:14.59635	\N
+46c170e9-a424-4453-8993-2ac97aa9f366	7	Auto-Generated Case: CASE-2026-0162	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	988957f9-dfe5-4cba-863e-c1c7e0baf9e7	\N	f	\N	2026-05-19 12:39:18.398583	\N
+03dc79a8-2e34-4035-a5cf-3406ac125a5a	1	Auto-Generated Case: CASE-2026-0162	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	988957f9-dfe5-4cba-863e-c1c7e0baf9e7	\N	f	\N	2026-05-19 12:39:18.398583	\N
+4daee4fe-ab27-4567-b73c-120da6ce7288	26	Auto-Generated Case: CASE-2026-0162	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	988957f9-dfe5-4cba-863e-c1c7e0baf9e7	\N	f	\N	2026-05-19 12:39:18.398583	\N
+8ae96550-44fe-448b-8c5e-122ec9461836	6	Case Assigned: CASE-2026-0162	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	988957f9-dfe5-4cba-863e-c1c7e0baf9e7	\N	f	\N	2026-05-19 12:39:18.402376	\N
+4909e274-7efd-416f-bb06-4aa024da727d	7	Auto-Generated Case: CASE-2026-0164	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	4fce1fef-fb8d-4da8-8bce-3eb82f305f07	\N	f	\N	2026-05-19 12:39:21.614783	\N
+0131fd8a-f94d-478b-85fc-a00cda38223f	1	Auto-Generated Case: CASE-2026-0164	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	4fce1fef-fb8d-4da8-8bce-3eb82f305f07	\N	f	\N	2026-05-19 12:39:21.614783	\N
+66817271-d5b2-4b2b-8839-87174bfa18f8	26	Auto-Generated Case: CASE-2026-0164	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	4fce1fef-fb8d-4da8-8bce-3eb82f305f07	\N	f	\N	2026-05-19 12:39:21.614783	\N
+87a8599f-5ff5-4278-b117-cb17982402c9	6	Case Assigned: CASE-2026-0164	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	4fce1fef-fb8d-4da8-8bce-3eb82f305f07	\N	f	\N	2026-05-19 12:39:21.618783	\N
+83aad17b-af52-418b-8b25-296ec4f899eb	7	Auto-Generated Case: CASE-2026-0166	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	a1a4c404-465b-4467-9f15-133bdcb64d69	\N	f	\N	2026-05-19 12:39:24.827272	\N
+5618d325-f252-4d62-a40e-38ba626b858f	1	Auto-Generated Case: CASE-2026-0166	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	a1a4c404-465b-4467-9f15-133bdcb64d69	\N	f	\N	2026-05-19 12:39:24.827272	\N
+761580c0-0318-4214-bb06-bf631bfb5a45	26	Auto-Generated Case: CASE-2026-0166	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	a1a4c404-465b-4467-9f15-133bdcb64d69	\N	f	\N	2026-05-19 12:39:24.827272	\N
+73034c57-9f38-472d-8fea-c8426fc00816	6	Case Assigned: CASE-2026-0166	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	a1a4c404-465b-4467-9f15-133bdcb64d69	\N	f	\N	2026-05-19 12:39:24.831356	\N
+4a11ba40-30e0-4959-bb5a-82efd5af9075	7	Auto-Generated Case: CASE-2026-0169	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	05a14071-e851-4010-8823-e48f4420b4c4	\N	f	\N	2026-05-19 12:39:28.563933	\N
+0f38d31c-f697-4f0d-806e-e7bfc9c6a4c5	1	Auto-Generated Case: CASE-2026-0169	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	05a14071-e851-4010-8823-e48f4420b4c4	\N	f	\N	2026-05-19 12:39:28.563933	\N
+3ad27e5d-7ae4-460f-b9e1-b8b55ea6ba1c	26	Auto-Generated Case: CASE-2026-0169	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	05a14071-e851-4010-8823-e48f4420b4c4	\N	f	\N	2026-05-19 12:39:28.563933	\N
+bce425c2-c487-4d65-826b-b0072dc0bf83	27	Case Assigned: CASE-2026-0169	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	05a14071-e851-4010-8823-e48f4420b4c4	\N	f	\N	2026-05-19 12:39:28.567934	\N
+0ba45e5e-3dc4-44f1-ab88-6ad315526678	7	Auto-Generated Case: CASE-2026-0170	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	3be98d34-5c71-4615-8503-0e495d880e69	\N	f	\N	2026-05-19 12:39:31.790962	\N
+c39ec44e-2df9-41d7-876b-5350c3c3d863	1	Auto-Generated Case: CASE-2026-0170	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	3be98d34-5c71-4615-8503-0e495d880e69	\N	f	\N	2026-05-19 12:39:31.790962	\N
+8ff6fcee-666d-42f8-9f8d-5cb97425d729	26	Auto-Generated Case: CASE-2026-0170	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	3be98d34-5c71-4615-8503-0e495d880e69	\N	f	\N	2026-05-19 12:39:31.790962	\N
+d44d6960-32f5-4223-910c-64f0c6098723	6	Case Assigned: CASE-2026-0170	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	3be98d34-5c71-4615-8503-0e495d880e69	\N	f	\N	2026-05-19 12:39:31.794641	\N
+5b309f5e-e9d4-4555-a737-af55773036c3	7	Auto-Generated Case: CASE-2026-0173	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	5628e99b-cf53-4fc7-9c2c-662ec4821efd	\N	f	\N	2026-05-19 12:39:38.388343	\N
+84a03c7e-9892-4b20-b9b1-2cd2b04b4b5c	1	Auto-Generated Case: CASE-2026-0173	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	5628e99b-cf53-4fc7-9c2c-662ec4821efd	\N	f	\N	2026-05-19 12:39:38.388343	\N
+2d249b7f-9ea3-4aee-ac26-741c1abb0976	26	Auto-Generated Case: CASE-2026-0173	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	5628e99b-cf53-4fc7-9c2c-662ec4821efd	\N	f	\N	2026-05-19 12:39:38.388343	\N
+fa58edbf-c5d4-4160-9d49-0164c69658dc	6	Case Assigned: CASE-2026-0173	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	5628e99b-cf53-4fc7-9c2c-662ec4821efd	\N	f	\N	2026-05-19 12:39:38.392141	\N
+8550a61c-acc8-490d-a6b8-cd958ff6c729	7	Auto-Generated Case: CASE-2026-0175	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	15a3ea7b-a0eb-413e-9b3c-0202c4cf3317	\N	f	\N	2026-05-19 12:39:41.720208	\N
+81c01b41-7271-4e0b-b640-121071aa2cad	26	Auto-Generated Case: CASE-2026-0160	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	326b75fe-5cd2-4115-89ed-b07d50486a47	\N	f	\N	2026-05-19 12:39:13.570578	\N
+6c411c57-6b7a-40fa-93d6-83f2e9030739	6	Case Assigned: CASE-2026-0160	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	326b75fe-5cd2-4115-89ed-b07d50486a47	\N	f	\N	2026-05-19 12:39:13.574653	\N
+15d69cca-46f4-41bb-b6e0-aba0ee0d2bd5	7	Auto-Generated Case: CASE-2026-0163	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	41176144-2221-43d9-993f-1ff869230f6d	\N	f	\N	2026-05-19 12:39:18.575477	\N
+2e13a4d9-2a14-4da4-aeda-00a3db9d0f31	1	Auto-Generated Case: CASE-2026-0163	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	41176144-2221-43d9-993f-1ff869230f6d	\N	f	\N	2026-05-19 12:39:18.575477	\N
+260c5dce-37a1-48b0-bd53-c1efc73e6675	26	Auto-Generated Case: CASE-2026-0163	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	41176144-2221-43d9-993f-1ff869230f6d	\N	f	\N	2026-05-19 12:39:18.575477	\N
+1ba71b0d-91a9-4bfc-8c0b-13d2451e082c	27	Case Assigned: CASE-2026-0163	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	41176144-2221-43d9-993f-1ff869230f6d	\N	f	\N	2026-05-19 12:39:18.57942	\N
+c320af80-aa57-46c8-9755-12c49316f433	7	Auto-Generated Case: CASE-2026-0165	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	f6d9b6e7-ee02-4e83-98cb-b648fd258680	\N	f	\N	2026-05-19 12:39:22.020977	\N
+76e8b7e6-e804-4bd1-a147-d2e36b503249	1	Auto-Generated Case: CASE-2026-0165	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	f6d9b6e7-ee02-4e83-98cb-b648fd258680	\N	f	\N	2026-05-19 12:39:22.020977	\N
+d263437e-8079-48f9-9c6b-3a738bdf1578	26	Auto-Generated Case: CASE-2026-0165	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	f6d9b6e7-ee02-4e83-98cb-b648fd258680	\N	f	\N	2026-05-19 12:39:22.020977	\N
+eda04095-0d99-4926-8ed3-083f2615e27c	27	Case Assigned: CASE-2026-0165	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	f6d9b6e7-ee02-4e83-98cb-b648fd258680	\N	f	\N	2026-05-19 12:39:22.024955	\N
+b8c0c3f1-9ff2-4f78-8a25-6eabeb51e42c	7	Auto-Generated Case: CASE-2026-0167	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	0988ec6a-1360-45ae-93d4-96d07460a1be	\N	f	\N	2026-05-19 12:39:25.237522	\N
+4feae33f-7144-4822-a0e3-f84e2c799600	1	Auto-Generated Case: CASE-2026-0167	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	0988ec6a-1360-45ae-93d4-96d07460a1be	\N	f	\N	2026-05-19 12:39:25.237522	\N
+90ecafd7-be28-4325-87fc-5f7713753b2c	26	Auto-Generated Case: CASE-2026-0167	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	0988ec6a-1360-45ae-93d4-96d07460a1be	\N	f	\N	2026-05-19 12:39:25.237522	\N
+c7e649af-25db-4470-9efb-f80926956195	27	Case Assigned: CASE-2026-0167	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	0988ec6a-1360-45ae-93d4-96d07460a1be	\N	f	\N	2026-05-19 12:39:25.241527	\N
+c8c04121-2c11-4291-8681-b720381c2341	7	Auto-Generated Case: CASE-2026-0168	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	d859e39e-f414-44bc-a9da-e8c80e2a6533	\N	f	\N	2026-05-19 12:39:28.518152	\N
+b5a5a7d9-e39c-4bc2-8e9e-be2f6c6cf49e	1	Auto-Generated Case: CASE-2026-0168	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	d859e39e-f414-44bc-a9da-e8c80e2a6533	\N	f	\N	2026-05-19 12:39:28.518152	\N
+195f84ba-04a3-41ed-94ed-09a1efe6fdd5	26	Auto-Generated Case: CASE-2026-0168	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	d859e39e-f414-44bc-a9da-e8c80e2a6533	\N	f	\N	2026-05-19 12:39:28.518152	\N
+9b580423-1bdc-4ec6-bded-124d5f49fa03	6	Case Assigned: CASE-2026-0168	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	d859e39e-f414-44bc-a9da-e8c80e2a6533	\N	f	\N	2026-05-19 12:39:28.523517	\N
+98c728d5-ee35-4a55-83fb-49717871917f	7	Auto-Generated Case: CASE-2026-0171	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	6ef55569-2eb8-4d31-86f1-f8e3cbd7bc19	\N	f	\N	2026-05-19 12:39:34.617337	\N
+da44388a-b60c-41c1-be6f-9b64f4b828a2	1	Auto-Generated Case: CASE-2026-0171	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	6ef55569-2eb8-4d31-86f1-f8e3cbd7bc19	\N	f	\N	2026-05-19 12:39:34.617337	\N
+429bc31b-9485-4b17-8e60-0626491e4a02	26	Auto-Generated Case: CASE-2026-0171	A new case has been automatically created from 1 verified reports. Case: Incident Type 1 case - Single Report	system	medium	case	6ef55569-2eb8-4d31-86f1-f8e3cbd7bc19	\N	f	\N	2026-05-19 12:39:34.617337	\N
+af686a8b-3950-4eb6-9c43-77c28dc52c03	27	Case Assigned: CASE-2026-0171	You have been assigned to auto-generated case: Incident Type 1 case - Single Report	assignment	medium	case	6ef55569-2eb8-4d31-86f1-f8e3cbd7bc19	\N	f	\N	2026-05-19 12:39:34.621683	\N
+bcd99146-4379-4bca-ac1d-faabc8aecfc0	7	Auto-Generated Case: CASE-2026-0172	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	c8aead05-115d-4967-a15d-c088d1c50c5c	\N	f	\N	2026-05-19 12:39:37.623996	\N
+11801740-c484-4f74-9c0a-66a4afb9ef24	1	Auto-Generated Case: CASE-2026-0172	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	c8aead05-115d-4967-a15d-c088d1c50c5c	\N	f	\N	2026-05-19 12:39:37.623996	\N
+63d0b407-478c-458f-be62-8f3be425314e	26	Auto-Generated Case: CASE-2026-0172	A new case has been automatically created from 1 verified reports. Case: Incident Type 3 case - Single Report	system	medium	case	c8aead05-115d-4967-a15d-c088d1c50c5c	\N	f	\N	2026-05-19 12:39:37.623996	\N
+a520ed5d-f398-415e-a2c3-d43e50ea3aa6	27	Case Assigned: CASE-2026-0172	You have been assigned to auto-generated case: Incident Type 3 case - Single Report	assignment	medium	case	c8aead05-115d-4967-a15d-c088d1c50c5c	\N	f	\N	2026-05-19 12:39:37.62784	\N
+c08d1080-b8ef-4b76-8a31-75ad074bfe90	7	Auto-Generated Case: CASE-2026-0174	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	6e95de27-c499-4e76-bf4a-0c82083288f3	\N	f	\N	2026-05-19 12:39:41.311408	\N
+2f86161b-8ded-4692-9841-8fd5709c091f	1	Auto-Generated Case: CASE-2026-0174	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	6e95de27-c499-4e76-bf4a-0c82083288f3	\N	f	\N	2026-05-19 12:39:41.311408	\N
+3296c1d2-f717-425c-8923-724db880a5b5	26	Auto-Generated Case: CASE-2026-0174	A new case has been automatically created from 1 verified reports. Case: Incident Type 5 case - Single Report	system	medium	case	6e95de27-c499-4e76-bf4a-0c82083288f3	\N	f	\N	2026-05-19 12:39:41.311408	\N
+db185031-6a44-419e-8fc6-7889915cc3f2	6	Case Assigned: CASE-2026-0174	You have been assigned to auto-generated case: Incident Type 5 case - Single Report	assignment	medium	case	6e95de27-c499-4e76-bf4a-0c82083288f3	\N	f	\N	2026-05-19 12:39:41.315307	\N
+1e11431a-1384-4078-a71d-a3b2170277ab	7	Auto-Generated Case: CASE-2026-0176	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	4a9afc53-ea81-48ed-a707-706f679e9161	\N	f	\N	2026-05-19 12:39:44.702724	\N
+9f153737-6b1f-403c-9d58-7ea76462dc8d	1	Auto-Generated Case: CASE-2026-0175	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	15a3ea7b-a0eb-413e-9b3c-0202c4cf3317	\N	f	\N	2026-05-19 12:39:41.720208	\N
+66fc6e50-b095-4e9f-83ce-94c38e73a38f	26	Auto-Generated Case: CASE-2026-0175	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	15a3ea7b-a0eb-413e-9b3c-0202c4cf3317	\N	f	\N	2026-05-19 12:39:41.720208	\N
+76eb094d-fd48-4b0a-9fb1-6385350c8572	27	Case Assigned: CASE-2026-0175	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	15a3ea7b-a0eb-413e-9b3c-0202c4cf3317	\N	f	\N	2026-05-19 12:39:41.724361	\N
+e3a57fa7-531e-40ed-aed7-10522b5c918a	7	Auto-Generated Case: CASE-2026-0177	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	00e28918-20e2-46b2-b0e4-c8c3fa5279c8	\N	f	\N	2026-05-19 12:39:45.339599	\N
+79234cf2-617e-4388-84b9-5412232ffa7c	1	Auto-Generated Case: CASE-2026-0177	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	00e28918-20e2-46b2-b0e4-c8c3fa5279c8	\N	f	\N	2026-05-19 12:39:45.339599	\N
+4866e65c-2374-425f-8adf-dea803758851	26	Auto-Generated Case: CASE-2026-0177	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	00e28918-20e2-46b2-b0e4-c8c3fa5279c8	\N	f	\N	2026-05-19 12:39:45.339599	\N
+03bdd492-eb84-41ce-8fca-c8cf20f459ba	6	Case Assigned: CASE-2026-0177	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	00e28918-20e2-46b2-b0e4-c8c3fa5279c8	\N	f	\N	2026-05-19 12:39:45.343358	\N
+7ba310c4-01ca-470a-afe3-b534bb1d1614	1	Auto-Generated Case: CASE-2026-0176	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	4a9afc53-ea81-48ed-a707-706f679e9161	\N	f	\N	2026-05-19 12:39:44.702724	\N
+35c3685a-586c-48e2-9968-47489680bdce	26	Auto-Generated Case: CASE-2026-0176	A new case has been automatically created from 1 verified reports. Case: Incident Type 9 case - Single Report	system	medium	case	4a9afc53-ea81-48ed-a707-706f679e9161	\N	f	\N	2026-05-19 12:39:44.702724	\N
+77c363e1-0360-483a-9716-a69ab964b102	27	Case Assigned: CASE-2026-0176	You have been assigned to auto-generated case: Incident Type 9 case - Single Report	assignment	medium	case	4a9afc53-ea81-48ed-a707-706f679e9161	\N	f	\N	2026-05-19 12:39:44.716036	\N
+4f3f0422-7abe-4434-89e9-51b14f166b43	7	Auto-Generated Case: CASE-2026-0178	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	584e89d4-6f46-4d49-b857-d6e657da837b	\N	f	\N	2026-05-19 12:39:47.957435	\N
+f3fdd624-0b33-4dd0-901a-7228c1f6029b	1	Auto-Generated Case: CASE-2026-0178	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	584e89d4-6f46-4d49-b857-d6e657da837b	\N	f	\N	2026-05-19 12:39:47.957435	\N
+7c2eac13-efd0-4dca-aec8-99f9ee573d07	26	Auto-Generated Case: CASE-2026-0178	A new case has been automatically created from 1 verified reports. Case: Incident Type 2 case - Single Report	system	medium	case	584e89d4-6f46-4d49-b857-d6e657da837b	\N	f	\N	2026-05-19 12:39:47.957435	\N
+ff11d502-d9cc-4818-a289-85a1f965f6b8	6	Case Assigned: CASE-2026-0178	You have been assigned to auto-generated case: Incident Type 2 case - Single Report	assignment	medium	case	584e89d4-6f46-4d49-b857-d6e657da837b	\N	f	\N	2026-05-19 12:39:47.961423	\N
+b06589b2-043a-4623-809a-e889084d4d32	7	Auto-Generated Case: CASE-2026-0001	A new case has been automatically created from 1 verified reports. Case: Theft Cases	system	medium	case	f0f64555-6fdc-4214-a5a5-25ef31324bb2	\N	f	\N	2026-05-19 12:55:36.087512	\N
+96326d30-88c4-46bf-bc4e-874fdb899f09	1	Auto-Generated Case: CASE-2026-0001	A new case has been automatically created from 1 verified reports. Case: Theft Cases	system	medium	case	f0f64555-6fdc-4214-a5a5-25ef31324bb2	\N	f	\N	2026-05-19 12:55:36.087512	\N
+3d026b7a-42ac-4107-8ed9-09d99e4bde4b	26	Auto-Generated Case: CASE-2026-0001	A new case has been automatically created from 1 verified reports. Case: Theft Cases	system	medium	case	f0f64555-6fdc-4214-a5a5-25ef31324bb2	\N	f	\N	2026-05-19 12:55:36.087512	\N
+8bd47fde-0089-4148-952d-34c9a602ac36	6	Case Assigned: CASE-2026-0001	You have been assigned to auto-generated case: Theft Cases	assignment	medium	case	f0f64555-6fdc-4214-a5a5-25ef31324bb2	\N	f	\N	2026-05-19 12:55:36.095402	\N
+537c538c-bcf6-4e24-8acc-d33eec4b437c	7	Auto-Generated Case: CASE-2026-0002	A new case has been automatically created from 4 verified reports. Case: Suspicious Activity Cases	system	medium	case	cdc610ad-a346-4fdc-84ee-d9759fe214cb	\N	f	\N	2026-05-19 12:55:42.944775	\N
+eac022c0-00db-47c8-ae43-f25ddd596894	1	Auto-Generated Case: CASE-2026-0002	A new case has been automatically created from 4 verified reports. Case: Suspicious Activity Cases	system	medium	case	cdc610ad-a346-4fdc-84ee-d9759fe214cb	\N	f	\N	2026-05-19 12:55:42.944775	\N
+23fb70d6-b53b-49b9-9a71-86a8f7a4e086	26	Auto-Generated Case: CASE-2026-0002	A new case has been automatically created from 4 verified reports. Case: Suspicious Activity Cases	system	medium	case	cdc610ad-a346-4fdc-84ee-d9759fe214cb	\N	f	\N	2026-05-19 12:55:42.944775	\N
+e5147c83-2c80-42f9-83b6-1bed815f3ba9	27	Case Assigned: CASE-2026-0002	You have been assigned to auto-generated case: Suspicious Activity Cases	assignment	medium	case	cdc610ad-a346-4fdc-84ee-d9759fe214cb	\N	f	\N	2026-05-19 12:55:42.949193	\N
+1e08e7c6-6924-40db-a8dc-4d3ecd4cfe08	7	Auto-Generated Case: CASE-2026-0003	A new case has been automatically created from 31 verified reports. Case: Traffic Incident Cases	system	medium	case	27316bb4-2d1f-45c9-a044-0e57c3a4f40d	\N	f	\N	2026-05-19 12:55:49.537946	\N
+aabd6438-d15e-428b-85bd-fb513d11cd26	1	Auto-Generated Case: CASE-2026-0003	A new case has been automatically created from 31 verified reports. Case: Traffic Incident Cases	system	medium	case	27316bb4-2d1f-45c9-a044-0e57c3a4f40d	\N	f	\N	2026-05-19 12:55:49.537946	\N
+f891e8cc-86dd-41ae-9ce7-b983a42247ea	26	Auto-Generated Case: CASE-2026-0003	A new case has been automatically created from 31 verified reports. Case: Traffic Incident Cases	system	medium	case	27316bb4-2d1f-45c9-a044-0e57c3a4f40d	\N	f	\N	2026-05-19 12:55:49.537946	\N
+640d0fc1-5563-4c60-8ba5-c29e0416bc1f	6	Case Assigned: CASE-2026-0003	You have been assigned to auto-generated case: Traffic Incident Cases	assignment	medium	case	27316bb4-2d1f-45c9-a044-0e57c3a4f40d	\N	f	\N	2026-05-19 12:55:49.542203	\N
+4af04822-b099-4b30-9318-2610002bbdca	7	Auto-Generated Case: CASE-2026-0004	A new case has been automatically created from 19 verified reports. Case: Vandalism Cases	system	medium	case	d466c90b-c1e2-490f-95d6-1c0354a12550	\N	f	\N	2026-05-19 12:55:55.897562	\N
+e7a86e28-3027-4dc1-aa36-9f093cd46845	1	Auto-Generated Case: CASE-2026-0004	A new case has been automatically created from 19 verified reports. Case: Vandalism Cases	system	medium	case	d466c90b-c1e2-490f-95d6-1c0354a12550	\N	f	\N	2026-05-19 12:55:55.897562	\N
+5fcdb1c1-d5f8-4ec0-bb6f-b3f1caf325c3	26	Auto-Generated Case: CASE-2026-0004	A new case has been automatically created from 19 verified reports. Case: Vandalism Cases	system	medium	case	d466c90b-c1e2-490f-95d6-1c0354a12550	\N	f	\N	2026-05-19 12:55:55.897562	\N
+cb49ba46-51bc-4ab1-84df-a0130c9599b3	7	Auto-Generated Case: CASE-2026-0005	A new case has been automatically created from 14 verified reports. Case: Domestic Violence Cases	system	medium	case	ef1042ac-1aa8-47e1-a044-c64dc06ff26c	\N	f	\N	2026-05-19 12:55:59.590776	\N
+f31426fc-54cb-41ee-be61-9ceb997de3c0	1	Auto-Generated Case: CASE-2026-0005	A new case has been automatically created from 14 verified reports. Case: Domestic Violence Cases	system	medium	case	ef1042ac-1aa8-47e1-a044-c64dc06ff26c	\N	f	\N	2026-05-19 12:55:59.590776	\N
+ac425fad-7a17-4828-88f1-e66f43975681	26	Auto-Generated Case: CASE-2026-0005	A new case has been automatically created from 14 verified reports. Case: Domestic Violence Cases	system	medium	case	ef1042ac-1aa8-47e1-a044-c64dc06ff26c	\N	f	\N	2026-05-19 12:55:59.590776	\N
+77131488-0908-429e-8c87-24522b1df270	27	Case Assigned: CASE-2026-0004	You have been assigned to auto-generated case: Vandalism Cases	assignment	medium	case	d466c90b-c1e2-490f-95d6-1c0354a12550	\N	f	\N	2026-05-19 12:55:55.901957	\N
+e313bc32-b6e2-4491-84ee-d1f9081daad5	27	Case Assigned: CASE-2026-0005	You have been assigned to auto-generated case: Domestic Violence Cases	assignment	medium	case	ef1042ac-1aa8-47e1-a044-c64dc06ff26c	\N	f	\N	2026-05-19 12:55:59.596959	\N
+4b0c7a54-2ff8-4084-be45-c69c5904c63d	7	Auto-Generated Case: CASE-2026-0006	A new case has been automatically created from 22 verified reports. Case: Theft Cases	system	medium	case	9c918772-0b74-495c-95d8-7f9bf8355372	\N	f	\N	2026-05-19 12:56:05.127561	\N
+428df759-4d14-4670-81be-3e42f1c3a3aa	1	Auto-Generated Case: CASE-2026-0006	A new case has been automatically created from 22 verified reports. Case: Theft Cases	system	medium	case	9c918772-0b74-495c-95d8-7f9bf8355372	\N	f	\N	2026-05-19 12:56:05.127561	\N
+9b138e96-6a09-4f8d-9fe2-7afcdd5fe5d6	26	Auto-Generated Case: CASE-2026-0006	A new case has been automatically created from 22 verified reports. Case: Theft Cases	system	medium	case	9c918772-0b74-495c-95d8-7f9bf8355372	\N	f	\N	2026-05-19 12:56:05.127561	\N
+6cf25d0e-b6fd-4d04-87dc-e8f382bfea1a	7	Auto-Generated Case: CASE-2026-0007	A new case has been automatically created from 19 verified reports. Case: Assault Cases	system	medium	case	12492d52-ceb4-40b7-8fca-c1a9d9f46780	\N	f	\N	2026-05-19 12:56:07.342195	\N
+c505bdd0-161b-4813-b0a5-d89ad1ca429b	1	Auto-Generated Case: CASE-2026-0007	A new case has been automatically created from 19 verified reports. Case: Assault Cases	system	medium	case	12492d52-ceb4-40b7-8fca-c1a9d9f46780	\N	f	\N	2026-05-19 12:56:07.342195	\N
+fdcc06b8-c0fa-48e1-9c77-c25536fc353c	26	Auto-Generated Case: CASE-2026-0007	A new case has been automatically created from 19 verified reports. Case: Assault Cases	system	medium	case	12492d52-ceb4-40b7-8fca-c1a9d9f46780	\N	f	\N	2026-05-19 12:56:07.342195	\N
+d2becc5c-97b8-4ad1-aedf-d7d24064a690	6	Case Assigned: CASE-2026-0006	You have been assigned to auto-generated case: Theft Cases	assignment	medium	case	9c918772-0b74-495c-95d8-7f9bf8355372	\N	f	\N	2026-05-19 12:56:05.131243	\N
+7919f71d-c903-4edd-ab2e-4d9147fad643	7	Auto-Generated Case: CASE-2026-0008	A new case has been automatically created from 14 verified reports. Case: Domestic Violence Cases	system	medium	case	39864d04-c7e5-4a88-94b6-a388dcc24287	\N	f	\N	2026-05-19 12:56:11.854631	\N
+6deff10a-0146-4e2b-b663-1cf2053a400f	1	Auto-Generated Case: CASE-2026-0008	A new case has been automatically created from 14 verified reports. Case: Domestic Violence Cases	system	medium	case	39864d04-c7e5-4a88-94b6-a388dcc24287	\N	f	\N	2026-05-19 12:56:11.854631	\N
+7df8014b-cde7-4fdc-827f-ba94a7c6329a	26	Auto-Generated Case: CASE-2026-0008	A new case has been automatically created from 14 verified reports. Case: Domestic Violence Cases	system	medium	case	39864d04-c7e5-4a88-94b6-a388dcc24287	\N	f	\N	2026-05-19 12:56:11.854631	\N
+5bbe4e58-380e-47a1-98b3-b0ab85856132	27	Case Assigned: CASE-2026-0008	You have been assigned to auto-generated case: Domestic Violence Cases	assignment	medium	case	39864d04-c7e5-4a88-94b6-a388dcc24287	\N	f	\N	2026-05-19 12:56:11.858188	\N
+4e0cd71f-27b6-477a-b1a6-5e957b934f4d	7	Auto-Generated Case: CASE-2026-0009	A new case has been automatically created from 19 verified reports. Case: Assault Cases	system	medium	case	4d4453c5-3366-47f9-840d-9492ad3394b8	\N	f	\N	2026-05-19 12:56:18.723279	\N
+e8c3ed84-e0ca-4cde-91a3-8f95a56be3a0	1	Auto-Generated Case: CASE-2026-0009	A new case has been automatically created from 19 verified reports. Case: Assault Cases	system	medium	case	4d4453c5-3366-47f9-840d-9492ad3394b8	\N	f	\N	2026-05-19 12:56:18.723279	\N
+be314ddc-9c4d-437f-bf32-47d7700fc8c1	26	Auto-Generated Case: CASE-2026-0009	A new case has been automatically created from 19 verified reports. Case: Assault Cases	system	medium	case	4d4453c5-3366-47f9-840d-9492ad3394b8	\N	f	\N	2026-05-19 12:56:18.723279	\N
+197fbcc3-e9eb-49ee-b6cb-77de3ec18225	27	Case Assigned: CASE-2026-0009	You have been assigned to auto-generated case: Assault Cases	assignment	medium	case	4d4453c5-3366-47f9-840d-9492ad3394b8	\N	f	\N	2026-05-19 12:56:18.726975	\N
+bb1b0eb9-f3a3-4c18-aa0d-4c5c27813965	7	Auto-Generated Case: CASE-2026-0010	A new case has been automatically created from 10 verified reports. Case: Suspicious Activity Cases	system	medium	case	3970f0b9-b3d6-4ebb-bae9-8991922f4612	\N	f	\N	2026-05-19 12:56:25.507304	\N
+42dca31c-ae7a-4f86-bd95-7fa111e0df09	1	Auto-Generated Case: CASE-2026-0010	A new case has been automatically created from 10 verified reports. Case: Suspicious Activity Cases	system	medium	case	3970f0b9-b3d6-4ebb-bae9-8991922f4612	\N	f	\N	2026-05-19 12:56:25.507304	\N
+07d66148-fd0d-4b63-bf6e-c6393b844b8a	26	Auto-Generated Case: CASE-2026-0010	A new case has been automatically created from 10 verified reports. Case: Suspicious Activity Cases	system	medium	case	3970f0b9-b3d6-4ebb-bae9-8991922f4612	\N	f	\N	2026-05-19 12:56:25.507304	\N
+cde8c76b-6b79-41bd-892c-605d089a9c41	6	Case Assigned: CASE-2026-0010	You have been assigned to auto-generated case: Suspicious Activity Cases	assignment	medium	case	3970f0b9-b3d6-4ebb-bae9-8991922f4612	\N	f	\N	2026-05-19 12:56:25.511807	\N
+0b235098-151f-4450-9857-56e167291932	6	Case Assigned: CASE-2026-0007	You have been assigned to auto-generated case: Assault Cases	assignment	medium	case	12492d52-ceb4-40b7-8fca-c1a9d9f46780	\N	f	\N	2026-05-19 12:56:07.346161	\N
 \.
 
 
 --
--- Data for Name: password_reset_codes; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: password_reset_codes; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.password_reset_codes (id, email, code, expires_at, created_at) FROM stdin;
@@ -1735,7 +2918,7 @@ COPY public.password_reset_codes (id, email, code, expires_at, created_at) FROM 
 
 
 --
--- Data for Name: police_reviews; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: police_reviews; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.police_reviews (review_id, report_id, police_user_id, decision, ground_truth_label, confidence_level, review_note, used_for_training, reviewed_at) FROM stdin;
@@ -1744,26 +2927,141 @@ bafe9dca-c474-4b06-a52c-964013d87070	b74ce4e2-848c-457a-87b9-ef919d1c54db	1	conf
 8c59980f-e53c-4eda-96ae-f00390c7fb59	079828c3-6f2b-44be-b8f0-2a5cf6202471	1	confirmed	\N	\N	ok	f	2026-05-04 20:09:47.927717
 c93b7462-ceec-4b3d-96e5-0f212b86fcb3	a278c066-a5dd-43bb-9d20-4ed14f0c8dce	26	confirmed	\N	\N	this scenario has happened as confirmed by our officers	f	2026-05-05 17:53:01.063914
 42af34f8-7690-4d5b-befb-3134c18122d1	6a9b8e8b-3409-4dc1-829c-1fa62c5d3e93	26	confirmed	\N	\N	confirmed by local leaders	f	2026-05-05 18:29:27.899175
+49645cab-7373-4593-9d3c-0cb044387222	4fca6507-70a5-4953-889a-fe58885ef80f	7	confirmed	real	0.91	Patrol unit dispatched. Physical evidence found matching the reported description.	f	2026-05-13 11:48:00
+15a64395-d135-4b50-9698-9110791afd78	61d9ad11-79ad-438c-88cf-7ad75fd823e4	7	confirmed	real	0.83	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-05-13 12:22:00
+b0ab587f-1706-48cf-87e8-322fe022a99b	1d00d3f6-2d0b-40a7-b345-39e0aa8d9eb8	7	confirmed	real	0.84	Community member corroborated the report. Evidence consistent. Verified and logged.	f	2026-05-13 12:09:00
+f22ec586-88b9-4483-9a32-cdf28bc65a2d	66658237-5d9e-48d9-b903-94eb50420598	7	confirmed	real	0.83	Officer visited reported location. Incident signs visible. Report marked verified.	f	2026-05-13 11:08:00
+21a67495-7a4d-49e2-b075-263796148f06	be9b3ccd-a2e8-43d3-97b8-4d0e73792a3e	7	confirmed	real	0.96	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-05-13 13:56:00
+a5f252c4-986f-4b2e-ba2d-e7a6784a042f	41ba8864-1d44-4804-b828-cb69cd46ee1d	7	confirmed	real	0.84	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-05-05 20:28:00
+144d26a4-98d6-416b-adba-759d7f97d382	ac105b65-8376-4b66-a216-e7416b7af3f4	7	confirmed	real	0.94	Witnesses identified and statements taken. Report confirmed and forwarded for follow-up.	f	2026-05-05 19:58:00
+9f61e1b1-f748-49c1-a785-ea48c2de55eb	b20d17b7-2209-41cd-9ad9-371547051207	7	confirmed	real	0.86	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-05-05 17:54:00
+36f71d11-7520-462c-ac7b-22f1e5036395	5eef1033-aab3-4663-8470-79fcdc8c75ad	7	confirmed	real	0.80	Scene investigation completed. Report details are consistent with physical findings.	f	2026-05-05 18:43:00
+a42bab9b-a40f-4ee6-9716-14ac24196228	debc3ac3-1471-4968-b832-138bb2bfa3aa	7	confirmed	real	0.93	Community member corroborated the report. Evidence consistent. Verified and logged.	f	2026-05-13 19:15:00
+30470656-b563-424b-bffe-7675be1aee31	263dc1a6-bf49-4879-936b-b4d803736044	7	confirmed	real	0.95	Officer visited reported location. Incident signs visible. Report marked verified.	f	2026-05-13 22:33:00
+56dbf169-45c3-4d04-b0dd-51d3fca22350	8479f8e2-d885-427f-a385-e28c74af3de4	7	confirmed	real	0.86	Community member corroborated the report. Evidence consistent. Verified and logged.	f	2026-05-13 22:01:00
+b3995dae-1de0-4a1d-b8a7-c6f32206a2f6	81dc465d-4c4b-4527-86df-3ffa1be00899	7	confirmed	real	0.83	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-05-13 22:10:00
+cedb1e41-71ab-4092-bf46-88abf4d91109	afcf74ac-dab4-4032-af3d-8f3fa1ab4180	7	confirmed	real	0.85	Scene documented with photographs. Physical evidence supports the report. Confirmed.	f	2026-05-05 17:22:00
+d69f27d1-bafd-4724-9cf0-50bbaef77c9f	5e58ba28-e778-4044-b0e2-8ba3e502b1a5	7	confirmed	real	0.97	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-05-05 18:14:00
+edf18fad-7680-42e6-93e4-6effeb08ece4	9b529720-5e42-4f66-af44-0b77bbd4bbe3	7	confirmed	real	0.90	Scene documented with photographs. Physical evidence supports the report. Confirmed.	f	2026-05-05 16:09:00
+aeb025a0-cf87-4483-be37-f8de771c96e3	fe6aadb6-e284-49c7-b0f0-9d9ce80513ae	7	confirmed	real	0.82	Scene investigation completed. Report details are consistent with physical findings.	f	2026-05-05 19:13:00
+7a1a1220-014a-4c25-bc46-52e2baadadf7	0cd3f80f-39c2-4687-8c4f-30377a03de91	7	confirmed	real	0.87	Community member corroborated the report. Evidence consistent. Verified and logged.	f	2026-05-05 18:33:00
+16114909-a33d-438c-91c6-83c069abd21b	c701470d-5fcf-48ee-8342-89715e1c9e31	7	confirmed	real	0.85	Report verified on scene. Incident confirmed by witness statements collected at location.	f	2026-05-05 17:51:00
+12af3509-06b7-4f41-8585-0d1667255609	b27e6bb7-1166-402b-9428-2c965c11c77d	7	confirmed	real	0.86	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-05-09 20:46:00
+0affa6dc-cc87-45fd-9bb9-57e4baf3dc78	aaef4b7e-b9ad-4073-be2c-ffcb61c81ecc	7	confirmed	real	0.91	Witnesses identified and statements taken. Report confirmed and forwarded for follow-up.	f	2026-05-09 19:54:00
+4db7390f-5d46-4d03-815c-6cec93b7f184	a8168200-bffd-4d4b-847c-69e1e4418b26	7	confirmed	real	0.81	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-05-09 18:09:00
+b1cd7849-a571-40dc-9763-a6a186da8dfd	685b2c28-757c-44e9-b8be-8e1273c435ff	7	confirmed	real	0.94	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-05-09 19:22:00
+647b7373-f87f-47cf-8068-e9b5297559b9	9cf848fb-a5f6-4f85-8fe7-b8a5f46e3fb9	7	confirmed	real	0.91	Witnesses identified and statements taken. Report confirmed and forwarded for follow-up.	f	2026-05-04 17:17:00
+37c2169a-732c-453f-b679-a983a6ffe2b4	7d88181b-65c4-47a8-9e1d-b1a74d5cec02	7	confirmed	real	0.97	Witnesses identified and statements taken. Report confirmed and forwarded for follow-up.	f	2026-05-04 19:08:00
+869cef2e-25eb-4bc8-b00d-88e73a50a62b	3dd73568-0c54-445b-9b26-31ae2aa55ed2	7	confirmed	real	0.88	Officer visited reported location. Incident signs visible. Report marked verified.	f	2026-05-04 18:06:00
+d7ddbe93-4806-4a8d-b144-0856480bd0da	f679c63f-4d00-4ba6-bc9c-c175a4f12124	7	confirmed	real	0.86	Patrol unit dispatched. Physical evidence found matching the reported description.	f	2026-05-04 20:56:00
+ca516340-8ab2-49aa-88a5-30e9aa8cbb6b	804515a3-79b1-4ca7-9e07-d4a06d924def	7	confirmed	real	0.95	Report verified on scene. Incident confirmed by witness statements collected at location.	f	2026-05-04 17:55:00
+1957253a-c80d-4134-91f2-2b7c63859ef8	5ba5d790-9984-473d-b123-128c4c404913	7	confirmed	real	0.93	Scene investigation completed. Report details are consistent with physical findings.	f	2026-05-17 10:28:13
+25022dcb-dc8a-4419-9464-42800d5976e2	a2dcc7fc-9366-445b-a694-36023416d620	7	confirmed	real	0.84	Witnesses identified and statements taken. Report confirmed and forwarded for follow-up.	f	2026-05-07 11:34:45
+d9dadcc9-7f64-415c-8ba9-8555921087d1	971d5453-7ede-4c0c-b2be-64909de63e8c	7	confirmed	real	0.81	Patrol unit dispatched. Physical evidence found matching the reported description.	f	2026-05-14 12:02:40
+e52118d2-580e-4364-a6ef-b4357e57e5dd	27b81e6f-1aad-4ced-98ed-7d7182bc89e9	7	confirmed	real	0.91	Witnesses identified and statements taken. Report confirmed and forwarded for follow-up.	f	2026-05-08 14:48:18
+0f8c1909-3d2f-49e4-8ff2-2596a405854a	cb2ab766-e7df-4626-94bc-ba4274f3501a	7	confirmed	real	0.86	Community member corroborated the report. Evidence consistent. Verified and logged.	f	2026-05-17 14:35:13
+79a4c0a6-38b2-4ef6-9611-aa28e800cbec	7a4e96e5-98f8-48dd-8e8d-8af76c077df4	7	confirmed	real	0.93	Officer visited reported location. Incident signs visible. Report marked verified.	f	2026-04-16 16:51:52
+d5701093-8385-4dfb-9e23-c230991c08a9	34d3bf12-4202-410b-b8c7-91d2eb5ce37f	7	confirmed	real	0.82	Patrol unit dispatched. Physical evidence found matching the reported description.	f	2026-04-09 17:42:53
+2415e20a-2eba-4860-b317-017d6dfb31db	7fbfde89-0df5-43a2-a905-97a59870a8f8	7	confirmed	real	0.94	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-04-19 05:31:40
+ae94fc5a-bdef-4ef3-820e-26c757b5a145	bf923512-ff26-41b1-867a-c44977cc8966	7	confirmed	real	0.89	Patrol unit dispatched. Physical evidence found matching the reported description.	f	2026-04-30 14:00:20
+51df2b0d-4dde-4d14-abe6-05fd41667b25	8259a0a7-7536-4276-9477-e8921202ccc3	7	confirmed	real	0.88	Patrol unit dispatched. Physical evidence found matching the reported description.	f	2026-05-07 18:59:58
+976ab792-d1d1-4071-94c2-f86371b042a6	0d3500ea-6e1f-4fe9-8435-a0e57632290b	7	confirmed	real	0.91	Scene documented with photographs. Physical evidence supports the report. Confirmed.	f	2026-04-11 12:08:27
+179e5b3b-5f49-42f1-8e8d-946e8121503b	454202a9-176b-4782-8110-801289df5697	7	confirmed	real	0.82	Community member corroborated the report. Evidence consistent. Verified and logged.	f	2026-04-14 12:15:30
+498f3c6d-5d89-4800-bb8f-756cb3e31bb1	eb2b0bba-15ad-4942-9c3d-f2a2916f11ae	7	confirmed	real	0.86	Confirmed with local community leader. Incident is genuine and location is accurate.	f	2026-04-26 09:14:31
+349489d9-50f6-4533-bac4-18189a9f3a87	8449550e-f9ca-45cb-83f1-b8837e28b0e9	7	confirmed	real	0.92	Confirmed with local community leader. Incident is genuine and location is accurate.	f	2026-04-11 17:09:32
+c7aaedcf-1d56-4bb1-a9f9-25fdd296c0aa	68d5c579-68bf-41da-8103-f5f20ba7c9b6	7	confirmed	real	0.96	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-05-10 18:38:20
+5276f8af-1e23-4a79-8255-50749f2df949	4b9b9b42-c441-4952-867f-c1b5cad45a9b	7	confirmed	real	0.97	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-05-03 15:19:57
+22f83069-c179-4943-aaf2-8e7821afab35	3c81bd92-2568-4ec4-9680-4512879f6438	7	confirmed	real	0.87	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-04-19 13:57:07
+4b98357a-1cfc-4fb8-bc62-e319abd6b1fc	0ba983ef-69ae-443a-a5e4-c65c1173a43e	7	confirmed	real	0.91	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-04-09 01:59:23
+862acde0-3180-4287-b9cd-5fa7f432661b	059bfa85-f021-4703-9c06-e3f2b0ff052b	7	confirmed	real	0.94	Patrol unit dispatched. Physical evidence found matching the reported description.	f	2026-04-11 08:28:22
+a1836fa1-337d-4fb6-9538-a49c4dc782ba	d0e97796-c317-4380-bc5f-5f7a5d16212e	7	confirmed	real	0.85	Officer visited reported location. Incident signs visible. Report marked verified.	f	2026-05-05 09:39:02
+553f6201-7d2d-4968-9823-adbff872a424	c0eb46eb-dff8-48c1-89d6-2ec53a2dd491	7	confirmed	real	0.92	Community member corroborated the report. Evidence consistent. Verified and logged.	f	2026-05-09 22:47:03
+7af74823-ccb5-414e-b737-162539bd882a	8d3ed732-d698-464e-813b-d04aae3f7e5a	7	confirmed	real	0.94	Officer visited reported location. Incident signs visible. Report marked verified.	f	2026-04-30 15:29:41
+2a63fb24-1c3e-4322-b30a-1d351fedace4	1a26d484-e69e-4f5e-8fa5-43d2e7833e81	7	confirmed	real	0.88	Confirmed with local community leader. Incident is genuine and location is accurate.	f	2026-04-19 14:06:40
+df846961-df15-4c60-8372-488bdb53c3fe	b5e1d340-eb9e-45d7-a761-e56ed2fd378d	7	confirmed	real	0.86	Community member corroborated the report. Evidence consistent. Verified and logged.	f	2026-05-16 13:38:55
+6cfce2b2-9dc4-41d8-a225-1eddb5ae4473	177cd3f3-cb1d-4734-8713-0d641474a3f7	7	confirmed	real	0.82	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-05-14 00:15:51
+dadaf436-3e24-4d9a-b63a-4551df2ab3a8	e9c404f9-6ae3-47ea-9fd7-4124be2334ff	7	confirmed	real	0.92	Scene investigation completed. Report details are consistent with physical findings.	f	2026-04-25 12:32:46
+cbe6b704-e41c-4779-81fb-6b36fcfad4fc	c8c0517a-9b70-4f20-9402-474b81828778	7	confirmed	real	0.89	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-04-20 22:31:44
+bb9f9e91-e281-4211-a66d-569b542c086f	7e74b351-d3f1-4d59-be2e-07f097419099	7	confirmed	real	0.86	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-04-25 15:55:43
+fcd3acb9-e485-4616-9030-90c9a1031c93	0929509a-02de-4a0e-9026-d94050ea9811	7	confirmed	real	0.91	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-05-07 11:10:27
+bc9578f1-1498-4377-a69c-9d0feac5ae96	dd2f22a0-67f9-4523-83e1-665b3a108ce4	7	confirmed	real	0.93	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-05-09 16:32:38
+ed5e9903-7fbc-4327-955a-399444744718	a9b60d0a-1675-44eb-9711-11dc2e9ed7e7	7	confirmed	real	0.96	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-05-03 14:03:28
+f8ffc910-e664-4deb-a426-6f4e3cdd1e7e	4bd3cbe6-96e7-40db-879e-e1253807136c	7	confirmed	real	0.84	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-04-23 01:25:55
+74a48b06-8190-480a-a2bd-692726aa0116	3c1cdd3b-27e2-4988-8047-dcfcd65c67d4	7	confirmed	real	0.92	Patrol unit dispatched. Physical evidence found matching the reported description.	f	2026-04-27 19:29:36
+5e1d726b-9ccc-4f55-9c34-5d5de87ff394	2e717511-2176-4ee5-b756-b1b847c639c9	7	confirmed	real	0.86	Patrol unit dispatched. Physical evidence found matching the reported description.	f	2026-05-12 15:57:19
+e726a7f6-b831-478a-9d82-e480756ebc61	e8283412-db82-47a4-b8b5-51ced9b592da	7	confirmed	real	0.87	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-05-13 14:55:38
+b962f53a-bf40-452e-9045-9413092adee3	94ef45a1-e92e-44bb-965a-5a6477547241	7	confirmed	real	0.88	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-05-01 09:29:32
+5ac1bfac-ad18-4d3b-bc25-40bcb214d87e	561328ac-bd36-4d85-accd-68d23afd0367	7	confirmed	real	0.82	Scene documented with photographs. Physical evidence supports the report. Confirmed.	f	2026-04-25 13:44:06
+7c7051e2-7880-4828-aa04-8ad6ce6dfb98	0df5fdc1-d660-48ba-ba0d-7ac2602e7b4f	7	confirmed	real	0.83	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-05-14 22:33:18
+5e0626c2-7d18-407f-b7df-d187306045fc	d9a429b2-5ece-4821-adc1-d30e2e731376	7	confirmed	real	0.88	Witnesses identified and statements taken. Report confirmed and forwarded for follow-up.	f	2026-05-13 10:41:57
+76c2fdda-17ab-4cde-a810-bbe089e97cb3	fade6b34-7576-44aa-b1aa-c3dc755c2448	7	confirmed	real	0.80	Confirmed with local community leader. Incident is genuine and location is accurate.	f	2026-05-09 10:15:29
+aee64d0d-c6c7-441a-bf57-ba5c62827b1b	c16b2c81-f1ef-40ed-8487-5f8c78952c20	7	confirmed	real	0.81	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-04-09 02:55:37
+005b3dad-0c3a-431f-89a5-e1e17b5bef9c	f9c9a76a-b614-4739-a931-86cd208ad7c4	7	confirmed	real	0.94	Confirmed with local community leader. Incident is genuine and location is accurate.	f	2026-05-03 20:12:34
+74690bbf-6a96-46ae-9a73-4069e589489a	43c922b5-3b25-4cd3-9304-1ba0e352f0d2	7	confirmed	real	0.91	Scene documented with photographs. Physical evidence supports the report. Confirmed.	f	2026-04-17 08:41:14
+e544c4fb-55aa-45bd-b8b5-37e529ce91e5	3bfb0023-830e-45cd-8de7-6321c0929221	7	confirmed	real	0.86	Patrol unit dispatched. Physical evidence found matching the reported description.	f	2026-05-03 13:42:10
+284893c0-ef50-4f18-8f64-c83086c89ef5	b432a023-6880-402d-a1bb-3fab54effae8	7	confirmed	real	0.85	Community member corroborated the report. Evidence consistent. Verified and logged.	f	2026-04-10 05:41:30
+98960563-0ccc-40c4-bae0-133497db1498	db6f45ac-2549-4f77-82dd-a2a14f5a8d3b	7	confirmed	real	0.81	Scene investigation completed. Report details are consistent with physical findings.	f	2026-04-07 17:00:23
+36cb38eb-b530-40b5-a527-ffcb2d2c58ed	6f294ecd-5940-4d82-b5b6-115ea98c655b	7	confirmed	real	0.95	Community member corroborated the report. Evidence consistent. Verified and logged.	f	2026-04-10 15:00:46
+226fc856-c68d-4224-85cf-25b09db7dbbd	3b873ffb-9df9-47ae-991d-ba51c0fdd5bc	7	confirmed	real	0.85	Witnesses identified and statements taken. Report confirmed and forwarded for follow-up.	f	2026-04-17 23:09:06
+3c7120f0-edad-4a10-8f45-31bff77ec20c	410f4d8c-9330-45e1-9917-7400e86425fa	7	confirmed	real	0.95	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-05-17 14:52:38
+d6d94684-8863-4c95-b390-8d430aa70995	a21f9dc5-a6bd-4e25-8edd-713c8d9dda68	7	confirmed	real	0.94	Witnesses identified and statements taken. Report confirmed and forwarded for follow-up.	f	2026-04-15 22:43:37
+0967aede-2db1-4d68-a0fe-e81bf46a6cd7	675857fc-907b-4ffc-9eb8-5e5bbb011169	7	confirmed	real	0.81	Officer visited reported location. Incident signs visible. Report marked verified.	f	2026-04-13 19:58:43
+ff082c70-d68b-43f1-a058-e67c04361f85	ff211874-f382-4e5e-8ba9-36af7acf774e	7	confirmed	real	0.95	Report verified on scene. Incident confirmed by witness statements collected at location.	f	2026-05-06 09:57:40
+489b438a-c27c-4df4-b382-1abeaae0a06b	99fab3dd-5a63-436b-82bf-b5fc8b0f5f37	7	confirmed	real	0.96	Community member corroborated the report. Evidence consistent. Verified and logged.	f	2026-05-12 19:02:03
+0449c90f-352a-4af7-989c-b8f4c11520ed	4da8719b-9c5b-462c-9faa-9d37e248a1d7	7	confirmed	real	0.80	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-05-04 17:43:16
+34ce0ab8-e584-4c63-b734-2879b1519c38	5eb53144-5b27-4caa-89d0-84eba188a8ca	7	confirmed	real	0.82	Community member corroborated the report. Evidence consistent. Verified and logged.	f	2026-05-04 05:08:55
+18090b06-a1bf-45a4-8133-ede64cae031e	e5903ad3-798b-492e-8264-cdc976c88942	7	confirmed	real	0.82	Scene investigation completed. Report details are consistent with physical findings.	f	2026-05-16 18:38:52
+7e11020c-847c-491d-a70a-13870528fac3	b7b40b95-03f0-4dc2-b19c-6f13fb9d3a4a	7	confirmed	real	0.89	Confirmed with local community leader. Incident is genuine and location is accurate.	f	2026-05-11 21:44:29
+4011f248-5c9e-4dac-a1df-1ef700238ac1	521af58e-775c-49c8-b126-25fca94d953b	7	confirmed	real	0.83	Report verified on scene. Incident confirmed by witness statements collected at location.	f	2026-04-18 19:35:45
+cae270cf-797d-45c6-a7e9-b1713b8f20ee	35482682-9afe-4ece-a338-5133914a378c	7	confirmed	real	0.97	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-04-25 23:22:47
+e61c9b5e-c385-4b6f-bb4d-c738ae55a7e3	dd7a12ba-3e8a-4576-8feb-34216be7446c	7	confirmed	real	0.90	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-04-09 22:36:02
+aae083a9-35ce-490a-8c72-1df93c83a774	cec42b29-571e-481d-92af-4749dd69d0a3	7	confirmed	real	0.96	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-04-23 16:17:24
+321eccf4-2515-43b9-afe5-2c74cee56e4c	f71e70fc-03f6-4974-b1b6-c18c54059881	7	confirmed	real	0.92	Witnesses identified and statements taken. Report confirmed and forwarded for follow-up.	f	2026-04-26 02:21:35
+6a04b391-9d44-47fc-af47-7c02a4e0d400	2b162d7b-eb05-40dd-86a1-ce9ea8765bd3	7	confirmed	real	0.95	Patrol unit dispatched. Physical evidence found matching the reported description.	f	2026-05-08 07:38:50
+183492f8-db9c-4feb-a5ff-ee7efa0db655	12c9b4bb-c718-4448-94b7-e511c514601c	7	confirmed	real	0.84	Scene investigation completed. Report details are consistent with physical findings.	f	2026-04-11 11:19:35
+6a754b31-913e-4c01-8b5d-a8acd51c4bde	367bb793-df5e-4524-862b-a727f309d6cb	7	confirmed	real	0.91	Witnesses identified and statements taken. Report confirmed and forwarded for follow-up.	f	2026-04-18 23:41:02
+43437d65-3aa0-4c66-9007-93a712483a3f	b1dbaac7-0683-4aa6-932b-ccb5ac8e4fbb	7	confirmed	real	0.83	Patrol unit dispatched. Physical evidence found matching the reported description.	f	2026-04-18 15:30:10
+0e303413-7ae3-45bc-9aeb-1d1506dc68fd	8f5e81e4-67c1-4e2c-ab72-be0359dee24e	7	confirmed	real	0.87	Scene documented with photographs. Physical evidence supports the report. Confirmed.	f	2026-05-07 16:14:38
+0b8eb071-0840-47c0-9c7e-ec9ac8ef2ac7	220ec952-367e-4d55-b984-b726188582d8	7	confirmed	real	0.93	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-04-11 00:36:16
+fb3cdabe-b54c-4f8b-808f-47d28d7c4972	0107b6fa-6ea2-4379-98aa-3913f4127df0	7	confirmed	real	0.83	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-04-25 02:11:51
+054a4d4b-167a-4e3b-a446-92b5c994c50c	b8055d3b-ddc7-4152-8a72-adb6f28858aa	7	confirmed	real	0.95	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-05-08 20:19:15
+d7990761-a8df-426d-a753-b3a111fa5283	fc4d219a-62f6-4f1e-92cc-d88812f65fc0	7	confirmed	real	0.93	Scene investigation completed. Report details are consistent with physical findings.	f	2026-04-18 22:33:21
+4e13a489-f373-4f8b-8db5-fc42814c758d	d1b846b8-4104-4a0f-a898-ae8067435897	7	confirmed	real	0.96	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-04-26 13:52:07
+51a0be73-e5c7-4eee-9775-e91652f4865e	69b392fb-24e1-4bfe-a34f-7585ac9b7831	7	confirmed	real	0.97	Scene investigation completed. Report details are consistent with physical findings.	f	2026-04-25 14:39:17
+d72c8087-bed3-4de4-8e6a-beaabdef3b5b	448fedee-e9b4-4259-b9b4-e66abb11d758	7	confirmed	real	0.93	Scene investigation completed. Report details are consistent with physical findings.	f	2026-05-13 16:09:29
+43352945-b3c7-4094-b523-8842d1fd64e3	50ffa3cd-3c59-4ae5-990a-a556f63cdd76	7	confirmed	real	0.85	Scene documented with photographs. Physical evidence supports the report. Confirmed.	f	2026-05-16 20:59:58
+a324ab7b-b59f-4be4-af0e-3d20fd316a45	dca91abe-5b7a-41a1-9e1b-c19d2d265e58	7	confirmed	real	0.83	Patrol unit dispatched. Physical evidence found matching the reported description.	f	2026-05-07 13:52:40
+809ee735-35a8-4334-90a8-4c9bbb1e9e78	c1a88496-8c45-4827-a01b-353fd77a79a0	7	confirmed	real	0.84	Scene investigation completed. Report details are consistent with physical findings.	f	2026-04-24 21:10:15
+ac415b67-2e07-46c5-91db-7740624d4acc	488a857a-f17e-4882-ac00-d152d8103282	7	confirmed	real	0.81	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-05-11 15:22:00
+ce7739e0-9126-4e3e-b0d6-ff055db35ee3	13ffd6aa-4d5e-4223-8a63-c5ed027b5701	7	confirmed	real	0.89	Officer visited reported location. Incident signs visible. Report marked verified.	f	2026-04-19 11:35:32
+3e6bd61a-7f69-41d8-8260-944337ae0a41	657d370d-237f-42b7-8327-7260fc799839	7	confirmed	real	0.83	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-05-19 02:15:41
+225d509d-59d0-4805-9f7a-8cc3ce018282	80268a4e-f890-43f6-b596-38b15b5f8187	7	confirmed	real	0.80	Community member corroborated the report. Evidence consistent. Verified and logged.	f	2026-04-13 17:14:49
+01bbcff9-468f-4569-bb65-b470bdeb19d0	13f22cb9-1d45-4dba-8fe5-41081b904d94	7	confirmed	real	0.95	Officer visited reported location. Incident signs visible. Report marked verified.	f	2026-04-29 08:00:13
+0bc7feca-f78e-48ba-a23a-dc5a1b76882e	9e573a15-c87c-4704-be6e-96cc6d460972	7	confirmed	real	0.84	Scene investigation completed. Report details are consistent with physical findings.	f	2026-04-08 16:10:33
+d6550198-6318-4e91-abce-5290790ba93e	5a1dd1bb-df91-4951-9a39-ee7b5989e92b	7	confirmed	real	0.89	Cross-referenced with other reports in the area. Consistent pattern. Verified.	f	2026-05-11 20:24:23
+3ac99cfd-8089-402d-9563-981d6f5fbec9	7e58550c-e5ce-4f24-a819-1c82703c99cd	7	confirmed	real	0.84	Witnesses identified and statements taken. Report confirmed and forwarded for follow-up.	f	2026-05-17 16:16:42
+af0f35c0-84ca-4c2b-8815-6dfa03b25804	874e0f76-66a9-4c89-b67f-3664767de16a	7	confirmed	real	0.85	Officer visited reported location. Incident signs visible. Report marked verified.	f	2026-05-18 02:32:14
+dbfc96e4-ebef-40bb-b8b1-78c4d05bbcb2	97c01e9d-34bf-4ec7-a90f-b5244c3eef4a	7	confirmed	real	0.84	Victim interviewed and statement recorded. Report is credible and verified.	f	2026-05-10 14:04:39
 \.
 
 
 --
--- Data for Name: police_users; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: police_users; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.police_users (police_user_id, badge_number, first_name, middle_name, last_name, email, phone_number, password_hash, role, assigned_location_id, station_id, profile_picture_url, is_active, mfa_enabled, mfa_secret, last_login_at, last_password_change, created_at, updated_at) FROM stdin;
-26	ADMIN-002	dukuze	\N	jean claude	dukuzejean09@gmail.com	0791457824	$pbkdf2-sha256$29000$htBaa01J6V2L8d77PyckhA$YpweLlQ8ajcdPZtm0FBJ724LeMkyrUnYZwrr0ssx0Io	admin	\N	\N	\N	t	f	\N	2026-05-08 17:25:44.348355	2026-04-19 10:49:03.133685	2026-04-19 10:49:03.133685	2026-05-08 17:25:44.209144
 7	Supervisor-001	Kalisa	\N	kalori	codefixtech18@gmail.com	0781798011	$pbkdf2-sha256$29000$pPR.T8k551yrNYZwDmFMyQ$kRYTCrsuJxxVmutvNn/SjZSljpsCTbDu0Sv3gsB.jr4	supervisor	283	\N	\N	t	f	\N	2026-04-23 04:25:20.714339	2026-03-15 17:25:42.122691	2026-03-15 17:25:42.122691	2026-05-08 17:27:50.532519
 29	Officer-003	Lydia	\N	Nyiramugisha	mugishalydia494@gmail.com	+250 780 328 250	$pbkdf2-sha256$29000$JMTYe69VKqUUotSaM.YcIw$JEtolBS3JXiIojjFlyf6ztlnvgai3iEjYywyA5e7jrU	officer	8	\N	\N	t	f	\N	2026-04-25 18:17:57.038931	2026-04-21 18:05:32.657099	2026-04-21 18:05:32.657099	2026-05-08 17:27:50.532519
 28	Officer-002	OLIVIER	\N	Munyabugingo	munyabugingoolivier4@gmail.com	+25783813720	$pbkdf2-sha256$29000$gRDCOCdkrBWC8P4fw1gLwQ$infJxL8AALhHmJ6LkxgAofS8HitYITOAFSqT6iBaA6U	officer	1	\N	\N	t	f	\N	2026-04-21 18:58:45.65309	2026-04-21 17:51:55.908443	2026-04-21 17:51:55.908443	2026-05-08 17:27:56.599199
 27	Supervisor-002	JANVIER	\N	Hakorimana	hakoj782@gmail.com	+250787724376	$pbkdf2-sha256$29000$CUEoRUiplVIq5dzbOydE6A$bE8mB0lICMztYG6trpMQIr9n23Oc/GVFpyzCmlOgzlY	officer	8	8	\N	t	f	\N	2026-04-25 18:15:34.161716	2026-04-21 17:32:35.922585	2026-04-21 17:32:35.922585	2026-05-08 17:44:07.524238
 6	Officer-001	Samuel	\N	Yitakubayo	samuelyitakubayo70@gmail.com	0781798011	$pbkdf2-sha256$29000$uRcCYIxxLkUopfReC4Gwdg$fibPN/TPuthW8Z/MPQCqRjVi1x1S1unp/iMjkzx9cgY	officer	8	8	\N	t	f	\N	2026-05-04 16:28:54.27143	2026-03-15 17:25:05.972992	2026-03-15 17:25:05.972992	2026-05-10 14:58:35.772583
 1	ADMIN-001	System	\N	Admin	samuelyitakubayo60@gmail.com	\N	$pbkdf2-sha256$29000$wnivNcaYU2rNWetda23NGQ$3h/ogi2VqcpSft.oaWtKt7hJkkB1wM8q7MuwTAUbn7c	admin	89	\N	\N	t	f	\N	2026-05-10 16:17:59.469538	2026-03-02 11:22:05.021999	2026-03-02 11:22:05.021999	2026-05-10 16:17:59.302259
+26	ADMIN-002	dukuze	\N	jean claude	dukuzejean09@gmail.com	0791457824	$pbkdf2-sha256$29000$htBaa01J6V2L8d77PyckhA$YpweLlQ8ajcdPZtm0FBJ724LeMkyrUnYZwrr0ssx0Io	admin	\N	\N	\N	t	f	\N	2026-05-20 05:20:21.937276	2026-04-19 10:49:03.133685	2026-04-19 10:49:03.133685	2026-05-20 05:20:21.930083
 \.
 
 
 --
--- Data for Name: report_assignments; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: report_assignments; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.report_assignments (assignment_id, report_id, police_user_id, status, priority, assigned_at, completed_at, assignment_note) FROM stdin;
@@ -1771,7 +3069,7 @@ COPY public.report_assignments (assignment_id, report_id, police_user_id, status
 
 
 --
--- Data for Name: reports; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: reports; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.reports (report_id, report_number, device_id, incident_type_id, description, latitude, longitude, gps_accuracy, movement_speed, was_stationary, location_id, handling_station_id, reported_at, status, is_flagged, flag_reason, verification_status, verified_by, verified_at, feature_vector, ai_ready, features_extracted_at, app_version, network_type, battery_level, motion_level, features_extracted, village_location_id, rule_status, context_tags, priority, ai_evidence_description, ai_verification_reason, leader_verification_status, leader_verified_by, leader_verified_at, leader_verification_note, submitted_by_local_leader_id) FROM stdin;
@@ -1788,11 +3086,126 @@ b74ce4e2-848c-457a-87b9-ef919d1c54db	RPT-2026-0005	0d9754fc-30f3-4620-8078-cd19e
 ed3dc2d5-91cb-4107-90c0-95c2ba6cdfa7	RPT-2026-0003	7b48e801-0c6e-4851-a560-d9e4b08f7f8b	4	unusual movements of group of young boys with cigarettes	-1.5051068	29.6374204	200.00	0.00	t	282	\N	2026-05-02 14:10:40.636619	verified	f	\N	verified	26	2026-05-02 14:51:44.384635	{"ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "scorecard": {}, "context_tags": [], "incident_type": "Suspicious Activity", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}}, "final_decision": {"label": "likely_real", "status": "verified", "is_flagged": false, "rule_status": "passed", "trust_score": 100.0, "threshold_band": null}, "reporter_description": "unusual movements of group of young boys with cigarettes"}, "text_only_validation": {"valid": true, "issues": [], "confidence": 0.5, "threshold_used": 0.4}}	f	2026-05-02 14:10:42.232397	\N	mobile	63.00	low	\N	282	passed	{}	medium	Report context: Suspicious Activity. No evidence files uploaded; verification relies on reporter description and metadata checks. Reporter states: unusual movements of group of young boys with cigarettes.	AI verification result: confirmed. Incident type considered: Suspicious Activity. Reporter description considered: unusual movements of group of young boys with cigarettes. Rule status: passed. ML label: likely_real (trust 100.00%). Decision drivers: rule checks passed, ML credibility is high. Reviewer note: legitimate report. Decision patterns: HIGH_TRUST_SCORE, RULES_PASSED, FINAL_CONFIRMED, HUMAN_CONFIRMED. Pattern explanations: HIGH_TRUST_SCORE: ML credibility score supports authenticity; RULES_PASSED: rule checks passed without blocking violations; FINAL_CONFIRMED: final decision is confirmed; HUMAN_CONFIRMED: police reviewer confirmed the report.\nDecision patterns: HIGH_TRUST_SCORE, RULES_PASSED, FINAL_CONFIRMED, HUMAN_CONFIRMED.\nPattern explanations: HIGH_TRUST_SCORE: ML credibility score supports authenticity; RULES_PASSED: rule checks passed without blocking violations; FINAL_CONFIRMED: final decision is confirmed; HUMAN_CONFIRMED: police reviewer confirmed the report.	confirmed	\N	\N	\N	\N
 a278c066-a5dd-43bb-9d20-4ed14f0c8dce	RPT-2026-0007	7b48e801-0c6e-4851-a560-d9e4b08f7f8b	4	I noticed two individuals sitting behind a shop around 7:00 PM. They were smoking something with a strong unusual smell, suspected to be drugs. Their behavior appeared relaxed but suspicious, and they stayed there for a while	-1.5050349	29.6379231	77.60	0.00	t	282	\N	2026-05-04 19:44:11.705173	verified	f	\N	verified	26	2026-05-05 17:53:01.41547	{"reasoning": "Detailed description provided; Valid GPS coordinates provided; Low device trust score; Normal reporting frequency", "confidence": 0.8999999999999999, "trust_score": 55.0, "prediction_label": "suspicious", "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Muhoza > Mpenge > Gikwege", "coordinates": "-1.50503, 29.63792", "gps_accuracy_m": 77.6}, "scorecard": {}, "context_tags": [], "incident_type": "Suspicious Activity", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}}, "final_decision": {"label": "likely_real", "status": "verified", "is_flagged": false, "rule_status": "passed", "trust_score": 100.0, "threshold_band": null}, "scorecard_digest": {}, "reporter_description": "I noticed two individuals sitting behind a shop around 7:00 PM. They were smoking something with a strong unusual smell, suspected to be drugs. Their behavior appeared relaxed but suspicious, and they stayed there for a while", "unified_validation_digest": {}}}	t	2026-05-04 20:43:04.837207	\N	mobile	30.00	low	\N	282	passed	{}	low	The reporter observed two individuals engaging in suspicious activity near a shop at around 7:00 PM. The individuals appeared relaxed but their behavior was noted as suspicious due to their smoking behavior. Why this decision: The rule passed based on the similarity between the description evidence and incident evidence.; There is no mismatch or breakdown found in the signals.. Uncertainty: While the report seems consistent with the rules, it may require further investigation into the nature of the substances being smoked. Next step: Conduct an investigation to gather more information about the individuals' activities and the nature of the substance being smoked.	The incident involved two individuals observed sitting in front of a shop at Muhoza, where they were smoking an unknown substance that had an unusual odor. Why this decision: Based on the description provided, it is reasonable to assume that this could be related to drug activity.. Uncertainty: While the initial observation seems concerning, additional context or evidence would be necessary to confirm the nature of the substances being smoked. Next step: Further investigation should be conducted to gather more information about the individuals' activities and ensure public safety.\nDecision patterns: HIGH_TRUST_SCORE, RULES_PASSED, FINAL_CONFIRMED, HUMAN_CONFIRMED.\nPattern explanations: HIGH_TRUST_SCORE: ML credibility score supports authenticity; RULES_PASSED: rule checks passed without blocking violations; FINAL_CONFIRMED: final decision is confirmed; HUMAN_CONFIRMED: police reviewer confirmed the report.	confirmed	\N	\N	\N	\N
 6a9b8e8b-3409-4dc1-829c-1fa62c5d3e93	RPT-2026-0009	7b48e801-0c6e-4851-a560-d9e4b08f7f8b	4	A group of three unknown individuals was observed moving between houses at approximately 11:15 PM. They were attempting to open gates quietly and left the area when approached by a local resident.	-1.5079605	29.6410425	200.00	0.00	t	282	\N	2026-05-05 18:19:56.030264	verified	f	\N	verified	26	2026-05-05 18:29:28.240934	{"unified_validation": {"trust_band": "medium_confidence", "model_breakdown": {"base": {"is_valid": true, "metadata": {"reason": "base_credibility_start"}, "raw_score": 40.0, "contribution": 40.0}, "natural_language": {"is_valid": true, "metadata": {"focus": "description_quality_semantic_analysis", "language_detected": "unknown", "description_quality": 75.0, "incident_type_match": false, "semantic_similarity": 52.00941562652588}, "raw_score": 65.80376625061035, "contribution": 39.48225975036622}}, "aggregated_score": 69.48, "contributing_models": 1, "validation_metadata": {"models_used": {"volo": false, "trustbond": false, "natural_language": true}, "evidence_analyzed": 0, "validation_version": "unified_v1.0", "validation_completed_at": "2026-05-05T18:19:57.740377+00:00"}}, "threshold_scorecard": {"factors": {"base_credibility": {"model": "base", "signal": 0.4, "weight": 40.0, "is_valid": true, "max_points": 40.0, "points_awarded": 40.0}, "community_signal": {"model": "community", "signal": 0.5, "weight": 0.0, "is_valid": true, "max_points": 10.0, "points_awarded": 0.0}, "natural_language_contribution": {"model": "natural_language", "signal": 0.658, "weight": 39.48, "is_valid": true, "max_points": 40.0, "points_awarded": 39.48}}, "max_score": 100.0, "hard_gates": [], "total_score": 69.48, "scorecard_type": "text_only_scorecard", "threshold_band": "under_review", "decision_source": "unified_validation"}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Muhoza > Mpenge > Gikwege", "coordinates": "-1.50796, 29.64104", "gps_accuracy_m": 200.0}, "scorecard": {"factors": {"base_credibility": {"model": "base", "signal": 0.4, "weight": 40.0, "is_valid": true, "max_points": 40.0, "points_awarded": 40.0}, "community_signal": {"model": "community", "signal": 0.5, "weight": 0.0, "is_valid": true, "max_points": 10.0, "points_awarded": 0.0}, "natural_language_contribution": {"model": "natural_language", "signal": 0.658, "weight": 39.48, "is_valid": true, "max_points": 40.0, "points_awarded": 39.48}}, "max_score": 100.0, "hard_gates": [], "total_score": 69.48, "scorecard_type": "text_only_scorecard", "threshold_band": "under_review", "decision_source": "unified_validation"}, "context_tags": [], "incident_type": "Suspicious Activity", "model_signals": {"base": {"is_valid": true, "metadata": {"reason": "base_credibility_start"}, "raw_score": 40.0, "contribution": 40.0}, "trustbond": {}, "evidence_ai": {"breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {"is_valid": true, "metadata": {"focus": "description_quality_semantic_analysis", "language_detected": "unknown", "description_quality": 75.0, "incident_type_match": false, "semantic_similarity": 52.00941562652588}, "raw_score": 65.80376625061035, "contribution": 39.48225975036622}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}}, "final_decision": {"label": "likely_real", "status": "verified", "is_flagged": false, "rule_status": "passed", "trust_score": 100.0, "threshold_band": "under_review"}, "scorecard_digest": {"band": "under_review", "total_points": 69.48}, "reporter_description": "A group of three unknown individuals was observed moving between houses at approximately 11:15 PM. They were attempting to open gates quietly and left the area when approached by a local resident.", "unified_validation_digest": {"trust_band": "medium_confidence", "aggregated_score": 69.48}}, "text_only_validation": {"valid": true, "issues": ["INCIDENT_TEXT_MISMATCH"], "breakdown": {"coherence": 86.56, "specificity": 68.89, "event_completeness": 75.0, "incident_relevance": 26.34, "meaningful_validity": 100.0}, "confidence": 0.729, "hard_gates": [], "quality_band": "pass_quality", "reason_codes": ["INCIDENT_TEXT_MISMATCH"], "quality_score": 72.91, "threshold_used": 0.5}}	f	2026-05-05 18:19:57.642542	\N	mobile	25.00	low	\N	282	passed	{}	low	Evidence summary (Suspicious Activity):\n\nThere is no uploaded media—only the textual report and contextual tags guided automated checks.\n\nReporter narrative: A group of three unknown individuals was observed moving between houses at approximately 11:15 PM. They were attempting to open gates quietly and left the area when approached by a local resident.\n\nIntegrated credibility sits near 100.0/100.	The reporter submitted a suspicious activity report. In their words: A group of three unknown individuals was observed moving between houses at approximately 11:15 PM. They were attempting to open gates quietly and left the area when approached by a local resident.\n\nLocation: administrative area: Muhoza > Mpenge > Gikwege; GPS -1.50796, 29.64104; GPS accuracy about 200 m. No photo, video, or audio evidence was attached, so the decision leans on the written report, metadata, and automated checks. Signals collected: automated credibility score ≈ 100.0/100; model label likely_real; threshold scorecard total ≈ 69.5/100; scorecard band under review; unified model blend ≈ 69.5/100.\n\nSummary verdict: Automated checks support treating this submission as credible for now, but policing policy and staffing still apply.\nDecision patterns: HIGH_TRUST_SCORE, RULES_PASSED, FINAL_CONFIRMED, HUMAN_CONFIRMED.\nPattern explanations: HIGH_TRUST_SCORE: ML credibility score supports authenticity; RULES_PASSED: rule checks passed without blocking violations; FINAL_CONFIRMED: final decision is confirmed; HUMAN_CONFIRMED: police reviewer confirmed the report.	confirmed	\N	\N	\N	\N
+4fca6507-70a5-4953-889a-fe58885ef80f	RPT-2026-0014	9c4c15be-6111-44d6-b52d-b167dfd3565d	9	A child was hit by a bicycle while playing near the road. The child cried for a long time and was taken to the nearby health post by the neighbors. The cyclist fled.	-1.5030396	29.6189229	14.01	0.67	f	292	8	2026-05-13 09:45:00	verified	f	\N	verified	7	2026-05-13 11:52:00	{"text_only_nl": {"score": 0.856, "word_count": 33, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.856, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 97.9, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	59.00	low	\N	292	passed	{"Medical attention needed"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-13 10:34:00+00	Community meeting was called after this incident. It happened as reported.	\N
+61d9ad11-79ad-438c-88cf-7ad75fd823e4	RPT-2026-0015	00ef4c2d-c9d2-48e6-8901-b7f57ba1c51f	9	A child was hit by a bicycle while playing near the road. The child cried for a long time and was taken to the nearby health post by the neighbors. The cyclist fled.	-1.5033692	29.6188436	30.62	1.17	f	292	8	2026-05-13 09:56:00	verified	f	\N	verified	7	2026-05-13 13:42:00	{"text_only_nl": {"score": 0.908, "word_count": 33, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.908, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 95.41, "user_behavior_score": 73.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	38.00	medium	\N	292	passed	{"Medical attention needed"}	medium	No media evidence submitted. Report evaluated on description quality and device trust.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-13 10:54:00+00	Confirmed. I know the families involved and the incident happened as described.	\N
+1d00d3f6-2d0b-40a7-b345-39e0aa8d9eb8	RPT-2026-0016	634821ae-59a5-4bf8-b64d-939c3b2d1717	9	A motorcycle collided with a bicycle at the road junction near the school. The motorcycle rider fell and appears to have a broken arm. Pedestrians helped at the scene.	-1.5032754	29.6194157	44.50	1.50	f	292	8	2026-05-13 10:23:00	verified	f	\N	verified	7	2026-05-13 11:54:00	{"text_only_nl": {"score": 0.7357, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7357, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 93.33, "user_behavior_score": 71.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	80.00	medium	\N	292	passed	{"Medical attention needed"}	high	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-13 11:50:00+00	Confirmed. I know the families involved and the incident happened as described.	\N
+66658237-5d9e-48d9-b903-94eb50420598	RPT-2026-0017	ab5d0550-2350-4ac8-8d37-95607e267bb4	9	A motorcycle collided with a bicycle at the road junction near the school. The motorcycle rider fell and appears to have a broken arm. Pedestrians helped at the scene.	-1.5034364	29.6192634	30.30	0.02	t	292	8	2026-05-13 09:53:00	verified	f	\N	verified	7	2026-05-13 11:34:00	{"text_only_nl": {"score": 0.7627, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7627, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 95.45, "user_behavior_score": 62.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	91.00	low	\N	292	passed	{"Medical attention needed","Reporter was stationary"}	medium	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-13 11:10:00+00	I was informed by community members before this report was submitted. Incident is real.	\N
+be9b3ccd-a2e8-43d3-97b8-4d0e73792a3e	RPT-2026-0018	2be85ca7-3ad3-482f-9aa5-35f08f6041a3	9	A loaded truck lost control on the slope and hit a wall. The driver was injured and two passengers are trapped inside. Emergency help is urgently needed.	-1.5029187	29.6190050	17.27	1.74	f	292	8	2026-05-13 10:30:00	verified	f	\N	verified	7	2026-05-13 14:11:00	{"text_only_nl": {"score": 0.7537, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.7537, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 97.41, "user_behavior_score": 55.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	79.00	medium	\N	292	passed	{"Medical attention needed"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-13 11:25:00+00	Confirmed. I know the families involved and the incident happened as described.	\N
+41ba8864-1d44-4804-b828-cb69cd46ee1d	RPT-2026-0019	e697bd51-052a-4832-9506-2d6a26968d36	9	A motorcycle overturned after hitting a pothole on the unpaved road. The rider and passenger both fell. The passenger has a head injury and is bleeding.	-1.5045637	29.6691475	22.02	1.68	f	271	8	2026-05-05 15:33:00	verified	f	\N	verified	7	2026-05-05 18:42:00	{"text_only_nl": {"score": 0.7827, "word_count": 26, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.7827, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 96.7, "user_behavior_score": 73.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	45.00	medium	\N	271	passed	{"Medical attention needed"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-05 17:00:00+00	Confirmed. I know the families involved and the incident happened as described.	\N
+ac105b65-8376-4b66-a216-e7416b7af3f4	RPT-2026-0020	72b42191-3da3-4df1-9b49-86f6dfea2578	9	A speeding vehicle knocked down a pedestrian who was crossing the road at the market area. The driver stopped but the victim is unconscious and needs medical attention.	-1.5050257	29.6692351	6.90	0.83	f	271	8	2026-05-05 15:43:00	verified	f	\N	verified	7	2026-05-05 16:41:00	{"text_only_nl": {"score": 0.7472, "word_count": 28, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7472, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 98.97, "user_behavior_score": 58.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	wifi	22.00	low	\N	271	passed	{"Medical attention needed"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-05 16:07:00+00	Community meeting was called after this incident. It happened as reported.	\N
+b20d17b7-2209-41cd-9ad9-371547051207	RPT-2026-0021	5cc9fa7d-305b-487d-abec-3212c0be094a	9	A motorcycle overturned after hitting a pothole on the unpaved road. The rider and passenger both fell. The passenger has a head injury and is bleeding.	-1.5048861	29.6695261	21.45	0.10	t	271	8	2026-05-05 15:29:00	verified	f	\N	verified	7	2026-05-05 19:29:00	{"text_only_nl": {"score": 0.7612, "word_count": 26, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7612, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 96.78, "user_behavior_score": 74.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	42.00	low	\N	271	passed	{"Medical attention needed","Reporter was stationary"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-05 16:13:00+00	I was informed by community members before this report was submitted. Incident is real.	\N
+5eef1033-aab3-4663-8470-79fcdc8c75ad	RPT-2026-0022	ab5d0550-2350-4ac8-8d37-95607e267bb4	9	A child was hit by a bicycle while playing near the road. The child cried for a long time and was taken to the nearby health post by the neighbors. The cyclist fled.	-1.5043404	29.6696328	18.50	2.12	f	271	8	2026-05-05 16:43:00	verified	f	\N	verified	7	2026-05-05 19:34:00	{"text_only_nl": {"score": 0.7811, "word_count": 33, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7811, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 97.22, "user_behavior_score": 62.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	wifi	66.00	medium	\N	271	passed	{"Medical attention needed"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-05 17:14:00+00	I was informed by community members before this report was submitted. Incident is real.	\N
+debc3ac3-1471-4968-b832-138bb2bfa3aa	RPT-2026-0023	5cc9fa7d-305b-487d-abec-3212c0be094a	3	Windows of the primary school classroom were smashed and school furniture was overturned. This happened over the weekend when no one was present. Children cannot have class.	-1.4679014	29.6445362	24.58	2.22	f	133	8	2026-05-13 17:09:00	verified	f	\N	verified	7	2026-05-13 20:51:00	{"text_only_nl": {"score": 0.8237, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8237, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 96.31, "user_behavior_score": 74.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	4g	40.00	low	\N	133	passed	{}	high	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-13 17:37:00+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+263dc1a6-bf49-4879-936b-b4d803736044	RPT-2026-0024	e739dea9-68c2-48f6-abfd-ae05173eecbe	3	Electric cables to the health center were cut during the night. The center has been without power since early morning. Patients including those on oxygen are at risk.	-1.4683284	29.6446486	16.92	1.94	f	133	8	2026-05-13 18:29:00	verified	f	\N	verified	7	2026-05-13 20:24:00	{"text_only_nl": {"score": 0.7732, "word_count": 28, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7732, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 97.46, "user_behavior_score": 77.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	37.00	medium	\N	133	passed	{Night-time}	medium	No media evidence submitted. Report evaluated on description quality and device trust.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-13 19:24:00+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+8479f8e2-d885-427f-a385-e28c74af3de4	RPT-2026-0025	98b07cbf-4272-4f34-88a3-ae992c605640	3	The road barrier on the dangerous slope was knocked down and removed. Vehicles are now driving on that stretch without any warning of the dangerous section below.	-1.4679317	29.6440628	21.36	0.01	t	133	8	2026-05-13 18:29:00	verified	f	\N	verified	7	2026-05-13 21:03:00	{"text_only_nl": {"score": 0.7787, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7787, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 96.8, "user_behavior_score": 79.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	3g	21.00	low	\N	133	passed	{Night-time,"Reporter was stationary"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-13 19:12:00+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+81dc465d-4c4b-4527-86df-3ffa1be00899	RPT-2026-0026	185101d1-a6c0-4efc-8266-dec4f87af389	3	The water pump at the community standpipe was deliberately damaged and the pipe was broken off. This has cut off water supply for the entire village. The damage looks intentional.	-1.4684659	29.6448082	15.85	0.20	t	133	8	2026-05-13 18:17:00	verified	f	\N	verified	7	2026-05-13 22:06:00	{"text_only_nl": {"score": 0.8823, "word_count": 30, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8823, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 97.62, "user_behavior_score": 66.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	43.00	low	\N	133	passed	{Night-time,"Reporter was stationary"}	high	No media evidence submitted. Report evaluated on description quality and device trust.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-13 18:37:00+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+afcf74ac-dab4-4032-af3d-8f3fa1ab4180	RPT-2026-0027	7dc6f614-fc40-4e31-937f-a0ea3195ecd4	9	A motorcycle collided with a bicycle at the road junction near the school. The motorcycle rider fell and appears to have a broken arm. Pedestrians helped at the scene.	-1.4950463	29.6360238	46.48	0.27	t	139	8	2026-05-05 14:20:00	verified	f	\N	verified	7	2026-05-05 15:09:00	{"text_only_nl": {"score": 0.9236, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.9236, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 93.03, "user_behavior_score": 64.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	4g	56.00	low	\N	139	passed	{"Medical attention needed","Reporter was stationary"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-05 15:50:00+00	Community meeting was called after this incident. It happened as reported.	\N
+5e58ba28-e778-4044-b0e2-8ba3e502b1a5	RPT-2026-0028	5cc9fa7d-305b-487d-abec-3212c0be094a	9	A speeding vehicle knocked down a pedestrian who was crossing the road at the market area. The driver stopped but the victim is unconscious and needs medical attention.	-1.4951527	29.6355184	15.49	1.16	f	139	8	2026-05-05 15:05:00	verified	f	\N	verified	7	2026-05-05 17:05:00	{"text_only_nl": {"score": 0.7166, "word_count": 28, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.7166, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 97.68, "user_behavior_score": 74.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	53.00	medium	\N	139	passed	{"Medical attention needed"}	medium	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-05 15:53:00+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+9b529720-5e42-4f66-af44-0b77bbd4bbe3	RPT-2026-0029	e697bd51-052a-4832-9506-2d6a26968d36	9	A motorcycle collided with a bicycle at the road junction near the school. The motorcycle rider fell and appears to have a broken arm. Pedestrians helped at the scene.	-1.4955803	29.6357378	5.61	1.34	f	139	8	2026-05-05 14:54:00	verified	f	\N	verified	7	2026-05-05 15:50:00	{"text_only_nl": {"score": 0.9341, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.9341, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 99.16, "user_behavior_score": 73.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	79.00	medium	\N	139	passed	{"Medical attention needed"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-05 15:10:00+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+fe6aadb6-e284-49c7-b0f0-9d9ce80513ae	RPT-2026-0030	22e6fd3f-4c6d-490a-b73a-3266ea52faf2	9	A loaded truck lost control on the slope and hit a wall. The driver was injured and two passengers are trapped inside. Emergency help is urgently needed.	-1.4950592	29.6356153	16.38	0.20	t	139	8	2026-05-05 14:51:00	verified	f	\N	verified	7	2026-05-05 18:17:00	{"text_only_nl": {"score": 0.75, "word_count": 27, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.75, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 97.54, "user_behavior_score": 65.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	54.00	low	\N	139	passed	{"Medical attention needed","Reporter was stationary"}	high	No media evidence submitted. Report evaluated on description quality and device trust.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-05 16:06:00+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+0cd3f80f-39c2-4687-8c4f-30377a03de91	RPT-2026-0031	5cc9fa7d-305b-487d-abec-3212c0be094a	9	A speeding vehicle knocked down a pedestrian who was crossing the road at the market area. The driver stopped but the victim is unconscious and needs medical attention.	-1.4952992	29.6361758	8.07	0.41	t	139	8	2026-05-05 14:50:00	verified	f	\N	verified	7	2026-05-05 17:19:00	{"text_only_nl": {"score": 0.8469, "word_count": 28, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8469, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 98.79, "user_behavior_score": 74.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	4g	82.00	low	\N	139	passed	{"Medical attention needed","Reporter was stationary"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-05 15:43:00+00	Community meeting was called after this incident. It happened as reported.	\N
+c701470d-5fcf-48ee-8342-89715e1c9e31	RPT-2026-0032	ababc889-2467-42cc-8cee-3645e74ad622	9	A child was hit by a bicycle while playing near the road. The child cried for a long time and was taken to the nearby health post by the neighbors. The cyclist fled.	-1.4952812	29.6361353	22.70	1.24	f	139	8	2026-05-05 15:22:00	verified	f	\N	verified	7	2026-05-05 19:09:00	{"text_only_nl": {"score": 0.7184, "word_count": 33, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7184, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 96.59, "user_behavior_score": 80.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	18.00	medium	\N	139	passed	{"Medical attention needed"}	high	No media evidence submitted. Report evaluated on description quality and device trust.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-05 16:28:00+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+b27e6bb7-1166-402b-9428-2c965c11c77d	RPT-2026-0033	3af0b36c-8921-4a19-8217-a5920f4e83ef	1	A woman reported that her handbag containing money and her national ID was snatched while she was waiting for a bus. There were children playing nearby but no adult witnesses.	-1.4586144	29.5180377	25.84	0.07	t	231	8	2026-05-09 16:29:00	verified	f	\N	verified	7	2026-05-09 19:20:00	{"text_only_nl": {"score": 0.85, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.85, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 96.12, "user_behavior_score": 68.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	3g	32.00	low	\N	231	passed	{"Reporter was stationary"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-09 17:36:00+00	Confirmed. I know the families involved and the incident happened as described.	\N
+aaef4b7e-b9ad-4073-be2c-ffcb61c81ecc	RPT-2026-0034	1178321c-e412-4be5-9a52-3d0b1a3a762d	1	Agricultural tools including hoes and a machete were stolen from a farm storage shed. The shed door was forced open during the night. The owner discovered the theft at dawn.	-1.4591428	29.5176893	41.01	1.45	f	231	8	2026-05-09 15:46:00	verified	f	\N	verified	7	2026-05-09 18:12:00	{"text_only_nl": {"score": 0.7442, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7442, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 93.85, "user_behavior_score": 63.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	wifi	48.00	medium	\N	231	passed	{}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-09 16:42:00+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+a8168200-bffd-4d4b-847c-69e1e4418b26	RPT-2026-0035	ababc889-2467-42cc-8cee-3645e74ad622	1	Agricultural tools including hoes and a machete were stolen from a farm storage shed. The shed door was forced open during the night. The owner discovered the theft at dawn.	-1.4586746	29.5183747	46.03	1.57	f	231	8	2026-05-09 16:04:00	verified	f	\N	verified	7	2026-05-09 17:32:00	{"text_only_nl": {"score": 0.8344, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8344, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 93.1, "user_behavior_score": 80.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	30.00	medium	\N	231	passed	{}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-09 16:30:00+00	Several people in the village witnessed this. The report is accurate.	\N
+685b2c28-757c-44e9-b8be-8e1273c435ff	RPT-2026-0036	3acb63d9-4e1c-4de3-a57f-ad994dcde4e8	1	My neighbor informed me that someone broke into the small shop on the road and stole groceries and mobile phone accessories. The padlock was cut with a metal cutter.	-1.4585664	29.5179265	34.68	1.14	f	231	8	2026-05-09 16:18:00	verified	f	\N	verified	7	2026-05-09 19:14:00	{"text_only_nl": {"score": 0.9399, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.9399, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 94.8, "user_behavior_score": 72.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	55.00	medium	\N	231	passed	{}	low	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-09 17:18:00+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+9cf848fb-a5f6-4f85-8fe7-b8a5f46e3fb9	RPT-2026-0037	93da6e1b-5cca-4577-afdd-c9f6b7e4e0d9	1	A bicycle was stolen from outside the church during the morning service. The owner chained it to the fence but the chain was broken. No one saw who took it.	-1.4369983	29.5491028	37.10	0.85	f	237	8	2026-05-04 15:37:00	verified	f	\N	verified	7	2026-05-04 19:32:00	{"text_only_nl": {"score": 0.9315, "word_count": 30, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.9315, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 94.44, "user_behavior_score": 76.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	68.00	low	\N	237	passed	{}	low	No media evidence submitted. Report evaluated on description quality and device trust.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-04 17:03:00+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+7d88181b-65c4-47a8-9e1d-b1a74d5cec02	RPT-2026-0038	e739dea9-68c2-48f6-abfd-ae05173eecbe	1	A woman reported that her handbag containing money and her national ID was snatched while she was waiting for a bus. There were children playing nearby but no adult witnesses.	-1.4377095	29.5490548	19.10	1.53	f	237	8	2026-05-04 16:19:00	verified	f	\N	verified	7	2026-05-04 17:18:00	{"text_only_nl": {"score": 0.8995, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8995, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 97.14, "user_behavior_score": 77.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	81.00	low	\N	237	passed	{}	low	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-04 16:51:00+00	Confirmed. I know the families involved and the incident happened as described.	\N
+3dd73568-0c54-445b-9b26-31ae2aa55ed2	RPT-2026-0039	98b07cbf-4272-4f34-88a3-ae992c605640	1	Two young men on foot grabbed a phone from someone who was walking home from the bus stop. They ran through the narrow path between the houses towards the bush.	-1.4375653	29.5490113	13.91	0.54	f	237	8	2026-05-04 16:26:00	verified	f	\N	verified	7	2026-05-04 17:33:00	{"text_only_nl": {"score": 0.8881, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8881, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 97.91, "user_behavior_score": 79.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	40.00	low	\N	237	passed	{}	low	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-04 16:57:00+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+f679c63f-4d00-4ba6-bc9c-c175a4f12124	RPT-2026-0040	6751960b-edf7-4947-9103-60411f4a4f73	1	Someone stole a jerrycan full of petrol from a parked motorcycle near the trading center. The motorcycle owner had gone into a shop for a few minutes.	-1.4376707	29.5484120	11.38	0.32	t	237	8	2026-05-04 16:41:00	verified	f	\N	verified	7	2026-05-04 19:07:00	{"text_only_nl": {"score": 0.8556, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8556, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 98.29, "user_behavior_score": 75.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	4g	32.00	low	\N	237	passed	{"Reporter was stationary"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-04 18:00:00+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+804515a3-79b1-4ca7-9e07-d4a06d924def	RPT-2026-0041	00ef4c2d-c9d2-48e6-8901-b7f57ba1c51f	1	A man snatched a handbag from a woman near the market and fled towards the main road. He was wearing a red hoodie and dark trousers. Several people witnessed the incident.	-1.4369766	29.5486857	46.64	1.50	f	237	8	2026-05-04 15:38:00	verified	f	\N	verified	7	2026-05-04 16:35:00	{"text_only_nl": {"score": 0.8429, "word_count": 31, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8429, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 93.0, "user_behavior_score": 73.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	32.00	medium	\N	237	passed	{}	high	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-04 16:37:00+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+5ba5d790-9984-473d-b123-128c4c404913	RPT-2026-0042	9c4c15be-6111-44d6-b52d-b167dfd3565d	5	A woman came to report that her husband is violent and has been threatening her with a machete. She managed to escape to a neighbor's house with her children.	-1.4975202	29.6435025	21.18	1.13	f	286	8	2026-05-17 08:33:13	verified	f	\N	verified	7	2026-05-17 09:16:13	{"text_only_nl": {"score": 0.7817, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7817, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 96.82, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	28.00	low	\N	286	passed	{"Violence reported"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-17 09:07:13+00	I was informed by community members before this report was submitted. Incident is real.	\N
+a2dcc7fc-9366-445b-a694-36023416d620	RPT-2026-0043	82a10997-3687-4c21-a393-a56f861d1b44	5	A man is physically abusing his wife and the sound of screaming has been ongoing for some time. Neighbors are afraid to intervene. The children are crying inside the house.	-1.4703242	29.6839013	14.89	1.40	f	120	8	2026-05-07 09:34:45	verified	f	\N	verified	7	2026-05-07 10:23:45	{"text_only_nl": {"score": 0.8013, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8013, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 97.77, "user_behavior_score": 69.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	wifi	69.00	medium	\N	120	passed	{"Violence reported"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-07 10:29:45+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+971d5453-7ede-4c0c-b2be-64909de63e8c	RPT-2026-0044	9c4c15be-6111-44d6-b52d-b167dfd3565d	2	A woman was beaten by an unknown man when she returned home late from work. She managed to call for help and neighbors came. The attacker escaped into the forest.	-1.4494389	29.5413448	26.25	1.89	f	241	8	2026-05-14 09:49:40	verified	f	\N	verified	7	2026-05-14 12:19:40	{"text_only_nl": {"score": 0.9088, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.9088, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 96.06, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	53.00	medium	\N	241	passed	{"Violence reported"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-14 11:00:40+00	Community meeting was called after this incident. It happened as reported.	\N
+27b81e6f-1aad-4ced-98ed-7d7182bc89e9	RPT-2026-0045	7dc6f614-fc40-4e31-937f-a0ea3195ecd4	3	The road barrier on the dangerous slope was knocked down and removed. Vehicles are now driving on that stretch without any warning of the dangerous section below.	-1.5073228	29.6259924	21.66	1.94	f	288	8	2026-05-08 12:58:18	verified	f	\N	verified	7	2026-05-08 14:32:18	{"text_only_nl": {"score": 0.7252, "word_count": 27, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7252, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 96.75, "user_behavior_score": 64.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	36.00	low	\N	288	passed	{}	high	No media evidence submitted. Report evaluated on description quality and device trust.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-08 13:32:18+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+cb2ab766-e7df-4626-94bc-ba4274f3501a	RPT-2026-0046	3acb63d9-4e1c-4de3-a57f-ad994dcde4e8	3	Electric cables to the health center were cut during the night. The center has been without power since early morning. Patients including those on oxygen are at risk.	-1.4636254	29.6523294	19.69	1.92	f	135	8	2026-05-17 12:11:13	verified	f	\N	verified	7	2026-05-17 15:30:13	{"text_only_nl": {"score": 0.94, "word_count": 28, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.94, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 97.05, "user_behavior_score": 72.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	94.00	low	\N	135	passed	{}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-17 13:09:13+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+7a4e96e5-98f8-48dd-8e8d-8af76c077df4	RPT-2026-0047	185101d1-a6c0-4efc-8266-dec4f87af389	9	A motorcycle collided with a bicycle at the road junction near the school. The motorcycle rider fell and appears to have a broken arm. Pedestrians helped at the scene.	-1.4332555	29.5871874	13.59	1.51	f	262	8	2026-04-16 15:10:52	verified	f	\N	verified	7	2026-04-16 16:52:52	{"text_only_nl": {"score": 0.8575, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8575, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 97.96, "user_behavior_score": 66.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	4g	75.00	medium	\N	262	passed	{"Medical attention needed"}	high	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-04-16 15:35:52+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+34d3bf12-4202-410b-b8c7-91d2eb5ce37f	RPT-2026-0048	9c4c15be-6111-44d6-b52d-b167dfd3565d	4	A vehicle with no registration plates has been parked near the primary school since this morning. There are two people inside who have not come out. It looks suspicious.	-1.5094965	29.6330595	43.92	1.49	f	279	8	2026-04-09 14:07:53	verified	f	\N	verified	7	2026-04-09 15:38:53	{"text_only_nl": {"score": 0.8753, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8753, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 93.41, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	wifi	28.00	low	\N	279	passed	{}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-04-09 15:35:53+00	Several people in the village witnessed this. The report is accurate.	\N
+7fbfde89-0df5-43a2-a905-97a59870a8f8	RPT-2026-0049	00ef4c2d-c9d2-48e6-8901-b7f57ba1c51f	2	Two groups of youth clashed near the sports field after a football disagreement. Several people were injured including one with a broken tooth. The situation calmed down.	-1.4736265	29.6234428	12.84	0.34	t	124	8	2026-04-19 02:30:40	verified	f	\N	verified	7	2026-04-19 04:19:40	{"text_only_nl": {"score": 0.7185, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.7185, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 98.07, "user_behavior_score": 73.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	50.00	low	\N	124	passed	{Night-time,"Violence reported","Reporter was stationary"}	low	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-04-19 03:50:40+00	Several people in the village witnessed this. The report is accurate.	\N
+bf923512-ff26-41b1-867a-c44977cc8966	RPT-2026-0050	fd9eb538-6fe2-4009-a7ad-69f66c2e8243	2	A neighbor attacked a family member with a stick during a land dispute argument. The victim sustained injuries on his back and arm. Witnesses are available.	-1.4085259	29.5579071	33.42	0.77	f	254	8	2026-04-30 12:05:20	verified	f	\N	verified	7	2026-04-30 15:12:20	{"text_only_nl": {"score": 0.8686, "word_count": 26, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8686, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 94.99, "user_behavior_score": 70.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	69.00	medium	\N	254	passed	{"Violence reported"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-04-30 13:15:20+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+8259a0a7-7536-4276-9477-e8921202ccc3	RPT-2026-0051	2be85ca7-3ad3-482f-9aa5-35f08f6041a3	1	A woman reported that her handbag containing money and her national ID was snatched while she was waiting for a bus. There were children playing nearby but no adult witnesses.	-1.5138243	29.6449344	29.15	0.65	f	280	8	2026-05-07 14:24:58	verified	f	\N	verified	7	2026-05-07 15:45:58	{"text_only_nl": {"score": 0.8126, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8126, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 95.63, "user_behavior_score": 55.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	40.00	medium	\N	280	passed	{}	high	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-07 14:54:58+00	I was informed by community members before this report was submitted. Incident is real.	\N
+0d3500ea-6e1f-4fe9-8435-a0e57632290b	RPT-2026-0052	9c4c15be-6111-44d6-b52d-b167dfd3565d	3	Electric cables to the health center were cut during the night. The center has been without power since early morning. Patients including those on oxygen are at risk.	-1.4630229	29.6528274	26.62	2.17	f	135	8	2026-04-11 09:08:27	verified	f	\N	verified	7	2026-04-11 11:50:27	{"text_only_nl": {"score": 0.7799, "word_count": 28, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7799, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 96.01, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	43.00	low	\N	135	passed	{}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-04-11 09:59:27+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+454202a9-176b-4782-8110-801289df5697	RPT-2026-0053	9c4c15be-6111-44d6-b52d-b167dfd3565d	4	Someone was seen checking the fence of several houses after dark in the residential area. When a neighbor called out to them they ran away towards the road leading to the forest.	-1.4346184	29.5876130	15.53	2.02	f	262	8	2026-04-14 11:19:30	verified	f	\N	verified	7	2026-04-14 13:52:30	{"text_only_nl": {"score": 0.8143, "word_count": 32, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8143, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 97.67, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	36.00	medium	\N	262	passed	{}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-04-14 12:33:30+00	I was informed by community members before this report was submitted. Incident is real.	\N
+eb2b0bba-15ad-4942-9c3d-f2a2916f11ae	RPT-2026-0054	98b07cbf-4272-4f34-88a3-ae992c605640	2	A woman was beaten by an unknown man when she returned home late from work. She managed to call for help and neighbors came. The attacker escaped into the forest.	-1.5133657	29.6465855	30.69	2.11	f	280	8	2026-04-26 07:18:31	verified	f	\N	verified	7	2026-04-26 10:54:31	{"text_only_nl": {"score": 0.8334, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8334, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 95.4, "user_behavior_score": 79.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	4g	23.00	medium	\N	280	passed	{"Violence reported"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-04-26 08:19:31+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+8449550e-f9ca-45cb-83f1-b8837e28b0e9	RPT-2026-0055	2659dc6a-7b14-4e2a-81a3-0c9a58395056	3	Windows of the primary school classroom were smashed and school furniture was overturned. This happened over the weekend when no one was present. Children cannot have class.	-1.4967661	29.6315208	27.89	1.77	f	141	8	2026-04-11 12:53:32	verified	f	\N	verified	7	2026-04-11 15:52:32	{"text_only_nl": {"score": 0.8976, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8976, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 95.82, "user_behavior_score": 78.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	78.00	medium	\N	141	passed	{}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-04-11 13:47:32+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+68d5c579-68bf-41da-8103-f5f20ba7c9b6	RPT-2026-0056	72b42191-3da3-4df1-9b49-86f6dfea2578	4	Someone was seen checking the fence of several houses after dark in the residential area. When a neighbor called out to them they ran away towards the road leading to the forest.	-1.4304077	29.5466831	47.92	1.20	f	253	8	2026-05-10 15:35:20	verified	f	\N	verified	7	2026-05-10 18:58:20	{"text_only_nl": {"score": 0.93, "word_count": 32, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.93, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 92.81, "user_behavior_score": 58.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	4g	49.00	medium	\N	253	passed	{}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-10 16:23:20+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+4b9b9b42-c441-4952-867f-c1b5cad45a9b	RPT-2026-0057	98b07cbf-4272-4f34-88a3-ae992c605640	5	A man is physically abusing his wife and the sound of screaming has been ongoing for some time. Neighbors are afraid to intervene. The children are crying inside the house.	-1.5077215	29.6251999	27.83	1.59	f	288	8	2026-05-03 10:42:57	verified	f	\N	verified	7	2026-05-03 11:13:57	{"text_only_nl": {"score": 0.8051, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8051, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 95.83, "user_behavior_score": 79.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	wifi	78.00	low	\N	288	passed	{"Violence reported"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-03 12:07:57+00	I was informed by community members before this report was submitted. Incident is real.	\N
+3c81bd92-2568-4ec4-9680-4512879f6438	RPT-2026-0058	1178321c-e412-4be5-9a52-3d0b1a3a762d	2	A neighbor attacked a family member with a stick during a land dispute argument. The victim sustained injuries on his back and arm. Witnesses are available.	-1.4523133	29.6486375	19.22	1.83	f	136	8	2026-04-19 11:51:07	verified	f	\N	verified	7	2026-04-19 13:05:07	{"text_only_nl": {"score": 0.7132, "word_count": 26, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7132, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 97.12, "user_behavior_score": 63.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	wifi	59.00	medium	\N	136	passed	{"Violence reported"}	low	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-04-19 12:57:07+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+0ba983ef-69ae-443a-a5e4-c65c1173a43e	RPT-2026-0059	22e6fd3f-4c6d-490a-b73a-3266ea52faf2	9	A motorcycle overturned after hitting a pothole on the unpaved road. The rider and passenger both fell. The passenger has a head injury and is bleeding.	-1.4228253	29.5631002	31.43	0.55	f	259	8	2026-04-08 21:18:23	verified	f	\N	verified	7	2026-04-09 00:47:23	{"text_only_nl": {"score": 0.7452, "word_count": 26, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7452, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 95.29, "user_behavior_score": 65.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	45.00	low	\N	259	passed	{Night-time,"Medical attention needed"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-04-08 22:43:23+00	Several people in the village witnessed this. The report is accurate.	\N
+059bfa85-f021-4703-9c06-e3f2b0ff052b	RPT-2026-0060	e697bd51-052a-4832-9506-2d6a26968d36	1	A man snatched a handbag from a woman near the market and fled towards the main road. He was wearing a red hoodie and dark trousers. Several people witnessed the incident.	-1.5133414	29.6386817	35.12	1.35	f	278	8	2026-04-11 07:27:22	verified	f	\N	verified	7	2026-04-11 11:13:22	{"text_only_nl": {"score": 0.9368, "word_count": 31, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.9368, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 94.73, "user_behavior_score": 73.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	4g	66.00	low	\N	278	passed	{}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-04-11 07:59:22+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+d0e97796-c317-4380-bc5f-5f7a5d16212e	RPT-2026-0061	5cc9fa7d-305b-487d-abec-3212c0be094a	1	My neighbor informed me that someone broke into the small shop on the road and stole groceries and mobile phone accessories. The padlock was cut with a metal cutter.	-1.4885116	29.6381305	24.20	1.68	f	128	8	2026-05-05 07:38:02	verified	f	\N	verified	7	2026-05-05 11:21:02	{"text_only_nl": {"score": 0.8803, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8803, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 96.37, "user_behavior_score": 74.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	47.00	low	\N	128	passed	{}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-05 08:00:02+00	I was informed by community members before this report was submitted. Incident is real.	\N
+c0eb46eb-dff8-48c1-89d6-2ec53a2dd491	RPT-2026-0062	2659dc6a-7b14-4e2a-81a3-0c9a58395056	2	Two groups of youth clashed near the sports field after a football disagreement. Several people were injured including one with a broken tooth. The situation calmed down.	-1.4543882	29.5271164	29.18	2.42	f	234	8	2026-05-09 19:58:03	verified	f	\N	verified	7	2026-05-09 22:02:03	{"text_only_nl": {"score": 0.7659, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7659, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 95.62, "user_behavior_score": 78.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	4g	52.00	low	\N	234	passed	{Night-time,"Violence reported"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-09 20:24:03+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+8d3ed732-d698-464e-813b-d04aae3f7e5a	RPT-2026-0063	ababc889-2467-42cc-8cee-3645e74ad622	3	Windows of the primary school classroom were smashed and school furniture was overturned. This happened over the weekend when no one was present. Children cannot have class.	-1.5078826	29.6271341	20.45	0.65	f	288	8	2026-04-30 13:34:41	verified	f	\N	verified	7	2026-04-30 15:38:41	{"text_only_nl": {"score": 0.7327, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7327, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 96.93, "user_behavior_score": 80.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	46.00	medium	\N	288	passed	{}	high	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-04-30 14:29:41+00	Several people in the village witnessed this. The report is accurate.	\N
+1a26d484-e69e-4f5e-8fa5-43d2e7833e81	RPT-2026-0064	1178321c-e412-4be5-9a52-3d0b1a3a762d	2	Two groups of youth clashed near the sports field after a football disagreement. Several people were injured including one with a broken tooth. The situation calmed down.	-1.4640309	29.6836300	33.67	1.54	f	121	8	2026-04-19 12:39:40	verified	f	\N	verified	7	2026-04-19 15:24:40	{"text_only_nl": {"score": 0.7136, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7136, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 94.95, "user_behavior_score": 63.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	82.00	medium	\N	121	passed	{"Violence reported"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-04-19 13:29:40+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+b5e1d340-eb9e-45d7-a761-e56ed2fd378d	RPT-2026-0065	1178321c-e412-4be5-9a52-3d0b1a3a762d	1	A man snatched a handbag from a woman near the market and fled towards the main road. He was wearing a red hoodie and dark trousers. Several people witnessed the incident.	-1.4071675	29.5572562	34.77	1.42	f	254	8	2026-05-16 10:57:55	verified	f	\N	verified	7	2026-05-16 12:12:55	{"text_only_nl": {"score": 0.9226, "word_count": 31, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.9226, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 94.78, "user_behavior_score": 63.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	wifi	36.00	medium	\N	254	passed	{}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-16 11:52:55+00	Confirmed. I know the families involved and the incident happened as described.	\N
+177cd3f3-cb1d-4734-8713-0d641474a3f7	RPT-2026-0066	185101d1-a6c0-4efc-8266-dec4f87af389	5	A woman came to report that her husband is violent and has been threatening her with a machete. She managed to escape to a neighbor's house with her children.	-1.5135424	29.6458968	15.60	0.18	t	280	8	2026-05-13 19:18:51	verified	f	\N	verified	7	2026-05-13 21:09:51	{"text_only_nl": {"score": 0.7455, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7455, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 97.66, "user_behavior_score": 66.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	57.00	low	\N	280	passed	{Night-time,"Violence reported","Reporter was stationary"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-13 20:19:51+00	Confirmed. I know the families involved and the incident happened as described.	\N
+e9c404f9-6ae3-47ea-9fd7-4124be2334ff	RPT-2026-0067	ab5d0550-2350-4ac8-8d37-95607e267bb4	4	A group of strangers was seen entering the abandoned house at the end of the road. They looked nervous when people passed by and left quickly after some time.	-1.4842548	29.6596053	31.88	1.48	f	112	8	2026-04-25 10:15:46	verified	f	\N	verified	7	2026-04-25 14:10:46	{"text_only_nl": {"score": 0.7346, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7346, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 95.22, "user_behavior_score": 62.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	94.00	low	\N	112	passed	{}	low	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-04-25 11:12:46+00	Several people in the village witnessed this. The report is accurate.	\N
+c8c0517a-9b70-4f20-9402-474b81828778	RPT-2026-0068	e697bd51-052a-4832-9506-2d6a26968d36	5	Loud argument between family members escalated and physical fighting is happening. Neighbors are alarmed and the noise is disturbing the whole neighborhood.	-1.4374440	29.5791768	7.97	2.12	f	261	8	2026-04-20 19:53:44	verified	f	\N	verified	7	2026-04-20 23:26:44	{"text_only_nl": {"score": 0.8248, "word_count": 22, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8248, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 98.8, "user_behavior_score": 73.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	4g	75.00	medium	\N	261	passed	{Night-time,"Violence reported"}	urgent	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-04-20 21:02:44+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+7e74b351-d3f1-4d59-be2e-07f097419099	RPT-2026-0069	6751960b-edf7-4947-9103-60411f4a4f73	2	A fight broke out between two men outside the bar and one man was injured with a cut on his face. The aggressor fled before anyone could stop him. The victim needs medical care.	-1.4962528	29.6486174	30.31	1.25	f	284	8	2026-04-25 13:49:43	verified	f	\N	verified	7	2026-04-25 15:48:43	{"text_only_nl": {"score": 0.821, "word_count": 34, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.821, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 95.45, "user_behavior_score": 75.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	3g	44.00	medium	\N	284	passed	{"Violence reported"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-04-25 14:43:43+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+0929509a-02de-4a0e-9026-d94050ea9811	RPT-2026-0070	9c4c15be-6111-44d6-b52d-b167dfd3565d	4	A group of strangers was seen entering the abandoned house at the end of the road. They looked nervous when people passed by and left quickly after some time.	-1.4554729	29.6570868	22.01	1.84	f	131	8	2026-05-07 09:42:27	verified	f	\N	verified	7	2026-05-07 11:23:27	{"text_only_nl": {"score": 0.8462, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8462, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 96.7, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	86.00	low	\N	131	passed	{}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-07 10:05:27+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+dd2f22a0-67f9-4523-83e1-665b3a108ce4	RPT-2026-0071	3acb63d9-4e1c-4de3-a57f-ad994dcde4e8	2	Two groups of youth clashed near the sports field after a football disagreement. Several people were injured including one with a broken tooth. The situation calmed down.	-1.4463074	29.5845660	10.93	0.96	f	245	8	2026-05-09 15:26:38	verified	f	\N	verified	7	2026-05-09 18:01:38	{"text_only_nl": {"score": 0.8562, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8562, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 98.36, "user_behavior_score": 72.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	4g	75.00	low	\N	245	passed	{"Violence reported"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-09 16:17:38+00	I was informed by community members before this report was submitted. Incident is real.	\N
+a9b60d0a-1675-44eb-9711-11dc2e9ed7e7	RPT-2026-0072	9c4c15be-6111-44d6-b52d-b167dfd3565d	1	A bicycle was stolen from outside the church during the morning service. The owner chained it to the fence but the chain was broken. No one saw who took it.	-1.5042175	29.6410353	16.30	2.16	f	282	8	2026-05-03 11:02:28	verified	f	\N	verified	7	2026-05-03 14:33:28	{"text_only_nl": {"score": 0.909, "word_count": 30, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.909, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 97.56, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	44.00	low	\N	282	passed	{}	high	No media evidence submitted. Report evaluated on description quality and device trust.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-03 12:11:28+00	I was informed by community members before this report was submitted. Incident is real.	\N
+4bd3cbe6-96e7-40db-879e-e1253807136c	RPT-2026-0073	3af0b36c-8921-4a19-8217-a5920f4e83ef	1	My neighbor informed me that someone broke into the small shop on the road and stole groceries and mobile phone accessories. The padlock was cut with a metal cutter.	-1.4554702	29.6485773	33.20	1.75	f	130	8	2026-04-22 21:17:55	verified	f	\N	verified	7	2026-04-22 23:52:55	{"text_only_nl": {"score": 0.7436, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.7436, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 95.02, "user_behavior_score": 68.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	71.00	low	\N	130	passed	{Night-time}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-04-22 21:50:55+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+3c1cdd3b-27e2-4988-8047-dcfcd65c67d4	RPT-2026-0074	2659dc6a-7b14-4e2a-81a3-0c9a58395056	9	A motorcycle collided with a bicycle at the road junction near the school. The motorcycle rider fell and appears to have a broken arm. Pedestrians helped at the scene.	-1.4067357	29.5576485	41.65	1.97	f	254	8	2026-04-27 15:08:36	verified	f	\N	verified	7	2026-04-27 16:18:36	{"text_only_nl": {"score": 0.7329, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7329, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 93.75, "user_behavior_score": 78.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	43.00	low	\N	254	passed	{"Medical attention needed"}	urgent	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-04-27 16:19:36+00	Several people in the village witnessed this. The report is accurate.	\N
+2e717511-2176-4ee5-b756-b1b847c639c9	RPT-2026-0075	22e6fd3f-4c6d-490a-b73a-3266ea52faf2	5	Loud argument between family members escalated and physical fighting is happening. Neighbors are alarmed and the noise is disturbing the whole neighborhood.	-1.4997038	29.6405002	10.90	1.93	f	283	8	2026-05-12 11:56:19	verified	f	\N	verified	7	2026-05-12 15:02:19	{"text_only_nl": {"score": 0.9384, "word_count": 22, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.9384, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 98.36, "user_behavior_score": 65.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	45.00	low	\N	283	passed	{"Violence reported"}	medium	No media evidence submitted. Report evaluated on description quality and device trust.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-12 12:32:19+00	Several people in the village witnessed this. The report is accurate.	\N
+e8283412-db82-47a4-b8b5-51ced9b592da	RPT-2026-0076	9c4c15be-6111-44d6-b52d-b167dfd3565d	9	A speeding vehicle knocked down a pedestrian who was crossing the road at the market area. The driver stopped but the victim is unconscious and needs medical attention.	-1.4570184	29.6568659	36.01	0.71	f	131	8	2026-05-13 10:38:38	verified	f	\N	verified	7	2026-05-13 12:23:38	{"text_only_nl": {"score": 0.7573, "word_count": 28, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.7573, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 94.6, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	3g	67.00	low	\N	131	passed	{"Medical attention needed"}	low	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-13 10:59:38+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+94ef45a1-e92e-44bb-965a-5a6477547241	RPT-2026-0077	3af0b36c-8921-4a19-8217-a5920f4e83ef	3	The road barrier on the dangerous slope was knocked down and removed. Vehicles are now driving on that stretch without any warning of the dangerous section below.	-1.4397849	29.5279440	44.60	2.44	f	252	8	2026-05-01 08:05:32	verified	f	\N	verified	7	2026-05-01 09:54:32	{"text_only_nl": {"score": 0.7999, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7999, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 93.31, "user_behavior_score": 68.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	4g	49.00	low	\N	252	passed	{}	low	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-01 09:15:32+00	Community meeting was called after this incident. It happened as reported.	\N
+561328ac-bd36-4d85-accd-68d23afd0367	RPT-2026-0078	634821ae-59a5-4bf8-b64d-939c3b2d1717	3	Electric cables to the health center were cut during the night. The center has been without power since early morning. Patients including those on oxygen are at risk.	-1.4967277	29.6481661	43.45	1.69	f	284	8	2026-04-25 09:49:06	verified	f	\N	verified	7	2026-04-25 12:19:06	{"text_only_nl": {"score": 0.8804, "word_count": 28, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8804, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 93.48, "user_behavior_score": 71.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	4g	22.00	low	\N	284	passed	{}	medium	No media evidence submitted. Report evaluated on description quality and device trust.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-04-25 10:50:06+00	Several people in the village witnessed this. The report is accurate.	\N
+0df5fdc1-d660-48ba-ba0d-7ac2602e7b4f	RPT-2026-0079	185101d1-a6c0-4efc-8266-dec4f87af389	1	Someone stole a jerrycan full of petrol from a parked motorcycle near the trading center. The motorcycle owner had gone into a shop for a few minutes.	-1.4826021	29.6801891	38.26	0.78	f	103	8	2026-05-14 20:55:18	verified	f	\N	verified	7	2026-05-15 00:34:18	{"text_only_nl": {"score": 0.8151, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8151, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 94.26, "user_behavior_score": 66.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	81.00	low	\N	103	passed	{Night-time}	urgent	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-14 21:41:18+00	Several people in the village witnessed this. The report is accurate.	\N
+d9a429b2-5ece-4821-adc1-d30e2e731376	RPT-2026-0080	93da6e1b-5cca-4577-afdd-c9f6b7e4e0d9	2	Two groups of youth clashed near the sports field after a football disagreement. Several people were injured including one with a broken tooth. The situation calmed down.	-1.4460169	29.5051586	41.36	1.03	f	238	8	2026-05-13 07:14:57	verified	f	\N	verified	7	2026-05-13 10:27:57	{"text_only_nl": {"score": 0.9341, "word_count": 27, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.9341, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 93.8, "user_behavior_score": 76.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	25.00	medium	\N	238	passed	{"Violence reported"}	medium	No media evidence submitted. Report evaluated on description quality and device trust.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-13 08:19:57+00	Confirmed. I know the families involved and the incident happened as described.	\N
+fade6b34-7576-44aa-b1aa-c3dc755c2448	RPT-2026-0081	22e6fd3f-4c6d-490a-b73a-3266ea52faf2	3	The road barrier on the dangerous slope was knocked down and removed. Vehicles are now driving on that stretch without any warning of the dangerous section below.	-1.5100401	29.6334314	18.50	0.30	t	279	8	2026-05-09 08:28:29	verified	f	\N	verified	7	2026-05-09 09:28:29	{"text_only_nl": {"score": 0.9319, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.9319, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 97.22, "user_behavior_score": 65.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	95.00	low	\N	279	passed	{"Reporter was stationary"}	low	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-09 08:54:29+00	I was informed by community members before this report was submitted. Incident is real.	\N
+c16b2c81-f1ef-40ed-8487-5f8c78952c20	RPT-2026-0082	00ef4c2d-c9d2-48e6-8901-b7f57ba1c51f	9	A motorcycle collided with a bicycle at the road junction near the school. The motorcycle rider fell and appears to have a broken arm. Pedestrians helped at the scene.	-1.4638803	29.6852443	30.20	2.29	f	121	8	2026-04-08 22:05:37	verified	f	\N	verified	7	2026-04-08 22:58:37	{"text_only_nl": {"score": 0.9393, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.9393, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 95.47, "user_behavior_score": 73.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	24.00	low	\N	121	passed	{Night-time,"Medical attention needed"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-04-08 23:02:37+00	Confirmed. I know the families involved and the incident happened as described.	\N
+f9c9a76a-b614-4739-a931-86cd208ad7c4	RPT-2026-0083	1178321c-e412-4be5-9a52-3d0b1a3a762d	5	A woman came to report that her husband is violent and has been threatening her with a machete. She managed to escape to a neighbor's house with her children.	-1.4480304	29.5812444	39.18	2.47	f	247	8	2026-05-03 17:51:34	verified	f	\N	verified	7	2026-05-03 20:00:34	{"text_only_nl": {"score": 0.8352, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8352, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 94.12, "user_behavior_score": 63.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	94.00	medium	\N	247	passed	{"Violence reported"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-03 18:40:34+00	I was informed by community members before this report was submitted. Incident is real.	\N
+43c922b5-3b25-4cd3-9304-1ba0e352f0d2	RPT-2026-0084	634821ae-59a5-4bf8-b64d-939c3b2d1717	9	A motorcycle overturned after hitting a pothole on the unpaved road. The rider and passenger both fell. The passenger has a head injury and is bleeding.	-1.5087690	29.6175362	30.87	0.05	t	293	8	2026-04-17 06:03:14	verified	f	\N	verified	7	2026-04-17 09:36:14	{"text_only_nl": {"score": 0.7102, "word_count": 26, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.7102, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 95.37, "user_behavior_score": 71.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	20.00	low	\N	293	passed	{"Medical attention needed","Reporter was stationary"}	low	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-04-17 06:40:14+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+3bfb0023-830e-45cd-8de7-6321c0929221	RPT-2026-0085	ab5d0550-2350-4ac8-8d37-95607e267bb4	5	A woman came to report that her husband is violent and has been threatening her with a machete. She managed to escape to a neighbor's house with her children.	-1.4738455	29.6473203	32.36	2.41	f	108	8	2026-05-03 12:20:10	verified	f	\N	verified	7	2026-05-03 13:55:10	{"text_only_nl": {"score": 0.7126, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7126, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 95.15, "user_behavior_score": 62.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	67.00	medium	\N	108	passed	{"Violence reported"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-03 12:48:10+00	Community meeting was called after this incident. It happened as reported.	\N
+b432a023-6880-402d-a1bb-3fab54effae8	RPT-2026-0086	ababc889-2467-42cc-8cee-3645e74ad622	1	Someone stole a jerrycan full of petrol from a parked motorcycle near the trading center. The motorcycle owner had gone into a shop for a few minutes.	-1.4165118	29.5497738	35.29	1.08	f	251	8	2026-04-10 03:57:30	verified	f	\N	verified	7	2026-04-10 05:15:30	{"text_only_nl": {"score": 0.9146, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.9146, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 94.71, "user_behavior_score": 80.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	87.00	low	\N	251	passed	{Night-time}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-04-10 05:04:30+00	Community meeting was called after this incident. It happened as reported.	\N
+db6f45ac-2549-4f77-82dd-a2a14f5a8d3b	RPT-2026-0087	ab5d0550-2350-4ac8-8d37-95607e267bb4	9	A motorcycle collided with a bicycle at the road junction near the school. The motorcycle rider fell and appears to have a broken arm. Pedestrians helped at the scene.	-1.5134485	29.6464132	43.08	0.92	f	280	8	2026-04-07 15:11:23	verified	f	\N	verified	7	2026-04-07 16:19:23	{"text_only_nl": {"score": 0.7706, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.7706, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 93.54, "user_behavior_score": 62.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	87.00	medium	\N	280	passed	{"Medical attention needed"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-04-07 15:38:23+00	Confirmed. I know the families involved and the incident happened as described.	\N
+6f294ecd-5940-4d82-b5b6-115ea98c655b	RPT-2026-0088	3af0b36c-8921-4a19-8217-a5920f4e83ef	5	A woman came to report that her husband is violent and has been threatening her with a machete. She managed to escape to a neighbor's house with her children.	-1.4940990	29.6691627	44.31	0.17	t	107	8	2026-04-10 11:58:46	verified	f	\N	verified	7	2026-04-10 12:31:46	{"text_only_nl": {"score": 0.838, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.838, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 93.35, "user_behavior_score": 68.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	4g	71.00	low	\N	107	passed	{"Violence reported","Reporter was stationary"}	low	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-04-10 13:28:46+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+3b873ffb-9df9-47ae-991d-ba51c0fdd5bc	RPT-2026-0089	93da6e1b-5cca-4577-afdd-c9f6b7e4e0d9	9	A motorcycle overturned after hitting a pothole on the unpaved road. The rider and passenger both fell. The passenger has a head injury and is bleeding.	-1.4550587	29.5060255	46.82	0.57	f	227	8	2026-04-17 20:43:06	verified	f	\N	verified	7	2026-04-17 22:01:06	{"text_only_nl": {"score": 0.888, "word_count": 26, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.888, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 92.98, "user_behavior_score": 76.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	wifi	80.00	medium	\N	227	passed	{Night-time,"Medical attention needed"}	high	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-04-17 21:54:06+00	I was informed by community members before this report was submitted. Incident is real.	\N
+410f4d8c-9330-45e1-9917-7400e86425fa	RPT-2026-0090	00ef4c2d-c9d2-48e6-8901-b7f57ba1c51f	1	Someone stole a jerrycan full of petrol from a parked motorcycle near the trading center. The motorcycle owner had gone into a shop for a few minutes.	-1.5043164	29.6401848	24.18	2.40	f	282	8	2026-05-17 10:31:38	verified	f	\N	verified	7	2026-05-17 12:13:38	{"text_only_nl": {"score": 0.8368, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8368, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 96.37, "user_behavior_score": 73.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	91.00	medium	\N	282	passed	{}	high	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-17 10:49:38+00	Several people in the village witnessed this. The report is accurate.	\N
+a21f9dc5-a6bd-4e25-8edd-713c8d9dda68	RPT-2026-0091	00ef4c2d-c9d2-48e6-8901-b7f57ba1c51f	9	A child was hit by a bicycle while playing near the road. The child cried for a long time and was taken to the nearby health post by the neighbors. The cyclist fled.	-1.4738353	29.6220141	9.40	1.28	f	124	8	2026-04-15 19:25:37	verified	f	\N	verified	7	2026-04-15 21:58:37	{"text_only_nl": {"score": 0.8589, "word_count": 33, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8589, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 98.59, "user_behavior_score": 73.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	59.00	medium	\N	124	passed	{Night-time,"Medical attention needed"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-04-15 19:48:37+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+675857fc-907b-4ffc-9eb8-5e5bbb011169	RPT-2026-0092	93da6e1b-5cca-4577-afdd-c9f6b7e4e0d9	2	A woman was beaten by an unknown man when she returned home late from work. She managed to call for help and neighbors came. The attacker escaped into the forest.	-1.4370739	29.5776657	43.68	1.64	f	261	8	2026-04-13 19:11:43	verified	f	\N	verified	7	2026-04-13 20:47:43	{"text_only_nl": {"score": 0.7614, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7614, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 93.45, "user_behavior_score": 76.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	3g	33.00	low	\N	261	passed	{Night-time,"Violence reported"}	medium	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-04-13 20:40:43+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+ff211874-f382-4e5e-8ba9-36af7acf774e	RPT-2026-0093	1178321c-e412-4be5-9a52-3d0b1a3a762d	9	A speeding vehicle knocked down a pedestrian who was crossing the road at the market area. The driver stopped but the victim is unconscious and needs medical attention.	-1.5006880	29.6512312	36.54	0.57	f	274	8	2026-05-06 06:00:40	verified	f	\N	verified	7	2026-05-06 06:46:40	{"text_only_nl": {"score": 0.7397, "word_count": 28, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7397, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 94.52, "user_behavior_score": 63.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	84.00	medium	\N	274	passed	{"Medical attention needed"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-06 06:20:40+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+99fab3dd-5a63-436b-82bf-b5fc8b0f5f37	RPT-2026-0094	72b42191-3da3-4df1-9b49-86f6dfea2578	3	The water pump at the community standpipe was deliberately damaged and the pipe was broken off. This has cut off water supply for the entire village. The damage looks intentional.	-1.4613491	29.6651292	34.66	1.04	f	122	8	2026-05-12 17:01:03	verified	f	\N	verified	7	2026-05-12 18:48:03	{"text_only_nl": {"score": 0.8359, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8359, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 94.8, "user_behavior_score": 58.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	84.00	medium	\N	122	passed	{}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-12 18:09:03+00	Community meeting was called after this incident. It happened as reported.	\N
+4da8719b-9c5b-462c-9faa-9d37e248a1d7	RPT-2026-0095	9c4c15be-6111-44d6-b52d-b167dfd3565d	9	A loaded truck lost control on the slope and hit a wall. The driver was injured and two passengers are trapped inside. Emergency help is urgently needed.	-1.4248607	29.5627061	24.96	0.25	t	259	8	2026-05-04 14:18:16	verified	f	\N	verified	7	2026-05-04 16:37:16	{"text_only_nl": {"score": 0.9111, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.9111, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 96.26, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	35.00	low	\N	259	passed	{"Medical attention needed","Reporter was stationary"}	high	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-04 14:47:16+00	Confirmed. I know the families involved and the incident happened as described.	\N
+5eb53144-5b27-4caa-89d0-84eba188a8ca	RPT-2026-0096	98b07cbf-4272-4f34-88a3-ae992c605640	5	A woman came to report that her husband is violent and has been threatening her with a machete. She managed to escape to a neighbor's house with her children.	-1.5222195	29.6241992	19.55	1.31	f	287	8	2026-05-04 01:42:55	verified	f	\N	verified	7	2026-05-04 02:50:55	{"text_only_nl": {"score": 0.8622, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8622, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 97.07, "user_behavior_score": 79.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	38.00	low	\N	287	passed	{Night-time,"Violence reported"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-04 03:08:55+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+e5903ad3-798b-492e-8264-cdc976c88942	RPT-2026-0097	82a10997-3687-4c21-a393-a56f861d1b44	4	A vehicle with no registration plates has been parked near the primary school since this morning. There are two people inside who have not come out. It looks suspicious.	-1.4653821	29.6378910	8.91	1.51	f	129	8	2026-05-16 15:00:52	verified	f	\N	verified	7	2026-05-16 18:59:52	{"text_only_nl": {"score": 0.8606, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8606, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 98.66, "user_behavior_score": 69.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	4g	89.00	medium	\N	129	passed	{}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-16 15:43:52+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+b7b40b95-03f0-4dc2-b19c-6f13fb9d3a4a	RPT-2026-0098	98b07cbf-4272-4f34-88a3-ae992c605640	5	A woman came to report that her husband is violent and has been threatening her with a machete. She managed to escape to a neighbor's house with her children.	-1.4315005	29.5467354	33.31	2.39	f	253	8	2026-05-11 19:28:29	verified	f	\N	verified	7	2026-05-11 22:08:29	{"text_only_nl": {"score": 0.711, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.711, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 95.0, "user_behavior_score": 79.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	34.00	low	\N	253	passed	{Night-time,"Violence reported"}	low	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-11 20:05:29+00	Community meeting was called after this incident. It happened as reported.	\N
+521af58e-775c-49c8-b126-25fca94d953b	RPT-2026-0099	fd9eb538-6fe2-4009-a7ad-69f66c2e8243	9	A motorcycle overturned after hitting a pothole on the unpaved road. The rider and passenger both fell. The passenger has a head injury and is bleeding.	-1.5068449	29.6266426	22.95	1.87	f	288	8	2026-04-18 16:42:45	verified	f	\N	verified	7	2026-04-18 17:25:45	{"text_only_nl": {"score": 0.8959, "word_count": 26, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8959, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 96.56, "user_behavior_score": 70.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	38.00	medium	\N	288	passed	{"Medical attention needed"}	urgent	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-04-18 17:04:45+00	I was informed by community members before this report was submitted. Incident is real.	\N
+35482682-9afe-4ece-a338-5133914a378c	RPT-2026-0100	9c4c15be-6111-44d6-b52d-b167dfd3565d	5	A woman came to report that her husband is violent and has been threatening her with a machete. She managed to escape to a neighbor's house with her children.	-1.4544148	29.6387311	30.95	1.94	f	132	8	2026-04-25 18:34:47	verified	f	\N	verified	7	2026-04-25 22:12:47	{"text_only_nl": {"score": 0.8132, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8132, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 95.36, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	4g	72.00	low	\N	132	passed	{Night-time,"Violence reported"}	medium	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-04-25 19:54:47+00	Confirmed. I know the families involved and the incident happened as described.	\N
+dd7a12ba-3e8a-4576-8feb-34216be7446c	RPT-2026-0101	9c4c15be-6111-44d6-b52d-b167dfd3565d	2	Two groups of youth clashed near the sports field after a football disagreement. Several people were injured including one with a broken tooth. The situation calmed down.	-1.4664484	29.5188464	34.35	0.80	f	229	8	2026-04-09 21:15:02	verified	f	\N	verified	7	2026-04-09 23:56:02	{"text_only_nl": {"score": 0.769, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.769, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 94.85, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	4g	55.00	low	\N	229	passed	{Night-time,"Violence reported"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-04-09 22:35:02+00	Several people in the village witnessed this. The report is accurate.	\N
+cec42b29-571e-481d-92af-4749dd69d0a3	RPT-2026-0102	9c4c15be-6111-44d6-b52d-b167dfd3565d	4	An unknown man has been seen walking around this area for the past two hours looking into compounds and checking doors. He is carrying a large bag. No one recognizes him.	-1.5080329	29.6339232	33.95	1.34	f	279	8	2026-04-23 13:01:24	verified	f	\N	verified	7	2026-04-23 16:52:24	{"text_only_nl": {"score": 0.8712, "word_count": 31, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8712, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 94.91, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	74.00	low	\N	279	passed	{}	medium	No media evidence submitted. Report evaluated on description quality and device trust.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-04-23 13:54:24+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+f71e70fc-03f6-4974-b1b6-c18c54059881	RPT-2026-0103	9c4c15be-6111-44d6-b52d-b167dfd3565d	5	A man is physically abusing his wife and the sound of screaming has been ongoing for some time. Neighbors are afraid to intervene. The children are crying inside the house.	-1.4839493	29.6532084	42.61	0.35	t	111	8	2026-04-25 23:00:35	verified	f	\N	verified	7	2026-04-26 00:48:35	{"text_only_nl": {"score": 0.7112, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7112, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 93.61, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	70.00	low	\N	111	passed	{Night-time,"Violence reported","Reporter was stationary"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-04-25 23:41:35+00	Community meeting was called after this incident. It happened as reported.	\N
+2b162d7b-eb05-40dd-86a1-ce9ea8765bd3	RPT-2026-0104	82a10997-3687-4c21-a393-a56f861d1b44	9	A speeding vehicle knocked down a pedestrian who was crossing the road at the market area. The driver stopped but the victim is unconscious and needs medical attention.	-1.4486959	29.5418032	14.53	1.85	f	241	8	2026-05-08 06:15:50	verified	f	\N	verified	7	2026-05-08 08:43:50	{"text_only_nl": {"score": 0.9032, "word_count": 28, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.9032, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 97.82, "user_behavior_score": 69.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	88.00	medium	\N	241	passed	{"Medical attention needed"}	low	No media evidence submitted. Report evaluated on description quality and device trust.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-08 07:27:50+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+12c9b4bb-c718-4448-94b7-e511c514601c	RPT-2026-0105	185101d1-a6c0-4efc-8266-dec4f87af389	3	Electric cables to the health center were cut during the night. The center has been without power since early morning. Patients including those on oxygen are at risk.	-1.4960761	29.6489173	16.21	2.23	f	284	8	2026-04-11 10:02:35	verified	f	\N	verified	7	2026-04-11 11:06:35	{"text_only_nl": {"score": 0.7941, "word_count": 28, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7941, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 97.57, "user_behavior_score": 66.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	68.00	medium	\N	284	passed	{}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-04-11 11:16:35+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+367bb793-df5e-4524-862b-a727f309d6cb	RPT-2026-0106	185101d1-a6c0-4efc-8266-dec4f87af389	9	A child was hit by a bicycle while playing near the road. The child cried for a long time and was taken to the nearby health post by the neighbors. The cyclist fled.	-1.4640913	29.6837638	6.72	1.62	f	121	8	2026-04-18 21:56:02	verified	f	\N	verified	7	2026-04-19 00:02:02	{"text_only_nl": {"score": 0.8557, "word_count": 33, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8557, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 98.99, "user_behavior_score": 66.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	27.00	low	\N	121	passed	{Night-time,"Medical attention needed"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-04-18 22:59:02+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+b1dbaac7-0683-4aa6-932b-ccb5ac8e4fbb	RPT-2026-0107	00ef4c2d-c9d2-48e6-8901-b7f57ba1c51f	4	An unknown man has been seen walking around this area for the past two hours looking into compounds and checking doors. He is carrying a large bag. No one recognizes him.	-1.4296653	29.5469442	32.83	1.03	f	253	8	2026-04-18 14:37:10	verified	f	\N	verified	7	2026-04-18 17:33:10	{"text_only_nl": {"score": 0.7394, "word_count": 31, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.7394, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 95.08, "user_behavior_score": 73.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	4g	41.00	low	\N	253	passed	{}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-04-18 15:10:10+00	Confirmed. I know the families involved and the incident happened as described.	\N
+8f5e81e4-67c1-4e2c-ab72-be0359dee24e	RPT-2026-0108	22e6fd3f-4c6d-490a-b73a-3266ea52faf2	3	The water pump at the community standpipe was deliberately damaged and the pipe was broken off. This has cut off water supply for the entire village. The damage looks intentional.	-1.4959495	29.6489506	6.68	1.96	f	284	8	2026-05-07 14:39:38	verified	f	\N	verified	7	2026-05-07 18:27:38	{"text_only_nl": {"score": 0.8209, "word_count": 30, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8209, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 99.0, "user_behavior_score": 65.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	4g	23.00	low	\N	284	passed	{}	high	No media evidence submitted. Report evaluated on description quality and device trust.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-05-07 15:49:38+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+220ec952-367e-4d55-b984-b726188582d8	RPT-2026-0109	2659dc6a-7b14-4e2a-81a3-0c9a58395056	1	Someone stole a jerrycan full of petrol from a parked motorcycle near the trading center. The motorcycle owner had gone into a shop for a few minutes.	-1.4620550	29.6641917	13.13	1.77	f	122	8	2026-04-10 20:26:16	verified	f	\N	verified	7	2026-04-10 23:52:16	{"text_only_nl": {"score": 0.8302, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8302, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 98.03, "user_behavior_score": 78.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	37.00	low	\N	122	passed	{Night-time}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-04-10 21:21:16+00	Several people in the village witnessed this. The report is accurate.	\N
+0107b6fa-6ea2-4379-98aa-3913f4127df0	RPT-2026-0110	634821ae-59a5-4bf8-b64d-939c3b2d1717	1	Someone stole a jerrycan full of petrol from a parked motorcycle near the trading center. The motorcycle owner had gone into a shop for a few minutes.	-1.4360349	29.5790745	8.92	0.36	t	261	8	2026-04-24 23:00:51	verified	f	\N	verified	7	2026-04-25 02:05:51	{"text_only_nl": {"score": 0.8101, "word_count": 27, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8101, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 98.66, "user_behavior_score": 71.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	3g	84.00	low	\N	261	passed	{Night-time,"Reporter was stationary"}	medium	No media evidence submitted. Report evaluated on description quality and device trust.	Report passed all rule-based validation checks. GPS accuracy within acceptable range. Device has consistent reporting history with high trust score. Description length and semantic alignment with incident type are satisfactory. ML model assigned high credibility. Auto-verified.	confirmed	3	2026-04-24 23:19:51+00	Community meeting was called after this incident. It happened as reported.	\N
+b8055d3b-ddc7-4152-8a72-adb6f28858aa	RPT-2026-0111	7dc6f614-fc40-4e31-937f-a0ea3195ecd4	2	A woman was beaten by an unknown man when she returned home late from work. She managed to call for help and neighbors came. The attacker escaped into the forest.	-1.5094461	29.6175929	33.17	2.44	f	293	8	2026-05-08 17:23:15	verified	f	\N	verified	7	2026-05-08 20:05:15	{"text_only_nl": {"score": 0.8893, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8893, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 95.02, "user_behavior_score": 64.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	88.00	low	\N	293	passed	{"Violence reported"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-08 17:39:15+00	Community meeting was called after this incident. It happened as reported.	\N
+fc4d219a-62f6-4f1e-92cc-d88812f65fc0	RPT-2026-0112	98b07cbf-4272-4f34-88a3-ae992c605640	4	An unknown man has been seen walking around this area for the past two hours looking into compounds and checking doors. He is carrying a large bag. No one recognizes him.	-1.4935650	29.6390450	46.33	1.15	f	140	8	2026-04-18 19:48:21	verified	f	\N	verified	7	2026-04-18 23:11:21	{"text_only_nl": {"score": 0.8209, "word_count": 31, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8209, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 93.05, "user_behavior_score": 79.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	63.00	medium	\N	140	passed	{Night-time}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-04-18 20:32:21+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+d1b846b8-4104-4a0f-a898-ae8067435897	RPT-2026-0113	7dc6f614-fc40-4e31-937f-a0ea3195ecd4	2	A fight broke out between two men outside the bar and one man was injured with a cut on his face. The aggressor fled before anyone could stop him. The victim needs medical care.	-1.4450324	29.5503315	44.57	1.69	f	243	8	2026-04-26 09:06:07	verified	f	\N	verified	7	2026-04-26 12:14:07	{"text_only_nl": {"score": 0.8858, "word_count": 34, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8858, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 93.31, "user_behavior_score": 64.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	53.00	medium	\N	243	passed	{"Violence reported"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-04-26 10:01:07+00	Several people in the village witnessed this. The report is accurate.	\N
+69b392fb-24e1-4bfe-a34f-7585ac9b7831	RPT-2026-0114	82a10997-3687-4c21-a393-a56f861d1b44	2	A fight broke out between two men outside the bar and one man was injured with a cut on his face. The aggressor fled before anyone could stop him. The victim needs medical care.	-1.5212667	29.6599358	24.38	1.43	f	276	8	2026-04-25 12:25:17	verified	f	\N	verified	7	2026-04-25 13:45:17	{"text_only_nl": {"score": 0.8758, "word_count": 34, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8758, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 96.34, "user_behavior_score": 69.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	3g	19.00	low	\N	276	passed	{"Violence reported"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-04-25 12:58:17+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+448fedee-e9b4-4259-b9b4-e66abb11d758	RPT-2026-0115	6751960b-edf7-4947-9103-60411f4a4f73	4	A vehicle with no registration plates has been parked near the primary school since this morning. There are two people inside who have not come out. It looks suspicious.	-1.4702594	29.6854984	32.16	0.36	t	120	8	2026-05-13 13:18:29	verified	f	\N	verified	7	2026-05-13 14:06:29	{"text_only_nl": {"score": 0.8573, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8573, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 95.18, "user_behavior_score": 75.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	58.00	low	\N	120	passed	{"Reporter was stationary"}	medium	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-13 13:43:29+00	I was informed by community members before this report was submitted. Incident is real.	\N
+50ffa3cd-3c59-4ae5-990a-a556f63cdd76	RPT-2026-0116	2be85ca7-3ad3-482f-9aa5-35f08f6041a3	2	Two groups of youth clashed near the sports field after a football disagreement. Several people were injured including one with a broken tooth. The situation calmed down.	-1.4163987	29.5427915	18.98	1.19	f	255	8	2026-05-16 17:55:58	verified	f	\N	verified	7	2026-05-16 21:06:58	{"text_only_nl": {"score": 0.7411, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7411, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 97.15, "user_behavior_score": 55.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	86.00	medium	\N	255	passed	{"Violence reported"}	medium	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-16 19:22:58+00	Several people in the village witnessed this. The report is accurate.	\N
+dca91abe-5b7a-41a1-9e1b-c19d2d265e58	RPT-2026-0117	ab5d0550-2350-4ac8-8d37-95607e267bb4	2	A neighbor attacked a family member with a stick during a land dispute argument. The victim sustained injuries on his back and arm. Witnesses are available.	-1.5208653	29.6291010	24.58	1.13	f	291	8	2026-05-07 09:07:40	verified	f	\N	verified	7	2026-05-07 10:03:40	{"text_only_nl": {"score": 0.7837, "word_count": 26, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.7837, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 96.31, "user_behavior_score": 62.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	wifi	74.00	medium	\N	291	passed	{"Violence reported"}	high	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-07 09:58:40+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+c1a88496-8c45-4827-a01b-353fd77a79a0	RPT-2026-0118	5cc9fa7d-305b-487d-abec-3212c0be094a	1	A bicycle was stolen from outside the church during the morning service. The owner chained it to the fence but the chain was broken. No one saw who took it.	-1.4612387	29.6656215	36.72	0.08	t	122	8	2026-04-24 19:28:15	verified	f	\N	verified	7	2026-04-24 21:37:15	{"text_only_nl": {"score": 0.8791, "word_count": 30, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8791, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 94.49, "user_behavior_score": 74.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	wifi	23.00	low	\N	122	passed	{Night-time,"Reporter was stationary"}	high	No media evidence submitted. Report evaluated on description quality and device trust.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-04-24 20:22:15+00	Visited the scene after receiving the alert. The report matches what I found.	\N
+488a857a-f17e-4882-ac00-d152d8103282	RPT-2026-0119	98b07cbf-4272-4f34-88a3-ae992c605640	9	A child was hit by a bicycle while playing near the road. The child cried for a long time and was taken to the nearby health post by the neighbors. The cyclist fled.	-1.4079365	29.5568629	46.66	1.45	f	254	8	2026-05-11 13:15:00	verified	f	\N	verified	7	2026-05-11 14:08:00	{"text_only_nl": {"score": 0.7456, "word_count": 33, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.7456, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 93.0, "user_behavior_score": 79.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	63.00	medium	\N	254	passed	{"Medical attention needed"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-11 14:13:00+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+13ffd6aa-4d5e-4223-8a63-c5ed027b5701	RPT-2026-0120	3acb63d9-4e1c-4de3-a57f-ad994dcde4e8	3	The water pump at the community standpipe was deliberately damaged and the pipe was broken off. This has cut off water supply for the entire village. The damage looks intentional.	-1.5059639	29.6487228	21.30	0.46	t	272	8	2026-04-19 06:40:32	verified	f	\N	verified	7	2026-04-19 10:14:32	{"text_only_nl": {"score": 0.8525, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8525, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 96.81, "user_behavior_score": 72.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	67.00	low	\N	272	passed	{"Reporter was stationary"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-04-19 07:03:32+00	Community meeting was called after this incident. It happened as reported.	\N
+657d370d-237f-42b7-8327-7260fc799839	RPT-2026-0121	ab5d0550-2350-4ac8-8d37-95607e267bb4	3	Windows of the primary school classroom were smashed and school furniture was overturned. This happened over the weekend when no one was present. Children cannot have class.	-1.4985603	29.6297386	26.13	2.22	f	138	8	2026-05-18 22:13:41	verified	f	\N	verified	7	2026-05-19 02:13:41	{"text_only_nl": {"score": 0.8942, "word_count": 27, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8942, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 96.08, "user_behavior_score": 62.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	52.00	low	\N	138	passed	{Night-time}	medium	No media evidence submitted. Report evaluated on description quality and device trust.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-18 23:15:41+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+80268a4e-f890-43f6-b596-38b15b5f8187	RPT-2026-0122	fd9eb538-6fe2-4009-a7ad-69f66c2e8243	2	Two groups of youth clashed near the sports field after a football disagreement. Several people were injured including one with a broken tooth. The situation calmed down.	-1.4216659	29.5744473	32.46	0.89	f	266	8	2026-04-13 13:06:49	verified	f	\N	verified	7	2026-04-13 15:45:49	{"text_only_nl": {"score": 0.913, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.913, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 95.13, "user_behavior_score": 70.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	wifi	94.00	medium	\N	266	passed	{"Violence reported"}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-04-13 14:04:49+00	Community meeting was called after this incident. It happened as reported.	\N
+13f22cb9-1d45-4dba-8fe5-41081b904d94	RPT-2026-0123	3af0b36c-8921-4a19-8217-a5920f4e83ef	3	The road barrier on the dangerous slope was knocked down and removed. Vehicles are now driving on that stretch without any warning of the dangerous section below.	-1.5096121	29.6509300	41.80	0.05	t	269	8	2026-04-29 06:14:13	verified	f	\N	verified	7	2026-04-29 07:08:13	{"text_only_nl": {"score": 0.9214, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.9214, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 93.73, "user_behavior_score": 68.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	35.00	low	\N	269	passed	{"Reporter was stationary"}	medium	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-04-29 06:33:13+00	Several people in the village witnessed this. The report is accurate.	\N
+9e573a15-c87c-4704-be6e-96cc6d460972	RPT-2026-0124	9c4c15be-6111-44d6-b52d-b167dfd3565d	1	Two young men on foot grabbed a phone from someone who was walking home from the bus stop. They ran through the narrow path between the houses towards the bush.	-1.4623996	29.6853062	6.77	1.35	f	121	8	2026-04-08 13:19:33	verified	f	\N	verified	7	2026-04-08 15:43:33	{"text_only_nl": {"score": 0.8256, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.8256, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 98.98, "user_behavior_score": 67.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	73.00	low	\N	121	passed	{}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-04-08 14:47:33+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+5a1dd1bb-df91-4951-9a39-ee7b5989e92b	RPT-2026-0125	ab5d0550-2350-4ac8-8d37-95607e267bb4	3	The road barrier on the dangerous slope was knocked down and removed. Vehicles are now driving on that stretch without any warning of the dangerous section below.	-1.4470853	29.5810144	19.98	0.80	f	247	8	2026-05-11 17:27:23	verified	f	\N	verified	7	2026-05-11 19:49:23	{"text_only_nl": {"score": 0.7489, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7489, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 50.0, "location_score": 97.0, "user_behavior_score": 62.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	4g	65.00	low	\N	247	passed	{}	medium	Evidence files reviewed. 1 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-11 17:47:23+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
+7e58550c-e5ce-4f24-a819-1c82703c99cd	RPT-2026-0126	00ef4c2d-c9d2-48e6-8901-b7f57ba1c51f	5	A woman came to report that her husband is violent and has been threatening her with a machete. She managed to escape to a neighbor's house with her children.	-1.5129778	29.6251493	27.65	0.64	f	289	8	2026-05-17 12:57:42	verified	f	\N	verified	7	2026-05-17 16:14:42	{"text_only_nl": {"score": 0.7562, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.7562, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 95.85, "user_behavior_score": 73.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	wifi	52.00	low	\N	289	passed	{"Violence reported"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-17 13:13:42+00	Confirmed. I know the families involved and the incident happened as described.	\N
+874e0f76-66a9-4c89-b67f-3664767de16a	RPT-2026-0127	185101d1-a6c0-4efc-8266-dec4f87af389	9	A motorcycle collided with a bicycle at the road junction near the school. The motorcycle rider fell and appears to have a broken arm. Pedestrians helped at the scene.	-1.4571733	29.6470958	11.52	2.24	f	130	8	2026-05-17 22:17:14	verified	f	\N	verified	7	2026-05-18 00:33:14	{"text_only_nl": {"score": 0.8779, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8779, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 98.27, "user_behavior_score": 66.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.3	3g	57.00	low	\N	130	passed	{Night-time,"Medical attention needed"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	All validation gates passed. Motion data is consistent with stationary reporting. Evidence files verified as live captures. Semantic description matches incident category. High device trust score supports credibility. Verified by trust aggregator.	confirmed	3	2026-05-17 23:02:14+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
+97c01e9d-34bf-4ec7-a90f-b5244c3eef4a	RPT-2026-0128	22e6fd3f-4c6d-490a-b73a-3266ea52faf2	2	A neighbor attacked a family member with a stick during a land dispute argument. The victim sustained injuries on his back and arm. Witnesses are available.	-1.4332182	29.5991223	31.53	1.51	f	267	8	2026-05-10 09:48:39	verified	f	\N	verified	7	2026-05-10 10:52:39	{"text_only_nl": {"score": 0.7631, "word_count": 26, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.7631, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 95.27, "user_behavior_score": 65.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	65.00	low	\N	267	passed	{"Violence reported"}	medium	No media evidence submitted. Report evaluated on description quality and device trust.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-10 11:07:39+00	I can confirm this incident. I personally know the area and the situation is as described.	\N
 \.
 
 
 --
--- Data for Name: spatial_ref_sys; Type: TABLE DATA; Schema: public; Owner: postgres
+-- Data for Name: spatial_ref_sys; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.spatial_ref_sys (srid, auth_name, auth_srid, srtext, proj4text) FROM stdin;
@@ -1800,7 +3213,7 @@ COPY public.spatial_ref_sys (srid, auth_name, auth_srid, srtext, proj4text) FROM
 
 
 --
--- Data for Name: station_coverage_cells; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: station_coverage_cells; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.station_coverage_cells (station_coverage_cell_id, station_id, cell_location_id) FROM stdin;
@@ -1838,7 +3251,7 @@ COPY public.station_coverage_cells (station_coverage_cell_id, station_id, cell_l
 
 
 --
--- Data for Name: stations; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: stations; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.stations (station_id, station_code, station_name, station_type, latitude, longitude, address_text, phone_number, email, is_active, created_at, updated_at) FROM stdin;
@@ -1848,7 +3261,7 @@ COPY public.stations (station_id, station_code, station_name, station_type, lati
 
 
 --
--- Data for Name: system_config; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: system_config; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.system_config (config_key, config_value, description, updated_by, updated_at) FROM stdin;
@@ -1866,7 +3279,7 @@ ml.under_review_threshold	{"value": 42.0, "description": "60% of TrustBond thres
 
 
 --
--- Data for Name: user_sessions; Type: TABLE DATA; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: user_sessions; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.user_sessions (session_id, police_user_id, refresh_token, user_agent, ip_address, expires_at, created_at, revoked_at) FROM stdin;
@@ -1895,88 +3308,148 @@ a52bf8a3-857d-48e1-868a-7e81986ec4bb	1	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJz
 5691386d-51de-48dc-bf72-39154710ecf7	1	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzc4NDEzNjA5fQ.SGkN3dBW005gC53DOayJzMxOK6qWIrHJm65n3khRkpw	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36	10.16.29.229	2026-05-10 11:46:49.51293	2026-05-10 03:46:49.643266	\N
 c3641fc2-0523-4834-8d18-dff66e6d6b88	1	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzc4NDQ5MTc2fQ.pyoTBZm4XdXdoeL04PLqTrFbcf-LyItV3O2_QY2n1sI	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36	10.16.1.102	2026-05-10 21:39:36.567481	2026-05-10 13:39:36.668682	\N
 4cdda4b8-a381-4d6f-8cbd-ef22bad8e5d1	1	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzc4NDU4Njc5fQ.Re8Eg2ftLW5VC3UxDIV90kDAJPRWsvz4b6TRnIRIfVY	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36	10.16.42.153	2026-05-11 00:17:59.469538	2026-05-10 16:17:59.674165	\N
+1d28272a-6508-450d-be43-41714416d5b9	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3ODk2MjU1OH0.u9alHFUcNsTVb4RhQ6rLG4_I48ZN_qNXcqB1bBTRGvk	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.120.0 Chrome/142.0.7444.265 Electron/39.8.8 Safari/537.36	172.18.0.1	2026-05-16 20:15:58.364125	2026-05-16 12:15:58.397124	\N
+d3ff4f30-f08d-4e54-8698-7385f869bd52	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTIyMjMzMX0.MqR1R_kBhi7MIhg8UqE7sNM4YGWID3sED_VYMxOtRC0	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.120.0 Chrome/142.0.7444.265 Electron/39.8.8 Safari/537.36	172.18.0.1	2026-05-19 20:25:31.469731	2026-05-19 12:25:31.4973	\N
+ca3c9ddf-03d5-4d46-8fac-29bf8685d47a	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTIyMjM3OH0.uQiEpU7PwWl2ZsaaLUSpbmz-9BQSox-f0sBidicj3Gk	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36	172.18.0.1	2026-05-19 20:26:18.643547	2026-05-19 12:26:18.645267	\N
+146fc726-3e76-47f4-a5b0-4fb4e1997922	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTIyNDM5OX0.MkHxk4jrkg4os55x7-M8VFju63ovMimWnqbSZ8lLZ7g	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36	172.18.0.1	2026-05-19 20:59:59.966692	2026-05-19 12:59:59.97222	\N
+8a536ab7-c442-4832-bc0b-a8c44781cc6b	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI4MzIyMX0.IzzmGRu1DUL6HV7VWXpykUTLmJVCkzKoeARlBDCHpP0	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.120.0 Chrome/142.0.7444.265 Electron/39.8.8 Safari/537.36	172.18.0.1	2026-05-20 13:20:21.937276	2026-05-20 05:20:21.953119	\N
 \.
 
 
 --
--- Name: audit_logs_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: trustbond_z1r9_user
+-- Data for Name: geocode_settings; Type: TABLE DATA; Schema: tiger; Owner: -
+--
+
+COPY tiger.geocode_settings (name, setting, unit, category, short_desc) FROM stdin;
+\.
+
+
+--
+-- Data for Name: pagc_gaz; Type: TABLE DATA; Schema: tiger; Owner: -
+--
+
+COPY tiger.pagc_gaz (id, seq, word, stdword, token, is_custom) FROM stdin;
+\.
+
+
+--
+-- Data for Name: pagc_lex; Type: TABLE DATA; Schema: tiger; Owner: -
+--
+
+COPY tiger.pagc_lex (id, seq, word, stdword, token, is_custom) FROM stdin;
+\.
+
+
+--
+-- Data for Name: pagc_rules; Type: TABLE DATA; Schema: tiger; Owner: -
+--
+
+COPY tiger.pagc_rules (id, rule, is_custom) FROM stdin;
+\.
+
+
+--
+-- Data for Name: topology; Type: TABLE DATA; Schema: topology; Owner: -
+--
+
+COPY topology.topology (id, name, srid, "precision", hasz) FROM stdin;
+\.
+
+
+--
+-- Data for Name: layer; Type: TABLE DATA; Schema: topology; Owner: -
+--
+
+COPY topology.layer (topology_id, layer_id, schema_name, table_name, feature_column, feature_type, level, child_id) FROM stdin;
+\.
+
+
+--
+-- Name: audit_logs_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
 SELECT pg_catalog.setval('public.audit_logs_log_id_seq', 91, true);
 
 
 --
--- Name: hotspots_hotspot_id_seq; Type: SEQUENCE SET; Schema: public; Owner: trustbond_z1r9_user
+-- Name: hotspots_hotspot_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.hotspots_hotspot_id_seq', 129, true);
+SELECT pg_catalog.setval('public.hotspots_hotspot_id_seq', 135, true);
 
 
 --
--- Name: incident_types_incident_type_id_seq; Type: SEQUENCE SET; Schema: public; Owner: trustbond_z1r9_user
+-- Name: incident_types_incident_type_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
 SELECT pg_catalog.setval('public.incident_types_incident_type_id_seq', 11, true);
 
 
 --
--- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE SET; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
 SELECT pg_catalog.setval('public.local_leader_auth_codes_local_leader_auth_code_id_seq', 13, true);
 
 
 --
--- Name: local_leader_coverage_locatio_local_leader_coverage_locatio_seq; Type: SEQUENCE SET; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_coverage_locatio_local_leader_coverage_locatio_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
 SELECT pg_catalog.setval('public.local_leader_coverage_locatio_local_leader_coverage_locatio_seq', 4, true);
 
 
 --
--- Name: local_leaders_local_leader_id_seq; Type: SEQUENCE SET; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leaders_local_leader_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
 SELECT pg_catalog.setval('public.local_leaders_local_leader_id_seq', 3, true);
 
 
 --
--- Name: locations_location_id_seq; Type: SEQUENCE SET; Schema: public; Owner: trustbond_z1r9_user
+-- Name: locations_location_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
 SELECT pg_catalog.setval('public.locations_location_id_seq', 515, true);
 
 
 --
--- Name: password_reset_codes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: trustbond_z1r9_user
+-- Name: password_reset_codes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
 SELECT pg_catalog.setval('public.password_reset_codes_id_seq', 4, true);
 
 
 --
--- Name: police_users_police_user_id_seq; Type: SEQUENCE SET; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_users_police_user_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
 SELECT pg_catalog.setval('public.police_users_police_user_id_seq', 29, true);
 
 
 --
--- Name: station_coverage_cells_station_coverage_cell_id_seq; Type: SEQUENCE SET; Schema: public; Owner: trustbond_z1r9_user
+-- Name: station_coverage_cells_station_coverage_cell_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
 SELECT pg_catalog.setval('public.station_coverage_cells_station_coverage_cell_id_seq', 39, true);
 
 
 --
--- Name: stations_station_id_seq; Type: SEQUENCE SET; Schema: public; Owner: trustbond_z1r9_user
+-- Name: stations_station_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
 SELECT pg_catalog.setval('public.stations_station_id_seq', 9, true);
 
 
 --
--- Name: alembic_version alembic_version_pkc; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: topology_id_seq; Type: SEQUENCE SET; Schema: topology; Owner: -
+--
+
+SELECT pg_catalog.setval('topology.topology_id_seq', 1, false);
+
+
+--
+-- Name: alembic_version alembic_version_pkc; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.alembic_version
@@ -1984,7 +3457,7 @@ ALTER TABLE ONLY public.alembic_version
 
 
 --
--- Name: audit_logs audit_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: audit_logs audit_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.audit_logs
@@ -1992,7 +3465,7 @@ ALTER TABLE ONLY public.audit_logs
 
 
 --
--- Name: case_reports case_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: case_reports case_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.case_reports
@@ -2000,7 +3473,7 @@ ALTER TABLE ONLY public.case_reports
 
 
 --
--- Name: cases cases_case_number_key; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: cases cases_case_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.cases
@@ -2008,7 +3481,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: cases cases_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: cases cases_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.cases
@@ -2016,7 +3489,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: devices devices_device_hash_key; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: devices devices_device_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.devices
@@ -2024,7 +3497,7 @@ ALTER TABLE ONLY public.devices
 
 
 --
--- Name: devices devices_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: devices devices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.devices
@@ -2032,7 +3505,7 @@ ALTER TABLE ONLY public.devices
 
 
 --
--- Name: evidence_files evidence_files_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: evidence_files evidence_files_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.evidence_files
@@ -2040,7 +3513,7 @@ ALTER TABLE ONLY public.evidence_files
 
 
 --
--- Name: hotspot_reports hotspot_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: hotspot_reports hotspot_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.hotspot_reports
@@ -2048,7 +3521,7 @@ ALTER TABLE ONLY public.hotspot_reports
 
 
 --
--- Name: hotspots hotspots_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: hotspots hotspots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.hotspots
@@ -2056,7 +3529,7 @@ ALTER TABLE ONLY public.hotspots
 
 
 --
--- Name: incident_types incident_types_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: incident_types incident_types_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.incident_types
@@ -2064,7 +3537,7 @@ ALTER TABLE ONLY public.incident_types
 
 
 --
--- Name: incident_types incident_types_type_name_key; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: incident_types incident_types_type_name_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.incident_types
@@ -2072,7 +3545,7 @@ ALTER TABLE ONLY public.incident_types
 
 
 --
--- Name: local_leader_auth_codes local_leader_auth_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_auth_codes local_leader_auth_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.local_leader_auth_codes
@@ -2080,7 +3553,7 @@ ALTER TABLE ONLY public.local_leader_auth_codes
 
 
 --
--- Name: local_leader_coverage_locations local_leader_coverage_locations_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_coverage_locations local_leader_coverage_locations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.local_leader_coverage_locations
@@ -2088,7 +3561,7 @@ ALTER TABLE ONLY public.local_leader_coverage_locations
 
 
 --
--- Name: local_leaders local_leaders_email_key; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leaders local_leaders_email_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.local_leaders
@@ -2096,7 +3569,7 @@ ALTER TABLE ONLY public.local_leaders
 
 
 --
--- Name: local_leaders local_leaders_phone_number_key; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leaders local_leaders_phone_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.local_leaders
@@ -2104,7 +3577,7 @@ ALTER TABLE ONLY public.local_leaders
 
 
 --
--- Name: local_leaders local_leaders_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leaders local_leaders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.local_leaders
@@ -2112,7 +3585,7 @@ ALTER TABLE ONLY public.local_leaders
 
 
 --
--- Name: locations locations_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: locations locations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.locations
@@ -2120,7 +3593,7 @@ ALTER TABLE ONLY public.locations
 
 
 --
--- Name: ml_predictions ml_predictions_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ml_predictions ml_predictions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.ml_predictions
@@ -2128,7 +3601,7 @@ ALTER TABLE ONLY public.ml_predictions
 
 
 --
--- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.notifications
@@ -2136,7 +3609,7 @@ ALTER TABLE ONLY public.notifications
 
 
 --
--- Name: password_reset_codes password_reset_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: password_reset_codes password_reset_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.password_reset_codes
@@ -2144,7 +3617,7 @@ ALTER TABLE ONLY public.password_reset_codes
 
 
 --
--- Name: police_reviews police_reviews_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_reviews police_reviews_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.police_reviews
@@ -2152,7 +3625,7 @@ ALTER TABLE ONLY public.police_reviews
 
 
 --
--- Name: police_reviews police_reviews_report_id_police_user_id_key; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_reviews police_reviews_report_id_police_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.police_reviews
@@ -2160,7 +3633,7 @@ ALTER TABLE ONLY public.police_reviews
 
 
 --
--- Name: police_users police_users_badge_number_key; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_users police_users_badge_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.police_users
@@ -2168,7 +3641,7 @@ ALTER TABLE ONLY public.police_users
 
 
 --
--- Name: police_users police_users_email_key; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_users police_users_email_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.police_users
@@ -2176,7 +3649,7 @@ ALTER TABLE ONLY public.police_users
 
 
 --
--- Name: police_users police_users_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_users police_users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.police_users
@@ -2184,7 +3657,7 @@ ALTER TABLE ONLY public.police_users
 
 
 --
--- Name: report_assignments report_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: report_assignments report_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.report_assignments
@@ -2192,7 +3665,7 @@ ALTER TABLE ONLY public.report_assignments
 
 
 --
--- Name: reports reports_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: reports reports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reports
@@ -2200,7 +3673,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_report_number_key; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: reports reports_report_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reports
@@ -2208,7 +3681,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: station_coverage_cells station_coverage_cells_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: station_coverage_cells station_coverage_cells_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.station_coverage_cells
@@ -2216,7 +3689,7 @@ ALTER TABLE ONLY public.station_coverage_cells
 
 
 --
--- Name: stations stations_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: stations stations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.stations
@@ -2224,7 +3697,7 @@ ALTER TABLE ONLY public.stations
 
 
 --
--- Name: stations stations_station_code_key; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: stations stations_station_code_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.stations
@@ -2232,7 +3705,7 @@ ALTER TABLE ONLY public.stations
 
 
 --
--- Name: system_config system_config_pkey; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: system_config system_config_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.system_config
@@ -2240,7 +3713,7 @@ ALTER TABLE ONLY public.system_config
 
 
 --
--- Name: local_leader_coverage_locations uq_local_leader_coverage_location; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_coverage_locations uq_local_leader_coverage_location; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.local_leader_coverage_locations
@@ -2248,7 +3721,7 @@ ALTER TABLE ONLY public.local_leader_coverage_locations
 
 
 --
--- Name: station_coverage_cells uq_station_coverage_cell; Type: CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: station_coverage_cells uq_station_coverage_cell; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.station_coverage_cells
@@ -2256,336 +3729,336 @@ ALTER TABLE ONLY public.station_coverage_cells
 
 
 --
--- Name: idx_audit_actor; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_audit_actor; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_audit_actor ON public.audit_logs USING btree (actor_type, actor_id, created_at DESC);
 
 
 --
--- Name: idx_audit_entity; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_audit_entity; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_audit_entity ON public.audit_logs USING btree (entity_type, entity_id);
 
 
 --
--- Name: idx_audit_time; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_audit_time; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_audit_time ON public.audit_logs USING btree (created_at);
 
 
 --
--- Name: idx_cases_assigned; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_cases_assigned; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_cases_assigned ON public.cases USING btree (assigned_to) WHERE ((status)::text <> 'closed'::text);
 
 
 --
--- Name: idx_cases_status; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_cases_status; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_cases_status ON public.cases USING btree (status, priority);
 
 
 --
--- Name: idx_devices_hash; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_devices_hash; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_devices_hash ON public.devices USING btree (device_hash);
 
 
 --
--- Name: idx_devices_trust; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_devices_trust; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_devices_trust ON public.devices USING btree (device_trust_score);
 
 
 --
--- Name: idx_evidence_hash; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_evidence_hash; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_evidence_hash ON public.evidence_files USING btree (perceptual_hash) WHERE (perceptual_hash IS NOT NULL);
 
 
 --
--- Name: idx_evidence_report; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_evidence_report; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_evidence_report ON public.evidence_files USING btree (report_id);
 
 
 --
--- Name: idx_hotspots_location; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_hotspots_location; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_hotspots_location ON public.hotspots USING gist (public.st_makepoint((center_long)::double precision, (center_lat)::double precision));
 
 
 --
--- Name: idx_hotspots_risk; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_hotspots_risk; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_hotspots_risk ON public.hotspots USING btree (risk_level) WHERE (is_active = true);
 
 
 --
--- Name: idx_locations_geom; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_locations_geom; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_locations_geom ON public.locations USING gist (geometry);
 
 
 --
--- Name: idx_locations_parent; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_locations_parent; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_locations_parent ON public.locations USING btree (parent_location_id);
 
 
 --
--- Name: idx_ml_final; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_ml_final; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_ml_final ON public.ml_predictions USING btree (report_id) WHERE (is_final = true);
 
 
 --
--- Name: idx_ml_report; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_ml_report; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_ml_report ON public.ml_predictions USING btree (report_id);
 
 
 --
--- Name: idx_notifications_user; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_notifications_user; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_notifications_user ON public.notifications USING btree (police_user_id, is_read, created_at DESC);
 
 
 --
--- Name: idx_report_assignments_user; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_report_assignments_user; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_report_assignments_user ON public.report_assignments USING btree (police_user_id);
 
 
 --
--- Name: idx_reports_device; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_reports_device; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_reports_device ON public.reports USING btree (device_id);
 
 
 --
--- Name: idx_reports_incident_type; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_reports_incident_type; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_reports_incident_type ON public.reports USING btree (incident_type_id);
 
 
 --
--- Name: idx_reports_location; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_reports_location; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_reports_location ON public.reports USING gist (public.st_makepoint((longitude)::double precision, (latitude)::double precision));
 
 
 --
--- Name: idx_reports_station; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_reports_station; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_reports_station ON public.reports USING btree (handling_station_id);
 
 
 --
--- Name: idx_reports_status; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_reports_status; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_reports_status ON public.reports USING btree (status, is_flagged);
 
 
 --
--- Name: idx_reports_time; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_reports_time; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_reports_time ON public.reports USING btree (reported_at DESC);
 
 
 --
--- Name: idx_reports_verification; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_reports_verification; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_reports_verification ON public.reports USING btree (verification_status) WHERE (verification_status <> 'verified'::public.verification_status);
 
 
 --
--- Name: idx_reviews_report; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_reviews_report; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_reviews_report ON public.police_reviews USING btree (report_id);
 
 
 --
--- Name: idx_reviews_training; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_reviews_training; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_reviews_training ON public.police_reviews USING btree (used_for_training) WHERE (used_for_training = true);
 
 
 --
--- Name: idx_sessions_token; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_sessions_token; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_sessions_token ON public.user_sessions USING btree (refresh_token) WHERE (revoked_at IS NULL);
 
 
 --
--- Name: idx_sessions_user; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_sessions_user; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_sessions_user ON public.user_sessions USING btree (police_user_id, expires_at);
 
 
 --
--- Name: idx_stations_active; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_stations_active; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_stations_active ON public.stations USING btree (is_active);
 
 
 --
--- Name: idx_users_badge; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_users_badge; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_users_badge ON public.police_users USING btree (badge_number);
 
 
 --
--- Name: idx_users_email; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_users_email; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_users_email ON public.police_users USING btree (email);
 
 
 --
--- Name: idx_users_role; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_users_role; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_users_role ON public.police_users USING btree (role) WHERE (is_active = true);
 
 
 --
--- Name: idx_users_station; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: idx_users_station; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_users_station ON public.police_users USING btree (station_id);
 
 
 --
--- Name: ix_audit_logs_actor_role; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ix_audit_logs_actor_role; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_audit_logs_actor_role ON public.audit_logs USING btree (actor_role);
 
 
 --
--- Name: ix_audit_logs_sensitivity_level; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ix_audit_logs_sensitivity_level; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_audit_logs_sensitivity_level ON public.audit_logs USING btree (sensitivity_level);
 
 
 --
--- Name: ix_local_leader_auth_codes_local_leader_id; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ix_local_leader_auth_codes_local_leader_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_local_leader_auth_codes_local_leader_id ON public.local_leader_auth_codes USING btree (local_leader_id);
 
 
 --
--- Name: ix_local_leader_auth_codes_phone_number; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ix_local_leader_auth_codes_phone_number; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_local_leader_auth_codes_phone_number ON public.local_leader_auth_codes USING btree (phone_number);
 
 
 --
--- Name: ix_local_leader_coverage_locations_local_leader_id; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ix_local_leader_coverage_locations_local_leader_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_local_leader_coverage_locations_local_leader_id ON public.local_leader_coverage_locations USING btree (local_leader_id);
 
 
 --
--- Name: ix_local_leader_coverage_locations_location_id; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ix_local_leader_coverage_locations_location_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_local_leader_coverage_locations_location_id ON public.local_leader_coverage_locations USING btree (location_id);
 
 
 --
--- Name: ix_local_leaders_email; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ix_local_leaders_email; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_local_leaders_email ON public.local_leaders USING btree (email);
 
 
 --
--- Name: ix_local_leaders_phone_number; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ix_local_leaders_phone_number; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_local_leaders_phone_number ON public.local_leaders USING btree (phone_number);
 
 
 --
--- Name: ix_password_reset_codes_email; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ix_password_reset_codes_email; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_password_reset_codes_email ON public.password_reset_codes USING btree (email);
 
 
 --
--- Name: ix_reports_submitted_by_local_leader_id; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ix_reports_submitted_by_local_leader_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_reports_submitted_by_local_leader_id ON public.reports USING btree (submitted_by_local_leader_id);
 
 
 --
--- Name: ix_station_coverage_cells_cell_location_id; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ix_station_coverage_cells_cell_location_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_station_coverage_cells_cell_location_id ON public.station_coverage_cells USING btree (cell_location_id);
 
 
 --
--- Name: ix_station_coverage_cells_station_id; Type: INDEX; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ix_station_coverage_cells_station_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_station_coverage_cells_station_id ON public.station_coverage_cells USING btree (station_id);
 
 
 --
--- Name: reports trigger_device_trust; Type: TRIGGER; Schema: public; Owner: trustbond_z1r9_user
+-- Name: reports trigger_device_trust; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER trigger_device_trust AFTER INSERT OR UPDATE OF status ON public.reports FOR EACH ROW EXECUTE FUNCTION public.update_device_trust();
 
 
 --
--- Name: police_users trigger_update_police_users; Type: TRIGGER; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_users trigger_update_police_users; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER trigger_update_police_users BEFORE UPDATE ON public.police_users FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
 --
--- Name: case_reports case_reports_added_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: case_reports case_reports_added_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.case_reports
@@ -2593,7 +4066,7 @@ ALTER TABLE ONLY public.case_reports
 
 
 --
--- Name: case_reports case_reports_case_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: case_reports case_reports_case_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.case_reports
@@ -2601,7 +4074,7 @@ ALTER TABLE ONLY public.case_reports
 
 
 --
--- Name: case_reports case_reports_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: case_reports case_reports_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.case_reports
@@ -2609,7 +4082,7 @@ ALTER TABLE ONLY public.case_reports
 
 
 --
--- Name: cases cases_assigned_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: cases cases_assigned_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.cases
@@ -2617,7 +4090,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: cases cases_assigned_to_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: cases cases_assigned_to_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.cases
@@ -2625,7 +4098,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: cases cases_assigned_to_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: cases cases_assigned_to_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.cases
@@ -2633,7 +4106,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: cases cases_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: cases cases_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.cases
@@ -2641,7 +4114,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: cases cases_incident_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: cases cases_incident_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.cases
@@ -2649,7 +4122,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: cases cases_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: cases cases_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.cases
@@ -2657,7 +4130,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: evidence_files evidence_files_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: evidence_files evidence_files_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.evidence_files
@@ -2665,7 +4138,7 @@ ALTER TABLE ONLY public.evidence_files
 
 
 --
--- Name: reports fk_reports_leader_verified_by; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: reports fk_reports_leader_verified_by; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reports
@@ -2673,7 +4146,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: hotspot_reports hotspot_reports_hotspot_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: hotspot_reports hotspot_reports_hotspot_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.hotspot_reports
@@ -2681,7 +4154,7 @@ ALTER TABLE ONLY public.hotspot_reports
 
 
 --
--- Name: hotspot_reports hotspot_reports_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: hotspot_reports hotspot_reports_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.hotspot_reports
@@ -2689,7 +4162,7 @@ ALTER TABLE ONLY public.hotspot_reports
 
 
 --
--- Name: hotspots hotspots_incident_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: hotspots hotspots_incident_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.hotspots
@@ -2697,7 +4170,7 @@ ALTER TABLE ONLY public.hotspots
 
 
 --
--- Name: local_leader_auth_codes local_leader_auth_codes_local_leader_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_auth_codes local_leader_auth_codes_local_leader_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.local_leader_auth_codes
@@ -2705,7 +4178,7 @@ ALTER TABLE ONLY public.local_leader_auth_codes
 
 
 --
--- Name: local_leader_coverage_locations local_leader_coverage_locations_local_leader_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_coverage_locations local_leader_coverage_locations_local_leader_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.local_leader_coverage_locations
@@ -2713,7 +4186,7 @@ ALTER TABLE ONLY public.local_leader_coverage_locations
 
 
 --
--- Name: local_leader_coverage_locations local_leader_coverage_locations_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: local_leader_coverage_locations local_leader_coverage_locations_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.local_leader_coverage_locations
@@ -2721,7 +4194,7 @@ ALTER TABLE ONLY public.local_leader_coverage_locations
 
 
 --
--- Name: locations locations_parent_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: locations locations_parent_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.locations
@@ -2729,7 +4202,7 @@ ALTER TABLE ONLY public.locations
 
 
 --
--- Name: ml_predictions ml_predictions_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: ml_predictions ml_predictions_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.ml_predictions
@@ -2737,7 +4210,7 @@ ALTER TABLE ONLY public.ml_predictions
 
 
 --
--- Name: notifications notifications_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: notifications notifications_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.notifications
@@ -2745,7 +4218,7 @@ ALTER TABLE ONLY public.notifications
 
 
 --
--- Name: police_reviews police_reviews_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_reviews police_reviews_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.police_reviews
@@ -2753,7 +4226,7 @@ ALTER TABLE ONLY public.police_reviews
 
 
 --
--- Name: police_reviews police_reviews_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_reviews police_reviews_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.police_reviews
@@ -2761,7 +4234,7 @@ ALTER TABLE ONLY public.police_reviews
 
 
 --
--- Name: police_users police_users_assigned_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_users police_users_assigned_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.police_users
@@ -2769,7 +4242,7 @@ ALTER TABLE ONLY public.police_users
 
 
 --
--- Name: police_users police_users_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: police_users police_users_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.police_users
@@ -2777,7 +4250,7 @@ ALTER TABLE ONLY public.police_users
 
 
 --
--- Name: report_assignments report_assignments_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: report_assignments report_assignments_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.report_assignments
@@ -2785,7 +4258,7 @@ ALTER TABLE ONLY public.report_assignments
 
 
 --
--- Name: report_assignments report_assignments_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: report_assignments report_assignments_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.report_assignments
@@ -2793,7 +4266,7 @@ ALTER TABLE ONLY public.report_assignments
 
 
 --
--- Name: reports reports_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: reports reports_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reports
@@ -2801,7 +4274,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_handling_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: reports reports_handling_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reports
@@ -2809,7 +4282,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_incident_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: reports reports_incident_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reports
@@ -2817,7 +4290,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: reports reports_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reports
@@ -2825,7 +4298,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_submitted_by_local_leader_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: reports reports_submitted_by_local_leader_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reports
@@ -2833,7 +4306,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_verified_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: reports reports_verified_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reports
@@ -2841,7 +4314,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_village_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: reports reports_village_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reports
@@ -2849,7 +4322,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: station_coverage_cells station_coverage_cells_cell_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: station_coverage_cells station_coverage_cells_cell_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.station_coverage_cells
@@ -2857,7 +4330,7 @@ ALTER TABLE ONLY public.station_coverage_cells
 
 
 --
--- Name: station_coverage_cells station_coverage_cells_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: station_coverage_cells station_coverage_cells_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.station_coverage_cells
@@ -2865,7 +4338,7 @@ ALTER TABLE ONLY public.station_coverage_cells
 
 
 --
--- Name: system_config system_config_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: system_config system_config_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.system_config
@@ -2873,7 +4346,7 @@ ALTER TABLE ONLY public.system_config
 
 
 --
--- Name: user_sessions user_sessions_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: trustbond_z1r9_user
+-- Name: user_sessions user_sessions_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.user_sessions
@@ -2881,5797 +4354,6 @@ ALTER TABLE ONLY public.user_sessions
 
 
 --
--- Name: SCHEMA public; Type: ACL; Schema: -; Owner: trustbond_z1r9_user
---
-
-REVOKE USAGE ON SCHEMA public FROM PUBLIC;
-
-
---
--- Name: FUNCTION box2d_in(cstring); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.box2d_in(cstring) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION box2d_out(public.box2d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.box2d_out(public.box2d) TO trustbond_z1r9_user;
-
-
---
--- Name: TYPE box2d; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TYPE public.box2d TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION box2df_in(cstring); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.box2df_in(cstring) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION box2df_out(public.box2df); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.box2df_out(public.box2df) TO trustbond_z1r9_user;
-
-
---
--- Name: TYPE box2df; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TYPE public.box2df TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION box3d_in(cstring); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.box3d_in(cstring) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION box3d_out(public.box3d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.box3d_out(public.box3d) TO trustbond_z1r9_user;
-
-
---
--- Name: TYPE box3d; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TYPE public.box3d TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_analyze(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_analyze(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_in(cstring, oid, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_in(cstring, oid, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_out(public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_out(public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_recv(internal, oid, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_recv(internal, oid, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_send(public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_send(public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_typmod_in(cstring[]); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_typmod_in(cstring[]) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_typmod_out(integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_typmod_out(integer) TO trustbond_z1r9_user;
-
-
---
--- Name: TYPE geography; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TYPE public.geography TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_analyze(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_analyze(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_in(cstring); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_in(cstring) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_out(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_out(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_recv(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_recv(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_send(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_send(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_typmod_in(cstring[]); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_typmod_in(cstring[]) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_typmod_out(integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_typmod_out(integer) TO trustbond_z1r9_user;
-
-
---
--- Name: TYPE geometry; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TYPE public.geometry TO trustbond_z1r9_user;
-
-
---
--- Name: TYPE geometry_dump; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TYPE public.geometry_dump TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION gidx_in(cstring); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.gidx_in(cstring) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION gidx_out(public.gidx); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.gidx_out(public.gidx) TO trustbond_z1r9_user;
-
-
---
--- Name: TYPE gidx; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TYPE public.gidx TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION spheroid_in(cstring); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.spheroid_in(cstring) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION spheroid_out(public.spheroid); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.spheroid_out(public.spheroid) TO trustbond_z1r9_user;
-
-
---
--- Name: TYPE spheroid; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TYPE public.spheroid TO trustbond_z1r9_user;
-
-
---
--- Name: TYPE valid_detail; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TYPE public.valid_detail TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION box3d(public.box2d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.box3d(public.box2d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry(public.box2d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry(public.box2d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION box(public.box3d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.box(public.box3d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION box2d(public.box3d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.box2d(public.box3d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry(public.box3d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry(public.box3d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION bytea(public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.bytea(public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography(public.geography, integer, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography(public.geography, integer, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry(public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry(public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION box(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.box(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION box2d(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.box2d(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION box3d(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.box3d(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION bytea(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.bytea(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry(public.geometry, integer, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry(public.geometry, integer, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION "json"(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public."json"(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION jsonb(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.jsonb(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION path(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.path(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION point(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.point(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION polygon(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.polygon(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION text(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.text(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry(path); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry(path) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry(point); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry(point) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry(polygon); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry(polygon) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _postgis_deprecate(oldname text, newname text, version text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._postgis_deprecate(oldname text, newname text, version text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _postgis_index_extent(tbl regclass, col text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._postgis_index_extent(tbl regclass, col text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _postgis_join_selectivity(regclass, text, regclass, text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._postgis_join_selectivity(regclass, text, regclass, text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _postgis_pgsql_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._postgis_pgsql_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _postgis_scripts_pgsql_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._postgis_scripts_pgsql_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _postgis_selectivity(tbl regclass, att_name text, geom public.geometry, mode text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._postgis_selectivity(tbl regclass, att_name text, geom public.geometry, mode text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _postgis_stats(tbl regclass, att_name text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._postgis_stats(tbl regclass, att_name text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_3ddfullywithin(geom1 public.geometry, geom2 public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_3ddfullywithin(geom1 public.geometry, geom2 public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_3ddwithin(geom1 public.geometry, geom2 public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_3ddwithin(geom1 public.geometry, geom2 public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_3dintersects(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_3dintersects(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_asgml(integer, public.geometry, integer, integer, text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_asgml(integer, public.geometry, integer, integer, text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_asx3d(integer, public.geometry, integer, integer, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_asx3d(integer, public.geometry, integer, integer, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_bestsrid(public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_bestsrid(public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_bestsrid(public.geography, public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_bestsrid(public.geography, public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_contains(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_contains(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_containsproperly(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_containsproperly(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_coveredby(geog1 public.geography, geog2 public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_coveredby(geog1 public.geography, geog2 public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_coveredby(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_coveredby(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_covers(geog1 public.geography, geog2 public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_covers(geog1 public.geography, geog2 public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_covers(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_covers(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_crosses(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_crosses(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_dfullywithin(geom1 public.geometry, geom2 public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_dfullywithin(geom1 public.geometry, geom2 public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_distancetree(public.geography, public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_distancetree(public.geography, public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_distancetree(public.geography, public.geography, double precision, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_distancetree(public.geography, public.geography, double precision, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_distanceuncached(public.geography, public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_distanceuncached(public.geography, public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_distanceuncached(public.geography, public.geography, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_distanceuncached(public.geography, public.geography, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_distanceuncached(public.geography, public.geography, double precision, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_distanceuncached(public.geography, public.geography, double precision, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_dwithin(geom1 public.geometry, geom2 public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_dwithin(geom1 public.geometry, geom2 public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_dwithin(geog1 public.geography, geog2 public.geography, tolerance double precision, use_spheroid boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_dwithin(geog1 public.geography, geog2 public.geography, tolerance double precision, use_spheroid boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_dwithinuncached(public.geography, public.geography, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_dwithinuncached(public.geography, public.geography, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_dwithinuncached(public.geography, public.geography, double precision, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_dwithinuncached(public.geography, public.geography, double precision, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_equals(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_equals(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_expand(public.geography, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_expand(public.geography, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_geomfromgml(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_geomfromgml(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_intersects(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_intersects(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_linecrossingdirection(line1 public.geometry, line2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_linecrossingdirection(line1 public.geometry, line2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_longestline(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_longestline(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_maxdistance(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_maxdistance(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_orderingequals(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_orderingequals(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_overlaps(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_overlaps(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_pointoutside(public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_pointoutside(public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_sortablehash(geom public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_sortablehash(geom public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_touches(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_touches(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_voronoi(g1 public.geometry, clip public.geometry, tolerance double precision, return_polygons boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_voronoi(g1 public.geometry, clip public.geometry, tolerance double precision, return_polygons boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION _st_within(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public._st_within(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION addgeometrycolumn(table_name character varying, column_name character varying, new_srid integer, new_type character varying, new_dim integer, use_typmod boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.addgeometrycolumn(table_name character varying, column_name character varying, new_srid integer, new_type character varying, new_dim integer, use_typmod boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION addgeometrycolumn(schema_name character varying, table_name character varying, column_name character varying, new_srid integer, new_type character varying, new_dim integer, use_typmod boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.addgeometrycolumn(schema_name character varying, table_name character varying, column_name character varying, new_srid integer, new_type character varying, new_dim integer, use_typmod boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION addgeometrycolumn(catalog_name character varying, schema_name character varying, table_name character varying, column_name character varying, new_srid_in integer, new_type character varying, new_dim integer, use_typmod boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.addgeometrycolumn(catalog_name character varying, schema_name character varying, table_name character varying, column_name character varying, new_srid_in integer, new_type character varying, new_dim integer, use_typmod boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION armor(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.armor(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION armor(bytea, text[], text[]); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.armor(bytea, text[], text[]) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION box3dtobox(public.box3d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.box3dtobox(public.box3d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION contains_2d(public.box2df, public.box2df); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.contains_2d(public.box2df, public.box2df) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION contains_2d(public.box2df, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.contains_2d(public.box2df, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION contains_2d(public.geometry, public.box2df); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.contains_2d(public.geometry, public.box2df) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION crypt(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.crypt(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION dearmor(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.dearmor(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION decrypt(bytea, bytea, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.decrypt(bytea, bytea, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION decrypt_iv(bytea, bytea, bytea, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.decrypt_iv(bytea, bytea, bytea, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION digest(bytea, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.digest(bytea, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION digest(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.digest(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION dropgeometrycolumn(table_name character varying, column_name character varying); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.dropgeometrycolumn(table_name character varying, column_name character varying) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION dropgeometrycolumn(schema_name character varying, table_name character varying, column_name character varying); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.dropgeometrycolumn(schema_name character varying, table_name character varying, column_name character varying) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION dropgeometrycolumn(catalog_name character varying, schema_name character varying, table_name character varying, column_name character varying); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.dropgeometrycolumn(catalog_name character varying, schema_name character varying, table_name character varying, column_name character varying) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION dropgeometrytable(table_name character varying); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.dropgeometrytable(table_name character varying) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION dropgeometrytable(schema_name character varying, table_name character varying); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.dropgeometrytable(schema_name character varying, table_name character varying) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION dropgeometrytable(catalog_name character varying, schema_name character varying, table_name character varying); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.dropgeometrytable(catalog_name character varying, schema_name character varying, table_name character varying) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION encrypt(bytea, bytea, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.encrypt(bytea, bytea, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION encrypt_iv(bytea, bytea, bytea, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.encrypt_iv(bytea, bytea, bytea, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION equals(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.equals(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION find_srid(character varying, character varying, character varying); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.find_srid(character varying, character varying, character varying) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION fips_mode(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.fips_mode() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION gen_random_bytes(integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.gen_random_bytes(integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION gen_random_uuid(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.gen_random_uuid() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION gen_salt(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.gen_salt(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION gen_salt(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.gen_salt(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geog_brin_inclusion_add_value(internal, internal, internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geog_brin_inclusion_add_value(internal, internal, internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geog_brin_inclusion_merge(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geog_brin_inclusion_merge(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_cmp(public.geography, public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_cmp(public.geography, public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_distance_knn(public.geography, public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_distance_knn(public.geography, public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_eq(public.geography, public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_eq(public.geography, public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_ge(public.geography, public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_ge(public.geography, public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_gist_compress(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_gist_compress(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_gist_consistent(internal, public.geography, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_gist_consistent(internal, public.geography, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_gist_decompress(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_gist_decompress(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_gist_distance(internal, public.geography, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_gist_distance(internal, public.geography, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_gist_penalty(internal, internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_gist_penalty(internal, internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_gist_picksplit(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_gist_picksplit(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_gist_same(public.box2d, public.box2d, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_gist_same(public.box2d, public.box2d, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_gist_union(bytea, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_gist_union(bytea, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_gt(public.geography, public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_gt(public.geography, public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_le(public.geography, public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_le(public.geography, public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_lt(public.geography, public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_lt(public.geography, public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_overlaps(public.geography, public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_overlaps(public.geography, public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_spgist_choose_nd(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_spgist_choose_nd(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_spgist_compress_nd(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_spgist_compress_nd(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_spgist_config_nd(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_spgist_config_nd(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_spgist_inner_consistent_nd(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_spgist_inner_consistent_nd(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_spgist_leaf_consistent_nd(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_spgist_leaf_consistent_nd(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geography_spgist_picksplit_nd(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geography_spgist_picksplit_nd(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geom2d_brin_inclusion_add_value(internal, internal, internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geom2d_brin_inclusion_add_value(internal, internal, internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geom2d_brin_inclusion_merge(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geom2d_brin_inclusion_merge(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geom3d_brin_inclusion_add_value(internal, internal, internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geom3d_brin_inclusion_add_value(internal, internal, internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geom3d_brin_inclusion_merge(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geom3d_brin_inclusion_merge(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geom4d_brin_inclusion_add_value(internal, internal, internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geom4d_brin_inclusion_add_value(internal, internal, internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geom4d_brin_inclusion_merge(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geom4d_brin_inclusion_merge(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_above(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_above(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_below(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_below(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_cmp(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_cmp(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_contained_3d(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_contained_3d(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_contains(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_contains(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_contains_3d(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_contains_3d(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_contains_nd(public.geometry, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_contains_nd(public.geometry, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_distance_box(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_distance_box(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_distance_centroid(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_distance_centroid(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_distance_centroid_nd(public.geometry, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_distance_centroid_nd(public.geometry, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_distance_cpa(public.geometry, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_distance_cpa(public.geometry, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_eq(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_eq(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_ge(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_ge(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_compress_2d(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_compress_2d(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_compress_nd(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_compress_nd(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_consistent_2d(internal, public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_consistent_2d(internal, public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_consistent_nd(internal, public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_consistent_nd(internal, public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_decompress_2d(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_decompress_2d(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_decompress_nd(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_decompress_nd(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_distance_2d(internal, public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_distance_2d(internal, public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_distance_nd(internal, public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_distance_nd(internal, public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_penalty_2d(internal, internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_penalty_2d(internal, internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_penalty_nd(internal, internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_penalty_nd(internal, internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_picksplit_2d(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_picksplit_2d(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_picksplit_nd(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_picksplit_nd(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_same_2d(geom1 public.geometry, geom2 public.geometry, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_same_2d(geom1 public.geometry, geom2 public.geometry, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_same_nd(public.geometry, public.geometry, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_same_nd(public.geometry, public.geometry, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_sortsupport_2d(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_sortsupport_2d(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_union_2d(bytea, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_union_2d(bytea, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gist_union_nd(bytea, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gist_union_nd(bytea, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_gt(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_gt(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_hash(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_hash(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_le(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_le(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_left(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_left(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_lt(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_lt(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_neq(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_neq(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_overabove(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_overabove(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_overbelow(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_overbelow(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_overlaps(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_overlaps(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_overlaps_3d(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_overlaps_3d(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_overlaps_nd(public.geometry, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_overlaps_nd(public.geometry, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_overleft(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_overleft(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_overright(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_overright(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_right(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_right(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_same(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_same(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_same_3d(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_same_3d(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_same_nd(public.geometry, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_same_nd(public.geometry, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_sortsupport(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_sortsupport(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_choose_2d(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_choose_2d(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_choose_3d(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_choose_3d(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_choose_nd(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_choose_nd(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_compress_2d(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_compress_2d(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_compress_3d(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_compress_3d(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_compress_nd(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_compress_nd(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_config_2d(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_config_2d(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_config_3d(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_config_3d(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_config_nd(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_config_nd(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_inner_consistent_2d(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_inner_consistent_2d(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_inner_consistent_3d(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_inner_consistent_3d(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_inner_consistent_nd(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_inner_consistent_nd(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_leaf_consistent_2d(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_leaf_consistent_2d(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_leaf_consistent_3d(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_leaf_consistent_3d(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_leaf_consistent_nd(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_leaf_consistent_nd(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_picksplit_2d(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_picksplit_2d(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_picksplit_3d(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_picksplit_3d(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_spgist_picksplit_nd(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_spgist_picksplit_nd(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_within(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_within(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometry_within_nd(public.geometry, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometry_within_nd(public.geometry, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometrytype(public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometrytype(public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geometrytype(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geometrytype(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geomfromewkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geomfromewkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION geomfromewkt(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.geomfromewkt(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION get_proj4_from_srid(integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.get_proj4_from_srid(integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION gserialized_gist_joinsel_2d(internal, oid, internal, smallint); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.gserialized_gist_joinsel_2d(internal, oid, internal, smallint) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION gserialized_gist_joinsel_nd(internal, oid, internal, smallint); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.gserialized_gist_joinsel_nd(internal, oid, internal, smallint) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION gserialized_gist_sel_2d(internal, oid, internal, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.gserialized_gist_sel_2d(internal, oid, internal, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION gserialized_gist_sel_nd(internal, oid, internal, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.gserialized_gist_sel_nd(internal, oid, internal, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION hmac(bytea, bytea, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.hmac(bytea, bytea, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION hmac(text, text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.hmac(text, text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION is_contained_2d(public.box2df, public.box2df); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.is_contained_2d(public.box2df, public.box2df) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION is_contained_2d(public.box2df, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.is_contained_2d(public.box2df, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION is_contained_2d(public.geometry, public.box2df); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.is_contained_2d(public.geometry, public.box2df) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION overlaps_2d(public.box2df, public.box2df); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.overlaps_2d(public.box2df, public.box2df) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION overlaps_2d(public.box2df, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.overlaps_2d(public.box2df, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION overlaps_2d(public.geometry, public.box2df); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.overlaps_2d(public.geometry, public.box2df) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION overlaps_geog(public.geography, public.gidx); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.overlaps_geog(public.geography, public.gidx) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION overlaps_geog(public.gidx, public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.overlaps_geog(public.gidx, public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION overlaps_geog(public.gidx, public.gidx); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.overlaps_geog(public.gidx, public.gidx) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION overlaps_nd(public.geometry, public.gidx); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.overlaps_nd(public.geometry, public.gidx) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION overlaps_nd(public.gidx, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.overlaps_nd(public.gidx, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION overlaps_nd(public.gidx, public.gidx); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.overlaps_nd(public.gidx, public.gidx) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asflatgeobuf_finalfn(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asflatgeobuf_finalfn(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asflatgeobuf_transfn(internal, anyelement); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asflatgeobuf_transfn(internal, anyelement) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asflatgeobuf_transfn(internal, anyelement, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asflatgeobuf_transfn(internal, anyelement, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asflatgeobuf_transfn(internal, anyelement, boolean, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asflatgeobuf_transfn(internal, anyelement, boolean, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asgeobuf_finalfn(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asgeobuf_finalfn(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asgeobuf_transfn(internal, anyelement); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asgeobuf_transfn(internal, anyelement) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asgeobuf_transfn(internal, anyelement, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asgeobuf_transfn(internal, anyelement, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asmvt_combinefn(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asmvt_combinefn(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asmvt_deserialfn(bytea, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asmvt_deserialfn(bytea, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asmvt_finalfn(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asmvt_finalfn(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asmvt_serialfn(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asmvt_serialfn(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asmvt_transfn(internal, anyelement); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asmvt_transfn(internal, anyelement) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asmvt_transfn(internal, anyelement, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asmvt_transfn(internal, anyelement, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asmvt_transfn(internal, anyelement, text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asmvt_transfn(internal, anyelement, text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asmvt_transfn(internal, anyelement, text, integer, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asmvt_transfn(internal, anyelement, text, integer, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_asmvt_transfn(internal, anyelement, text, integer, text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_asmvt_transfn(internal, anyelement, text, integer, text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_accum_transfn(internal, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_accum_transfn(internal, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_accum_transfn(internal, public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_accum_transfn(internal, public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_accum_transfn(internal, public.geometry, double precision, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_accum_transfn(internal, public.geometry, double precision, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_clusterintersecting_finalfn(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_clusterintersecting_finalfn(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_clusterwithin_finalfn(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_clusterwithin_finalfn(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_collect_finalfn(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_collect_finalfn(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_coverageunion_finalfn(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_coverageunion_finalfn(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_makeline_finalfn(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_makeline_finalfn(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_polygonize_finalfn(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_polygonize_finalfn(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_union_parallel_combinefn(internal, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_union_parallel_combinefn(internal, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_union_parallel_deserialfn(bytea, internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_union_parallel_deserialfn(bytea, internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_union_parallel_finalfn(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_union_parallel_finalfn(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_union_parallel_serialfn(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_union_parallel_serialfn(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_union_parallel_transfn(internal, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_union_parallel_transfn(internal, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgis_geometry_union_parallel_transfn(internal, public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgis_geometry_union_parallel_transfn(internal, public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_armor_headers(text, OUT key text, OUT value text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_armor_headers(text, OUT key text, OUT value text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_key_id(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_key_id(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_pub_decrypt(bytea, bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_pub_decrypt(bytea, bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_pub_decrypt(bytea, bytea, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_pub_decrypt(bytea, bytea, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_pub_decrypt(bytea, bytea, text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_pub_decrypt(bytea, bytea, text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_pub_decrypt_bytea(bytea, bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_pub_decrypt_bytea(bytea, bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_pub_decrypt_bytea(bytea, bytea, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_pub_decrypt_bytea(bytea, bytea, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_pub_decrypt_bytea(bytea, bytea, text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_pub_decrypt_bytea(bytea, bytea, text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_pub_encrypt(text, bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_pub_encrypt(text, bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_pub_encrypt(text, bytea, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_pub_encrypt(text, bytea, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_pub_encrypt_bytea(bytea, bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_pub_encrypt_bytea(bytea, bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_pub_encrypt_bytea(bytea, bytea, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_pub_encrypt_bytea(bytea, bytea, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_sym_decrypt(bytea, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_sym_decrypt(bytea, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_sym_decrypt(bytea, text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_sym_decrypt(bytea, text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_sym_decrypt_bytea(bytea, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_sym_decrypt_bytea(bytea, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_sym_decrypt_bytea(bytea, text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_sym_decrypt_bytea(bytea, text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_sym_encrypt(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_sym_encrypt(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_sym_encrypt(text, text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_sym_encrypt(text, text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_sym_encrypt_bytea(bytea, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_sym_encrypt_bytea(bytea, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION pgp_sym_encrypt_bytea(bytea, text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.pgp_sym_encrypt_bytea(bytea, text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION populate_geometry_columns(use_typmod boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.populate_geometry_columns(use_typmod boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION populate_geometry_columns(tbl_oid oid, use_typmod boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.populate_geometry_columns(tbl_oid oid, use_typmod boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_addbbox(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_addbbox(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_cache_bbox(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_cache_bbox() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_constraint_dims(geomschema text, geomtable text, geomcolumn text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_constraint_dims(geomschema text, geomtable text, geomcolumn text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_constraint_srid(geomschema text, geomtable text, geomcolumn text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_constraint_srid(geomschema text, geomtable text, geomcolumn text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_constraint_type(geomschema text, geomtable text, geomcolumn text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_constraint_type(geomschema text, geomtable text, geomcolumn text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_dropbbox(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_dropbbox(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_extensions_upgrade(target_version text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_extensions_upgrade(target_version text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_full_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_full_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_geos_compiled_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_geos_compiled_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_geos_noop(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_geos_noop(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_geos_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_geos_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_getbbox(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_getbbox(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_hasbbox(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_hasbbox(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_index_supportfn(internal); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_index_supportfn(internal) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_lib_build_date(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_lib_build_date() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_lib_revision(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_lib_revision() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_lib_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_lib_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_libjson_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_libjson_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_liblwgeom_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_liblwgeom_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_libprotobuf_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_libprotobuf_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_libxml_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_libxml_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_noop(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_noop(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_proj_compiled_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_proj_compiled_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_proj_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_proj_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_scripts_build_date(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_scripts_build_date() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_scripts_installed(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_scripts_installed() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_scripts_released(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_scripts_released() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_srs(auth_name text, auth_srid text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_srs(auth_name text, auth_srid text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_srs_all(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_srs_all() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_srs_codes(auth_name text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_srs_codes(auth_name text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_srs_search(bounds public.geometry, authname text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_srs_search(bounds public.geometry, authname text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_svn_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_svn_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_transform_geometry(geom public.geometry, text, text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_transform_geometry(geom public.geometry, text, text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_transform_pipeline_geometry(geom public.geometry, pipeline text, forward boolean, to_srid integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_transform_pipeline_geometry(geom public.geometry, pipeline text, forward boolean, to_srid integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_type_name(geomname character varying, coord_dimension integer, use_new_name boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_type_name(geomname character varying, coord_dimension integer, use_new_name boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_typmod_dims(integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_typmod_dims(integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_typmod_srid(integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_typmod_srid(integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_typmod_type(integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_typmod_type(integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION postgis_wagyu_version(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.postgis_wagyu_version() TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_3dclosestpoint(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_3dclosestpoint(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_3ddfullywithin(geom1 public.geometry, geom2 public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_3ddfullywithin(geom1 public.geometry, geom2 public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_3ddistance(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_3ddistance(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_3ddwithin(geom1 public.geometry, geom2 public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_3ddwithin(geom1 public.geometry, geom2 public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_3dintersects(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_3dintersects(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_3dlength(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_3dlength(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_3dlineinterpolatepoint(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_3dlineinterpolatepoint(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_3dlongestline(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_3dlongestline(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_3dmakebox(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_3dmakebox(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_3dmaxdistance(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_3dmaxdistance(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_3dperimeter(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_3dperimeter(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_3dshortestline(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_3dshortestline(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_addmeasure(public.geometry, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_addmeasure(public.geometry, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_addpoint(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_addpoint(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_addpoint(geom1 public.geometry, geom2 public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_addpoint(geom1 public.geometry, geom2 public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_affine(public.geometry, double precision, double precision, double precision, double precision, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_affine(public.geometry, double precision, double precision, double precision, double precision, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_affine(public.geometry, double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_affine(public.geometry, double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_angle(line1 public.geometry, line2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_angle(line1 public.geometry, line2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_angle(pt1 public.geometry, pt2 public.geometry, pt3 public.geometry, pt4 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_angle(pt1 public.geometry, pt2 public.geometry, pt3 public.geometry, pt4 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_area(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_area(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_area(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_area(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_area(geog public.geography, use_spheroid boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_area(geog public.geography, use_spheroid boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_area2d(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_area2d(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asbinary(public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asbinary(public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asbinary(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asbinary(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asbinary(public.geography, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asbinary(public.geography, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asbinary(public.geometry, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asbinary(public.geometry, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asencodedpolyline(geom public.geometry, nprecision integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asencodedpolyline(geom public.geometry, nprecision integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asewkb(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asewkb(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asewkb(public.geometry, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asewkb(public.geometry, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asewkt(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asewkt(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asewkt(public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asewkt(public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asewkt(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asewkt(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asewkt(public.geography, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asewkt(public.geography, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asewkt(public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asewkt(public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asgeojson(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asgeojson(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asgeojson(geog public.geography, maxdecimaldigits integer, options integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asgeojson(geog public.geography, maxdecimaldigits integer, options integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asgeojson(geom public.geometry, maxdecimaldigits integer, options integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asgeojson(geom public.geometry, maxdecimaldigits integer, options integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asgeojson(r record, geom_column text, maxdecimaldigits integer, pretty_bool boolean, id_column text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asgeojson(r record, geom_column text, maxdecimaldigits integer, pretty_bool boolean, id_column text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asgml(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asgml(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asgml(geom public.geometry, maxdecimaldigits integer, options integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asgml(geom public.geometry, maxdecimaldigits integer, options integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asgml(geog public.geography, maxdecimaldigits integer, options integer, nprefix text, id text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asgml(geog public.geography, maxdecimaldigits integer, options integer, nprefix text, id text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asgml(version integer, geog public.geography, maxdecimaldigits integer, options integer, nprefix text, id text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asgml(version integer, geog public.geography, maxdecimaldigits integer, options integer, nprefix text, id text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asgml(version integer, geom public.geometry, maxdecimaldigits integer, options integer, nprefix text, id text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asgml(version integer, geom public.geometry, maxdecimaldigits integer, options integer, nprefix text, id text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_ashexewkb(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_ashexewkb(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_ashexewkb(public.geometry, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_ashexewkb(public.geometry, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_askml(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_askml(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_askml(geog public.geography, maxdecimaldigits integer, nprefix text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_askml(geog public.geography, maxdecimaldigits integer, nprefix text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_askml(geom public.geometry, maxdecimaldigits integer, nprefix text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_askml(geom public.geometry, maxdecimaldigits integer, nprefix text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_aslatlontext(geom public.geometry, tmpl text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_aslatlontext(geom public.geometry, tmpl text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asmarc21(geom public.geometry, format text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asmarc21(geom public.geometry, format text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asmvtgeom(geom public.geometry, bounds public.box2d, extent integer, buffer integer, clip_geom boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asmvtgeom(geom public.geometry, bounds public.box2d, extent integer, buffer integer, clip_geom boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_assvg(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_assvg(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_assvg(geog public.geography, rel integer, maxdecimaldigits integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_assvg(geog public.geography, rel integer, maxdecimaldigits integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_assvg(geom public.geometry, rel integer, maxdecimaldigits integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_assvg(geom public.geometry, rel integer, maxdecimaldigits integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_astext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_astext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_astext(public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_astext(public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_astext(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_astext(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_astext(public.geography, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_astext(public.geography, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_astext(public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_astext(public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_astwkb(geom public.geometry, prec integer, prec_z integer, prec_m integer, with_sizes boolean, with_boxes boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_astwkb(geom public.geometry, prec integer, prec_z integer, prec_m integer, with_sizes boolean, with_boxes boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_astwkb(geom public.geometry[], ids bigint[], prec integer, prec_z integer, prec_m integer, with_sizes boolean, with_boxes boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_astwkb(geom public.geometry[], ids bigint[], prec integer, prec_z integer, prec_m integer, with_sizes boolean, with_boxes boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asx3d(geom public.geometry, maxdecimaldigits integer, options integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asx3d(geom public.geometry, maxdecimaldigits integer, options integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_azimuth(geog1 public.geography, geog2 public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_azimuth(geog1 public.geography, geog2 public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_azimuth(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_azimuth(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_bdmpolyfromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_bdmpolyfromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_bdpolyfromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_bdpolyfromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_boundary(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_boundary(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_boundingdiagonal(geom public.geometry, fits boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_boundingdiagonal(geom public.geometry, fits boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_box2dfromgeohash(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_box2dfromgeohash(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_buffer(text, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_buffer(text, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_buffer(public.geography, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_buffer(public.geography, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_buffer(text, double precision, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_buffer(text, double precision, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_buffer(text, double precision, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_buffer(text, double precision, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_buffer(public.geography, double precision, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_buffer(public.geography, double precision, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_buffer(public.geography, double precision, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_buffer(public.geography, double precision, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_buffer(geom public.geometry, radius double precision, quadsegs integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_buffer(geom public.geometry, radius double precision, quadsegs integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_buffer(geom public.geometry, radius double precision, options text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_buffer(geom public.geometry, radius double precision, options text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_buildarea(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_buildarea(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_centroid(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_centroid(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_centroid(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_centroid(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_centroid(public.geography, use_spheroid boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_centroid(public.geography, use_spheroid boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_chaikinsmoothing(public.geometry, integer, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_chaikinsmoothing(public.geometry, integer, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_cleangeometry(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_cleangeometry(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_clipbybox2d(geom public.geometry, box public.box2d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_clipbybox2d(geom public.geometry, box public.box2d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_closestpoint(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_closestpoint(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_closestpoint(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_closestpoint(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_closestpoint(public.geography, public.geography, use_spheroid boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_closestpoint(public.geography, public.geography, use_spheroid boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_closestpointofapproach(public.geometry, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_closestpointofapproach(public.geometry, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_clusterdbscan(public.geometry, eps double precision, minpoints integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_clusterdbscan(public.geometry, eps double precision, minpoints integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_clusterintersecting(public.geometry[]); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_clusterintersecting(public.geometry[]) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_clusterintersectingwin(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_clusterintersectingwin(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_clusterkmeans(geom public.geometry, k integer, max_radius double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_clusterkmeans(geom public.geometry, k integer, max_radius double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_clusterwithin(public.geometry[], double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_clusterwithin(public.geometry[], double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_clusterwithinwin(public.geometry, distance double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_clusterwithinwin(public.geometry, distance double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_collect(public.geometry[]); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_collect(public.geometry[]) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_collect(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_collect(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_collectionextract(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_collectionextract(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_collectionextract(public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_collectionextract(public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_collectionhomogenize(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_collectionhomogenize(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_combinebbox(public.box2d, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_combinebbox(public.box2d, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_combinebbox(public.box3d, public.box3d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_combinebbox(public.box3d, public.box3d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_combinebbox(public.box3d, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_combinebbox(public.box3d, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_concavehull(param_geom public.geometry, param_pctconvex double precision, param_allow_holes boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_concavehull(param_geom public.geometry, param_pctconvex double precision, param_allow_holes boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_contains(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_contains(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_containsproperly(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_containsproperly(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_convexhull(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_convexhull(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_coorddim(geometry public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_coorddim(geometry public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_coverageclean(geom public.geometry, gapmaximumwidth double precision, snappingdistance double precision, overlapmergestrategy text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_coverageclean(geom public.geometry, gapmaximumwidth double precision, snappingdistance double precision, overlapmergestrategy text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_coverageinvalidedges(geom public.geometry, tolerance double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_coverageinvalidedges(geom public.geometry, tolerance double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_coveragesimplify(geom public.geometry, tolerance double precision, simplifyboundary boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_coveragesimplify(geom public.geometry, tolerance double precision, simplifyboundary boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_coverageunion(public.geometry[]); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_coverageunion(public.geometry[]) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_coveredby(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_coveredby(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_coveredby(geog1 public.geography, geog2 public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_coveredby(geog1 public.geography, geog2 public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_coveredby(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_coveredby(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_covers(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_covers(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_covers(geog1 public.geography, geog2 public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_covers(geog1 public.geography, geog2 public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_covers(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_covers(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_cpawithin(public.geometry, public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_cpawithin(public.geometry, public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_crosses(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_crosses(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_curven(geometry public.geometry, i integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_curven(geometry public.geometry, i integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_curvetoline(geom public.geometry, tol double precision, toltype integer, flags integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_curvetoline(geom public.geometry, tol double precision, toltype integer, flags integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_delaunaytriangles(g1 public.geometry, tolerance double precision, flags integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_delaunaytriangles(g1 public.geometry, tolerance double precision, flags integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_dfullywithin(geom1 public.geometry, geom2 public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_dfullywithin(geom1 public.geometry, geom2 public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_difference(geom1 public.geometry, geom2 public.geometry, gridsize double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_difference(geom1 public.geometry, geom2 public.geometry, gridsize double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_dimension(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_dimension(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_disjoint(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_disjoint(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_distance(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_distance(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_distance(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_distance(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_distance(geog1 public.geography, geog2 public.geography, use_spheroid boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_distance(geog1 public.geography, geog2 public.geography, use_spheroid boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_distancecpa(public.geometry, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_distancecpa(public.geometry, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_distancesphere(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_distancesphere(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_distancesphere(geom1 public.geometry, geom2 public.geometry, radius double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_distancesphere(geom1 public.geometry, geom2 public.geometry, radius double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_distancespheroid(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_distancespheroid(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_distancespheroid(geom1 public.geometry, geom2 public.geometry, public.spheroid); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_distancespheroid(geom1 public.geometry, geom2 public.geometry, public.spheroid) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_dump(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_dump(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_dumppoints(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_dumppoints(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_dumprings(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_dumprings(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_dumpsegments(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_dumpsegments(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_dwithin(text, text, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_dwithin(text, text, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_dwithin(geom1 public.geometry, geom2 public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_dwithin(geom1 public.geometry, geom2 public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_dwithin(geog1 public.geography, geog2 public.geography, tolerance double precision, use_spheroid boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_dwithin(geog1 public.geography, geog2 public.geography, tolerance double precision, use_spheroid boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_endpoint(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_endpoint(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_envelope(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_envelope(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_equals(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_equals(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_estimatedextent(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_estimatedextent(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_estimatedextent(text, text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_estimatedextent(text, text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_estimatedextent(text, text, text, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_estimatedextent(text, text, text, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_expand(public.box2d, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_expand(public.box2d, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_expand(public.box3d, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_expand(public.box3d, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_expand(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_expand(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_expand(box public.box2d, dx double precision, dy double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_expand(box public.box2d, dx double precision, dy double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_expand(box public.box3d, dx double precision, dy double precision, dz double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_expand(box public.box3d, dx double precision, dy double precision, dz double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_expand(geom public.geometry, dx double precision, dy double precision, dz double precision, dm double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_expand(geom public.geometry, dx double precision, dy double precision, dz double precision, dm double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_exteriorring(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_exteriorring(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_filterbym(public.geometry, double precision, double precision, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_filterbym(public.geometry, double precision, double precision, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_findextent(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_findextent(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_findextent(text, text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_findextent(text, text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_flipcoordinates(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_flipcoordinates(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_force2d(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_force2d(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_force3d(geom public.geometry, zvalue double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_force3d(geom public.geometry, zvalue double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_force3dm(geom public.geometry, mvalue double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_force3dm(geom public.geometry, mvalue double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_force3dz(geom public.geometry, zvalue double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_force3dz(geom public.geometry, zvalue double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_force4d(geom public.geometry, zvalue double precision, mvalue double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_force4d(geom public.geometry, zvalue double precision, mvalue double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_forcecollection(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_forcecollection(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_forcecurve(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_forcecurve(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_forcepolygonccw(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_forcepolygonccw(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_forcepolygoncw(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_forcepolygoncw(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_forcerhr(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_forcerhr(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_forcesfs(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_forcesfs(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_forcesfs(public.geometry, version text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_forcesfs(public.geometry, version text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_frechetdistance(geom1 public.geometry, geom2 public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_frechetdistance(geom1 public.geometry, geom2 public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_fromflatgeobuf(anyelement, bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_fromflatgeobuf(anyelement, bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_fromflatgeobuftotable(text, text, bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_fromflatgeobuftotable(text, text, bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_generatepoints(area public.geometry, npoints integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_generatepoints(area public.geometry, npoints integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_generatepoints(area public.geometry, npoints integer, seed integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_generatepoints(area public.geometry, npoints integer, seed integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geogfromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geogfromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geogfromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geogfromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geographyfromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geographyfromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geohash(geog public.geography, maxchars integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geohash(geog public.geography, maxchars integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geohash(geom public.geometry, maxchars integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geohash(geom public.geometry, maxchars integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomcollfromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomcollfromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomcollfromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomcollfromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomcollfromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomcollfromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomcollfromwkb(bytea, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomcollfromwkb(bytea, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geometricmedian(g public.geometry, tolerance double precision, max_iter integer, fail_if_not_converged boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geometricmedian(g public.geometry, tolerance double precision, max_iter integer, fail_if_not_converged boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geometryfromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geometryfromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geometryfromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geometryfromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geometryn(public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geometryn(public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geometrytype(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geometrytype(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromewkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromewkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromewkt(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromewkt(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromgeohash(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromgeohash(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromgeojson(json); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromgeojson(json) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromgeojson(jsonb); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromgeojson(jsonb) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromgeojson(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromgeojson(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromgml(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromgml(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromgml(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromgml(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromkml(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromkml(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfrommarc21(marc21xml text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfrommarc21(marc21xml text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromtwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromtwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_geomfromwkb(bytea, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_geomfromwkb(bytea, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_gmltosql(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_gmltosql(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_gmltosql(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_gmltosql(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_hasarc(geometry public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_hasarc(geometry public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_hasm(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_hasm(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_hasz(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_hasz(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_hausdorffdistance(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_hausdorffdistance(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_hausdorffdistance(geom1 public.geometry, geom2 public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_hausdorffdistance(geom1 public.geometry, geom2 public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_hexagon(size double precision, cell_i integer, cell_j integer, origin public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_hexagon(size double precision, cell_i integer, cell_j integer, origin public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_hexagongrid(size double precision, bounds public.geometry, OUT geom public.geometry, OUT i integer, OUT j integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_hexagongrid(size double precision, bounds public.geometry, OUT geom public.geometry, OUT i integer, OUT j integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_interiorringn(public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_interiorringn(public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_interpolatepoint(line public.geometry, point public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_interpolatepoint(line public.geometry, point public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_intersection(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_intersection(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_intersection(public.geography, public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_intersection(public.geography, public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_intersection(geom1 public.geometry, geom2 public.geometry, gridsize double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_intersection(geom1 public.geometry, geom2 public.geometry, gridsize double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_intersects(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_intersects(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_intersects(geog1 public.geography, geog2 public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_intersects(geog1 public.geography, geog2 public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_intersects(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_intersects(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_inversetransformpipeline(geom public.geometry, pipeline text, to_srid integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_inversetransformpipeline(geom public.geometry, pipeline text, to_srid integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_isclosed(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_isclosed(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_iscollection(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_iscollection(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_isempty(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_isempty(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_ispolygonccw(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_ispolygonccw(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_ispolygoncw(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_ispolygoncw(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_isring(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_isring(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_issimple(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_issimple(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_isvalid(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_isvalid(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_isvalid(public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_isvalid(public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_isvaliddetail(geom public.geometry, flags integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_isvaliddetail(geom public.geometry, flags integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_isvalidreason(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_isvalidreason(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_isvalidreason(public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_isvalidreason(public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_isvalidtrajectory(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_isvalidtrajectory(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_largestemptycircle(geom public.geometry, tolerance double precision, boundary public.geometry, OUT center public.geometry, OUT nearest public.geometry, OUT radius double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_largestemptycircle(geom public.geometry, tolerance double precision, boundary public.geometry, OUT center public.geometry, OUT nearest public.geometry, OUT radius double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_length(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_length(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_length(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_length(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_length(geog public.geography, use_spheroid boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_length(geog public.geography, use_spheroid boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_length2d(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_length2d(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_length2dspheroid(public.geometry, public.spheroid); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_length2dspheroid(public.geometry, public.spheroid) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_lengthspheroid(public.geometry, public.spheroid); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_lengthspheroid(public.geometry, public.spheroid) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_letters(letters text, font json); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_letters(letters text, font json) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linecrossingdirection(line1 public.geometry, line2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linecrossingdirection(line1 public.geometry, line2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_lineextend(geom public.geometry, distance_forward double precision, distance_backward double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_lineextend(geom public.geometry, distance_forward double precision, distance_backward double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linefromencodedpolyline(txtin text, nprecision integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linefromencodedpolyline(txtin text, nprecision integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linefrommultipoint(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linefrommultipoint(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linefromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linefromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linefromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linefromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linefromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linefromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linefromwkb(bytea, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linefromwkb(bytea, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_lineinterpolatepoint(text, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_lineinterpolatepoint(text, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_lineinterpolatepoint(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_lineinterpolatepoint(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_lineinterpolatepoint(public.geography, double precision, use_spheroid boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_lineinterpolatepoint(public.geography, double precision, use_spheroid boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_lineinterpolatepoints(text, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_lineinterpolatepoints(text, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_lineinterpolatepoints(public.geometry, double precision, repeat boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_lineinterpolatepoints(public.geometry, double precision, repeat boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_lineinterpolatepoints(public.geography, double precision, use_spheroid boolean, repeat boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_lineinterpolatepoints(public.geography, double precision, use_spheroid boolean, repeat boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linelocatepoint(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linelocatepoint(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linelocatepoint(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linelocatepoint(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linelocatepoint(public.geography, public.geography, use_spheroid boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linelocatepoint(public.geography, public.geography, use_spheroid boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linemerge(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linemerge(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linemerge(public.geometry, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linemerge(public.geometry, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linestringfromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linestringfromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linestringfromwkb(bytea, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linestringfromwkb(bytea, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linesubstring(text, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linesubstring(text, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linesubstring(public.geography, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linesubstring(public.geography, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linesubstring(public.geometry, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linesubstring(public.geometry, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_linetocurve(geometry public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_linetocurve(geometry public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_locatealong(geometry public.geometry, measure double precision, leftrightoffset double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_locatealong(geometry public.geometry, measure double precision, leftrightoffset double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_locatebetween(geometry public.geometry, frommeasure double precision, tomeasure double precision, leftrightoffset double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_locatebetween(geometry public.geometry, frommeasure double precision, tomeasure double precision, leftrightoffset double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_locatebetweenelevations(geometry public.geometry, fromelevation double precision, toelevation double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_locatebetweenelevations(geometry public.geometry, fromelevation double precision, toelevation double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_longestline(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_longestline(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_m(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_m(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_makebox2d(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_makebox2d(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_makeenvelope(double precision, double precision, double precision, double precision, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_makeenvelope(double precision, double precision, double precision, double precision, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_makeline(public.geometry[]); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_makeline(public.geometry[]) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_makeline(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_makeline(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_makepoint(double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_makepoint(double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_makepoint(double precision, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_makepoint(double precision, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_makepoint(double precision, double precision, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_makepoint(double precision, double precision, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_makepointm(double precision, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_makepointm(double precision, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_makepolygon(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_makepolygon(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_makepolygon(public.geometry, public.geometry[]); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_makepolygon(public.geometry, public.geometry[]) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_makevalid(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_makevalid(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_makevalid(geom public.geometry, params text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_makevalid(geom public.geometry, params text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_maxdistance(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_maxdistance(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_maximuminscribedcircle(public.geometry, OUT center public.geometry, OUT nearest public.geometry, OUT radius double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_maximuminscribedcircle(public.geometry, OUT center public.geometry, OUT nearest public.geometry, OUT radius double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_memsize(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_memsize(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_minimumboundingcircle(inputgeom public.geometry, segs_per_quarter integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_minimumboundingcircle(inputgeom public.geometry, segs_per_quarter integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_minimumboundingradius(public.geometry, OUT center public.geometry, OUT radius double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_minimumboundingradius(public.geometry, OUT center public.geometry, OUT radius double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_minimumclearance(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_minimumclearance(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_minimumclearanceline(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_minimumclearanceline(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_mlinefromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_mlinefromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_mlinefromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_mlinefromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_mlinefromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_mlinefromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_mlinefromwkb(bytea, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_mlinefromwkb(bytea, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_mpointfromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_mpointfromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_mpointfromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_mpointfromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_mpointfromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_mpointfromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_mpointfromwkb(bytea, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_mpointfromwkb(bytea, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_mpolyfromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_mpolyfromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_mpolyfromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_mpolyfromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_mpolyfromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_mpolyfromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_mpolyfromwkb(bytea, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_mpolyfromwkb(bytea, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_multi(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_multi(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_multilinefromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_multilinefromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_multilinestringfromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_multilinestringfromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_multilinestringfromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_multilinestringfromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_multipointfromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_multipointfromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_multipointfromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_multipointfromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_multipointfromwkb(bytea, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_multipointfromwkb(bytea, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_multipolyfromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_multipolyfromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_multipolyfromwkb(bytea, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_multipolyfromwkb(bytea, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_multipolygonfromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_multipolygonfromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_multipolygonfromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_multipolygonfromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_ndims(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_ndims(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_node(g public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_node(g public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_normalize(geom public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_normalize(geom public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_npoints(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_npoints(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_nrings(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_nrings(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_numcurves(geometry public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_numcurves(geometry public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_numgeometries(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_numgeometries(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_numinteriorring(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_numinteriorring(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_numinteriorrings(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_numinteriorrings(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_numpatches(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_numpatches(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_numpoints(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_numpoints(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_offsetcurve(line public.geometry, distance double precision, params text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_offsetcurve(line public.geometry, distance double precision, params text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_orderingequals(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_orderingequals(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_orientedenvelope(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_orientedenvelope(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_overlaps(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_overlaps(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_patchn(public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_patchn(public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_perimeter(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_perimeter(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_perimeter(geog public.geography, use_spheroid boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_perimeter(geog public.geography, use_spheroid boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_perimeter2d(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_perimeter2d(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_point(double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_point(double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_point(double precision, double precision, srid integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_point(double precision, double precision, srid integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_pointfromgeohash(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_pointfromgeohash(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_pointfromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_pointfromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_pointfromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_pointfromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_pointfromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_pointfromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_pointfromwkb(bytea, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_pointfromwkb(bytea, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_pointinsidecircle(public.geometry, double precision, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_pointinsidecircle(public.geometry, double precision, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_pointm(xcoordinate double precision, ycoordinate double precision, mcoordinate double precision, srid integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_pointm(xcoordinate double precision, ycoordinate double precision, mcoordinate double precision, srid integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_pointn(public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_pointn(public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_pointonsurface(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_pointonsurface(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_points(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_points(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_pointz(xcoordinate double precision, ycoordinate double precision, zcoordinate double precision, srid integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_pointz(xcoordinate double precision, ycoordinate double precision, zcoordinate double precision, srid integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_pointzm(xcoordinate double precision, ycoordinate double precision, zcoordinate double precision, mcoordinate double precision, srid integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_pointzm(xcoordinate double precision, ycoordinate double precision, zcoordinate double precision, mcoordinate double precision, srid integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_polyfromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_polyfromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_polyfromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_polyfromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_polyfromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_polyfromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_polyfromwkb(bytea, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_polyfromwkb(bytea, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_polygon(public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_polygon(public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_polygonfromtext(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_polygonfromtext(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_polygonfromtext(text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_polygonfromtext(text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_polygonfromwkb(bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_polygonfromwkb(bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_polygonfromwkb(bytea, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_polygonfromwkb(bytea, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_polygonize(public.geometry[]); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_polygonize(public.geometry[]) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_project(geog public.geography, distance double precision, azimuth double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_project(geog public.geography, distance double precision, azimuth double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_project(geog_from public.geography, geog_to public.geography, distance double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_project(geog_from public.geography, geog_to public.geography, distance double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_project(geom1 public.geometry, distance double precision, azimuth double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_project(geom1 public.geometry, distance double precision, azimuth double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_project(geom1 public.geometry, geom2 public.geometry, distance double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_project(geom1 public.geometry, geom2 public.geometry, distance double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_quantizecoordinates(g public.geometry, prec_x integer, prec_y integer, prec_z integer, prec_m integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_quantizecoordinates(g public.geometry, prec_x integer, prec_y integer, prec_z integer, prec_m integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_reduceprecision(geom public.geometry, gridsize double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_reduceprecision(geom public.geometry, gridsize double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_relate(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_relate(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_relate(geom1 public.geometry, geom2 public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_relate(geom1 public.geometry, geom2 public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_relate(geom1 public.geometry, geom2 public.geometry, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_relate(geom1 public.geometry, geom2 public.geometry, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_relatematch(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_relatematch(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_removeirrelevantpointsforview(public.geometry, public.box2d, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_removeirrelevantpointsforview(public.geometry, public.box2d, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_removepoint(public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_removepoint(public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_removerepeatedpoints(geom public.geometry, tolerance double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_removerepeatedpoints(geom public.geometry, tolerance double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_removesmallparts(public.geometry, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_removesmallparts(public.geometry, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_reverse(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_reverse(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_rotate(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_rotate(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_rotate(public.geometry, double precision, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_rotate(public.geometry, double precision, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_rotate(public.geometry, double precision, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_rotate(public.geometry, double precision, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_rotatex(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_rotatex(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_rotatey(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_rotatey(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_rotatez(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_rotatez(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_scale(public.geometry, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_scale(public.geometry, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_scale(public.geometry, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_scale(public.geometry, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_scale(public.geometry, public.geometry, origin public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_scale(public.geometry, public.geometry, origin public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_scale(public.geometry, double precision, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_scale(public.geometry, double precision, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_scroll(public.geometry, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_scroll(public.geometry, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_segmentize(geog public.geography, max_segment_length double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_segmentize(geog public.geography, max_segment_length double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_segmentize(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_segmentize(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_seteffectivearea(public.geometry, double precision, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_seteffectivearea(public.geometry, double precision, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_setpoint(public.geometry, integer, public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_setpoint(public.geometry, integer, public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_setsrid(geog public.geography, srid integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_setsrid(geog public.geography, srid integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_setsrid(geom public.geometry, srid integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_setsrid(geom public.geometry, srid integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_sharedpaths(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_sharedpaths(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_shiftlongitude(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_shiftlongitude(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_shortestline(text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_shortestline(text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_shortestline(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_shortestline(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_shortestline(public.geography, public.geography, use_spheroid boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_shortestline(public.geography, public.geography, use_spheroid boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_simplify(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_simplify(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_simplify(public.geometry, double precision, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_simplify(public.geometry, double precision, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_simplifypolygonhull(geom public.geometry, vertex_fraction double precision, is_outer boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_simplifypolygonhull(geom public.geometry, vertex_fraction double precision, is_outer boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_simplifypreservetopology(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_simplifypreservetopology(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_simplifyvw(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_simplifyvw(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_snap(geom1 public.geometry, geom2 public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_snap(geom1 public.geometry, geom2 public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_snaptogrid(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_snaptogrid(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_snaptogrid(public.geometry, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_snaptogrid(public.geometry, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_snaptogrid(public.geometry, double precision, double precision, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_snaptogrid(public.geometry, double precision, double precision, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_snaptogrid(geom1 public.geometry, geom2 public.geometry, double precision, double precision, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_snaptogrid(geom1 public.geometry, geom2 public.geometry, double precision, double precision, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_split(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_split(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_square(size double precision, cell_i integer, cell_j integer, origin public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_square(size double precision, cell_i integer, cell_j integer, origin public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_squaregrid(size double precision, bounds public.geometry, OUT geom public.geometry, OUT i integer, OUT j integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_squaregrid(size double precision, bounds public.geometry, OUT geom public.geometry, OUT i integer, OUT j integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_srid(geog public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_srid(geog public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_srid(geom public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_srid(geom public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_startpoint(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_startpoint(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_subdivide(geom public.geometry, maxvertices integer, gridsize double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_subdivide(geom public.geometry, maxvertices integer, gridsize double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_summary(public.geography); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_summary(public.geography) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_summary(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_summary(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_swapordinates(geom public.geometry, ords cstring); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_swapordinates(geom public.geometry, ords cstring) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_symdifference(geom1 public.geometry, geom2 public.geometry, gridsize double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_symdifference(geom1 public.geometry, geom2 public.geometry, gridsize double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_symmetricdifference(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_symmetricdifference(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_tileenvelope(zoom integer, x integer, y integer, bounds public.geometry, margin double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_tileenvelope(zoom integer, x integer, y integer, bounds public.geometry, margin double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_touches(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_touches(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_transform(public.geometry, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_transform(public.geometry, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_transform(geom public.geometry, to_proj text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_transform(geom public.geometry, to_proj text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_transform(geom public.geometry, from_proj text, to_srid integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_transform(geom public.geometry, from_proj text, to_srid integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_transform(geom public.geometry, from_proj text, to_proj text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_transform(geom public.geometry, from_proj text, to_proj text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_transformpipeline(geom public.geometry, pipeline text, to_srid integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_transformpipeline(geom public.geometry, pipeline text, to_srid integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_translate(public.geometry, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_translate(public.geometry, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_translate(public.geometry, double precision, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_translate(public.geometry, double precision, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_transscale(public.geometry, double precision, double precision, double precision, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_transscale(public.geometry, double precision, double precision, double precision, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_triangulatepolygon(g1 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_triangulatepolygon(g1 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_unaryunion(public.geometry, gridsize double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_unaryunion(public.geometry, gridsize double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_union(public.geometry[]); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_union(public.geometry[]) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_union(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_union(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_union(geom1 public.geometry, geom2 public.geometry, gridsize double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_union(geom1 public.geometry, geom2 public.geometry, gridsize double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_voronoilines(g1 public.geometry, tolerance double precision, extend_to public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_voronoilines(g1 public.geometry, tolerance double precision, extend_to public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_voronoipolygons(g1 public.geometry, tolerance double precision, extend_to public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_voronoipolygons(g1 public.geometry, tolerance double precision, extend_to public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_within(geom1 public.geometry, geom2 public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_within(geom1 public.geometry, geom2 public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_wkbtosql(wkb bytea); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_wkbtosql(wkb bytea) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_wkttosql(text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_wkttosql(text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_wrapx(geom public.geometry, wrap double precision, move double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_wrapx(geom public.geometry, wrap double precision, move double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_x(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_x(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_xmax(public.box3d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_xmax(public.box3d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_xmin(public.box3d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_xmin(public.box3d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_y(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_y(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_ymax(public.box3d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_ymax(public.box3d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_ymin(public.box3d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_ymin(public.box3d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_z(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_z(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_zmax(public.box3d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_zmax(public.box3d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_zmflag(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_zmflag(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_zmin(public.box3d); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_zmin(public.box3d) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION updategeometrysrid(character varying, character varying, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.updategeometrysrid(character varying, character varying, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION updategeometrysrid(character varying, character varying, character varying, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.updategeometrysrid(character varying, character varying, character varying, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION updategeometrysrid(catalogn_name character varying, schema_name character varying, table_name character varying, column_name character varying, new_srid_in integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.updategeometrysrid(catalogn_name character varying, schema_name character varying, table_name character varying, column_name character varying, new_srid_in integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_3dextent(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_3dextent(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asflatgeobuf(anyelement); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asflatgeobuf(anyelement) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asflatgeobuf(anyelement, boolean); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asflatgeobuf(anyelement, boolean) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asflatgeobuf(anyelement, boolean, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asflatgeobuf(anyelement, boolean, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asgeobuf(anyelement); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asgeobuf(anyelement) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asgeobuf(anyelement, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asgeobuf(anyelement, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asmvt(anyelement); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asmvt(anyelement) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asmvt(anyelement, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asmvt(anyelement, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asmvt(anyelement, text, integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asmvt(anyelement, text, integer) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asmvt(anyelement, text, integer, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asmvt(anyelement, text, integer, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_asmvt(anyelement, text, integer, text, text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_asmvt(anyelement, text, integer, text, text) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_clusterintersecting(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_clusterintersecting(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_clusterwithin(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_clusterwithin(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_collect(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_collect(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_coverageunion(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_coverageunion(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_extent(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_extent(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_makeline(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_makeline(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_memcollect(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_memcollect(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_memunion(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_memunion(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_polygonize(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_polygonize(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_union(public.geometry); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_union(public.geometry) TO trustbond_z1r9_user;
-
-
---
--- Name: FUNCTION st_union(public.geometry, double precision); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.st_union(public.geometry, double precision) TO trustbond_z1r9_user;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: -; Owner: postgres
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres GRANT ALL ON SEQUENCES TO trustbond_z1r9_user;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR TYPES; Type: DEFAULT ACL; Schema: -; Owner: postgres
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres GRANT ALL ON TYPES TO trustbond_z1r9_user;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR FUNCTIONS; Type: DEFAULT ACL; Schema: -; Owner: postgres
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres GRANT ALL ON FUNCTIONS TO trustbond_z1r9_user;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: -; Owner: postgres
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres GRANT ALL ON TABLES TO trustbond_z1r9_user;
-
-
---
 -- PostgreSQL database dump complete
 --
-
-\unrestrict 7cxwegkkuEnRdwnUxBWMutIg501UoLREzRreDZehMBEgmUSqxiOxnWQIb7aefqG
 
