@@ -844,6 +844,42 @@ COMMENT ON COLUMN public.reports.context_tags IS 'Contextual tags from reporter 
 
 
 --
+-- Name: special_assignment_units; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.special_assignment_units (
+    unit_id integer NOT NULL,
+    unit_code character varying(50) NOT NULL,
+    unit_name character varying(100) NOT NULL,
+    description character varying(500),
+    is_active boolean DEFAULT true,
+    requires_commander_approval boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: special_assignment_units_unit_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.special_assignment_units_unit_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: special_assignment_units_unit_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.special_assignment_units_unit_id_seq OWNED BY public.special_assignment_units.unit_id;
+
+
+--
 -- Name: station_coverage_cells; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -964,6 +1000,13 @@ ALTER TABLE ONLY public.local_leaders ALTER COLUMN local_leader_id SET DEFAULT n
 --
 
 ALTER TABLE ONLY public.password_reset_codes ALTER COLUMN id SET DEFAULT nextval('public.password_reset_codes_id_seq'::regclass);
+
+
+--
+-- Name: special_assignment_units unit_id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.special_assignment_units ALTER COLUMN unit_id SET DEFAULT nextval('public.special_assignment_units_unit_id_seq'::regclass);
 
 
 --
@@ -1357,34 +1400,28 @@ c4b55679-56dc-4a8e-921b-ee6b1b355b68	7e58550c-e5ce-4f24-a819-1c82703c99cd	https:
 --
 
 COPY public.hotspot_reports (hotspot_id, report_id) FROM stdin;
-130	debc3ac3-1471-4968-b832-138bb2bfa3aa
-130	81dc465d-4c4b-4527-86df-3ffa1be00899
-130	263dc1a6-bf49-4879-936b-b4d803736044
-130	8479f8e2-d885-427f-a385-e28c74af3de4
-131	afcf74ac-dab4-4032-af3d-8f3fa1ab4180
-131	0cd3f80f-39c2-4687-8c4f-30377a03de91
-131	fe6aadb6-e284-49c7-b0f0-9d9ce80513ae
-131	9b529720-5e42-4f66-af44-0b77bbd4bbe3
-131	5e58ba28-e778-4044-b0e2-8ba3e502b1a5
-131	c701470d-5fcf-48ee-8342-89715e1c9e31
-132	aaef4b7e-b9ad-4073-be2c-ffcb61c81ecc
-132	a8168200-bffd-4d4b-847c-69e1e4418b26
-132	685b2c28-757c-44e9-b8be-8e1273c435ff
-132	b27e6bb7-1166-402b-9428-2c965c11c77d
-133	9cf848fb-a5f6-4f85-8fe7-b8a5f46e3fb9
-133	804515a3-79b1-4ca7-9e07-d4a06d924def
-133	7d88181b-65c4-47a8-9e1d-b1a74d5cec02
-133	3dd73568-0c54-445b-9b26-31ae2aa55ed2
-133	f679c63f-4d00-4ba6-bc9c-c175a4f12124
-134	b20d17b7-2209-41cd-9ad9-371547051207
-134	41ba8864-1d44-4804-b828-cb69cd46ee1d
-134	ac105b65-8376-4b66-a216-e7416b7af3f4
-134	5eef1033-aab3-4663-8470-79fcdc8c75ad
-135	4fca6507-70a5-4953-889a-fe58885ef80f
-135	66658237-5d9e-48d9-b903-94eb50420598
-135	61d9ad11-79ad-438c-88cf-7ad75fd823e4
-135	1d00d3f6-2d0b-40a7-b345-39e0aa8d9eb8
-135	be9b3ccd-a2e8-43d3-97b8-4d0e73792a3e
+150	debc3ac3-1471-4968-b832-138bb2bfa3aa
+150	81dc465d-4c4b-4527-86df-3ffa1be00899
+150	263dc1a6-bf49-4879-936b-b4d803736044
+150	8479f8e2-d885-427f-a385-e28c74af3de4
+151	aaef4b7e-b9ad-4073-be2c-ffcb61c81ecc
+151	a8168200-bffd-4d4b-847c-69e1e4418b26
+151	685b2c28-757c-44e9-b8be-8e1273c435ff
+151	b27e6bb7-1166-402b-9428-2c965c11c77d
+152	9cf848fb-a5f6-4f85-8fe7-b8a5f46e3fb9
+152	804515a3-79b1-4ca7-9e07-d4a06d924def
+152	7d88181b-65c4-47a8-9e1d-b1a74d5cec02
+152	3dd73568-0c54-445b-9b26-31ae2aa55ed2
+152	f679c63f-4d00-4ba6-bc9c-c175a4f12124
+153	b20d17b7-2209-41cd-9ad9-371547051207
+153	41ba8864-1d44-4804-b828-cb69cd46ee1d
+153	ac105b65-8376-4b66-a216-e7416b7af3f4
+153	5eef1033-aab3-4663-8470-79fcdc8c75ad
+154	4fca6507-70a5-4953-889a-fe58885ef80f
+154	66658237-5d9e-48d9-b903-94eb50420598
+154	61d9ad11-79ad-438c-88cf-7ad75fd823e4
+154	1d00d3f6-2d0b-40a7-b345-39e0aa8d9eb8
+154	be9b3ccd-a2e8-43d3-97b8-4d0e73792a3e
 \.
 
 
@@ -1393,12 +1430,11 @@ COPY public.hotspot_reports (hotspot_id, report_id) FROM stdin;
 --
 
 COPY public.hotspots (hotspot_id, hotspot_name, center_lat, center_long, radius_meters, incident_count, report_ids, risk_level, incident_type_distribution, time_window_hours, detected_at, expires_at, is_active, incident_type_id) FROM stdin;
-130	\N	-1.4681569	29.6445140	500.00	4	\N	medium	\N	720	2026-05-19 12:26:45.586475	\N	t	3
-131	\N	-1.4952365	29.6358677	500.00	6	\N	high	\N	720	2026-05-19 12:26:45.734281	\N	t	9
-132	\N	-1.4587496	29.5180071	500.00	4	\N	medium	\N	720	2026-05-19 12:26:45.890306	\N	t	1
-133	\N	-1.4373841	29.5488533	500.00	5	\N	medium	\N	720	2026-05-19 12:26:46.05113	\N	t	1
-134	\N	-1.5047040	29.6693854	500.00	4	\N	medium	\N	720	2026-05-19 12:26:46.258819	\N	t	9
-135	\N	-1.5032079	29.6190901	500.00	5	\N	medium	\N	720	2026-05-19 12:26:46.417277	\N	t	9
+150	\N	-1.4681569	29.6445140	500.00	4	\N	medium	\N	8760	2026-05-20 14:30:09.408946	\N	t	3
+151	\N	-1.4587496	29.5180071	500.00	4	\N	medium	\N	8760	2026-05-20 14:30:09.711494	\N	t	1
+152	\N	-1.4373841	29.5488533	500.00	5	\N	medium	\N	8760	2026-05-20 14:30:09.957836	\N	t	1
+153	\N	-1.5047040	29.6693854	500.00	4	\N	medium	\N	8760	2026-05-20 14:30:10.249822	\N	t	9
+154	\N	-1.5032079	29.6190901	500.00	5	\N	medium	\N	8760	2026-05-20 14:30:10.584735	\N	t	9
 \.
 
 
@@ -3056,7 +3092,7 @@ COPY public.police_users (police_user_id, badge_number, first_name, middle_name,
 27	Supervisor-002	JANVIER	\N	Hakorimana	hakoj782@gmail.com	+250787724376	$pbkdf2-sha256$29000$CUEoRUiplVIq5dzbOydE6A$bE8mB0lICMztYG6trpMQIr9n23Oc/GVFpyzCmlOgzlY	officer	8	8	\N	t	f	\N	2026-04-25 18:15:34.161716	2026-04-21 17:32:35.922585	2026-04-21 17:32:35.922585	2026-05-08 17:44:07.524238
 6	Officer-001	Samuel	\N	Yitakubayo	samuelyitakubayo70@gmail.com	0781798011	$pbkdf2-sha256$29000$uRcCYIxxLkUopfReC4Gwdg$fibPN/TPuthW8Z/MPQCqRjVi1x1S1unp/iMjkzx9cgY	officer	8	8	\N	t	f	\N	2026-05-04 16:28:54.27143	2026-03-15 17:25:05.972992	2026-03-15 17:25:05.972992	2026-05-10 14:58:35.772583
 1	ADMIN-001	System	\N	Admin	samuelyitakubayo60@gmail.com	\N	$pbkdf2-sha256$29000$wnivNcaYU2rNWetda23NGQ$3h/ogi2VqcpSft.oaWtKt7hJkkB1wM8q7MuwTAUbn7c	admin	89	\N	\N	t	f	\N	2026-05-10 16:17:59.469538	2026-03-02 11:22:05.021999	2026-03-02 11:22:05.021999	2026-05-10 16:17:59.302259
-26	ADMIN-002	dukuze	\N	jean claude	dukuzejean09@gmail.com	0791457824	$pbkdf2-sha256$29000$htBaa01J6V2L8d77PyckhA$YpweLlQ8ajcdPZtm0FBJ724LeMkyrUnYZwrr0ssx0Io	admin	\N	\N	\N	t	f	\N	2026-05-20 05:20:21.937276	2026-04-19 10:49:03.133685	2026-04-19 10:49:03.133685	2026-05-20 05:20:21.930083
+26	ADMIN-002	dukuze	\N	jean claude	dukuzejean09@gmail.com	0791457824	$pbkdf2-sha256$29000$htBaa01J6V2L8d77PyckhA$YpweLlQ8ajcdPZtm0FBJ724LeMkyrUnYZwrr0ssx0Io	admin	\N	\N	\N	t	f	\N	2026-05-20 15:36:58.368896	2026-04-19 10:49:03.133685	2026-04-19 10:49:03.133685	2026-05-20 15:36:58.363982
 \.
 
 
@@ -3213,6 +3249,22 @@ COPY public.spatial_ref_sys (srid, auth_name, auth_srid, srtext, proj4text) FROM
 
 
 --
+-- Data for Name: special_assignment_units; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.special_assignment_units (unit_id, unit_code, unit_name, description, is_active, requires_commander_approval, created_at, updated_at) FROM stdin;
+2	RRU	Rapid Response Unit (RRU)	Armed unit for immediate response to violent incidents, riots, and high-threat situations.	t	t	2026-05-20 11:23:55.906966+00	2026-05-20 11:23:55.906966+00
+4	DEU	Drug Enforcement Unit (DEU)	Specialized unit for narcotics investigations, trafficking networks, and rehabilitation coordination.	t	t	2026-05-20 11:23:55.906966+00	2026-05-20 11:23:55.906966+00
+5	TPU	Traffic Police Unit (TPU)	Dedicated traffic law enforcement, road safety audits, and accident investigation.	t	f	2026-05-20 11:23:55.906966+00	2026-05-20 11:23:55.906966+00
+6	CPU	Community Policing Unit (CPU)	Neighbourhood liaison, community watch coordination, and public infrastructure protection.	t	f	2026-05-20 11:23:55.906966+00	2026-05-20 11:23:55.906966+00
+7	ISU	Intelligence & Surveillance Unit (ISU)	Covert intelligence gathering, informant networks, and threat assessment.	t	t	2026-05-20 11:23:55.906966+00	2026-05-20 11:23:55.906966+00
+8	K9	K9 / Canine Unit	Dog-assisted search, tracking suspects, and evidence detection operations.	t	t	2026-05-20 11:23:55.906966+00	2026-05-20 11:23:55.906966+00
+9	AFU	Anti-Fraud Unit (AFU)	Financial crime, cybercrime, and identity theft investigations.	t	t	2026-05-20 11:23:55.906966+00	2026-05-20 11:23:55.906966+00
+10	VPU	Victim Protection Unit (VPU)	Specialist support for victims of gender-based violence, child abuse, and vulnerable persons.	t	f	2026-05-20 11:23:55.906966+00	2026-05-20 11:23:55.906966+00
+\.
+
+
+--
 -- Data for Name: station_coverage_cells; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -3267,7 +3319,6 @@ COPY public.stations (station_id, station_code, station_name, station_type, lati
 COPY public.system_config (config_key, config_value, description, updated_by, updated_at) FROM stdin;
 trust_score.formula	{"history": 0.3, "spam_penalty": 0.2, "confirmation_rate": 0.4, "location_diversity": 0.1}	Device trust score weights	1	2026-03-02 14:37:52.623085
 spam.threshold	{"flags": 5, "trust_score": 10}	Auto-ban thresholds	1	2026-03-02 14:37:52.623085
-dbscan.epsilon	{"value": 500}	DBSCAN cluster radius	1	2026-03-02 14:37:52.623085
 dbscan.min_samples	{"value": 1}	Minimum reports for cluster	1	2026-03-02 14:37:52.623085
 ml.auto_verification_threshold	{"value": 70.0, "description": "TrustBond model threshold for auto-verification"}	Auto-verification threshold - match TrustBond model (70%)	\N	2026-04-29 18:19:54.66837
 ml.confidence_threshold	{"value": 0.7, "description": "TrustBond model confidence threshold"}	ML confidence threshold - match TrustBond model (0.7)	\N	2026-04-29 18:19:54.66837
@@ -3275,6 +3326,7 @@ ml.max_trust_score	{"value": 100.0, "description": "Maximum trust score (100%)"}
 ml.min_trust_score	{"value": 0.0, "description": "Minimum trust score (0%)"}	Min trust score - reset to 0% for proper model alignment	\N	2026-04-29 18:19:54.66837
 ml.trust_threshold	{"value": 70.0, "description": "TrustBond model threshold (70%) - matches trained model"}	ML trust threshold - reset to match TrustBond model (70%)	\N	2026-04-29 18:19:54.66837
 ml.under_review_threshold	{"value": 42.0, "description": "60% of TrustBond threshold (70% * 0.6)"}	ML under review threshold - 60% of model threshold (42%)	\N	2026-04-29 18:19:54.66837
+dbscan.epsilon	{"value": 1000}	DBSCAN cluster radius	26	2026-03-02 14:37:52.623085
 \.
 
 
@@ -3313,6 +3365,37 @@ d3ff4f30-f08d-4e54-8698-7385f869bd52	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ
 ca3c9ddf-03d5-4d46-8fac-29bf8685d47a	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTIyMjM3OH0.uQiEpU7PwWl2ZsaaLUSpbmz-9BQSox-f0sBidicj3Gk	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36	172.18.0.1	2026-05-19 20:26:18.643547	2026-05-19 12:26:18.645267	\N
 146fc726-3e76-47f4-a5b0-4fb4e1997922	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTIyNDM5OX0.MkHxk4jrkg4os55x7-M8VFju63ovMimWnqbSZ8lLZ7g	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36	172.18.0.1	2026-05-19 20:59:59.966692	2026-05-19 12:59:59.97222	\N
 8a536ab7-c442-4832-bc0b-a8c44781cc6b	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI4MzIyMX0.IzzmGRu1DUL6HV7VWXpykUTLmJVCkzKoeARlBDCHpP0	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.120.0 Chrome/142.0.7444.265 Electron/39.8.8 Safari/537.36	172.18.0.1	2026-05-20 13:20:21.937276	2026-05-20 05:20:21.953119	\N
+be809c0c-d720-4f4c-8bf1-2cbc6dde4d7a	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI5MjA4NX0.SJOnjuulTTB_jTUbL1T5OoInPb3af4BQnJ7xyGkznDQ	python-requests/2.34.2	127.0.0.1	2026-05-20 15:48:05.918965	2026-05-20 07:48:05.945538	\N
+3db042da-61a7-498f-93dd-7d1ca403d8b7	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI5MjEyMn0.bpZ3XOYoPRifc2dmM407ifj65__xIUMwfN5NTi1KSpo	python-requests/2.34.2	127.0.0.1	2026-05-20 15:48:42.560321	2026-05-20 07:48:42.590048	\N
+c37b04ae-66dd-4dfa-b5a6-b2889387fd72	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI5MjEzN30.dxXyx0amdJA22JpkTNMNsMY271zjptx7C-56g8x05TA	python-requests/2.34.2	127.0.0.1	2026-05-20 15:48:57.224233	2026-05-20 07:48:57.226091	\N
+0450499d-a6fb-4cfe-8453-d4cc4625a171	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI5MjE3N30.ZqMBYVA7ZqGJT4ROBIFH362oxAKfjdRqGB__VlBij70	python-requests/2.34.2	127.0.0.1	2026-05-20 15:49:37.379453	2026-05-20 07:49:37.381299	\N
+12a72ee4-ec25-4909-b98f-151720df9469	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI5MjE5MH0.1GUs0sPmPoEoAekPwnX-gncwbKZi7ozDhNhNJw_Mg3M	python-requests/2.34.2	127.0.0.1	2026-05-20 15:49:50.10774	2026-05-20 07:49:50.109077	\N
+fe45069f-1e8d-478f-ab85-6578dd39fd47	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI5MjI3Nn0.Hi-SuBWx9Nqktz4k5YyQMXyRIMslMsgTgj5J7bvCu78	python-requests/2.34.2	127.0.0.1	2026-05-20 15:51:16.243594	2026-05-20 07:51:16.260239	\N
+ea9e2d79-873e-45d4-b040-47b1a540b39a	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI5MjQ3NH0.4099Gy2SDD5v_zsA3Y7CKMx-2BtsA6l0jr8kzB0296k	python-requests/2.34.2	127.0.0.1	2026-05-20 15:54:34.309321	2026-05-20 07:54:34.311247	\N
+89ed4da6-ab58-45e7-be14-d2063e6dde0f	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI5MzA1OX0.PSxWKcypmCEdT2kuB81utasmDkWze4IDRQBoDIJUf4Y	python-requests/2.34.2	127.0.0.1	2026-05-20 16:04:19.838211	2026-05-20 08:04:19.863691	\N
+946f4764-9cec-4a5c-b302-b19f2eb689e6	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI5MzA4Nn0.MyY4y0x_r4T_9eJcxnVEkdfs5pCsOywcwN9tzCzUKvw	python-requests/2.34.2	127.0.0.1	2026-05-20 16:04:46.154726	2026-05-20 08:04:46.157905	\N
+0c3f6986-f7b7-4891-84f1-714bb3978dbc	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI5MzE4M30.sRrNvSFaoyHxugE0CeL0Y1-JgEX6dxP0xwShQYZJVVQ	python-requests/2.34.2	127.0.0.1	2026-05-20 16:06:23.050818	2026-05-20 08:06:23.054676	\N
+ae49aac1-ecbd-4b42-82d3-af1466f25898	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI5MzMwNX0.dKbmFOigaFyUhEKxnmwN-vCalN8hnSM2epgCXkF1etY	python-requests/2.34.2	127.0.0.1	2026-05-20 16:08:25.482456	2026-05-20 08:08:25.517311	\N
+9c86d7de-c4f1-426a-985b-5f8bf5bd9ed6	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTI5MzU0OH0.Zd2MzIOBBUI7t_TQZWcwOVCT3QVt6bq_T9K4-2g9I7Q	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36	172.18.0.1	2026-05-20 16:12:28.733644	2026-05-20 08:12:28.738931	\N
+58c83a92-d1e1-4972-9160-b9371afa5f53	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMwMDMzOX0.4E1f9V-9S6u5649qmhlJtNqzO02_9Y6qHavVLkkZuDI	python-requests/2.34.2	127.0.0.1	2026-05-20 18:05:39.26993	2026-05-20 10:05:39.28871	\N
+c4fda227-966d-4cf5-869c-a8c87d6d7d3f	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMwNDU0N30.MGNwu9noWiJXzYeQHmdKS5QHWucfPbXUbtdSYyx0Gzg	python-requests/2.34.2	127.0.0.1	2026-05-20 19:15:47.293637	2026-05-20 11:15:47.306949	\N
+a379cc07-61f4-41ef-b276-d69f28c4f526	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMwNTI3MX0.jWudoRarP9E3Vbj4RZdUl-NZxV9pqQWVsqq2PGayS1k	python-requests/2.34.2	127.0.0.1	2026-05-20 19:27:51.327776	2026-05-20 11:27:51.453563	\N
+b39e5419-7cad-4849-b49d-bc018b014b3c	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMxMjA2NH0.YDmb5mn5gg-ODE533dxw0AaT2IOpbm_-UDFKqMjEfrI	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.120.0 Chrome/142.0.7444.265 Electron/39.8.8 Safari/537.36	172.18.0.1	2026-05-20 21:21:04.124612	2026-05-20 13:21:04.170073	\N
+9c1e54f8-4506-4094-b066-0d49d4fb99e2	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMxMjI5Mn0.doDjkr98KPsrLrlZDnJ3arY7LLeeXDj4J4NV622rcTE	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.120.0 Chrome/142.0.7444.265 Electron/39.8.8 Safari/537.36	172.18.0.1	2026-05-20 21:24:52.142653	2026-05-20 13:24:52.15415	\N
+216cf052-23df-457f-bd32-fbe8e54c43ea	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMxNjIwNX0.YvGMi5JKZVjVfZ7T-aP-qAqBItj8z58sJcHq5x4IMrs	curl/8.12.1	172.18.0.1	2026-05-20 22:30:05.986157	2026-05-20 14:30:06.086667	\N
+091d6b2e-e97a-4669-95d2-488a24c8857d	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMxOTIwNn0.wpg3XXYLQhc0IHj1872qb-DCWYmFCttSrnRnTaqzZ8Y	curl/8.12.1	172.18.0.1	2026-05-20 23:20:06.785687	2026-05-20 15:20:06.799281	\N
+e66e5b1a-bc30-46a7-9832-13699ce6e98f	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMxOTQyNn0.EVCSM8PiySOPoYTj-e-lX8eXiDl_vA6yJJuQ9pohhF0	curl/8.12.1	172.18.0.1	2026-05-20 23:23:46.173386	2026-05-20 15:23:46.188385	\N
+7f1860d2-b935-4cba-af64-29619fc1fd46	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMxOTY2NX0.T1BmSMsdyGiIh5BJ-C_cyWhLY2IYSE0N8pJ-3IQ9Bys	curl/8.12.1	172.18.0.1	2026-05-20 23:27:45.43169	2026-05-20 15:27:45.4381	\N
+7c2df185-734c-400f-86ca-05ee7bbe9e49	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMxOTc0M30.pYt486wWKsQ86AzDBlO32R-coAkmrZuJ9GPEXyESEfw	curl/8.12.1	172.18.0.1	2026-05-20 23:29:03.224705	2026-05-20 15:29:03.232682	\N
+73398301-f5e0-4f1b-ab18-1168eb008baf	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMxOTgxMX0.Zt_X7Sum0jzMhsbxW3UelO7IYKByo8CMHEf-pwCyEiI	curl/8.12.1	172.18.0.1	2026-05-20 23:30:11.233353	2026-05-20 15:30:11.236666	\N
+5f436b1f-08c6-48c8-b49d-9ed43bb3a9f9	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMxOTgyN30.jCv3GooK8QkeNpxUEsC59QYPuI7f7pjrXIlMkS68hUc	curl/8.12.1	172.18.0.1	2026-05-20 23:30:27.985979	2026-05-20 15:30:27.995072	\N
+3df2d2be-08ef-4010-b092-2667781b91b6	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMxOTg1MH0.kNGIHdldnLWMXskOKB3WaK5je0o6YXJVSBUP4QHqlhE	curl/8.12.1	172.18.0.1	2026-05-20 23:30:50.689136	2026-05-20 15:30:50.690982	\N
+0084034c-c603-446f-bae6-7a41d7512a1c	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMxOTg3M30.BgRy1MK18Pnx8VVSzz5PlTZs5KE9h1tQ6bKR__nD2Kg	curl/8.12.1	172.18.0.1	2026-05-20 23:31:13.26913	2026-05-20 15:31:13.275992	\N
+bd7688e7-d6dc-4f39-85c4-97813aaf409d	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMyMDAyNH0.K_D8wc-TKGJofB3AVxbZPlSCZKtOr82avrG2Wpk_ylk	curl/8.12.1	172.18.0.1	2026-05-20 23:33:44.957087	2026-05-20 15:33:44.966347	\N
+143fa330-16af-4340-a9ab-ea73f0635f73	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMyMDA0OX0.YjKgmoOsjODzUUwckfXzp0ROO4jvs_NRklhiKLJ0ywY	curl/8.12.1	172.18.0.1	2026-05-20 23:34:09.150294	2026-05-20 15:34:09.154222	\N
+8b835c72-da8e-4e0a-8b97-deda2ec1962b	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMyMDA3MH0.CvcPuuVTcTx6QxOfbGmDS9CFdPjImsWNG47UtoEstgA	curl/8.12.1	172.18.0.1	2026-05-20 23:34:30.285061	2026-05-20 15:34:30.296665	\N
+c799e525-272d-4563-807a-023c6b8ee739	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMyMDE0N30.9qXq_CyanhAFQ3CzsAi2-pndI15Q-jY5l8JNMCpPbP8	curl/8.12.1	172.18.0.1	2026-05-20 23:35:47.588986	2026-05-20 15:35:47.590644	\N
+3938176b-5f79-4db9-b3eb-d104042407da	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMyMDIxOH0.WzHnf54fUpakNpO2esg__bPuQXU6OlBTc5iakAOUJZo	curl/8.12.1	172.18.0.1	2026-05-20 23:36:58.368896	2026-05-20 15:36:58.379083	\N
 \.
 
 
@@ -3375,7 +3458,7 @@ SELECT pg_catalog.setval('public.audit_logs_log_id_seq', 91, true);
 -- Name: hotspots_hotspot_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.hotspots_hotspot_id_seq', 135, true);
+SELECT pg_catalog.setval('public.hotspots_hotspot_id_seq', 154, true);
 
 
 --
@@ -3425,6 +3508,13 @@ SELECT pg_catalog.setval('public.password_reset_codes_id_seq', 4, true);
 --
 
 SELECT pg_catalog.setval('public.police_users_police_user_id_seq', 29, true);
+
+
+--
+-- Name: special_assignment_units_unit_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.special_assignment_units_unit_id_seq', 10, true);
 
 
 --
@@ -3678,6 +3768,22 @@ ALTER TABLE ONLY public.reports
 
 ALTER TABLE ONLY public.reports
     ADD CONSTRAINT reports_report_number_key UNIQUE (report_number);
+
+
+--
+-- Name: special_assignment_units special_assignment_units_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.special_assignment_units
+    ADD CONSTRAINT special_assignment_units_pkey PRIMARY KEY (unit_id);
+
+
+--
+-- Name: special_assignment_units special_assignment_units_unit_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.special_assignment_units
+    ADD CONSTRAINT special_assignment_units_unit_code_key UNIQUE (unit_code);
 
 
 --
