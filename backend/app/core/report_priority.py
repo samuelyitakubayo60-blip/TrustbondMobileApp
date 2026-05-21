@@ -13,10 +13,6 @@ from app.models.system_config import SystemConfig
 from app.config import settings
 from sqlalchemy.orm import Session
 
-_SEMANTIC_MODEL = None
-_SEMANTIC_MODEL_UNAVAILABLE = False
-
-
 def calculate_report_priority(
     report: Report,
     evidence_count: int = 0,
@@ -285,33 +281,12 @@ def _gibberish_description(report: Report) -> bool:
     return False
 
 
-def _get_semantic_model():
-    global _SEMANTIC_MODEL, _SEMANTIC_MODEL_UNAVAILABLE
-    if not getattr(settings, "enable_semantic_match", False):
-        return None
-    if _SEMANTIC_MODEL is not None:
-        return _SEMANTIC_MODEL
-    if _SEMANTIC_MODEL_UNAVAILABLE:
-        return None
-    try:
-        from .model_manager import ensure_sentence_transformer_model
-        
-        # Use automatic model manager for downloading and caching
-        _SEMANTIC_MODEL = ensure_sentence_transformer_model("all-MiniLM-L6-v2")
-        return _SEMANTIC_MODEL
-    except Exception:
-        # Fail open: system continues using keyword rules.
-        _SEMANTIC_MODEL_UNAVAILABLE = True
-        return None
-
-
 def _incident_description_mismatch_semantic(report: Report, db: Optional[Session]) -> bool:
     """
-    Semantic mismatch check using sentence embeddings.
-    Returns True only when selected incident type is clearly less similar
-    than the best alternative and confidence is meaningfully high.
+    Semantic mismatch via Groq/Gemini API (same stack as hotspot LLM).
+    Falls back to keyword rules when API is not configured.
     """
-    if db is None:
+    if db is None or not getattr(settings, "enable_semantic_match", False):
         return False
 
     description = (getattr(report, "description", None) or "").strip()
@@ -322,16 +297,12 @@ def _incident_description_mismatch_semantic(report: Report, db: Optional[Session
     if not selected_id:
         return False
 
-    model = _get_semantic_model()
-    if model is None:
-        return False
-
-    selected = (
-        db.query(IncidentType)
-        .filter(IncidentType.incident_type_id == selected_id)
-        .first()
+    from app.core.natural_language_scorer import (
+        incident_description_mismatch_via_llm,
+        report_semantic_llm_configured,
     )
-    if not selected:
+
+    if not report_semantic_llm_configured():
         return False
 
     active_types = (
@@ -344,46 +315,14 @@ def _incident_description_mismatch_semantic(report: Report, db: Optional[Session
     if len(active_types) < 2:
         return False
 
-    labels = []
-    ids = []
-    for t in active_types:
-        txt = f"{(t.type_name or '').strip()}: {(t.description or '').strip()}"
-        labels.append(txt)
-        ids.append(t.incident_type_id)
-
-    try:
-        emb_desc = model.encode(description, convert_to_tensor=True, normalize_embeddings=True)
-        emb_types = model.encode(labels, convert_to_tensor=True, normalize_embeddings=True)
-
-        # cosine scores in [-1, 1], normalized embeddings keep it efficient.
-        # Lazy import to avoid hard dependency issues at module load.
-        from sentence_transformers import util
-        scores = util.cos_sim(emb_desc, emb_types)[0]
-
-        best_idx = int(scores.argmax().item())
-        best_score = float(scores[best_idx].item())
-        best_id = ids[best_idx]
-
-        selected_idx = None
-        for i, iid in enumerate(ids):
-            if iid == selected_id:
-                selected_idx = i
-                break
-        if selected_idx is None:
-            return False
-        selected_score = float(scores[selected_idx].item())
-    except Exception:
-        return False
-
-    # Conservative mismatch rule:
-    # - selected type is not top match
-    # - top semantic confidence is decent
-    # - and top-vs-selected margin is meaningful
-    return (
-        best_id != selected_id
-        and best_score >= 0.42
-        and (best_score - selected_score) >= 0.10
-    )
+    type_pairs = [
+        (
+            t.incident_type_id,
+            f"{(t.type_name or '').strip()}: {(t.description or '').strip()}",
+        )
+        for t in active_types
+    ]
+    return incident_description_mismatch_via_llm(description, selected_id, type_pairs)
 
 
 def _device_burst_reporting(report: Report, db: Optional[Session]) -> bool:

@@ -90,11 +90,6 @@ async def lifespan(app: FastAPI):
         
         logger.info("Downloading and caching ML models on startup...")
         
-        # Ensure sentence transformer model is available
-        from app.core.model_manager import ensure_sentence_transformer_model
-        semantic_model = ensure_sentence_transformer_model("all-MiniLM-L6-v2")
-        logger.info(f"Sentence transformer model loaded: {semantic_model}")
-        
         # Ensure YOLO model is available (will be downloaded by ultralytics on first use)
         from app.core.model_manager import ensure_yolo_model
         yolo_model = ensure_yolo_model("yolov8n.pt")

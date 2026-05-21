@@ -24,6 +24,16 @@ const friendlyFlagReason = (reason) => {
       "Live-capture evidence timestamp appears stale.",
     incident_description_mismatch:
       "Description appears inconsistent with the selected incident type.",
+    incident_text_mismatch:
+      "Description appears inconsistent with the selected incident type.",
+    INCIDENT_TEXT_MISMATCH:
+      "Description appears inconsistent with the selected incident type.",
+    description_evidence_mismatch:
+      "Description, media, and incident type do not align.",
+    evidence_incident_mismatch:
+      "Uploaded media does not support the selected incident type.",
+    threshold_low_score:
+      "Automated credibility score was too low to auto-confirm.",
     gibberish_description:
       "Description looks meaningless or spammy and needs manual review.",
     ai_suspicious_review:
@@ -80,7 +90,9 @@ const cleanAiNarrative = (text) => {
     "AI scoring breakdown:",
     "ML label:",
     "Rule status:",
-    "Semantic similarity",
+    "WHAT THE CITIZEN REPORTED",
+    "AUTOMATED OUTCOME",
+    "WHY THE SYSTEM REACHED",
   ];
   let cleaned = raw;
   for (const marker of stopMarkers) {
@@ -90,7 +102,10 @@ const cleanAiNarrative = (text) => {
   return cleaned
     .replace(/^AI verification result:\s*/i, "")
     .replace(/^Report context:\s*/i, "")
-    .replace(/\s+/g, " ")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n\n")
     .trim();
 };
 
@@ -1109,7 +1124,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
               </div>
             )}
             {(report.ai_verification_reason ||
-              report.ai_evidence_description ||
               hasDescriptionCredibility(report)) && (
               <div
                 style={{
@@ -1124,35 +1138,19 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   gap: 8,
                 }}
               >
-                <DescriptionCredibilityPanel
-                  report={report}
-                  title="Why this report was scored (description & evidence)"
-                />
                 {report.ai_verification_reason && (
                   <div style={{ lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
-                    <strong>Automated screening explanation:</strong>
+                    <strong>Automated screening summary</strong>
                     <div style={{ marginTop: 6 }}>
                       {cleanAiNarrative(report.ai_verification_reason)}
                     </div>
                   </div>
                 )}
-                {Array.isArray(report.decision_patterns) &&
-                  report.decision_patterns.length > 0 && (
-                    <div>
-                      <strong>Signals that drove this outcome:</strong>
-                      <div style={{ marginTop: 6 }}>
-                        {renderDecisionPatternChips(
-                          report.decision_patterns,
-                          report.decision_pattern_explanations || {},
-                        )}
-                      </div>
-                    </div>
-                  )}
-                {report.ai_evidence_description && (
-                  <div>
-                    <strong>AI Evidence Summary (generated):</strong>{" "}
-                    <span>{cleanAiNarrative(report.ai_evidence_description)}</span>
-                  </div>
+                {hasDescriptionCredibility(report) && (
+                  <DescriptionCredibilityPanel
+                    report={report}
+                    title="Credibility score details"
+                  />
                 )}
               </div>
             )}

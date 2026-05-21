@@ -65,8 +65,9 @@ class Settings(BaseSettings):
 
     # How many hours after submitting a report the user (device) can still add evidence (mobile).
     evidence_add_window_hours: int = 72
-    # Optional semantic description matcher (disabled by default to avoid model downloads/runtime overhead).
-    enable_semantic_match: bool = False
+    # Semantic description matching via Groq/Gemini API (same as hotspots). No local embedding download.
+    # Requires GROQ_API_KEY and/or GEMINI_API_KEY; falls back to keyword rules if unset.
+    enable_semantic_match: bool = True
     # Run unified verification backlog on API startup (replaces legacy ml_evaluator auto-verify).
     verification_startup_backlog_enabled: bool = True
 

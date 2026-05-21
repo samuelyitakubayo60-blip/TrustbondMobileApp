@@ -1,6 +1,7 @@
 """
 Model Manager - Automatic model downloading and caching for ML models.
-Handles downloading and caching of models like YOLO and sentence transformers.
+Handles downloading and caching of models like YOLO.
+Report semantic matching uses Groq/Gemini API (see natural_language_scorer).
 """
 
 import os
@@ -74,43 +75,6 @@ class ModelManager:
             logger.error(f"Failed to download model: {e}")
             raise
     
-    def get_sentence_transformer_model(self, model_name: str = "all-MiniLM-L6-v2") -> Path:
-        """
-        Get or download sentence transformer model.
-        Returns the path to the cached model directory.
-        """
-        model_cache_dir = self.cache_dir / f"sentence-transformers-{model_name}"
-        
-        if model_cache_dir.exists():
-            logger.info(f"Sentence transformer model already cached: {model_cache_dir}")
-            return model_cache_dir
-        
-        logger.info(f"Setting up sentence transformer model: {model_name}")
-        
-        try:
-            from sentence_transformers import SentenceTransformer
-
-            st_kw: dict[str, Any] = {"cache_folder": str(model_cache_dir)}
-            _tok = _hf_hub_token()
-            if _tok:
-                st_kw["token"] = _tok
-
-            # Download and cache the model using sentence-transformers' built-in caching
-            model = SentenceTransformer(model_name, **st_kw)
-            
-            # Test the model to ensure it's properly loaded
-            test_embedding = model.encode("test")
-            logger.info(f"Model loaded successfully, embedding shape: {test_embedding.shape}")
-            
-            return model_cache_dir
-            
-        except ImportError:
-            logger.error("sentence-transformers package not installed")
-            raise ImportError("Please install sentence-transformers: pip install sentence-transformers")
-        except Exception as e:
-            logger.error(f"Failed to load sentence transformer model: {e}")
-            raise
-    
     def get_yolo_model_path(self, model_name: str = "yolov8n.pt") -> Path:
         """Get or download YOLO model."""
         model_path = self.cache_dir / model_name
@@ -133,26 +97,6 @@ def get_model_manager() -> ModelManager:
     if _model_manager is None:
         _model_manager = ModelManager()
     return _model_manager
-
-def ensure_sentence_transformer_model(model_name: str = "all-MiniLM-L6-v2"):
-    """
-    Ensure sentence transformer model is downloaded and available.
-    Returns the model instance ready for use.
-    """
-    manager = get_model_manager()
-    model_cache_dir = manager.get_sentence_transformer_model(model_name)
-    
-    try:
-        from sentence_transformers import SentenceTransformer
-        st_kw: dict[str, Any] = {"cache_folder": str(model_cache_dir)}
-        _tok = _hf_hub_token()
-        if _tok:
-            st_kw["token"] = _tok
-        model = SentenceTransformer(model_name, **st_kw)
-        return model
-    except Exception as e:
-        logger.error(f"Failed to load sentence transformer model: {e}")
-        raise
 
 def ensure_yolo_model(model_name: str = "yolov8n.pt"):
     """

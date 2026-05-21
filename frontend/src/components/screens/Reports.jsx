@@ -19,6 +19,16 @@ const friendlyFlagReason = (reason) => {
     stale_live_capture_timestamp: "Live-capture timestamp is too old",
     incident_description_mismatch:
       "Description does not match selected incident type",
+    incident_text_mismatch:
+      "Description does not match selected incident type",
+    INCIDENT_TEXT_MISMATCH:
+      "Description does not match selected incident type",
+    description_evidence_mismatch:
+      "Description, media, and incident type do not align",
+    evidence_incident_mismatch:
+      "Media does not support the selected incident type",
+    threshold_low_score:
+      "Credibility score too low to auto-confirm",
     ai_suspicious_review: "AI marked this report as suspicious",
     ai_uncertain_review: "AI result is uncertain; manual review needed",
     ai_detected_fake: "AI detected possible fake evidence",

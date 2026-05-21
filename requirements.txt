@@ -67,6 +67,5 @@ groq
 google-generativeai
 ultralytics
 openai-whisper
-sentence-transformers
 pytesseract
 

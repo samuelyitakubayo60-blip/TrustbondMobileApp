@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from app.core.report_verification_narrative import humanize_flag_reason
+
 
 def description_credibility_from_report(report: Any) -> dict[str, Any]:
     fv = getattr(report, "feature_vector", None)
@@ -96,7 +98,9 @@ def build_credibility_summary_parts(
 
     fr = flag_reason or getattr(report, "flag_reason", None)
     if fr:
-        parts.append(f"Flag: {fr}")
+        plain = humanize_flag_reason(fr)
+        if plain:
+            parts.append(plain.rstrip("."))
 
     if desc_meta:
         wc = desc_meta.get("word_count")

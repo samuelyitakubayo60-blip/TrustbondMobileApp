@@ -39,8 +39,7 @@ services:
       # Force HuggingFace to use only cached models — never phone home
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
-      HF_HOME: "/app/backend/models/sentence-transformers-all-MiniLM-L6-v2"
-      # ── Free LLM keys for natural-language hotspot recommendations ──────────
+      # ── Free LLM keys (hotspot recommendations + report semantic checks) ───
       # Groq  (primary):  get free key at https://console.groq.com
       # Gemini (fallback): get free key at https://aistudio.google.com
       # Leave blank to use template fallback (no API call).

@@ -1,7 +1,7 @@
 """
 Single citizen-report verification pipeline.
 
-Order: integrity hints → unified models → anti-fraud rules → scorecard → outcome → narratives.
+Order: integrity hints → unified models → evidence semantic alignment → anti-fraud rules → scorecard → outcome → narratives.
 """
 
 from __future__ import annotations
@@ -19,15 +19,79 @@ from app.core.credibility_model import _json_safe, update_device_ml_aggregates
 from app.core.report_priority import apply_anti_fraud_rules, calculate_report_priority
 from app.core.report_review import infer_prediction_label_from_trust_score, resolve_ml_prediction_for_report
 from app.core.trust_thresholds import TrustBand
+from app.config import settings
 from app.core.unified_validator import validate_report_unified
 from app.models.device import Device
 from app.models.evidence_file import EvidenceFile
+from app.models.incident_type import IncidentType
 from app.models.ml_prediction import MLPrediction
 from app.models.report import Report
 
 logger = logging.getLogger(__name__)
 
 VOLO_VALID_THRESHOLD = 45.0  # overall_score 0-100
+
+HARD_GATE_REJECT_CODES = frozenset({
+    "RULE_REJECTED",
+    "LOCATION_OUT_OF_BOUNDARY",
+    "BOUNDARY_REJECT",
+    "HARD_RULE_REJECT",
+    "boundary_reject",
+    "hard_rule_reject",
+})
+
+
+def pending_evidence_validation() -> Dict[str, Any]:
+    """Placeholder until unified Volo analysis runs (never treated as passed)."""
+    return {
+        "pending": True,
+        "valid": None,
+        "confidence": None,
+        "source": "awaiting_unified_volo",
+        "issues": [],
+    }
+
+
+def build_text_only_validation_from_nl(nl: Any) -> Dict[str, Any]:
+    """Map NL analysis into scorecard-compatible text_only_validation."""
+    overall = float(getattr(nl, "overall_score", 0.0) or 0.0)
+    sem = float(getattr(nl, "semantic_similarity_score", 0.0) or 0.0)
+    desc_q = float(getattr(nl, "description_quality_score", 0.0) or 0.0)
+    conf = float(getattr(nl, "confidence", 0.0) or 0.0)
+    reason_codes: List[str] = []
+    if desc_q < 25.0:
+        reason_codes.append("GIBBERISH")
+    # semantic_similarity_score is 0–100 (same scale as NL scorer output)
+    if sem < 35.0:
+        reason_codes.append("INCIDENT_TEXT_MISMATCH")
+    if overall < 35.0:
+        reason_codes.append("REJECT_QUALITY")
+    elif overall < 55.0:
+        reason_codes.append("REVIEW_QUALITY")
+
+    if overall >= 60.0 and sem >= 42.0 and desc_q >= 40.0:
+        quality_band = "accept_quality"
+        valid = True
+    elif overall < 40.0 or "REJECT_QUALITY" in reason_codes:
+        quality_band = "reject_quality"
+        valid = False
+    else:
+        quality_band = "review_quality"
+        valid = False
+
+    return {
+        "valid": valid,
+        "quality_band": quality_band,
+        "reason_codes": reason_codes,
+        "overall_score": round(overall, 2),
+        "semantic_similarity": round(sem, 4),
+        "description_quality": round(desc_q, 2),
+        "confidence": round(conf, 4),
+    }
+
+
+def _normalize_evidence_url(url: Optional[str]) -> str:
+    return (url or "").strip().split("?")[0]
 
 
 @dataclass
@@ -91,16 +155,26 @@ def merge_volo_into_evidence_validations(
     for idx, ef in enumerate(analyzed):
         if idx >= len(volo_results):
             break
-        url = (getattr(ef, "file_url", None) or "").strip()
+        url = _normalize_evidence_url(getattr(ef, "file_url", None))
         if url:
             volo_by_url[url] = volo_results[idx]
 
     merged: List[Dict[str, Any]] = []
     for item in evidence_validations or []:
         entry = dict(item) if isinstance(item, dict) else {"evidence_url": "", "validation": {}}
-        url = (entry.get("evidence_url") or "").strip()
+        url = _normalize_evidence_url(entry.get("evidence_url"))
         volo = volo_by_url.get(url)
         if volo is None:
+            val = entry.get("validation") if isinstance(entry.get("validation"), dict) else {}
+            if val.get("pending"):
+                entry["validation"] = {
+                    "pending": False,
+                    "valid": False,
+                    "confidence": 0.0,
+                    "source": "volo_unavailable",
+                    "issues": ["volo_analysis_unavailable"],
+                    "threshold_used": VOLO_VALID_THRESHOLD / 100.0,
+                }
             merged.append(entry)
             continue
         score = float(getattr(volo, "overall_score", 0.0) or 0.0)
@@ -130,6 +204,125 @@ def merge_volo_into_evidence_validations(
         }
         merged.append(entry)
     return merged
+
+
+def build_evidence_semantic_text(evidence_validations: List[Dict[str, Any]]) -> str:
+    """Compact text from Volo validation outputs for triple semantic alignment."""
+    fragments: List[str] = []
+    for item in evidence_validations or []:
+        validation = (item or {}).get("validation") or {}
+        summary = validation.get("analysis_summary") or {}
+        advanced = validation.get("advanced_analysis") or {}
+
+        objects = summary.get("detected_objects") or []
+        if isinstance(objects, list) and objects:
+            fragments.append("objects: " + ", ".join(str(o) for o in objects[:10]))
+
+        extracted_text = summary.get("extracted_text")
+        if isinstance(extracted_text, str) and extracted_text.strip():
+            fragments.append("text: " + extracted_text.strip()[:300])
+
+        actions = advanced.get("actions_detected") or []
+        if isinstance(actions, list) and actions:
+            fragments.append("actions: " + ", ".join(str(a) for a in actions[:8]))
+
+        scene_context = advanced.get("scene_context") or {}
+        scene_bits: List[str] = []
+        indoor = scene_context.get("is_indoor")
+        if isinstance(indoor, bool):
+            scene_bits.append("indoor" if indoor else "outdoor")
+        lighting = scene_context.get("lighting")
+        if lighting:
+            scene_bits.append(str(lighting))
+        weather = scene_context.get("weather")
+        if weather:
+            scene_bits.append(str(weather))
+        if scene_bits:
+            fragments.append("scene: " + ", ".join(scene_bits))
+
+        media_type = summary.get("media_type")
+        if media_type:
+            fragments.append(f"media_type: {media_type}")
+
+    return " | ".join(fragments)[:2000]
+
+
+def apply_evidence_semantic_checks(
+    db: Session,
+    report: Report,
+    *,
+    description: Optional[str] = None,
+    skip_if_rejected: bool = True,
+) -> Optional[Dict[str, Any]]:
+    """
+    Groq/Gemini triple alignment (description + evidence summary + incident type)
+    and flag failed Volo validations. Runs when evidence_validations exist.
+    """
+    if skip_if_rejected and (getattr(report, "rule_status", None) or "").strip().lower() == "rejected":
+        return None
+
+    fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
+    validations = fv.get("evidence_validations") if isinstance(fv.get("evidence_validations"), list) else []
+    if not validations:
+        return None
+
+    semantic_result: Optional[Dict[str, Any]] = None
+    try:
+        incident_type_row = None
+        if getattr(report, "incident_type", None) is not None:
+            incident_type_row = report.incident_type
+        elif getattr(report, "incident_type_id", None) is not None:
+            incident_type_row = (
+                db.query(IncidentType)
+                .filter(IncidentType.incident_type_id == report.incident_type_id)
+                .first()
+            )
+
+        type_name = getattr(incident_type_row, "type_name", "") or ""
+        type_desc = getattr(incident_type_row, "description", "") or ""
+        desc_text = (description if description is not None else getattr(report, "description", None)) or ""
+
+        if getattr(settings, "enable_semantic_match", False):
+            from app.core.natural_language_scorer import check_triple_semantic_alignment
+
+            evidence_text = build_evidence_semantic_text(validations)
+            semantic_result = check_triple_semantic_alignment(
+                report_description=desc_text,
+                incident_type_name=type_name,
+                incident_type_description=type_desc,
+                evidence_semantic_text=evidence_text,
+            )
+            if semantic_result:
+                fv["semantic_alignment"] = semantic_result
+                if semantic_result.get("mismatch"):
+                    report.rule_status = "flagged"
+                    report.is_flagged = True
+                    report.verification_status = "under_review"
+                    if not report.flag_reason:
+                        report.flag_reason = "description_evidence_mismatch"
+
+        failed = [
+            (ev or {}).get("validation")
+            for ev in validations
+            if isinstance((ev or {}).get("validation"), dict)
+            and (ev or {}).get("validation", {}).get("valid") is False
+        ]
+        if failed:
+            report.rule_status = "flagged"
+            report.is_flagged = True
+            report.verification_status = "under_review"
+            if not report.flag_reason:
+                report.flag_reason = "evidence_incident_mismatch"
+
+        report.feature_vector = _json_safe(fv)
+    except Exception as exc:
+        logger.warning(
+            "Evidence semantic checks failed for report %s: %s",
+            getattr(report, "report_id", None),
+            exc,
+        )
+
+    return semantic_result
 
 
 def store_unified_validation_result(
@@ -252,20 +445,26 @@ def apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
         return
 
     band = str(scorecard.get("threshold_band") or "").lower()
-    hard_gates = scorecard.get("hard_gates") or []
+    hard_gates = [str(g) for g in (scorecard.get("hard_gates") or [])]
+    hard_set = {g.upper() for g in hard_gates}
     rule_status = (getattr(report, "rule_status", None) or "").strip().lower()
     is_flagged = bool(getattr(report, "is_flagged", False))
     flagged_for_review = is_flagged or rule_status == "flagged"
 
-    if "boundary_reject" in hard_gates or "hard_rule_reject" in hard_gates:
+    hard_reject = (
+        band == "hard_reject"
+        or bool(hard_set & {c.upper() for c in HARD_GATE_REJECT_CODES})
+    )
+    if hard_reject:
         report.rule_status = "rejected"
         report.verification_status = "rejected"
         report.status = "rejected"
         report.is_flagged = True
         if not getattr(report, "flag_reason", None):
-            report.flag_reason = (
-                "boundary_reject" if "boundary_reject" in hard_gates else "hard_rule_reject"
-            )
+            if "LOCATION_OUT_OF_BOUNDARY" in hard_set or "BOUNDARY_REJECT" in hard_set:
+                report.flag_reason = "out_of_musanze_boundary"
+            else:
+                report.flag_reason = "hard_rule_reject"
         return
 
     if rule_status == "rejected" and not flagged_for_review:
@@ -287,7 +486,13 @@ def apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
         report.status = "rejected"
         report.is_flagged = True
         if not getattr(report, "flag_reason", None):
-            report.flag_reason = "threshold_low_score"
+            fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
+            tov = fv.get("text_only_validation") if isinstance(fv.get("text_only_validation"), dict) else {}
+            codes = {str(c).strip().upper() for c in (tov.get("reason_codes") or [])}
+            if "INCIDENT_TEXT_MISMATCH" in codes:
+                report.flag_reason = "incident_description_mismatch"
+            else:
+                report.flag_reason = "threshold_low_score"
         return
 
     if band == "under_review":
@@ -584,6 +789,13 @@ def run_citizen_verification_pipeline(
         fv["evidence_validations"] = validations
         report.feature_vector = _json_safe(fv)
 
+    apply_evidence_semantic_checks(
+        db,
+        report,
+        description=getattr(report, "description", None) or "",
+        skip_if_rejected=report.rule_status == "rejected",
+    )
+
     rule_status, is_flagged, flag_reason = apply_anti_fraud_rules(report, evidence_count, db)
     if report.rule_status != "rejected":
         report.rule_status = rule_status
@@ -612,6 +824,9 @@ def run_citizen_verification_pipeline(
     fv_sc["threshold_scorecard"] = scorecard
     report.feature_vector = _json_safe(fv_sc)
     apply_threshold_outcome(report, scorecard)
+
+    if report.is_flagged and (report.rule_status or "").strip().lower() == "flagged":
+        apply_threshold_outcome(report, scorecard)
 
     if ml_prediction is None:
         ml_prediction = ensure_ml_prediction_from_unified(db, report, unified_validation)

@@ -28,6 +28,18 @@ from app.models.incident_type import IncidentType
 
 logger = logging.getLogger(__name__)
 
+
+def _incident_type_context(report: Report) -> str:
+    """Name + DB description for Volo relevance (replaces name-only MiniLM-era context)."""
+    if not report.incident_type:
+        return ""
+    name = (report.incident_type.type_name or "").strip()
+    desc = (report.incident_type.description or "").strip()
+    if name and desc:
+        return f"{name}: {desc}"
+    return name or desc
+
+
 @dataclass
 class ValidationResult:
     """Result of unified validation."""
@@ -118,22 +130,22 @@ class UnifiedValidator:
                 if not (is_photo or is_video or is_audio):
                     continue
                 try:
-                    incident_type_name = report.incident_type.type_name if report.incident_type else ""
+                    incident_context = _incident_type_context(report)
 
                     if is_photo:
                         volo_result = analyze_evidence_content(
                             image_url=evidence_file.file_url,
-                            incident_type_name=incident_type_name,
+                            incident_type_name=incident_context,
                         )
                     elif is_video:
                         volo_result = analyze_evidence_video_content(
                             video_url=evidence_file.file_url,
-                            incident_type_name=incident_type_name,
+                            incident_type_name=incident_context,
                         )
                     else:
                         volo_result = analyze_evidence_audio_content(
                             audio_url=evidence_file.file_url,
-                            incident_type_name=incident_type_name,
+                            incident_type_name=incident_context,
                         )
 
                     volo_results.append(volo_result)
