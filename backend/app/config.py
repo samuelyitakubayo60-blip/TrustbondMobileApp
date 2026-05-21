@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     evidence_add_window_hours: int = 72
     # Optional semantic description matcher (disabled by default to avoid model downloads/runtime overhead).
     enable_semantic_match: bool = False
+    # Run unified verification backlog on API startup (replaces legacy ml_evaluator auto-verify).
+    verification_startup_backlog_enabled: bool = True
 
     # Optional LLM narrative generation for human-like AI explanations.
     llm_narrative_enabled: bool = True

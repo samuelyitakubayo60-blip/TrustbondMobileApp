@@ -112,17 +112,20 @@ class UnifiedValidator:
                 if not evidence_file.file_url:
                     continue
                 ft = (evidence_file.file_type or "").strip().lower()
-                if ft not in ("photo", "video", "audio"):
+                is_photo = ft == "photo" or ft.startswith("image/")
+                is_video = ft == "video" or ft.startswith("video/")
+                is_audio = ft == "audio" or ft.startswith("audio/")
+                if not (is_photo or is_video or is_audio):
                     continue
                 try:
                     incident_type_name = report.incident_type.type_name if report.incident_type else ""
 
-                    if ft == "photo":
+                    if is_photo:
                         volo_result = analyze_evidence_content(
                             image_url=evidence_file.file_url,
                             incident_type_name=incident_type_name,
                         )
-                    elif ft == "video":
+                    elif is_video:
                         volo_result = analyze_evidence_video_content(
                             video_url=evidence_file.file_url,
                             incident_type_name=incident_type_name,

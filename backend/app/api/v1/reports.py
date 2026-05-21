@@ -1742,16 +1742,17 @@ def _compute_threshold_scorecard(
                 "model": model_name,
                 "is_valid": bool(model_data.get("is_valid", False)),
             }
+        comm_points = round(min(10.0, community_signal * 10.0), 2)
         factors["community_signal"] = {
-            "weight": 0.0,
+            "weight": 10.0,
             "max_points": 10.0,
             "signal": round(community_signal, 4),
-            "points_awarded": 0.0,
+            "points_awarded": comm_points,
             "model": "community",
             "is_valid": True,
         }
 
-        total = round(min(100.0, max(0.0, aggregated_score)), 2)
+        total = round(min(100.0, max(0.0, aggregated_score + comm_points)), 2)
         # For text-only submissions, aggressively dampen scores when language quality/context is weak.
         if not has_evidence:
             text_valid = bool(text_only.get("valid", True))
@@ -1933,46 +1934,10 @@ def _compute_threshold_scorecard(
 
 
 def _apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
-    """Apply scorecard thresholds to report state while preserving hard rejects."""
-    if not isinstance(scorecard, dict):
-        return
-    band = str(scorecard.get("threshold_band") or "").lower()
-    hard_gates = scorecard.get("hard_gates") or []
+    """Apply scorecard thresholds (delegates to verification_orchestrator)."""
+    from app.core.verification_orchestrator import apply_threshold_outcome
 
-    # Hard rejections from rule engine/boundary controls take priority.
-    if "boundary_reject" in hard_gates or "hard_rule_reject" in hard_gates:
-        report.rule_status = "rejected"
-        report.verification_status = "rejected"
-        report.status = "rejected"
-        report.is_flagged = True
-        if not getattr(report, "flag_reason", None):
-            report.flag_reason = "boundary_reject" if "boundary_reject" in hard_gates else "hard_rule_reject"
-        return
-
-    if band == "low_confidence":
-        # Policy: any score below threshold is rejected.
-        report.rule_status = "rejected"
-        report.verification_status = "rejected"
-        report.status = "rejected"
-        report.is_flagged = True
-        if not getattr(report, "flag_reason", None):
-            report.flag_reason = "threshold_low_score"
-        return
-
-    if band == "under_review":
-        if report.rule_status != "rejected":
-            if report.rule_status not in {"flagged"}:
-                report.rule_status = "passed"
-            report.verification_status = "under_review"
-            if report.status != "rejected":
-                report.status = "pending"
-        return
-
-    if band == "confirmed_candidate":
-        if report.rule_status == "passed" and not bool(getattr(report, "is_flagged", False)):
-            report.verification_status = "verified"
-            if report.status in {None, "", "pending", "flagged"}:
-                report.status = "verified"
+    apply_threshold_outcome(report, scorecard)
 
 
 def _store_unified_validation_result(
@@ -2055,21 +2020,20 @@ def _process_report_background(
     report_id: str,
     device_id: str,
     evidence_count: int,
-    evidence_metadata_list: List[dict]
+    evidence_metadata_list: List[dict],
 ):
-    """Background task to process heavy verification without blocking response."""
+    """Background re-run of citizen verification (same orchestrator as submit)."""
+    from app.core.verification_orchestrator import run_citizen_verification_pipeline
+
     db = SessionLocal()
     try:
         report = db.query(Report).filter(Report.report_id == report_id).first()
         device = db.query(Device).filter(Device.device_id == device_id).first()
-        
         if not report or not device:
-            logger.error(f"Background processing failed: report {report_id} or device {device_id} not found")
+            logger.error("Background verification: report %s or device %s not found", report_id, device_id)
             return
-        
-        # Check if device was banned after report creation
+
         if getattr(device, "is_banned", False):
-            logger.warning(f"Device {device_id} was banned, rejecting report {report_id} in background processing")
             report.rule_status = "rejected"
             report.verification_status = "rejected"
             report.status = "rejected"
@@ -2077,147 +2041,36 @@ def _process_report_background(
             report.flag_reason = "device_banned"
             db.commit()
             return
-        
-        # 1. Enhanced evidence verification
-        verification_issues = []
-        for evidence_meta in evidence_metadata_list:
-            try:
-                # Screenshot detection
-                screenshot_result = enhanced_screenshot_detection(
-                    filename=evidence_meta["file_url"].split('/')[-1],
-                    file_path=evidence_meta["file_url"]
-                )
-                if screenshot_result["is_screenshot"]:
-                    verification_issues.append(f"Screenshot detected: {screenshot_result['details']}")
-            except Exception as e:
-                logger.warning(f"Screenshot detection failed: {e}")
-            
-            try:
-                # File timing analysis
-                timing_result = analyze_file_timing(
-                    file_path=evidence_meta["file_url"],
-                    file_created_at=evidence_meta.get("captured_at")
-                )
-                if timing_result["is_suspicious"]:
-                    verification_issues.append(f"Suspicious file timing: {timing_result['suspicious_reasons']}")
-            except Exception as e:
-                logger.warning(f"Timing analysis failed: {e}")
-            
-            try:
-                # Evidence source validation
-                source_result = validate_evidence_source(
-                    filename=evidence_meta["file_url"].split('/')[-1],
-                    file_path=evidence_meta["file_url"]
-                )
-                if not source_result["is_valid"]:
-                    verification_issues.append(f"Invalid evidence source: {source_result['suspicious_indicators']}")
-            except Exception as e:
-                logger.warning(f"Source validation failed: {e}")
-        
-        # 2. Location consistency validation
-        try:
-            location_result = validate_location_consistency(
-                report_latitude=float(report.latitude),
-                report_longitude=float(report.longitude),
-                evidence_metadata=evidence_metadata_list
-            )
-            if not location_result["is_consistent"]:
-                verification_issues.append(f"Location inconsistency detected: {location_result['details']}")
-            
-            # Store location validation results in report metadata
-            fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
-            fv["location_validation"] = location_result
-            report.feature_vector = _json_safe(fv)
-        except Exception as e:
-            logger.warning(f"Location consistency validation failed: {e}")
-        
-        # 3. Unified validation using all models (TrustBond, Natural Language, Volo) — no legacy fallback.
-        from app.core.unified_validator import validate_report_unified
 
-        evidence_files = db.query(EvidenceFile).filter(
-            EvidenceFile.report_id == report.report_id
-        ).all()
-        validation_result = validate_report_unified(
-            db=db,
-            report=report,
-            device=device,
+        evidence_files = (
+            db.query(EvidenceFile).filter(EvidenceFile.report_id == report.report_id).all()
+        )
+        fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+        validations = fv.get("evidence_validations") if isinstance(fv.get("evidence_validations"), list) else []
+
+        run_citizen_verification_pipeline(
+            db,
+            report,
+            device,
             evidence_files=evidence_files,
-        )
-        unified_validation_data = _store_unified_validation_result(db, report, validation_result)
-        logger.info(
-            "Unified validation completed for report %s - Score: %.2f",
-            report_id,
-            validation_result.aggregated_trust.total_score,
+            evidence_validations=validations,
+            evidence_metadata_list=evidence_metadata_list,
+            compute_scorecard_fn=_compute_threshold_scorecard,
         )
 
-        # 4. Apply rule-based verification (still needed for basic validation)
         try:
-            rule_status, is_flagged, flag_reason = apply_rule_based_status(
-                report, evidence_count, db
-            )
-            report.rule_status = rule_status
-            report.is_flagged = bool(getattr(report, "is_flagged", False) or is_flagged)
-            if is_flagged and flag_reason and not getattr(report, "flag_reason", None):
-                report.flag_reason = flag_reason
-        except Exception as e:
-            logger.error(f"Rule-based verification failed for report {report_id}: {e}")
-
-        # 4b. Apply threshold decision from aggregated model output + rule gates.
-        try:
-            votes_bg = {"real": 0, "false": 0, "unknown": 0}
-            fv_bg = report.feature_vector if isinstance(report.feature_vector, dict) else {}
-            vv_bg = fv_bg.get("community_votes", {}) if isinstance(fv_bg.get("community_votes", {}), dict) else {}
-            for v in vv_bg.values():
-                k = str(v)
-                if k in votes_bg:
-                    votes_bg[k] += 1
-            ml_prediction_bg = resolve_ml_prediction_for_report(report)
-            scorecard_bg = _compute_threshold_scorecard(
-                report,
-                ml_prediction=ml_prediction_bg,
-                community_votes=votes_bg,
-                unified_validation=unified_validation_data if isinstance(unified_validation_data, dict) else (
-                    fv_bg.get("unified_validation") if isinstance(fv_bg.get("unified_validation"), dict) else None
-                ),
-            )
-            fv_bg["threshold_scorecard"] = scorecard_bg
-            report.feature_vector = _json_safe(fv_bg)
-            _apply_threshold_outcome(report, scorecard_bg)
-            ml_prediction_adj = resolve_ml_prediction_for_report(report)
-            ai_ts = (
-                float(ml_prediction_adj.trust_score)
-                if ml_prediction_adj and getattr(ml_prediction_adj, "trust_score", None) is not None
-                else None
-            )
-            ai_lbl = getattr(ml_prediction_adj, "prediction_label", None)
-            ai_ts, ai_lbl = _rule_adjusted_trust_label(report, ai_ts, ai_lbl)
-            _persist_adjusted_ml_prediction(db, ml_prediction_adj, ai_ts, ai_lbl)
-            try:
-                update_device_ml_aggregates(db, device, window=30)
-                logger.info("Device ML aggregates updated after final trust for report %s", report_id)
-            except Exception as agg_exc:
-                logger.error("Device ML aggregates update failed for report %s: %s", report_id, agg_exc)
-        except Exception as e:
-            logger.error(f"Threshold decision application failed for report {report_id}: {e}")
-        
-        # 5. Update hotspot clustering
-        try:
-            if report.status not in ["rejected", "flagged"]:
+            if report.status not in ("rejected",):
                 create_hotspots_from_reports(db, [report])
-        except Exception as e:
-            logger.error(f"Hotspot creation failed for report {report_id}: {e}")
-        
+        except Exception as exc:
+            logger.error("Hotspot creation failed for report %s: %s", report_id, exc)
+
         db.commit()
-        logger.info(f"Background processing completed for report {report_id}")
-        
-        # Broadcast update to dashboard
         try:
             manager.broadcast({"type": "refresh_data", "entity": "report", "action": "processed"})
-        except Exception as e:
-            logger.warning(f"Failed to broadcast update for report {report_id}: {e}")
-            
-    except Exception as e:
-        logger.error(f"Background processing error for report {report_id}: {e}")
+        except Exception as exc:
+            logger.warning("Broadcast failed for report %s: %s", report_id, exc)
+    except Exception as exc:
+        logger.error("Background verification error for report %s: %s", report_id, exc)
         db.rollback()
     finally:
         db.close()
@@ -2821,56 +2674,6 @@ def _enforce_device_submission_guards(
                 status_code=429,
                 detail=f"Multiple identical reports detected. Please ensure each report represents a unique incident. If this is an error, please wait 2 minutes.",
             )
-
-
-def _ensure_fallback_ml_prediction_if_missing(db: Session, report: Report) -> None:
-    """
-    XGBoost scoring may skip inserting a row (no model, bad meta, errors).
-    Persist a heuristic evaluation so list/detail APIs always have ml_predictions
-    (prediction_label, trust_score, etc.) when possible.
-
-    Called on every new report (`create_report`) and after community re-score so the
-    Reports page can read real DB rows — ongoing operation does not require manual backfill.
-    """
-    from app.models.ml_prediction import MLPrediction
-
-    exists = (
-        db.query(MLPrediction.prediction_id)
-        .filter(MLPrediction.report_id == report.report_id)
-        .limit(1)
-        .first()
-    )
-    if exists is not None:
-        return
-    try:
-        from app.utils.ml_evaluator import ml_evaluator
-
-        ml_result = ml_evaluator.evaluate_report(report)
-        db.add(
-            MLPrediction(
-                prediction_id=uuid4(),
-                report_id=report.report_id,
-                trust_score=ml_result["trust_score"],
-                prediction_label=ml_result["prediction_label"],
-                confidence=ml_result["confidence"],
-                model_type="auto_evaluation",
-                is_final=False,
-                evaluated_at=datetime.now(timezone.utc),
-            )
-        )
-        logger.info(
-            "Fallback ML row for report %s: %s (%.1f%%)",
-            report.report_id,
-            ml_result.get("prediction_label"),
-            float(ml_result.get("trust_score") or 0),
-        )
-    except Exception as exc:
-        logger.warning(
-            "Could not create fallback ml_prediction for report %s: %s",
-            report.report_id,
-            exc,
-            exc_info=True,
-        )
 
 
 #this marks the biggining of changes I did to implement AI-enhanced rules and ML-based auto-verification in the create_report endpoint. The improvements include:
@@ -3661,147 +3464,116 @@ def create_report(
                 report, db, evidence_count=evidence_count
             )
         if submitting_leader is None:
-            from app.core.unified_validator import validate_report_unified
-            from app.core.report_priority import apply_anti_fraud_rules, calculate_report_priority
+            from app.core.report_priority import apply_anti_fraud_rules
+            from app.core.verification_orchestrator import run_citizen_verification_pipeline
 
-            validation_result = validate_report_unified(
-                db=db,
-                report=report,
-                device=device,
-                evidence_files=list(getattr(report, "evidence_files", []) or []),
-            )
-            unified_validation_data = _store_unified_validation_result(db, report, validation_result)
-
-            ml_prediction_tmp = resolve_ml_prediction_for_report(report)
-            rule_status, is_flagged, flag_reason = apply_anti_fraud_rules(
+            # Hard reject before full pipeline (invalid coords / type / speed)
+            pre_rule_status, pre_flagged, pre_reason = apply_anti_fraud_rules(
                 report, evidence_count, db
             )
-
-            # HARD REJECTION: If rule-based validation fails, reject report immediately (like boundary rejection)
-            if rule_status == "rejected":
-                # Rollback any database changes and return HTTP 400
+            if pre_rule_status == "rejected":
                 db.rollback()
                 raise HTTPException(
                     status_code=400,
                     detail={
                         "error": "RULE_BASED_REJECTION",
-                        "message": _friendly_rule_rejection_message(flag_reason),
-                        "flag_reason": flag_reason or "anti_fraud_rules_violation",
-                        "rule_status": rule_status
-                    }
+                        "message": _friendly_rule_rejection_message(pre_reason),
+                        "flag_reason": pre_reason or "anti_fraud_rules_violation",
+                        "rule_status": pre_rule_status,
+                    },
                 )
 
-            # Preserve existing flags unless the rule engine flags
-            if report.rule_status != "rejected":
-                report.rule_status = rule_status
+            def _compose_narratives_create(**kwargs):
+                r = kwargs["report"]
+                uv = kwargs["unified_validation"]
+                sc = kwargs["scorecard"]
+                mp = kwargs["ml_prediction"]
+                ai_ts = kwargs["ai_trust_score"]
+                ai_lbl = kwargs["ai_label"]
+                ev = kwargs["evidence_validations"]
+                sem = (
+                    r.feature_vector.get("semantic_alignment")
+                    if isinstance(r.feature_vector, dict)
+                    else None
+                )
+                r.ai_verification_reason = _compose_ai_verification_reason(
+                    verification_status=r.verification_status,
+                    rule_status=r.rule_status,
+                    is_flagged=r.is_flagged,
+                    flag_reason=r.flag_reason,
+                    ml_prediction_label=ai_lbl,
+                    trust_score=ai_ts,
+                    semantic_alignment=sem if isinstance(sem, dict) else None,
+                    incident_type_name=getattr(getattr(r, "incident_type", None), "type_name", None),
+                    reporter_description=r.description,
+                    context_tags=list(getattr(r, "context_tags", None) or []),
+                    unified_validation=uv,
+                    scorecard=sc,
+                    latitude=getattr(r, "latitude", None),
+                    longitude=getattr(r, "longitude", None),
+                    gps_accuracy=getattr(r, "gps_accuracy", None),
+                    location_label=_human_location_chain_from_report(r),
+                    description_credibility=_description_credibility_from_report(r),
+                )
+                r.ai_evidence_description = _compose_ai_evidence_description(
+                    ev,
+                    incident_type_name=getattr(getattr(r, "incident_type", None), "type_name", None),
+                    reporter_description=r.description,
+                    context_tags=list(getattr(r, "context_tags", None) or []),
+                    evidence_file_count=len(ev),
+                    unified_validation=uv,
+                    scorecard=sc,
+                    verification_status=r.verification_status,
+                    rule_status=r.rule_status,
+                    is_flagged=r.is_flagged,
+                    flag_reason=r.flag_reason,
+                    ml_prediction_label=ai_lbl,
+                    trust_score=ai_ts,
+                    semantic_alignment=sem if isinstance(sem, dict) else None,
+                    latitude=getattr(r, "latitude", None),
+                    longitude=getattr(r, "longitude", None),
+                    gps_accuracy=getattr(r, "gps_accuracy", None),
+                    location_label=_human_location_chain_from_report(r),
+                )
+                snapshot = _build_ai_analysis_snapshot(
+                    verification_status=r.verification_status,
+                    rule_status=r.rule_status,
+                    is_flagged=r.is_flagged,
+                    flag_reason=r.flag_reason,
+                    ml_prediction_label=ai_lbl,
+                    trust_score=ai_ts,
+                    semantic_alignment=sem if isinstance(sem, dict) else None,
+                    incident_type_name=getattr(getattr(r, "incident_type", None), "type_name", None),
+                    reporter_description=r.description,
+                    context_tags=list(getattr(r, "context_tags", None) or []),
+                    unified_validation=uv,
+                    scorecard=sc,
+                    evidence_validations=ev,
+                    evidence_file_count=len(ev),
+                    latitude=getattr(r, "latitude", None),
+                    longitude=getattr(r, "longitude", None),
+                    gps_accuracy=getattr(r, "gps_accuracy", None),
+                    location_label=_human_location_chain_from_report(r),
+                    description_credibility=_description_credibility_from_report(r),
+                )
+                _persist_ai_analysis_snapshot(r, snapshot)
 
-            # Handle flagging from rule engine (not rejection)
-            report.is_flagged = bool(report.is_flagged or is_flagged)
-            if report.is_flagged:
-                report.verification_status = "under_review"
-            if report.flag_reason is None and flag_reason:
-                report.flag_reason = flag_reason
-
-            # Get unified validation result for priority calculation
-            unified_validation_data = (
-                unified_validation_data
-                if isinstance(unified_validation_data, dict)
-                else report.feature_vector.get('unified_validation', {}) if isinstance(report.feature_vector, dict) else {}
-            )
-            report.priority = calculate_report_priority(report, evidence_count, db, unified_validation_data)
-            votes_tmp = {"real": 0, "false": 0, "unknown": 0}
-            if isinstance(report.feature_vector, dict):
-                vv = report.feature_vector.get("community_votes", {})
-                if isinstance(vv, dict):
-                    for v in vv.values():
-                        k = str(v)
-                        if k in votes_tmp:
-                            votes_tmp[k] += 1
-            scorecard = _compute_threshold_scorecard(
+            pipeline_result = run_citizen_verification_pipeline(
+                db,
                 report,
-                ml_prediction=ml_prediction_tmp,
-                community_votes=votes_tmp,
-                unified_validation=unified_validation_data,
-            )
-            fv_sc = report.feature_vector if isinstance(report.feature_vector, dict) else {}
-            fv_sc["threshold_scorecard"] = scorecard
-            report.feature_vector = _json_safe(fv_sc)
-            _apply_threshold_outcome(report, scorecard)
-            semantic_alignment_meta = None
-            if isinstance(report.feature_vector, dict):
-                semantic_alignment_meta = report.feature_vector.get("semantic_alignment")
-            ai_trust_score = (
-                float(ml_prediction_tmp.trust_score)
-                if getattr(ml_prediction_tmp, "trust_score", None) is not None
-                else None
-            )
-            ai_label = getattr(ml_prediction_tmp, "prediction_label", None)
-            ai_trust_score, ai_label = _rule_adjusted_trust_label(report, ai_trust_score, ai_label)
-            _persist_adjusted_ml_prediction(db, ml_prediction_tmp, ai_trust_score, ai_label)
-            try:
-                update_device_ml_aggregates(db, device, window=30)
-            except Exception:
-                pass
-            report.ai_verification_reason = _compose_ai_verification_reason(
-                verification_status=report.verification_status,
-                rule_status=report.rule_status,
-                is_flagged=report.is_flagged,
-                flag_reason=report.flag_reason,
-                ml_prediction_label=ai_label,
-                trust_score=ai_trust_score,
-                semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
-                incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
-                reporter_description=report.description,
-                context_tags=list(getattr(report, "context_tags", None) or []),
-                unified_validation=unified_validation_data,
-                scorecard=scorecard,
-                latitude=getattr(report, "latitude", None),
-                longitude=getattr(report, "longitude", None),
-                gps_accuracy=getattr(report, "gps_accuracy", None),
-                location_label=_human_location_chain_from_report(report),
-                description_credibility=_description_credibility_from_report(report),
-            )
-            report.ai_evidence_description = _compose_ai_evidence_description(
-                evidence_validations,
-                incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
-                reporter_description=report.description,
-                context_tags=list(getattr(report, "context_tags", None) or []),
-                evidence_file_count=len(evidence_validations),
-                unified_validation=unified_validation_data,
-                scorecard=scorecard,
-                verification_status=report.verification_status,
-                rule_status=report.rule_status,
-                is_flagged=report.is_flagged,
-                flag_reason=report.flag_reason,
-                ml_prediction_label=ai_label,
-                trust_score=ai_trust_score,
-                semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
-                latitude=getattr(report, "latitude", None),
-                longitude=getattr(report, "longitude", None),
-                gps_accuracy=getattr(report, "gps_accuracy", None),
-                location_label=_human_location_chain_from_report(report),
-            )
-            snapshot = _build_ai_analysis_snapshot(
-                verification_status=report.verification_status,
-                rule_status=report.rule_status,
-                is_flagged=report.is_flagged,
-                flag_reason=report.flag_reason,
-                ml_prediction_label=ai_label,
-                trust_score=ai_trust_score,
-                semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
-                incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
-                reporter_description=report.description,
-                context_tags=list(getattr(report, "context_tags", None) or []),
-                unified_validation=unified_validation_data,
-                scorecard=scorecard,
+                device,
+                evidence_files=list(getattr(report, "evidence_files", []) or []),
                 evidence_validations=evidence_validations,
-                evidence_file_count=len(evidence_validations),
-                latitude=getattr(report, "latitude", None),
-                longitude=getattr(report, "longitude", None),
-                gps_accuracy=getattr(report, "gps_accuracy", None),
-                location_label=_human_location_chain_from_report(report),
+                evidence_metadata_list=evidence_metadata_list,
+                compute_scorecard_fn=_compute_threshold_scorecard,
+                compose_narratives_fn=_compose_narratives_create,
+                skip_if_out_of_boundary=out_of_boundary,
             )
-            _persist_ai_analysis_snapshot(report, snapshot)
+            unified_validation_data = pipeline_result.unified_validation
+            scorecard = pipeline_result.scorecard
+            ml_prediction_tmp = pipeline_result.ml_prediction
+            ai_trust_score = pipeline_result.ai_trust_score
+            ai_label = pipeline_result.ai_label
     except HTTPException:
         raise
     except Exception as e:
@@ -5330,139 +5102,99 @@ async def upload_evidence(
         except Exception as e:
             logger.warning(f"Post-upload semantic validation failed for report {report_after.report_id}: {e}")
 
-        evidence_count = db.query(EvidenceFile).filter(EvidenceFile.report_id == report_after.report_id).count()
-        print(f"Re-applying AI-enhanced rules after evidence upload - evidence_count: {evidence_count}")  # Debug log
-        
-        # Re-run unified validation so TrustBond/NL/VOLO only contribute signals (no legacy fallback).
-        from app.core.unified_validator import validate_report_unified
+        from app.core.verification_orchestrator import run_citizen_verification_pipeline
 
-        validation_result = validate_report_unified(
-            db=db,
-            report=report_after,
-            device=device,
-            evidence_files=list(getattr(report_after, "evidence_files", []) or []),
+        evidence_files_all = (
+            db.query(EvidenceFile).filter(EvidenceFile.report_id == report_after.report_id).all()
         )
-        unified_validation_data = _store_unified_validation_result(db, report_after, validation_result)
+        fv_pre = report_after.feature_vector if isinstance(report_after.feature_vector, dict) else {}
+        validations_pre = (
+            fv_pre.get("evidence_validations")
+            if isinstance(fv_pre.get("evidence_validations"), list)
+            else []
+        )
 
-        ml_prediction = resolve_ml_prediction_for_report(report_after)
-        if ml_prediction is not None:
-            print(f"Using ML prediction for re-evaluation: {ml_prediction.prediction_label}, trust_score: {ml_prediction.trust_score}")  # Debug log
+        def _compose_narratives_upload(**kwargs):
+            r = kwargs["report"]
+            uv = kwargs["unified_validation"]
+            sc = kwargs["scorecard"]
+            ai_lbl = kwargs["ai_label"]
+            ai_ts = kwargs["ai_trust_score"]
+            ev = kwargs["evidence_validations"]
+            sem = fv_pre.get("semantic_alignment") if isinstance(fv_pre.get("semantic_alignment"), dict) else None
+            loc_chain = _human_location_chain_from_report(r)
+            r.ai_evidence_description = _compose_ai_evidence_description(
+                ev,
+                incident_type_name=getattr(getattr(r, "incident_type", None), "type_name", None),
+                reporter_description=r.description,
+                context_tags=list(getattr(r, "context_tags", None) or []),
+                evidence_file_count=len(ev),
+                unified_validation=uv,
+                scorecard=sc,
+                verification_status=r.verification_status,
+                rule_status=r.rule_status,
+                is_flagged=r.is_flagged,
+                flag_reason=r.flag_reason,
+                ml_prediction_label=ai_lbl,
+                trust_score=ai_ts,
+                semantic_alignment=sem,
+                latitude=getattr(r, "latitude", None),
+                longitude=getattr(r, "longitude", None),
+                gps_accuracy=getattr(r, "gps_accuracy", None),
+                location_label=loc_chain,
+            )
+            r.ai_verification_reason = _compose_ai_verification_reason(
+                verification_status=r.verification_status,
+                rule_status=r.rule_status,
+                is_flagged=r.is_flagged,
+                flag_reason=r.flag_reason,
+                ml_prediction_label=ai_lbl,
+                trust_score=ai_ts,
+                semantic_alignment=sem,
+                incident_type_name=getattr(getattr(r, "incident_type", None), "type_name", None),
+                reporter_description=r.description,
+                context_tags=list(getattr(r, "context_tags", None) or []),
+                unified_validation=uv,
+                scorecard=sc,
+                latitude=getattr(r, "latitude", None),
+                longitude=getattr(r, "longitude", None),
+                gps_accuracy=getattr(r, "gps_accuracy", None),
+                location_label=loc_chain,
+                description_credibility=_description_credibility_from_report(r),
+            )
+            _persist_ai_analysis_snapshot(
+                r,
+                _build_ai_analysis_snapshot(
+                    verification_status=r.verification_status,
+                    rule_status=r.rule_status,
+                    is_flagged=r.is_flagged,
+                    flag_reason=r.flag_reason,
+                    ml_prediction_label=ai_lbl,
+                    trust_score=ai_ts,
+                    semantic_alignment=sem,
+                    incident_type_name=getattr(getattr(r, "incident_type", None), "type_name", None),
+                    reporter_description=r.description,
+                    context_tags=list(getattr(r, "context_tags", None) or []),
+                    unified_validation=uv,
+                    scorecard=sc,
+                    evidence_validations=ev,
+                    evidence_file_count=len(ev),
+                    latitude=getattr(r, "latitude", None),
+                    longitude=getattr(r, "longitude", None),
+                    gps_accuracy=getattr(r, "gps_accuracy", None),
+                    location_label=loc_chain,
+                ),
+            )
 
-        # Apply AI-enhanced rules
-        from app.core.report_priority import apply_anti_fraud_rules, calculate_report_priority
-        rule_status, is_flagged, flag_reason = apply_anti_fraud_rules(
-            report_after, evidence_count, db
-        )
-        print(f"AI-enhanced rule result after evidence upload - rule_status: {rule_status}, is_flagged: {is_flagged}, flag_reason: {flag_reason}")  # Debug log
-        
-        # Recalculate priority with unified validation
-        unified_validation_data = (
-            unified_validation_data
-            if isinstance(unified_validation_data, dict)
-            else report_after.feature_vector.get('unified_validation', {}) if isinstance(report_after.feature_vector, dict) else {}
-        )
-        priority = calculate_report_priority(report_after, evidence_count, db, unified_validation_data)
-        print(f"Recalculated priority after evidence upload: {priority}")  # Debug log
-        
-        report_after.rule_status = rule_status
-        report_after.is_flagged = is_flagged
-        report_after.priority = priority  # Save recalculated priority
-        if is_flagged and flag_reason:
-            report_after.flag_reason = flag_reason
-        votes_after = {"real": 0, "false": 0, "unknown": 0}
-        fv_votes = report_after.feature_vector if isinstance(report_after.feature_vector, dict) else {}
-        vv_after = fv_votes.get("community_votes", {}) if isinstance(fv_votes.get("community_votes", {}), dict) else {}
-        for v in vv_after.values():
-            k = str(v)
-            if k in votes_after:
-                votes_after[k] += 1
-        scorecard_after = _compute_threshold_scorecard(
+        run_citizen_verification_pipeline(
+            db,
             report_after,
-            ml_prediction=ml_prediction,
-            community_votes=votes_after,
-            unified_validation=unified_validation_data,
+            device,
+            evidence_files=evidence_files_all,
+            evidence_validations=validations_pre,
+            compute_scorecard_fn=_compute_threshold_scorecard,
+            compose_narratives_fn=_compose_narratives_upload,
         )
-        fv_votes["threshold_scorecard"] = scorecard_after
-        report_after.feature_vector = _json_safe(fv_votes)
-        _apply_threshold_outcome(report_after, scorecard_after)
-
-        # Persist human-readable AI summary and decision reasoning on report row.
-        fv_after = report_after.feature_vector if isinstance(report_after.feature_vector, dict) else {}
-        validations_after = fv_after.get("evidence_validations") if isinstance(fv_after.get("evidence_validations"), list) else []
-        semantic_after = fv_after.get("semantic_alignment") if isinstance(fv_after.get("semantic_alignment"), dict) else None
-        ai_trust_score = (
-            float(ml_prediction.trust_score)
-            if ml_prediction and getattr(ml_prediction, "trust_score", None) is not None
-            else None
-        )
-        ai_label = getattr(ml_prediction, "prediction_label", None) if ml_prediction else None
-        ai_trust_score, ai_label = _rule_adjusted_trust_label(report_after, ai_trust_score, ai_label)
-        _persist_adjusted_ml_prediction(db, ml_prediction, ai_trust_score, ai_label)
-        try:
-            update_device_ml_aggregates(db, device, window=30)
-        except Exception:
-            pass
-        loc_chain = _human_location_chain_from_report(report_after)
-        report_after.ai_evidence_description = _compose_ai_evidence_description(
-            validations_after,
-            incident_type_name=getattr(getattr(report_after, "incident_type", None), "type_name", None),
-            reporter_description=report_after.description,
-            context_tags=list(getattr(report_after, "context_tags", None) or []),
-            evidence_file_count=len(validations_after),
-            unified_validation=unified_validation_data,
-            scorecard=scorecard_after,
-            verification_status=report_after.verification_status,
-            rule_status=report_after.rule_status,
-            is_flagged=report_after.is_flagged,
-            flag_reason=report_after.flag_reason,
-            ml_prediction_label=ai_label,
-            trust_score=ai_trust_score,
-            semantic_alignment=semantic_after if isinstance(semantic_after, dict) else None,
-            latitude=getattr(report_after, "latitude", None),
-            longitude=getattr(report_after, "longitude", None),
-            gps_accuracy=getattr(report_after, "gps_accuracy", None),
-            location_label=loc_chain,
-        )
-        report_after.ai_verification_reason = _compose_ai_verification_reason(
-            verification_status=report_after.verification_status,
-            rule_status=report_after.rule_status,
-            is_flagged=report_after.is_flagged,
-            flag_reason=report_after.flag_reason,
-            ml_prediction_label=ai_label,
-            trust_score=ai_trust_score,
-            semantic_alignment=semantic_after,
-            incident_type_name=getattr(getattr(report_after, "incident_type", None), "type_name", None),
-            reporter_description=report_after.description,
-            context_tags=list(getattr(report_after, "context_tags", None) or []),
-            unified_validation=unified_validation_data,
-            scorecard=scorecard_after,
-            latitude=getattr(report_after, "latitude", None),
-            longitude=getattr(report_after, "longitude", None),
-            gps_accuracy=getattr(report_after, "gps_accuracy", None),
-            location_label=loc_chain,
-            description_credibility=_description_credibility_from_report(report_after),
-        )
-        snapshot_after = _build_ai_analysis_snapshot(
-            verification_status=report_after.verification_status,
-            rule_status=report_after.rule_status,
-            is_flagged=report_after.is_flagged,
-            flag_reason=report_after.flag_reason,
-            ml_prediction_label=ai_label,
-            trust_score=ai_trust_score,
-            semantic_alignment=semantic_after if isinstance(semantic_after, dict) else None,
-            incident_type_name=getattr(getattr(report_after, "incident_type", None), "type_name", None),
-            reporter_description=report_after.description,
-            context_tags=list(getattr(report_after, "context_tags", None) or []),
-            unified_validation=unified_validation_data,
-            scorecard=scorecard_after,
-            evidence_validations=validations_after,
-            evidence_file_count=len(validations_after),
-            latitude=getattr(report_after, "latitude", None),
-            longitude=getattr(report_after, "longitude", None),
-            gps_accuracy=getattr(report_after, "gps_accuracy", None),
-            location_label=loc_chain,
-        )
-        _persist_ai_analysis_snapshot(report_after, snapshot_after)
         db.commit()
     
     await manager.broadcast({"type": "refresh_data", "entity": "report", "action": "evidence_added"})
@@ -5511,55 +5243,55 @@ def add_community_confirmation(
     db.refresh(report)
     
     device = report.device
-    # Recalculate credibility score since community votes changed
+    if device is None:
+        device = db.query(Device).filter(Device.device_id == report.device_id).first()
     evidence_count = db.query(EvidenceFile).filter(EvidenceFile.report_id == report_id).count()
-    score_report_credibility(db, report, device, evidence_count)
-    _ensure_fallback_ml_prediction_if_missing(db, report)
-    update_device_ml_aggregates(db, device)
+    if device is not None:
+        score_report_credibility(db, report, device, evidence_count)
+        from app.core.verification_orchestrator import (
+            rerun_scorecard_and_outcome,
+            run_citizen_verification_pipeline,
+        )
 
-    # Persist updated ML prediction + device aggregates so the response includes fresh trust.
+        fv_vote = report.feature_vector if isinstance(report.feature_vector, dict) else {}
+        has_unified = isinstance(fv_vote.get("unified_validation"), dict)
+
+        try:
+            if has_unified:
+                rerun_scorecard_and_outcome(
+                    db,
+                    report,
+                    device,
+                    compute_scorecard_fn=_compute_threshold_scorecard,
+                    respect_human_final=True,
+                )
+            else:
+                evidence_files = (
+                    db.query(EvidenceFile).filter(EvidenceFile.report_id == report_id).all()
+                )
+                validations = (
+                    fv_vote.get("evidence_validations")
+                    if isinstance(fv_vote.get("evidence_validations"), list)
+                    else []
+                )
+                run_citizen_verification_pipeline(
+                    db,
+                    report,
+                    device,
+                    evidence_files=evidence_files,
+                    evidence_validations=validations,
+                    compute_scorecard_fn=_compute_threshold_scorecard,
+                )
+        except Exception as exc:
+            logger.warning("Community vote verification refresh failed for %s: %s", report_id, exc)
+            try:
+                update_device_ml_aggregates(db, device, window=30)
+            except Exception:
+                pass
+
     db.commit()
     db.refresh(report)
 
-    # Update report lifecycle state based on the new ML trust score
-    try:
-        from app.models.ml_prediction import MLPrediction
-        latest_ml = (
-            db.query(MLPrediction)
-            .filter(MLPrediction.report_id == report_id)
-            .order_by(MLPrediction.evaluated_at.desc())
-            .first()
-        )
-
-        if latest_ml:
-            trust_score = float(latest_ml.trust_score) if latest_ml.trust_score is not None else 0.0
-            prediction_label = (latest_ml.prediction_label or "").lower()
-
-            # Get ML thresholds from system config
-            from app.database import SessionLocal
-            from app.models.system_config import SystemConfig
-            
-            db = SessionLocal()
-            try:
-                auto_verify_config = db.query(SystemConfig).filter(
-                    SystemConfig.config_key == 'ml.auto_verification_threshold'
-                ).first()
-                under_review_config = db.query(SystemConfig).filter(
-                    SystemConfig.config_key == 'ml.under_review_threshold'
-                ).first()
-                
-                auto_verify_threshold = float(auto_verify_config.config_value.get('value', 70.0)) if auto_verify_config else 70.0
-                under_review_threshold = float(under_review_config.config_value.get('value', 45.0)) if under_review_config else 45.0
-            finally:
-                db.close()
-
-            # AI-PRIMARY: Community voting disabled - AI makes all decisions
-            # Community votes only affect ML model training, not verification status
-            print(" AI-PRIMARY: Community vote processed, but verification status unchanged")
-    except Exception:
-        # Best-effort only: community vote must not fail if state update is blocked
-        pass
-    
     return _build_report_response(report, db, request_device_id=device_id_str)
 
 

@@ -75,7 +75,7 @@ def infer_prediction_label_from_trust_score(
 ) -> str:
     """
     When DB row has trust_score but no prediction_label (legacy / partial writes),
-    derive a label using the same banding as app.utils.ml_evaluator.MLEvaluator.
+    derive a label using standard trust bands (70 / 45 thresholds).
     """
     if trust_score >= trust_threshold:
         return "likely_real"

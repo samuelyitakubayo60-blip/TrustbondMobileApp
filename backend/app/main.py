@@ -108,93 +108,60 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Failed to preload some ML models: {e}")
         logger.info("Models will be downloaded on first use")
 
-    # Process existing pending reports through AI on startup
     import asyncio
     import logging
-    from app.utils.ml_evaluator import ml_evaluator
+    from app.config import settings
     from app.database import SessionLocal
     from app.models.report import Report
     from sqlalchemy import or_
-    from datetime import datetime, timezone
-    
+
     logger = logging.getLogger(__name__)
-    
+
     async def process_existing_reports():
-        """Process existing reports that haven't been AI-evaluated"""
+        """Backlog: run unified verification orchestrator on stale pending rows."""
+        if not getattr(settings, "verification_startup_backlog_enabled", True):
+            return
         try:
-            logger.info("Processing existing reports through AI automation...")
-            
+            from app.api.v1.reports import _compute_threshold_scorecard
+            from app.core.verification_orchestrator import process_backlog_report
+
             db = SessionLocal()
             try:
-                # Get reports that haven't been processed by AI
-                pending_reports = db.query(Report).filter(
-                    or_(
-                        Report.ai_ready.is_(None),
-                        Report.ai_ready == False
-                    ),
-                    Report.verification_status.in_(['pending', 'under_review'])
-                ).limit(50).all()
-                
-                logger.info(f"Found {len(pending_reports)} reports to process through AI")
-                
+                pending_reports = (
+                    db.query(Report)
+                    .filter(
+                        or_(Report.ai_ready.is_(None), Report.ai_ready.is_(False)),
+                        Report.verification_status.in_(("pending", "under_review")),
+                    )
+                    .limit(50)
+                    .all()
+                )
+                logger.info("Verification backlog: %s report(s)", len(pending_reports))
                 for report in pending_reports:
-                    # Never auto-promote reports that were already rule-flagged/rejected.
-                    current_rule_status = (report.rule_status or "").strip().lower()
-                    if current_rule_status in {"flagged", "rejected"}:
-                        report.verification_status = (
-                            "rejected" if current_rule_status == "rejected" else "under_review"
+                    try:
+                        process_backlog_report(
+                            db,
+                            report,
+                            compute_scorecard_fn=_compute_threshold_scorecard,
                         )
-                        report.status = "rejected" if current_rule_status == "rejected" else "pending"
-                        continue
-
-                    # Run ML evaluation
-                    ml_result = ml_evaluator.evaluate_report(report)
-                    trust_score = float(ml_result['trust_score'])
-                    
-                    # Update report with AI results
-                    report.feature_vector = {
-                        'trust_score': trust_score,
-                        'prediction_label': ml_result['prediction_label'],
-                        'confidence': float(ml_result['confidence']),
-                        'reasoning': ml_result['reasoning']
-                    }
-                    report.ai_ready = True
-                    report.features_extracted_at = datetime.now(timezone.utc)
-                    
-                    # Auto-verify high-trust reports, auto-reject low-trust
-                    if trust_score >= 70.0:
-                        report.verification_status = 'verified'
-                        report.status = 'verified'
-                        report.rule_status = 'passed'
-                        logger.info(f"Auto-verified report {report.report_id} (trust: {trust_score})")
-                    elif trust_score < 30.0:
-                        report.verification_status = 'rejected'
-                        report.status = 'rejected'
-                        report.rule_status = 'failed'
-                        logger.info(f"Auto-rejected report {report.report_id} (trust: {trust_score})")
-                    else:
-                        report.verification_status = 'under_review'
-                        report.rule_status = 'pending'
-                
+                    except Exception as row_exc:
+                        logger.warning(
+                            "Backlog verification failed for %s: %s",
+                            report.report_id,
+                            row_exc,
+                        )
                 db.commit()
-                
-                # Auto-case/hotspot creation runs on live report/review events.
-                # Startup stays focused on AI backlog hydration for older pending rows.
-                # Safety catch-up: process already-verified unlinked reports once per startup.
                 try:
                     from app.api.v1.reports import run_auto_case_realtime
+
                     run_auto_case_realtime()
-                    logger.info("Startup auto-case catch-up completed")
                 except Exception as catchup_err:
-                    logger.warning(f"Startup auto-case catch-up failed: {catchup_err}")
-                
+                    logger.warning("Startup auto-case catch-up failed: %s", catchup_err)
             finally:
                 db.close()
-                
         except Exception as e:
-            logger.error(f"Error processing existing reports: {e}")
-    
-    # Process existing reports in background
+            logger.error("Verification backlog error: %s", e)
+
     asyncio.create_task(process_existing_reports())
     
     yield
