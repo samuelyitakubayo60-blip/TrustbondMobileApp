@@ -1,0 +1,81 @@
+services:
+  # ─── PostgreSQL + PostGIS ────────────────────────────────────────────────────
+  db:
+    image: postgis/postgis:17-3.5
+    container_name: trustbond_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: trustbond
+    ports:
+      - "5432:5432"
+    volumes:
+      - trustbond_pgdata:/var/lib/postgresql/data
+      # Restore full schema + data on first run (only runs when volume is empty)
+      - ./00_create_roles.sql:/docker-entrypoint-initdb.d/00_create_roles.sql
+      - ./trustbond.sql:/docker-entrypoint-initdb.d/01_restore.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d trustbond"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  # ─── FastAPI Backend ─────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trustbond_backend
+    ports:
+      - "8000:8000"
+    # Load base secrets from .env, then override DB URL to point at Docker db
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/trustbond
+      # Allow requests from the frontend container and ngrok tunnels
+      FRONTEND_URL: http://localhost
+      CORS_ORIGINS: "http://localhost,http://localhost:80,http://127.0.0.1,http://localhost:8000"
+      # Force HuggingFace to use only cached models — never phone home
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HF_HOME: "/app/backend/models/sentence-transformers-all-MiniLM-L6-v2"
+      # ── Free LLM keys for natural-language hotspot recommendations ──────────
+      # Groq  (primary):  get free key at https://console.groq.com
+      # Gemini (fallback): get free key at https://aistudio.google.com
+      # Leave blank to use template fallback (no API call).
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GEMINI_API_KEY: ""
+    volumes:
+      # Persist uploaded evidence files across restarts
+      - trustbond_uploads:/app/backend/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ─── React Police Dashboard ───────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked into the JS bundle at build time — points to the backend on the host
+        VITE_API_BASE_URL: http://localhost:8000
+    container_name: trustbond_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+  # ─── Cloudflare Tunnel ───────────────────────────────────────────────────────
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: trustbond_tunnel
+    command: tunnel --no-autoupdate --url http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  trustbond_pgdata:
+  trustbond_uploads:
