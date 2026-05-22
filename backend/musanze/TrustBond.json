@@ -1,7 +1,15 @@
 {
-  "model_version": "trustbond_v2_no_desc_length_20260501_082231",
-  "model_type": "xgboost",
-  "training_date": "2026-05-01T06:22:31.649199+00:00",
+  "model_version": "trustbond_v3_20260523_000841",
+  "best_params": {
+    "clf__subsample": 0.7,
+    "clf__n_estimators": 300,
+    "clf__min_child_weight": 7,
+    "clf__max_depth": 4,
+    "clf__learning_rate": 0.01,
+    "clf__gamma": 0.0,
+    "clf__colsample_bytree": 1.0
+  },
+  "best_threshold": 0.34346020221710205,
   "feature_columns": [
     "latitude",
     "longitude",
@@ -21,6 +29,7 @@
     "has_live_capture",
     "time_of_day",
     "reported_at",
+    "description_length",
     "network_type",
     "device_total_reports",
     "device_trusted_reports",
@@ -28,48 +37,252 @@
     "device_trust_score",
     "confirmation_rate",
     "spam_flag_count",
-    "rule_status",
-    "is_flagged",
     "gps_speed_check",
     "gps_anomaly_flag",
-    "future_timestamp_flag",
-    "decision",
-    "confidence_level",
-    "used_for_training"
+    "future_timestamp_flag"
   ],
-  "target_column": "is_real",
-  "best_threshold": 0.3,
-  "feature_importance": {
-    "latitude": 0.0017090634210035205,
-    "longitude": 0.0005219154991209507,
-    "sector_id": 0.001762744621373713,
-    "cell_id": 0.003519474994391203,
-    "village_id": 0.00033761037047952414,
-    "incident_type_id": 0.0005716620362363756,
-    "gps_accuracy": 0.001575629343278706,
-    "movement_speed": 0.0019271282944828272,
-    "was_stationary": 0.0,
-    "evidence_count": 0.015672238543629646,
-    "has_live_capture": 0.0142273074015975,
-    "device_total_reports": 0.0036385501734912395,
-    "device_trusted_reports": 0.0026058705989271402,
-    "device_flagged_reports": 0.0017050215974450111,
-    "device_trust_score": 0.07533811777830124,
-    "confirmation_rate": 0.0028990181162953377,
-    "spam_flag_count": 0.0,
-    "is_flagged": 0.867189347743988,
-    "gps_speed_check": 0.0009797628736123443,
-    "gps_anomaly_flag": 0.0,
-    "future_timestamp_flag": 0.0,
-    "confidence_level": 0.0011136382818222046,
-    "used_for_training": 0.0027058792766183615
+  "numeric_columns": [
+    "latitude",
+    "longitude",
+    "sector_id",
+    "cell_id",
+    "village_id",
+    "incident_type_id",
+    "gps_accuracy",
+    "movement_speed",
+    "was_stationary",
+    "evidence_count",
+    "has_live_capture",
+    "description_length",
+    "device_total_reports",
+    "device_trusted_reports",
+    "device_flagged_reports",
+    "device_trust_score",
+    "confirmation_rate",
+    "spam_flag_count",
+    "gps_speed_check",
+    "gps_anomaly_flag",
+    "future_timestamp_flag"
+  ],
+  "categorical_columns": [
+    "sector",
+    "cell",
+    "village",
+    "incident_type_name",
+    "motion_level",
+    "time_of_day",
+    "reported_at",
+    "network_type"
+  ],
+  "n_rows": 6388,
+  "train_size": 4471,
+  "validation": {
+    "roc_auc": 0.9777331804281346,
+    "pr_auc": 0.9897982755262659
   },
-  "removed_features": [
-    "description_length"
-  ],
-  "description": "TrustBond model v2 - description_length removed, moved to Natural Language model",
-  "performance_metrics": {
-    "training_samples": 33,
-    "model_type": "xgboost"
-  }
+  "test": {
+    "roc_auc": 0.9810397553516819
+  },
+  "feature_importances_top50": [
+    {
+      "feature": "num__device_trust_score",
+      "importance": 0.29541516304016113
+    },
+    {
+      "feature": "num__confirmation_rate",
+      "importance": 0.2441318780183792
+    },
+    {
+      "feature": "num__evidence_count",
+      "importance": 0.06466751545667648
+    },
+    {
+      "feature": "num__has_live_capture",
+      "importance": 0.05897578224539757
+    },
+    {
+      "feature": "cat__network_type_mobile",
+      "importance": 0.028519101440906525
+    },
+    {
+      "feature": "cat__motion_level_low",
+      "importance": 0.023263445124030113
+    },
+    {
+      "feature": "cat__motion_level_high",
+      "importance": 0.019313545897603035
+    },
+    {
+      "feature": "num__device_flagged_reports",
+      "importance": 0.019179528579115868
+    },
+    {
+      "feature": "num__gps_accuracy",
+      "importance": 0.018897945061326027
+    },
+    {
+      "feature": "cat__incident_type_name_Harassment",
+      "importance": 0.01888621784746647
+    },
+    {
+      "feature": "num__sector_id",
+      "importance": 0.01767319068312645
+    },
+    {
+      "feature": "num__cell_id",
+      "importance": 0.017205271869897842
+    },
+    {
+      "feature": "num__village_id",
+      "importance": 0.01704215258359909
+    },
+    {
+      "feature": "num__movement_speed",
+      "importance": 0.01566295325756073
+    },
+    {
+      "feature": "num__description_length",
+      "importance": 0.015636203810572624
+    },
+    {
+      "feature": "cat__network_type_wifi",
+      "importance": 0.015467504970729351
+    },
+    {
+      "feature": "num__latitude",
+      "importance": 0.01533746812492609
+    },
+    {
+      "feature": "cat__time_of_day_night",
+      "importance": 0.014578597620129585
+    },
+    {
+      "feature": "num__device_trusted_reports",
+      "importance": 0.013090068474411964
+    },
+    {
+      "feature": "num__longitude",
+      "importance": 0.012568850070238113
+    },
+    {
+      "feature": "num__device_total_reports",
+      "importance": 0.012197518721222878
+    },
+    {
+      "feature": "num__incident_type_id",
+      "importance": 0.01202524732798338
+    },
+    {
+      "feature": "cat__motion_level_medium",
+      "importance": 0.011447391472756863
+    },
+    {
+      "feature": "num__gps_speed_check",
+      "importance": 0.010054415091872215
+    },
+    {
+      "feature": "cat__incident_type_name_Assault",
+      "importance": 0.0077103604562580585
+    },
+    {
+      "feature": "cat__incident_type_name_Drug Activity",
+      "importance": 0.0010527060367166996
+    },
+    {
+      "feature": "num__was_stationary",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__spam_flag_count",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__gps_anomaly_flag",
+      "importance": 0.0
+    },
+    {
+      "feature": "num__future_timestamp_flag",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Busogo",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Cyuve",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Gacaca",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Gashaki",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Gataraga",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Kimonyi",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Kinigi",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Muhoza",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Muko",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Musanze",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Nkotsi",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Nyange",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Remera",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Rwaza",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__sector_Shingiro",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Bikara",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Birira",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Bisoke",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Bukinanyana",
+      "importance": 0.0
+    },
+    {
+      "feature": "cat__cell_Bumara",
+      "importance": 0.0
+    }
+  ]
 }
