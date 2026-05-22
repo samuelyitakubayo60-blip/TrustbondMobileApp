@@ -620,29 +620,20 @@ def get_officer_performance(
     since = datetime.now(timezone.utc) - timedelta(hours=time_window_hours)
     
     # Get reports verified by this officer within the time window
-    print(f"DEBUG: Officer {current_user.police_user_id} ({current_user.first_name} {current_user.last_name}) requesting performance data")
-    print(f"DEBUG: Time window: {time_window_hours} hours, since: {since}")
     
     officer_reports = db.query(Report).filter(
         Report.verified_by == current_user.police_user_id,
         Report.verified_at >= since  # Filter by verification date, not report date
     ).all()
     
-    print(f"DEBUG: Found {len(officer_reports)} reports verified by officer {current_user.police_user_id}")
     
     # Also check all reports verified by this officer (no time limit)
     all_officer_reports = db.query(Report).filter(
         Report.verified_by == current_user.police_user_id
     ).all()
-    print(f"DEBUG: Total reports verified by officer {current_user.police_user_id} (all time): {len(all_officer_reports)}")
-    
-    # Show some sample reports
-    for i, report in enumerate(all_officer_reports[:3]):
-        print(f"DEBUG: Sample report {i+1}: ID={report.report_id}, reported_at={report.reported_at}, verified_at={report.verified_at}, status={report.status}")
     
     # Check if there are any reports with verified_by set at all
     reports_with_verifier = db.query(Report).filter(Report.verified_by.isnot(None)).count()
-    print(f"DEBUG: Total reports in database with any verifier: {reports_with_verifier}")
     
     # Calculate daily performance metrics
     daily_metrics = {}
@@ -671,14 +662,12 @@ def get_officer_performance(
             
             if assignment and assignment.assigned_at:
                 response_time = (report.verified_at - assignment.assigned_at).total_seconds() / 3600  # in hours
-                print(f"DEBUG: Response time calculation for report {str(report.report_id)[:8]}...")
                 print(f"  Assigned at: {assignment.assigned_at}")
                 print(f"  Verified at: {report.verified_at}")
                 print(f"  Time difference: {report.verified_at - assignment.assigned_at}")
                 print(f"  Response time (hours): {response_time}")
                 daily_metrics[day_key]['total_response_time'] += response_time
             else:
-                print(f"DEBUG: No assignment found for report {str(report.report_id)[:8]}, using report submission time")
                 # Fallback to report submission time if no assignment found
                 response_time = (report.verified_at - report.reported_at).total_seconds() / 3600  # in hours
                 print(f"  Reported at: {report.reported_at}")

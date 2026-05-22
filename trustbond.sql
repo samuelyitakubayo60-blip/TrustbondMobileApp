@@ -1273,15 +1273,15 @@ COPY public.hotspots (hotspot_id, hotspot_name, center_lat, center_long, radius_
 --
 
 COPY public.incident_types (incident_type_id, type_name, description, severity_weight, color_code, is_active, created_at, default_special_assignment_unit) FROM stdin;
-2	Assault	Physical attack or violence against a person.	1.60	\N	t	2026-03-02 11:21:05.80863	\N
-5	Domestic Violence	Threats or violence within a household/family.	1.70	\N	t	2026-03-02 11:21:05.80863	\N
-6	Drug Activity	Suspected selling/using of illegal drugs.	1.40	\N	t	2026-03-02 11:21:05.80863	\N
-7	Fraud/Scam	Deception to gain money/property (mobile money scam, etc.).	1.30	\N	t	2026-03-02 11:21:05.80863	\N
-8	Harassment	Repeated threats, stalking, or intimidation.	1.20	\N	t	2026-03-02 11:21:05.80863	\N
-4	Suspicious Activity	Unusual behavior or suspicious movement in the area.	1.00	\N	t	2026-03-02 11:21:05.80863	\N
-1	Theft	Stealing of property (e.g., phone, money, livestock).	1.20	\N	t	2026-03-02 11:21:05.80863	\N
-9	Traffic Incident	Non-emergency road incident affecting safety.	1.00	\N	t	2026-03-02 11:21:05.80863	\N
-3	Vandalism	Damage or destruction of public/private property.	1.10	\N	t	2026-03-02 11:21:05.80863	\N
+2	Assault	Physical attack or violence against a person.	1.60	\N	t	2026-03-02 11:21:05.80863	RRU
+5	Domestic Violence	Threats or violence within a household/family.	1.70	\N	t	2026-03-02 11:21:05.80863	VPU
+6	Drug Activity	Suspected selling/using of illegal drugs.	1.40	\N	t	2026-03-02 11:21:05.80863	DEU
+7	Fraud/Scam	Deception to gain money/property (mobile money scam, etc.).	1.30	\N	t	2026-03-02 11:21:05.80863	AFU
+8	Harassment	Repeated threats, stalking, or intimidation.	1.20	\N	t	2026-03-02 11:21:05.80863	VPU
+4	Suspicious Activity	Unusual behavior or suspicious movement in the area.	1.00	\N	t	2026-03-02 11:21:05.80863	ISU
+1	Theft	Stealing of property (e.g., phone, money, livestock).	1.20	\N	t	2026-03-02 11:21:05.80863	CPU
+9	Traffic Incident	Non-emergency road incident affecting safety.	1.00	\N	t	2026-03-02 11:21:05.80863	TPU
+3	Vandalism	Damage or destruction of public/private property.	1.10	\N	t	2026-03-02 11:21:05.80863	CPU
 \.
 
 
@@ -2922,7 +2922,7 @@ COPY public.police_users (police_user_id, badge_number, first_name, middle_name,
 27	Supervisor-002	JANVIER	\N	Hakorimana	hakoj782@gmail.com	+250787724376	$pbkdf2-sha256$29000$CUEoRUiplVIq5dzbOydE6A$bE8mB0lICMztYG6trpMQIr9n23Oc/GVFpyzCmlOgzlY	officer	8	8	\N	t	f	\N	2026-04-25 18:15:34.161716	2026-04-21 17:32:35.922585	2026-04-21 17:32:35.922585	2026-05-08 17:44:07.524238
 6	Officer-001	Samuel	\N	Yitakubayo	samuelyitakubayo70@gmail.com	0781798011	$pbkdf2-sha256$29000$uRcCYIxxLkUopfReC4Gwdg$fibPN/TPuthW8Z/MPQCqRjVi1x1S1unp/iMjkzx9cgY	officer	8	8	\N	t	f	\N	2026-05-04 16:28:54.27143	2026-03-15 17:25:05.972992	2026-03-15 17:25:05.972992	2026-05-10 14:58:35.772583
 1	ADMIN-001	System	\N	Admin	samuelyitakubayo60@gmail.com	\N	$pbkdf2-sha256$29000$wnivNcaYU2rNWetda23NGQ$3h/ogi2VqcpSft.oaWtKt7hJkkB1wM8q7MuwTAUbn7c	admin	89	\N	\N	t	f	\N	2026-05-10 16:17:59.469538	2026-03-02 11:22:05.021999	2026-03-02 11:22:05.021999	2026-05-10 16:17:59.302259
-26	ADMIN-002	dukuze	\N	jean claude	dukuzejean09@gmail.com	0791457824	$pbkdf2-sha256$29000$htBaa01J6V2L8d77PyckhA$YpweLlQ8ajcdPZtm0FBJ724LeMkyrUnYZwrr0ssx0Io	admin	\N	\N	\N	t	f	\N	2026-05-20 15:36:58.368896	2026-04-19 10:49:03.133685	2026-04-19 10:49:03.133685	2026-05-20 15:36:58.363982
+26	ADMIN-002	dukuze	\N	jean claude	dukuzejean09@gmail.com	0791457824	$pbkdf2-sha256$29000$htBaa01J6V2L8d77PyckhA$YpweLlQ8ajcdPZtm0FBJ724LeMkyrUnYZwrr0ssx0Io	admin	\N	\N	\N	t	f	\N	2026-05-21 19:54:35.645095	2026-04-19 10:49:03.133685	2026-04-19 10:49:03.133685	2026-05-21 19:54:35.608073
 \.
 
 
@@ -3226,6 +3226,7 @@ bd7688e7-d6dc-4f39-85c4-97813aaf409d	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ
 8b835c72-da8e-4e0a-8b97-deda2ec1962b	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMyMDA3MH0.CvcPuuVTcTx6QxOfbGmDS9CFdPjImsWNG47UtoEstgA	curl/8.12.1	172.18.0.1	2026-05-20 23:34:30.285061	2026-05-20 15:34:30.296665	\N
 c799e525-272d-4563-807a-023c6b8ee739	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMyMDE0N30.9qXq_CyanhAFQ3CzsAi2-pndI15Q-jY5l8JNMCpPbP8	curl/8.12.1	172.18.0.1	2026-05-20 23:35:47.588986	2026-05-20 15:35:47.590644	\N
 3938176b-5f79-4db9-b3eb-d104042407da	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTMyMDIxOH0.WzHnf54fUpakNpO2esg__bPuQXU6OlBTc5iakAOUJZo	curl/8.12.1	172.18.0.1	2026-05-20 23:36:58.368896	2026-05-20 15:36:58.379083	\N
+1414b44e-e8dc-4988-b810-78c20444ae48	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3OTQyMjA3NX0.y0ksAZ9121bFI6ynIlHohUbHKWDKt0qTfUWjssgBcbQ	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36	172.18.0.1	2026-05-22 03:54:35.645095	2026-05-21 19:54:35.815851	\N
 \.
 
 

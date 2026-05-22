@@ -3828,18 +3828,19 @@ def add_review(
         ).order_by(MLPrediction.evaluated_at.desc()).first()
         
         if existing_ml:
-            # Human confirmation increases trust score and sets label to likely_real
-            existing_ml.trust_score = Decimal(str(max_trust_score))
+            # Police confirmation = at least 90; preserve higher scores already given
+            current_score = float(existing_ml.trust_score or 50.0)
+            police_score = max(90.0, min(current_score, max_trust_score))
+            existing_ml.trust_score = Decimal(str(round(police_score, 2)))
             existing_ml.prediction_label = "likely_real"
             existing_ml.confidence = Decimal("0.95")
             existing_ml.is_final = True
-            print(f"Updated ML prediction based on police confirmation: trust_score={max_trust_score}%, label=likely_real")  # Debug log
         else:
-            # Create new ML prediction if none exists
+            police_score = max(90.0, max_trust_score)
             new_ml = MLPrediction(
                 prediction_id=uuid4(),
                 report_id=report_id,
-                trust_score=Decimal(str(max_trust_score)),
+                trust_score=Decimal(str(round(police_score, 2))),
                 prediction_label="likely_real",
                 confidence=Decimal("0.95"),
                 model_type="human_override",
@@ -3847,7 +3848,6 @@ def add_review(
                 evaluated_at=now_utc
             )
             db.add(new_ml)
-            print(f"Created new ML prediction based on police confirmation: trust_score={max_trust_score}%, label=likely_real")  # Debug log
         
         # Update device trust score based on successful human confirmation.
         # Keep step small to avoid over-inflating trust from a single review.
@@ -3856,7 +3856,6 @@ def add_review(
             # Increase by a small bounded step.
             new_device_score = min(100.0, current_device_score + 2.0)
             report.device.device_trust_score = Decimal(str(new_device_score))
-            print(f"Updated device trust score: {current_device_score:.1f}% → {new_device_score:.1f}%")  # Debug log
         
         # Update trusted_reports count
         if hasattr(report.device, "trusted_reports"):
@@ -3896,7 +3895,6 @@ def add_review(
             existing_ml.prediction_label = "fake"
             existing_ml.confidence = Decimal("0.95")  # High confidence in this assessment
             existing_ml.is_final = True
-            print(f"Updated ML prediction based on police rejection: trust_score={min_trust_score}%, label=fake")  # Debug log
         else:
             # Create new ML prediction if none exists
             new_ml = MLPrediction(
@@ -3910,7 +3908,6 @@ def add_review(
                 evaluated_at=now_utc
             )
             db.add(new_ml)
-            print(f"Created new ML prediction based on police rejection: trust_score={min_trust_score}%, label=fake")  # Debug log
         
         # Update device trust score based on human rejection.
         # Keep reduction small to avoid dangerous one-shot collapses.
@@ -3919,7 +3916,6 @@ def add_review(
             # Decrease by a small bounded step.
             new_device_score = max(0.0, current_device_score - 3.0)
             report.device.device_trust_score = Decimal(str(new_device_score))
-            print(f"Updated device trust score: {current_device_score:.1f}% → {new_device_score:.1f}%")  # Debug log
         
         # Update flagged_reports count
         if hasattr(report.device, "flagged_reports"):
@@ -4649,7 +4645,6 @@ async def upload_evidence(
     Mobile: pass device_id to add evidence to your own report (only within evidence_add_window_hours after submit).
     Police dashboard: no device_id; requires auth (future use).
     """
-    print(f"Evidence upload - report_id: {report_id}, device_id: {device_id}, filename: {file.filename}")  # Debug log
     
     report = db.query(Report).filter(Report.report_id == report_id).first()
     if not report:
@@ -4665,24 +4660,19 @@ async def upload_evidence(
             raise HTTPException(status_code=400, detail="Invalid device_id format")
 
     if device_id_uuid is not None:
-        print(f"Device ID validation - report.device_id: {report.device_id}, device_id_uuid: {device_id_uuid}")  # Debug log
         if str(report.device_id) != str(device_id_uuid):
-            print("Device ID mismatch - raising 403")  # Debug log
             raise HTTPException(status_code=403, detail="You can only add evidence to your own report")
         window_hours = getattr(settings, "evidence_add_window_hours", 72)
         cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours)
         reported_at = report.reported_at
         if reported_at.tzinfo is None:
             reported_at = reported_at.replace(tzinfo=timezone.utc)
-        print(f"Time window check - reported_at: {reported_at}, cutoff: {cutoff}, window_hours: {window_hours}")  # Debug log
         if reported_at < cutoff:
-            print("Time window exceeded - raising 400")  # Debug log
             raise HTTPException(
                 status_code=400,
                 detail=f"You can add evidence only within {window_hours} hours of submitting the report",
             )
     elif current_user is None:
-        print("No device_id and no current_user - raising 400")  # Debug log
         raise HTTPException(status_code=400, detail="device_id required to add evidence (mobile)")
 
     # Read file content once
@@ -4776,8 +4766,6 @@ async def upload_evidence(
             )
 
     # Cloudinary upload if configured, otherwise save locally
-    print(f"Cloudinary enabled: {_CLOUDINARY_ENABLED}")  # Debug log
-    print(f"Cloudinary config - cloud_name: {settings.cloudinary_cloud_name}, api_key configured: {bool(settings.cloudinary_api_key)}")  # Debug log
     cloudinary_public_id: Optional[str] = None
     cloudinary_secure_url: Optional[str] = None
 
@@ -5346,7 +5334,6 @@ def _create_new_case_for_report(db: Session, report: Report, cluster_radius_km: 
             if len(village_reports) >= min_reports_threshold:
                 case_stats = _create_case_from_reports(db, village_reports)
                 if case_stats['cases_created'] > 0:
-                    print(f"Created new village-based case {case_stats['case_number']} with {len(village_reports)} reports in village {report.village_location_id}")
                     return
             else:
                 logger.info(
@@ -5404,7 +5391,7 @@ def _create_new_case_for_report(db: Session, report: Report, cluster_radius_km: 
         if len(clustered_reports) >= min_reports_threshold:
             case_stats = _create_case_from_reports(db, clustered_reports)
             if case_stats['cases_created'] > 0:
-                print(f"Created new geo-clustered case {case_stats['case_number']} with {len(clustered_reports)} reports within {cluster_radius_km * 1000:.0f}m")
+                pass
         else:
             logger.info(
                 "[AUTO_CASE] Geo threshold not met report=%s %s/%s",
@@ -5970,7 +5957,6 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
         db.commit()
         stats['cases_created'] += 1
         stats['case_number'] = case_number
-        print(f"Created auto-case {case.case_number} with {len(reports)} reports")
         
         # Broadcast case creation to all connected clients for real-time updates
         try:

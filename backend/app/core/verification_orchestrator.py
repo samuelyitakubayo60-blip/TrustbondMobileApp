@@ -473,6 +473,18 @@ def apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
         report.is_flagged = True
         return
 
+    # confirmed_candidate = ML says this report is credible.
+    # Auto-verify immediately — soft flags do not block map display.
+    # Only hard_reject (out-of-boundary, clear fraud) is a blocker.
+    if band == "confirmed_candidate":
+        if report.rule_status not in ("rejected",):
+            report.rule_status = "passed"
+            report.verification_status = "verified"
+            report.is_flagged = False
+            if report.status in {None, "", "pending", "flagged", "under_review"}:
+                report.status = "verified"
+        return
+
     if flagged_for_review:
         if report.rule_status != "rejected":
             report.verification_status = "under_review"
@@ -503,12 +515,6 @@ def apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
             if report.status != "rejected":
                 report.status = "pending"
         return
-
-    if band == "confirmed_candidate":
-        if report.rule_status == "passed" and not is_flagged:
-            report.verification_status = "verified"
-            if report.status in {None, "", "pending", "flagged"}:
-                report.status = "verified"
 
 
 def run_integrity_checks_on_evidence(

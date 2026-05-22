@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Annotated, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models.location import Location
+from app.models.ml_prediction import MLPrediction
 from app.models.report import Report
 from app.models.local_leader import LocalLeader
 from app.api.v1.leader_auth import get_current_local_leader
@@ -160,6 +162,83 @@ def verify_report(
     r.leader_verified_by = current_leader.local_leader_id
     r.leader_verified_at = now
     r.leader_verification_note = (payload.note or "").strip()[:500] if payload.note else None
+
+    # Leader confirmation is sufficient for map display — no police review needed.
+    if decision == "confirmed" and r.verification_status not in ("rejected",):
+        r.verification_status = "verified"
+        r.status = "verified"
+        if r.rule_status not in ("rejected", "passed"):
+            r.rule_status = "passed"
+    elif decision == "rejected":
+        r.verification_status = "rejected"
+        r.status = "rejected"
+        r.is_flagged = True
+        r.flag_reason = r.flag_reason or "rejected_by_local_leader"
+
+    # ── Update ML trust score based on leader decision ──────────────────────
+    # Leader weight is moderate (community authority, not police authority).
+    # confirmed: score nudged up toward 75, device trust +1
+    # rejected:  score nudged down toward 15, device trust -2
+    existing_ml = (
+        db.query(MLPrediction)
+        .filter(MLPrediction.report_id == r.report_id)
+        .order_by(MLPrediction.evaluated_at.desc())
+        .first()
+    )
+    if decision == "confirmed":
+        if existing_ml:
+            current_score = float(existing_ml.trust_score or 50.0)
+            new_score = max(80.0, current_score)   # leader confirmation = at least 80
+            existing_ml.trust_score = Decimal(str(round(new_score, 2)))
+            existing_ml.prediction_label = "likely_real"
+            existing_ml.confidence = Decimal("0.80")
+            existing_ml.is_final = False  # Police can still override
+        else:
+            db.add(MLPrediction(
+                prediction_id=uuid4(),
+                report_id=r.report_id,
+                trust_score=Decimal("80.0"),
+                prediction_label="likely_real",
+                confidence=Decimal("0.80"),
+                model_type="leader_override",
+                is_final=False,
+                evaluated_at=now,
+            ))
+        # Bump device trust slightly
+        if getattr(r, "device", None) and hasattr(r.device, "device_trust_score"):
+            r.device.device_trust_score = Decimal(
+                str(min(100.0, float(r.device.device_trust_score or 50.0) + 1.0))
+            )
+        if hasattr(r.device, "trusted_reports"):
+            r.device.trusted_reports = (r.device.trusted_reports or 0) + 1
+
+    elif decision == "rejected":
+        if existing_ml:
+            current_score = float(existing_ml.trust_score or 50.0)
+            new_score = max(15.0, min(current_score, current_score - 20.0))
+            existing_ml.trust_score = Decimal(str(round(new_score, 2)))
+            existing_ml.prediction_label = "suspicious"
+            existing_ml.confidence = Decimal("0.80")
+            existing_ml.is_final = False  # Police can still override
+        else:
+            db.add(MLPrediction(
+                prediction_id=uuid4(),
+                report_id=r.report_id,
+                trust_score=Decimal("20.0"),
+                prediction_label="suspicious",
+                confidence=Decimal("0.80"),
+                model_type="leader_override",
+                is_final=False,
+                evaluated_at=now,
+            ))
+        # Reduce device trust slightly
+        if getattr(r, "device", None) and hasattr(r.device, "device_trust_score"):
+            r.device.device_trust_score = Decimal(
+                str(max(0.0, float(r.device.device_trust_score or 50.0) - 2.0))
+            )
+        if hasattr(r.device, "flagged_reports"):
+            r.device.flagged_reports = (r.device.flagged_reports or 0) + 1
+
     db.add(r)
     db.commit()
 

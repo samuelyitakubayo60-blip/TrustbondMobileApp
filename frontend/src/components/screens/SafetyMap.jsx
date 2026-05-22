@@ -26,8 +26,6 @@ const HOTSPOT_PERIOD_OPTIONS = [
   { label: "1 year", hours: 8760 },
 ];
 
-/** Map always loads full cluster history; side panel filter highlights a period. */
-const MAP_CLUSTER_WINDOW_HOURS = 8760;
 const DEFAULT_TIME_PERIOD = "week";
 
 /** Derive sidebar stats from persisted hotspot rows (same source as map polygons). */
@@ -273,14 +271,12 @@ const ZoomTracker = ({ onZoom }) => {
 };
 
 const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
-  const [mapHotspots, setMapHotspots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirmedOnMap, setConfirmedOnMap] = useState([]);
   const [typeFilter, setTypeFilter] = useState("all"); // 'all' | incident_type_name
   const [timePeriod, setTimePeriod] = useState(DEFAULT_TIME_PERIOD); // '', 'day', 'week', 'month', 'quarter', 'year'
   const [customHours, setCustomHours] = useState(""); // Custom hours input
   const [historicalHotspots, setHistoricalHotspots] = useState([]);
-  const [historicalLoading, setHistoricalLoading] = useState(false);
   const [hotspotStats, setHotspotStats] = useState({
     total_clusters: 0,
     reports_in_clusters: 0,
@@ -303,16 +299,20 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   });
   const [mapZoom, setMapZoom] = useState(MUSANZE_ZOOM);
 
-  const loadMapHotspots = () => {
+  const loadHistoricalHotspots = () => {
     setLoading(true);
-    const query = new URLSearchParams();
-    query.set("time_window_hours", String(MAP_CLUSTER_WINDOW_HOURS));
-    query.set("limit", "200");
+    const params = new URLSearchParams();
+    params.set("limit", "200");
+    if (timePeriod && timePeriod !== "") {
+      params.set("time_period", timePeriod);
+    } else if (customHours && customHours !== "") {
+      params.set("hours_back", customHours);
+    }
     api
-      .get(`/api/v1/hotspots/?${query.toString()}`)
+      .get(`/api/v1/hotspots/?${params.toString()}`)
       .then((res) => {
         const rows = res || [];
-        setMapHotspots(rows);
+        setHistoricalHotspots(rows);
         setHotspotStats(buildStatsFromHotspots(rows));
         setLoading(false);
       })
@@ -351,65 +351,8 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     }
   };
 
-  const loadHistoricalHotspots = () => {
-    setHistoricalLoading(true);
-
-    // Build query parameters for time-based filtering
-    const params = new URLSearchParams();
-    if (timePeriod && timePeriod !== "") {
-      params.append("time_period", timePeriod);
-    }
-    if (customHours && customHours !== "") {
-      params.append("hours_back", customHours);
-    }
-
-    const url = params.toString()
-      ? `/api/v1/hotspots/?${params.toString()}`
-      : "/api/v1/hotspots/";
-
-    api
-      .get(url)
-      .then((res) => {
-        setHistoricalHotspots(res || []);
-        setHistoricalLoading(false);
-      })
-      .catch(() => setHistoricalLoading(false));
-  };
-
-  const loadHotspotStats = () => {
-    // Build query parameters for stats API
-    const params = new URLSearchParams();
-    if (timePeriod && timePeriod !== "") {
-      params.append("time_period", timePeriod);
-    }
-    if (customHours && customHours !== "") {
-      params.append("hours_back", customHours);
-    }
-
-    const url = params.toString()
-      ? `/api/v1/hotspots/stats?${params.toString()}`
-      : "/api/v1/hotspots/stats";
-
-    api
-      .get(url)
-      .then((res) => {
-        setHotspotStats(res);
-      })
-      .catch(() => {
-        // Fallback to empty stats if API fails
-        setHotspotStats({
-          total_clusters: 0,
-          reports_in_clusters: 0,
-          risk_counts: { critical: 0, warning: 0, normal: 0 },
-          stage_counts: { emerging: 0, active: 0, intense: 0 },
-          avg_cluster_trust: 75,
-          latest_cluster_run: "Never"
-        });
-      });
-  };
-
   useEffect(() => {
-    loadMapHotspots();
+    loadHistoricalHotspots();
     loadConfirmedReportsForMap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsRefreshKey]);
@@ -421,7 +364,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
 
   useEffect(() => {
     loadHistoricalHotspots();
-    loadHotspotStats();
   }, [timePeriod, customHours]);
 
   useEffect(() => {
@@ -431,7 +373,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
         if (!res) return;
         const nextParams = { ...dbscanParams, ...res };
         setDbscanParams(nextParams);
-        loadMapHotspots();
         loadHistoricalHotspots();
       })
       .catch(() => {});
@@ -507,14 +448,23 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   }, []);
 
   const filteredHotspots = useMemo(() => {
-    return typeFilter === "all"
-      ? mapHotspots
-      : mapHotspots.filter(
+    const byType = typeFilter === "all"
+      ? historicalHotspots
+      : historicalHotspots.filter(
           (h) =>
             (h.incident_type_name || "").toLowerCase() ===
             typeFilter.toLowerCase(),
         );
-  }, [mapHotspots, typeFilter]);
+    // Apply DBSCAN param sliders as a client-side preview so the map and
+    // cluster list reflect the configured thresholds without a server round-trip.
+    const minInc = Number(dbscanParams.min_incidents || 1);
+    const trustMin = Number(dbscanParams.trust_min || 0);
+    return byType.filter(
+      (h) =>
+        (h.incident_count || 0) >= minInc &&
+        (h.avg_trust_score || 0) >= trustMin,
+    );
+  }, [historicalHotspots, typeFilter, dbscanParams.min_incidents, dbscanParams.trust_min]);
 
   const filteredConfirmedOnMap = useMemo(() => {
     return typeFilter === "all"
@@ -533,23 +483,16 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
           ...h,                           // preserves incident_points + boundary_points from API
           lat: Number(h.center_lat),
           lng: Number(h.center_long),
-          radius_meters: Number(h.radius_meters || 0),
+          // Use the slider radius as a visual preview; falls back to stored value.
+          radius_meters: Number(dbscanParams.radius_meters || h.radius_meters || 500),
           stage: getFormationStage(h),
         }))
         .filter((h) => Number.isFinite(h.lat) && Number.isFinite(h.lng)),
-    [filteredHotspots],
+    [filteredHotspots, dbscanParams.radius_meters],
   );
 
-// Filter historical hotspots for table display
-  const filteredHistoricalHotspots = useMemo(() => {
-    return typeFilter === "all"
-      ? historicalHotspots
-      : historicalHotspots.filter(
-          (h) =>
-            (h.incident_type_name || "").toLowerCase() ===
-            typeFilter.toLowerCase(),
-        );
-  }, [historicalHotspots, typeFilter]);
+  // filteredHistoricalHotspots = same as filteredHotspots (type + param filters already applied)
+  const filteredHistoricalHotspots = filteredHotspots;
 
   const selectedHotspot = useMemo(
     () =>
@@ -1832,7 +1775,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                         time_window_hours: Number(e.target.value),
                       };
                       setDbscanParams(nextParams);
-                      loadMapHotspots();
                       loadConfirmedReportsForMap();
                       loadHistoricalHotspots();
                     }}
@@ -1935,14 +1877,13 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                   setRecomputing(true);
                   try {
                     await api.post("/api/v1/hotspots/recompute", {
-                      time_window_hours: MAP_CLUSTER_WINDOW_HOURS,
+                      time_window_hours: Number(dbscanParams.time_window_hours || 168),
                       radius_meters: Number(dbscanParams.radius_meters || 500),
                       min_incidents: Number(dbscanParams.min_incidents || 2),
                       trust_min: Number(dbscanParams.trust_min || 0),
                     });
-                    loadMapHotspots();
-                    loadConfirmedReportsForMap();
                     loadHistoricalHotspots();
+                    loadConfirmedReportsForMap();
                   } catch {
                     // non-fatal
                   } finally {
@@ -2095,28 +2036,30 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
           <div className="tbl-wrap smx-cluster-table-wrap">
             <table className="smx-cluster-table">
               <colgroup>
-                <col style={{ width: "8%" }} />
-                <col style={{ width: "13%" }} />
-                <col style={{ width: "8%" }} />
-                <col style={{ width: "8%" }} />
-                <col style={{ width: "8%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "13%" }} />
+                <col style={{ width: "7%" }} />
                 <col style={{ width: "12%" }} />
+                <col style={{ width: "11%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "11%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "9%" }} />
               </colgroup>
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>Location</th>
+                  <th>Area</th>
+                  <th>Crime Type</th>
                   <th>Reports</th>
-                  <th>Type</th>
                   <th>Radius (m)</th>
+                  <th>Trust %</th>
+                  <th>Score</th>
+                  <th>Classification</th>
                   <th>Risk Level</th>
-                  <th>Formation</th>
-                  <th>Window</th>
-                  <th>Last Updated</th>
+                  <th>Detected</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -2127,22 +2070,46 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                     ...h,
                     stage: getFormationStage(h),
                   };
+                  const cls = h.classification || hotspotWithStage.stage || "—";
                   return (
                   <tr key={h.hotspot_id}>
                     <td className="smx-cell-id smx-cell-muted">
                       HS-{String(h.hotspot_id).padStart(3, "0")}
                     </td>
                     <td className="smx-cell-strong">
-                      <strong>{h.incident_type_name || "Cluster"}</strong>
+                      <strong>{h.area_label || h.incident_type_name || "—"}</strong>
+                    </td>
+                    <td className="smx-cell-compact">
+                      {h.dominant_crime_type || h.incident_type_name || "—"}
                     </td>
                     <td className="smx-cell-strong smx-cell-center">
                       {h.incident_count}
                     </td>
-                    <td className="smx-cell-compact">
-                      {h.incident_type_name || "—"}
+                    <td className="smx-cell-center">
+                      {Number(dbscanParams.radius_meters || h.radius_meters || 0)}
                     </td>
                     <td className="smx-cell-center">
-                      {Number(h.radius_meters || 0)}
+                      {h.avg_trust_score != null
+                        ? `${Math.round(Number(h.avg_trust_score))}%`
+                        : "—"}
+                    </td>
+                    <td className="smx-cell-center">
+                      {h.hotspot_score != null
+                        ? Math.round(Number(h.hotspot_score))
+                        : "—"}
+                    </td>
+                    <td className="smx-cell-center">
+                      <span
+                        className={`risk-pill ${
+                          cls === "critical"
+                            ? "r-critical"
+                            : cls === "active"
+                              ? "r-warning"
+                              : "r-normal"
+                        }`}
+                      >
+                        {String(cls).toUpperCase().slice(0, 5)}
+                      </span>
                     </td>
                     <td className="smx-cell-center">
                       <span
@@ -2156,24 +2123,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                       >
                         {(h.risk_level || "ok").toUpperCase().slice(0, 4)}
                       </span>
-                    </td>
-                    <td className="smx-cell-center">
-                      <span
-                        className={`risk-pill ${
-                          hotspotWithStage.stage === "intense"
-                            ? "r-critical"
-                            : hotspotWithStage.stage === "active"
-                              ? "r-warning"
-                              : "r-normal"
-                        }`}
-                      >
-                        {stageLabel(hotspotWithStage.stage)}
-                      </span>
-                    </td>
-                    <td className="smx-cell-center smx-cell-muted">
-                      {h.time_window_hours
-                        ? formatTimeWindow(h.time_window_hours)
-                        : "-"}
                     </td>
                     <td className="smx-cell-muted smx-cell-compact">
                       {formatClusterTimestamp(h.detected_at)}
@@ -2194,10 +2143,10 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                     </td>
                   </tr>
                 )})}
-                {!filteredHistoricalHotspots.length && !historicalLoading && (
+                {!filteredHistoricalHotspots.length && !loading && (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={11}
                       style={{
                         fontSize: "12px",
                         color: "var(--muted)",
@@ -2208,10 +2157,10 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                     </td>
                   </tr>
                 )}
-                {historicalLoading && (
+                {loading && (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={11}
                       style={{
                         fontSize: "12px",
                         color: "var(--muted)",
@@ -2233,7 +2182,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             <div className="card-title">🛡️ Security Recommendations</div>
           </div>
           <div style={{ padding: "16px" }}>
-            {historicalLoading ? (
+            {loading ? (
               <div style={{ textAlign: "center", padding: "20px" }}>
                 <div style={{ fontSize: "12px", color: "var(--muted)" }}>
                   Analyzing security recommendations...
@@ -2249,19 +2198,30 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   );
 };
 
-// ─── Unit lookup — names only, no mock action text ─────────────────────────────
+// ─── Unit lookup — fallback when backend doesn't supply a unit ───────────────
 const UNIT_LOOKUP = [
-  { match: /assault|fight|attack|violence|battery/i,     unit: "Rapid Response Unit (RRU)",                badge: "🚨" },
-  { match: /theft|robbery|burglary|steal|pickpocket/i,   unit: "Criminal Investigation Dept. (CID)",        badge: "🔍" },
-  { match: /drug|narcotic|substance|contraband/i,         unit: "Drug Enforcement Unit (DEU)",               badge: "💊" },
-  { match: /traffic|accident|road|vehicle|speeding/i,     unit: "Traffic Police Unit (TPU)",                 badge: "🚦" },
-  { match: /vandal|destruction|damage|property|cable|pump|barrier/i, unit: "Community Policing Unit (CPU)", badge: "🏘️" },
-  { match: /suspicious|loiter|trespass|stalking|threat/i, unit: "Intelligence & Surveillance Unit (ISU)",   badge: "👁️" },
+  { match: /assault|fight|attack|violence|battery/i,                      unit: "RRU" },
+  { match: /theft|robbery|burglary|steal|pickpocket/i,                    unit: "CPU" },
+  { match: /drug|narcotic|substance|contraband/i,                          unit: "DEU" },
+  { match: /traffic|accident|road|vehicle|speeding/i,                      unit: "TPU" },
+  { match: /vandal|destruction|damage|property/i,                          unit: "CPU" },
+  { match: /suspicious|loiter|trespass|stalking|harassment|threat/i,       unit: "ISU" },
+  { match: /fraud|scam|financial/i,                                         unit: "AFU" },
+  { match: /domestic|gender|victim/i,                                       unit: "VPU" },
 ];
 
 function resolveUnit(typeName) {
   const t = typeName || "";
-  return UNIT_LOOKUP.find((u) => u.match.test(t)) || { unit: "General Patrol Unit", badge: "🚔" };
+  const match = UNIT_LOOKUP.find((u) => u.match.test(t));
+  return { unit: match ? match.unit : "Patrol" };
+}
+
+/** Single severity dot — the only decorative symbol on each card. */
+function severityDot(alarm) {
+  if (alarm >= 75) return "🔴";
+  if (alarm >= 50) return "🟠";
+  if (alarm >= 30) return "🟡";
+  return "🟢";
 }
 
 /**
@@ -2300,131 +2260,31 @@ function alarmLabel(alarm) {
   return "CALM";
 }
 
-/**
- * Build a natural-language situation brief entirely from real hotspot fields.
- * No hardcoded sentences — every clause is conditional on actual data.
- */
+/** Hard-cap text to at most `max` words, appending "…" if trimmed. */
+function capWords(text, max) {
+  if (!text) return "";
+  const words = text.trim().split(/\s+/);
+  if (words.length <= max) return text.trim();
+  return words.slice(0, max).join(" ") + "…";
+}
+
+/** Situation brief — narrative capped at 80 words (target 50–80). */
 function buildNarrative(h) {
-  const parts = [];
+  const pred = h.prediction || {};
+  if (pred.narrative) return capWords(pred.narrative, 80);
   const area = h.area_label || "this area";
   const type = h.dominant_crime_type || h.incident_type_name || "incidents";
   const count = h.incident_count || 0;
-  const trust = Math.round(h.avg_trust_score || 0);
-  const pred = h.prediction || {};
-  const mix = h.incident_mix || {};
-  const mixEntries = Object.entries(mix);
-  const points = Array.isArray(h.incident_points) ? h.incident_points : [];
-
-  // Opening — from backend prediction narrative if present, else derived
-  if (pred.narrative) {
-    parts.push(pred.narrative);
-  } else {
-    parts.push(
-      `${count} verified ${type.toLowerCase()} report${count !== 1 ? "s" : ""} have been recorded in ${area}.`
-    );
-  }
-
-  // Incident mix detail (only if more than one type)
-  if (mixEntries.length > 1) {
-    const mixStr = mixEntries.map(([k, v]) => `${v} ${k.toLowerCase()}`).join(", ");
-    parts.push(`The cluster contains a mix of: ${mixStr}.`);
-  }
-
-  // Trust / evidence weight
-  if (trust > 0) {
-    const weight = trust >= 80 ? "high-confidence" : trust >= 60 ? "moderate-confidence" : "low-confidence";
-    parts.push(`Community trust score: ${trust}% (${weight} evidence base).`);
-  }
-
-  // Growth trajectory
-  if (pred.predicted_increase_pct > 0) {
-    const growStr = pred.predicted_increase_pct >= 30 ? "rapidly" : pred.predicted_increase_pct >= 15 ? "steadily" : "gradually";
-    parts.push(
-      `Trend analysis projects a ${pred.predicted_increase_pct}% increase — activity is growing ${growStr}.`
-    );
-  }
-
-  // Peak time
-  if (pred.peak_time) {
-    parts.push(`Peak activity window identified: ${pred.peak_time}.`);
-  }
-
-  // Lifecycle
-  if (h.lifecycle_state === "active" || h.lifecycle_state === "intense") {
-    parts.push(`Cluster status: ${h.lifecycle_state.toUpperCase()} — requires active response.`);
-  } else if (h.lifecycle_state === "emerging") {
-    parts.push("Pattern is still emerging — early intervention can prevent escalation.");
-  }
-
-  // What was actually observed — sample real descriptions (up to 2 unique ones)
-  const seen = new Set();
-  const samples = points
-    .filter((p) => p.description && !seen.has(p.description) && seen.add(p.description))
-    .slice(0, 2)
-    .map((p) => {
-      const loc = p.village_name ? ` (${p.village_name})` : "";
-      return `"${p.description.trim()}"${loc}`;
-    });
-  if (samples.length > 0) {
-    parts.push(`Reported observations include: ${samples.join("; ")}.`);
-  }
-
-  // Backend recommendation text
-  if (pred.recommendation) {
-    parts.push(`System recommendation: ${pred.recommendation}.`);
-  }
-
-  return parts.join(" ");
+  return `${count} verified ${type.toLowerCase()} report${count !== 1 ? "s" : ""} recorded in ${area}.`;
 }
 
-/** Build a specific deployment action from real data — no canned sentences. */
+/** Deployment action — recommendation capped at 40 words (target 20–40). */
 function buildAction(h, unit) {
   const pred = h.prediction || {};
-  const peakTime = pred.peak_time;
+  if (pred.recommendation) return capWords(pred.recommendation, 40);
+  // Fallback when no LLM recommendation is available
   const area = h.area_label || "the cluster area";
-  const radius = h.radius_meters ? `${Math.round(Number(h.radius_meters))} m` : null;
-  const points = Array.isArray(h.incident_points) ? h.incident_points : [];
-
-  const clauses = [];
-
-  // Deployment scope
-  clauses.push(
-    `Deploy ${unit} to ${area}${radius ? ` (cluster radius: ${radius})` : ""}.`
-  );
-
-  // Timing — use real peak_time if available
-  if (peakTime) {
-    clauses.push(`Concentrate patrols during the identified peak window: ${peakTime}.`);
-  } else {
-    clauses.push("Maintain coverage across all hours until pattern is resolved.");
-  }
-
-  // Location-specific direction — affected villages from real incident_points
-  const villages = [...new Set(points.map((p) => p.village_name).filter(Boolean))];
-  if (villages.length > 0) {
-    clauses.push(
-      `Priority villages: ${villages.slice(0, 4).join(", ")}${villages.length > 4 ? ` and ${villages.length - 4} more` : ""}.`
-    );
-  }
-
-  // Growth-driven escalation note
-  if ((pred.predicted_increase_pct || 0) >= 25) {
-    clauses.push(
-      `Given the projected ${pred.predicted_increase_pct}% growth, pre-position additional personnel before peak window.`
-    );
-  }
-
-  // Lifecycle-based posture
-  if (h.lifecycle_state === "active" || h.lifecycle_state === "intense") {
-    clauses.push("Maintain active operational posture and report status every 6 hours to the duty commander.");
-  } else if (h.lifecycle_state === "emerging") {
-    clauses.push("Monitor for 72 hours and escalate immediately if incident count increases by 2 or more.");
-  }
-
-  // Community bridge
-  clauses.push("Engage sector and cell leadership to strengthen community reporting and cordon awareness.");
-
-  return clauses.join(" ");
+  return `Deploy ${unit} to ${area}.`;
 }
 
 // Security Recommendations Component
@@ -2443,7 +2303,6 @@ const SecurityRecommendations = ({ hotspots }) => {
         backgroundColor: "var(--surface)", borderRadius: "8px",
         border: "1px solid var(--border)",
       }}>
-        <div style={{ fontSize: "22px", marginBottom: "6px" }}>✅</div>
         <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)", marginBottom: "4px" }}>
           No active hotspots detected
         </div>
@@ -2503,7 +2362,10 @@ const SecurityRecommendations = ({ hotspots }) => {
       {sorted.map((h, idx) => {
         const alarm = h._alarm;
         const color = alarmToColor(alarm);
-        const { unit, badge } = resolveUnit(h.incident_type_name);
+        const { unit: fallbackUnit } = resolveUnit(h.incident_type_name);
+        // Prefer the unit resolved by the backend (pulled from DB), fall back to frontend lookup
+        const unit = h.prediction?.recommended_unit || fallbackUnit;
+        const dot = severityDot(alarm);
         const narrative = buildNarrative(h);
         const action = buildAction(h, unit);
         const area = h.area_label || "Unknown area";
@@ -2514,107 +2376,180 @@ const SecurityRecommendations = ({ hotspots }) => {
         return (
           <div key={h.hotspot_id || idx} style={{
             borderRadius: "10px",
-            border: `1px solid ${color}44`,
-            backgroundColor: `${color}0b`,
+            border: "1px solid var(--border)",
+            backgroundColor: "var(--surface)",
             overflow: "hidden",
+            display: "flex",
           }}>
-            {/* Header */}
+            {/* Severity stripe — thin left bar, only colored element on the card */}
             <div style={{
-              display: "flex", alignItems: "center", gap: "8px",
-              padding: "9px 12px",
-              borderBottom: `1px solid ${color}22`,
-              backgroundColor: `${color}1a`,
-            }}>
-              <span style={{ fontSize: "18px", lineHeight: 1, flexShrink: 0 }}>{badge}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)", lineHeight: 1.2 }}>
-                  {h.incident_type_name || "Incident"} · {area}
+              width: "4px", flexShrink: 0,
+              backgroundColor: color,
+            }} />
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Header */}
+              <div style={{
+                display: "flex", alignItems: "center", gap: "8px",
+                padding: "9px 12px",
+                borderBottom: "1px solid var(--border)",
+              }}>
+                <span style={{ fontSize: "13px", lineHeight: 1, flexShrink: 0 }}>{dot}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)", lineHeight: 1.2 }}>
+                    {h.incident_type_name || "Incident"} · {area}
+                  </div>
+                  <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "1px" }}>
+                    {sectors} · {h.incident_count} incident{h.incident_count !== 1 ? "s" : ""}
+                    {h.radius_meters ? ` · ${Math.round(Number(h.radius_meters))} m` : ""}
+                  </div>
                 </div>
-                <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "1px" }}>
-                  Sectors: {sectors} · {h.incident_count} incident{h.incident_count !== 1 ? "s" : ""}
-                  {h.radius_meters ? ` · ${Math.round(Number(h.radius_meters))} m cluster` : ""}
-                </div>
-              </div>
-              {/* Alarm pill */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px", flexShrink: 0 }}>
+                {/* Level badge — small pill, only coloured element in header */}
                 <span style={{
                   fontSize: "9px", fontWeight: 800, letterSpacing: "0.06em",
                   padding: "2px 7px", borderRadius: "99px",
-                  backgroundColor: color, color: "#fff",
+                  backgroundColor: color, color: "#fff", flexShrink: 0,
                 }}>
                   {alarmLabel(alarm)}
                 </span>
-                <span style={{ fontSize: "9px", color: "var(--muted)" }}>
-                  index {Math.round(alarm)}/100
-                </span>
-              </div>
-            </div>
-
-            {/* Body */}
-            <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: "8px" }}>
-              {/* Mini alarm bar */}
-              <div style={{ height: "3px", borderRadius: "2px", backgroundColor: "var(--border)", overflow: "hidden" }}>
-                <div style={{
-                  height: "100%", width: `${alarm}%`,
-                  backgroundColor: color, borderRadius: "2px",
-                }} />
               </div>
 
-              {/* Deploy label */}
-              <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
-                <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.07em" }}>
-                  DEPLOY
-                </span>
-                <span style={{ fontSize: "12px", fontWeight: 700, color }}>
-                  {unit}
-                </span>
-              </div>
-
-              {/* Situation narrative — natural language from real data */}
-              <div style={{
-                fontSize: "11px", color: "var(--text)", lineHeight: 1.6,
-                padding: "8px 10px", borderRadius: "6px",
-                backgroundColor: "var(--surface)",
-                border: `1px solid ${color}22`,
-              }}>
-                <div style={{
-                  fontSize: "9px", fontWeight: 700, color: "var(--muted)",
-                  letterSpacing: "0.07em", marginBottom: "4px",
-                }}>
-                  SITUATION
+              {/* Body */}
+              <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: "7px" }}>
+                {/* Top meta row: alarm index + prediction status + classification */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                    {h.classification && (
+                      <span style={{
+                        fontSize: "9px", fontWeight: 700, padding: "1px 6px",
+                        borderRadius: "99px", border: `1px solid ${color}88`,
+                        color, textTransform: "uppercase", letterSpacing: "0.05em",
+                      }}>
+                        {h.classification}
+                      </span>
+                    )}
+                    {h.prediction?.status && (
+                      <span style={{
+                        fontSize: "9px", fontWeight: 600, padding: "1px 6px",
+                        borderRadius: "99px", backgroundColor: "var(--border)",
+                        color: "var(--text)", letterSpacing: "0.04em",
+                      }}>
+                        {String(h.prediction.status).replace(/_/g, " ")}
+                      </span>
+                    )}
+                    {h.cluster_kind && (
+                      <span style={{ fontSize: "9px", color: "var(--muted)" }}>
+                        {h.cluster_kind === "mixed_hotspot" ? "mixed" : "single-type"}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: "9px", color: "var(--muted)" }}>
+                    alarm <strong style={{ color }}>{Math.round(alarm)}/100</strong>
+                    {h.classification_confidence != null && (
+                      <span> · conf {Math.round(Number(h.classification_confidence) * 100)}%</span>
+                    )}
+                    {h.hotspot_score != null && (
+                      <span> · score {Math.round(Number(h.hotspot_score))}</span>
+                    )}
+                  </div>
                 </div>
-                {narrative}
-              </div>
 
-              {/* Action — built from real data fields */}
-              <div style={{
-                fontSize: "11px", color: "var(--text)", lineHeight: 1.6,
-                padding: "8px 10px", borderRadius: "6px",
-                backgroundColor: `${color}0d`,
-                border: `1px solid ${color}33`,
-              }}>
+                {/* Situation — narrative from LLM */}
                 <div style={{
-                  fontSize: "9px", fontWeight: 700, color,
-                  letterSpacing: "0.07em", marginBottom: "4px",
+                  fontSize: "11px", color: "var(--text)", lineHeight: 1.5,
+                  padding: "7px 10px", borderRadius: "6px",
+                  backgroundColor: "var(--background)",
+                  border: "1px solid var(--border)",
                 }}>
-                  RECOMMENDED ACTION
+                  <div style={{
+                    fontSize: "9px", fontWeight: 700, color: "var(--muted)",
+                    letterSpacing: "0.07em", marginBottom: "3px",
+                  }}>
+                    SITUATION
+                  </div>
+                  {narrative}
                 </div>
-                {action}
-              </div>
 
-              {/* Metadata strip */}
-              <div style={{
-                display: "flex", gap: "8px", flexWrap: "wrap",
-                fontSize: "10px", color: "var(--muted)",
-              }}>
-                <span>Trust score: <strong style={{ color: "var(--text)" }}>{Math.round(h.avg_trust_score || 0)}%</strong></span>
-                {h.prediction?.predicted_increase_pct > 0 && (
-                  <span>Projected growth: <strong style={{ color }}>{h.prediction.predicted_increase_pct}%</strong></span>
+                {/* Incident mix — show per-crime breakdown when more than one type */}
+                {h.incident_mix && Object.keys(h.incident_mix).length > 1 && (
+                  <div style={{
+                    display: "flex", gap: "5px", flexWrap: "wrap",
+                    padding: "5px 8px", borderRadius: "6px",
+                    backgroundColor: "var(--background)",
+                    border: "1px solid var(--border)",
+                  }}>
+                    <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.07em", marginRight: "2px" }}>
+                      MIX:
+                    </span>
+                    {Object.entries(h.incident_mix)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([type, cnt]) => (
+                        <span key={type} style={{
+                          fontSize: "9px", padding: "1px 5px", borderRadius: "4px",
+                          backgroundColor: "var(--border)", color: "var(--text)",
+                        }}>
+                          {type} ({cnt})
+                        </span>
+                      ))}
+                  </div>
                 )}
-                {h.prediction?.peak_time && (
-                  <span>Peak: <strong style={{ color: "var(--text)" }}>{h.prediction.peak_time}</strong></span>
+
+                {/* Recommended action — from LLM */}
+                <div style={{
+                  fontSize: "11px", color: "var(--text)", lineHeight: 1.5,
+                  padding: "7px 10px", borderRadius: "6px",
+                  backgroundColor: "var(--background)",
+                  border: "1px solid var(--border)",
+                  borderLeft: `3px solid ${color}`,
+                }}>
+                  <div style={{
+                    fontSize: "9px", fontWeight: 700, color,
+                    letterSpacing: "0.07em", marginBottom: "3px",
+                  }}>
+                    RECOMMENDED ACTION
+                  </div>
+                  {action}
+                </div>
+
+                {/* Operation window — always show when available */}
+                {(h.prediction?.operation_hours || h.prediction?.concentrate_window) && (
+                  <div style={{
+                    display: "flex", gap: "10px", flexWrap: "wrap",
+                    padding: "5px 10px", borderRadius: "6px",
+                    backgroundColor: `${color}0d`,
+                    border: `1px solid ${color}33`,
+                    fontSize: "10px", color: "var(--text)",
+                  }}>
+                    {h.prediction?.operation_hours && (
+                      <span>
+                        <span style={{ color: "var(--muted)" }}>Duration: </span>
+                        <strong>{h.prediction.operation_hours} h</strong>
+                      </span>
+                    )}
+                    {h.prediction?.concentrate_window && (
+                      <span>
+                        <span style={{ color: "var(--muted)" }}>Concentrate: </span>
+                        <strong>{h.prediction.concentrate_window}</strong>
+                      </span>
+                    )}
+                    {h.prediction?.peak_time && (
+                      <span>
+                        <span style={{ color: "var(--muted)" }}>Peak: </span>
+                        <strong>{h.prediction.peak_time}</strong>
+                      </span>
+                    )}
+                  </div>
                 )}
-                <span>State: <strong style={{ color: "var(--text)" }}>{h.lifecycle_state || "unknown"}</strong></span>
+
+                {/* Metadata strip */}
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", fontSize: "10px", color: "var(--muted)" }}>
+                  <span>Trust: <strong style={{ color: "var(--text)" }}>{Math.round(h.avg_trust_score || 0)}%</strong></span>
+                  {h.prediction?.predicted_increase_pct > 0 && (
+                    <span>Growth: <strong style={{ color }}>{h.prediction.predicted_increase_pct}%</strong></span>
+                  )}
+                  <span>Radius: <strong style={{ color: "var(--text)" }}>{Math.round(Number(h.radius_meters || 0))} m</strong></span>
+                  <span>State: <strong style={{ color: "var(--text)" }}>{h.lifecycle_state || "—"}</strong></span>
+                </div>
               </div>
             </div>
           </div>

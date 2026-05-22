@@ -44,7 +44,7 @@ services:
       # Gemini (fallback): get free key at https://aistudio.google.com
       # Leave blank to use template fallback (no API call).
       GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GEMINI_API_KEY: ""
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     volumes:
       # Persist uploaded evidence files across restarts
       - trustbond_uploads:/app/backend/uploads

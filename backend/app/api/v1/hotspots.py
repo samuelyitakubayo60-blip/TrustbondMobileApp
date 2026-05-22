@@ -28,7 +28,7 @@ from app.core.hotspot_auto import (
 )
 from app.core.village_lookup import get_village_location_info
 from app.core.websocket import manager
-from app.core.llm_recommendations import generate_recommendation
+from app.core.llm_recommendations import generate_recommendation, _resolve_unit, clear_recommendation_cache
 
 router = APIRouter(prefix="/hotspots", tags=["hotspots"])
 
@@ -463,6 +463,21 @@ def list_hotspots(
 
         cluster_kind = "trend_cluster" if len(incident_mix) <= 1 else "mixed_hotspot"
 
+        # Determine the special assignment unit for the dominant crime type.
+        # For mixed hotspots use the most-frequent crime type; for single-type
+        # clusters use the hotspot's own incident_type directly.
+        # CID and RIB are investigation bodies — _resolve_unit() strips them out.
+        _raw_unit: Optional[str] = None
+        if incident_mix:
+            dominant_name = max(incident_mix, key=lambda k: incident_mix[k])
+            for r in reports_in_cluster:
+                if r.incident_type and r.incident_type.type_name == dominant_name:
+                    _raw_unit = getattr(r.incident_type, "default_special_assignment_unit", None)
+                    break
+        if _raw_unit is None and h.incident_type:
+            _raw_unit = getattr(h.incident_type, "default_special_assignment_unit", None)
+        recommended_unit: Optional[str] = _resolve_unit(_raw_unit)
+
         report_times = [
             r.reported_at for r in reports_in_cluster if r.reported_at is not None
         ]
@@ -476,6 +491,7 @@ def list_hotspots(
             area_label=area_label,
             incident_mix=incident_mix,
             peak_time=peak_time,
+            recommended_unit=recommended_unit,
         )
 
         prediction = _prediction_for_hotspot(
@@ -484,10 +500,13 @@ def list_hotspots(
             cluster_kind,
             report_times=report_times,
         )
-        # All text fields come from the LLM (Groq → Gemini → template fallback)
-        prediction["recommendation"] = llm["recommendation"]
-        prediction["narrative"]       = llm["narrative"]
-        prediction["status"]          = llm["status"]
+        # All text/operation fields come from the LLM (Groq → Gemini → template fallback)
+        prediction["recommendation"]    = llm["recommendation"]
+        prediction["narrative"]          = llm["narrative"]
+        prediction["status"]             = llm["status"]
+        prediction["recommended_unit"]   = llm.get("recommended_unit")
+        prediction["operation_hours"]    = llm.get("operation_hours")
+        prediction["concentrate_window"] = llm.get("concentrate_window")
             
         responses.append(HotspotResponse(
             hotspot_id=h.hotspot_id,
@@ -777,7 +796,12 @@ def recompute_hotspots(
         end_time=window_end,
     )
     db.commit()
-    
+
+    # New clusters → stale recommendations no longer apply; clear cache so the
+    # next Safety Map load generates fresh LLM analysis for each new cluster.
+    cleared = clear_recommendation_cache()
+    logger.info("Recompute: cleared %d cached recommendations.", cleared)
+
     # Broadcast hotspot update to all connected clients for real-time Safety Map updates
     background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "hotspot", "action": "recomputed"})
     

@@ -241,30 +241,6 @@ def get_dashboard_stats(
     )
     by_status = {str(r[0]) if r[0] is not None else None: int(r[1]) for r in by_status_rows}
 
-    # Debug: Let's see what reports are being filtered
-    print(f"DEBUG: Dashboard user role: {current_role}")
-    print(f"DEBUG: Dashboard user station_id: {getattr(current_user, 'station_id', None)}")
-    
-    # Count total reports for admin
-    total_reports_debug = db.query(func.count(Report.report_id)).scalar() or 0
-    print(f"DEBUG: Total reports in database: {total_reports_debug}")
-    
-    # Show report status breakdown
-    status_breakdown = (
-        db.query(Report.status, func.count(Report.report_id))
-        .group_by(Report.status)
-        .all()
-    )
-    print(f"DEBUG: Report status breakdown: {dict(status_breakdown)}")
-    
-    # Show verification status breakdown
-    verification_breakdown = (
-        db.query(Report.verification_status, func.count(Report.report_id))
-        .group_by(Report.verification_status)
-        .all()
-    )
-    print(f"DEBUG: Verification status breakdown: {dict(verification_breakdown)}")
-    
     # Count reports that need police review (pending + under_review)
     pending_review = (
         db.query(func.count(Report.report_id))
@@ -272,7 +248,7 @@ def get_dashboard_stats(
         .scalar()
         or 0
     )
-    
+
     # Count flagged reports using is_flagged field
     flagged_reports = (
         db.query(func.count(Report.report_id))
@@ -280,9 +256,6 @@ def get_dashboard_stats(
         .scalar()
         or 0
     )
-    
-    print(f"DEBUG: Dashboard pending_review (pending + under_review): {pending_review}")
-    print(f"DEBUG: Dashboard flagged_reports (is_flagged=True): {flagged_reports}")
     pending = int(pending_review)
     verified = int(by_status.get("verified", 0))
     flagged = int(flagged_reports)
