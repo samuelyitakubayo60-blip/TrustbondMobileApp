@@ -95,8 +95,8 @@ function App() {
     }
   });
   const [isLightMode, setIsLightMode] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("tb-mode") === "light";
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("tb-mode") !== "dark";
   });
   const [selectedReportId, setSelectedReportId] = useState(initialReportId);
   const [selectedHotspotId, setSelectedHotspotId] = useState(null);
@@ -279,7 +279,7 @@ function App() {
 
   useEffect(() => {
     if (typeof document === "undefined") return;
-    document.body.classList.toggle("light-mode", isLightMode);
+    document.body.classList.toggle("dark-mode", !isLightMode);
   }, [isLightMode]);
 
   // Initialise screen/auth state from the current URL.
