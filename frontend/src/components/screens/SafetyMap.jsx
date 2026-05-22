@@ -2198,22 +2198,36 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   );
 };
 
-// ─── Unit lookup — fallback when backend doesn't supply a unit ───────────────
-const UNIT_LOOKUP = [
-  { match: /assault|fight|attack|violence|battery/i,                      unit: "RRU" },
-  { match: /theft|robbery|burglary|steal|pickpocket/i,                    unit: "CPU" },
-  { match: /drug|narcotic|substance|contraband/i,                          unit: "DEU" },
-  { match: /traffic|accident|road|vehicle|speeding/i,                      unit: "TPU" },
-  { match: /vandal|destruction|damage|property/i,                          unit: "CPU" },
-  { match: /suspicious|loiter|trespass|stalking|harassment|threat/i,       unit: "ISU" },
-  { match: /fraud|scam|financial/i,                                         unit: "AFU" },
-  { match: /domestic|gender|victim/i,                                       unit: "VPU" },
-];
+const HOTSPOT_UNIT_LABELS = {
+  AFU: "Anti-Fraud Unit (AFU)",
+  CPU: "Community Policing Unit (CPU)",
+  COUNTER_TERROR: "Counter Terror Unit",
+  DEU: "Drug Enforcement Unit (DEU)",
+  FIRE_RESCUE: "Fire & Rescue",
+  GENERAL_PATROL: "General Patrol",
+  ISU: "Intelligence & Surveillance Unit (ISU)",
+  K9: "K9 / Canine Unit",
+  QUICK_RESPONSE: "Quick Response Team",
+  RRU: "Rapid Response Unit (RRU)",
+  TRAFFIC: "Traffic Police",
+  TPU: "Traffic Police Unit (TPU)",
+  VPU: "Victim Protection Unit (VPU)",
+};
 
-function resolveUnit(typeName) {
-  const t = typeName || "";
-  const match = UNIT_LOOKUP.find((u) => u.match.test(t));
-  return { unit: match ? match.unit : "Patrol" };
+function hotspotUnitLabel(h) {
+  const pred = h.prediction || {};
+  if (pred.recommended_unit_name) return pred.recommended_unit_name;
+  const units = pred.recommended_units;
+  if (Array.isArray(units) && units.length > 0) {
+    const primary = units.find((u) => u.role === "primary") || units[0];
+    if (primary?.unit_name) return primary.unit_name;
+    if (primary?.unit_code && HOTSPOT_UNIT_LABELS[primary.unit_code]) {
+      return HOTSPOT_UNIT_LABELS[primary.unit_code];
+    }
+  }
+  const code = pred.recommended_unit;
+  if (code && HOTSPOT_UNIT_LABELS[code]) return HOTSPOT_UNIT_LABELS[code];
+  return code || "Patrol unit";
 }
 
 /** Single severity dot — the only decorative symbol on each card. */
@@ -2362,9 +2376,11 @@ const SecurityRecommendations = ({ hotspots }) => {
       {sorted.map((h, idx) => {
         const alarm = h._alarm;
         const color = alarmToColor(alarm);
-        const { unit: fallbackUnit } = resolveUnit(h.incident_type_name);
-        // Prefer the unit resolved by the backend (pulled from DB), fall back to frontend lookup
-        const unit = h.prediction?.recommended_unit || fallbackUnit;
+        const unit = hotspotUnitLabel(h);
+        const unitChips = Array.isArray(h.prediction?.recommended_units)
+          ? h.prediction.recommended_units
+          : [];
+        const citizenNote = (h.prediction?.citizen_advisory || "").trim();
         const dot = severityDot(alarm);
         const narrative = buildNarrative(h);
         const action = buildAction(h, unit);
@@ -2494,7 +2510,34 @@ const SecurityRecommendations = ({ hotspots }) => {
                   </div>
                 )}
 
-                {/* Recommended action — from LLM */}
+                {unitChips.length > 0 && (
+                  <div style={{
+                    display: "flex", gap: "5px", flexWrap: "wrap", alignItems: "center",
+                    padding: "5px 8px", borderRadius: "6px",
+                    backgroundColor: "var(--background)",
+                    border: "1px solid var(--border)",
+                  }}>
+                    <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.07em" }}>
+                      DEPLOY:
+                    </span>
+                    {unitChips.map((u) => (
+                      <span
+                        key={u.unit_code || u.unit_name}
+                        style={{
+                          fontSize: "9px", fontWeight: 600, padding: "2px 7px", borderRadius: "99px",
+                          backgroundColor: u.role === "primary" ? `${color}22` : "var(--border)",
+                          border: `1px solid ${u.role === "primary" ? color : "var(--border)"}`,
+                          color: "var(--text)",
+                        }}
+                      >
+                        {u.unit_name || HOTSPOT_UNIT_LABELS[u.unit_code] || u.unit_code}
+                        {u.role === "support" ? " (support)" : ""}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Recommended action — police deployment */}
                 <div style={{
                   fontSize: "11px", color: "var(--text)", lineHeight: 1.5,
                   padding: "7px 10px", borderRadius: "6px",
@@ -2510,6 +2553,23 @@ const SecurityRecommendations = ({ hotspots }) => {
                   </div>
                   {action}
                 </div>
+
+                {citizenNote && (
+                  <div style={{
+                    fontSize: "11px", color: "var(--text)", lineHeight: 1.5,
+                    padding: "7px 10px", borderRadius: "6px",
+                    backgroundColor: "rgba(34, 197, 94, 0.08)",
+                    border: "1px solid rgba(34, 197, 94, 0.25)",
+                  }}>
+                    <div style={{
+                      fontSize: "9px", fontWeight: 700, color: "#16a34a",
+                      letterSpacing: "0.07em", marginBottom: "3px",
+                    }}>
+                      COMMUNITY NOTICE
+                    </div>
+                    {citizenNote}
+                  </div>
+                )}
 
                 {/* Operation window — always show when available */}
                 {(h.prediction?.operation_hours || h.prediction?.concentrate_window) && (

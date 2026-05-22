@@ -1,76 +1,306 @@
 """
 LLM-generated hotspot recommendations.
 
-Priority chain:
-  1. Groq  (free — llama-3.3-70b-versatile)   → set GROQ_API_KEY
-  2. Gemini (free tier — gemini-1.5-flash)     → set GEMINI_API_KEY
-  3. Template fallback (always works, no key)
+Hotspot deployments use active tactical units from ``special_assignment_units``
+(investigation-only codes like RIB/CID/LIB are excluded). Cases keep the full unit dropdown.
 
-Keys are read from environment variables; if a key is absent or the call
-fails the next provider is tried automatically.
+Priority chain: Groq → Gemini → crime-specific template fallback.
 """
 import json
 import logging
 import os
-from typing import Dict, Any, Optional
-from datetime import datetime, timezone
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# ── Unit configuration ────────────────────────────────────────────────────────
+# Investigation / case-handover units — not for hotspot tactical deployment
+_HOTSPOT_EXCLUDED_UNITS = frozenset({"RIB", "CID", "LIB"})
 
-# Investigation-only bodies — never assigned to tactical hotspot deployments.
-# Their incident types receive no unit recommendation; incidents are left as-is.
-_INVESTIGATION_ONLY = {"CID", "RIB"}
-
-# Tactical deployment mode per special assignment unit code.
-# This drives both the LLM prompt and the template fallback so recommendations
-# describe the correct tactic (covert, checkpoint, uniformed, etc.) not just
-# "deploy patrol" for every situation.
 _UNIT_TACTICS: Dict[str, str] = {
     "RRU": "rapid armed response and tactical intervention",
     "DEU": "covert surveillance and undercover drug enforcement operations",
     "TPU": "traffic checkpoints, vehicle interdiction, and road patrol",
+    "TRAFFIC": "traffic checkpoints, road patrol, and vehicle interdiction",
     "CPU": "uniformed community patrol and neighborhood liaison",
+    "GENERAL_PATROL": "visible patrol, community engagement, and preventive deterrence",
     "ISU": "plainclothes intelligence gathering and covert surveillance",
-    "K9":  "K9-assisted search operations and suspect tracking",
+    "K9": "K9-assisted search operations and suspect tracking",
     "AFU": "anti-fraud awareness operations and financial crime deterrence",
     "VPU": "protective patrol and victim safety escort operations",
+    "QUICK_RESPONSE": "rapid deployment to active incidents and interdiction",
+    "COUNTER_TERROR": "counter-terrorism screening and high-threat response",
+    "FIRE_RESCUE": "fire and rescue response with police coordination",
 }
 
+_DEFAULT_HOTSPOT_UNITS: Dict[str, Dict[str, str]] = {
+    code: {
+        "name": {
+            "AFU": "Anti-Fraud Unit (AFU)",
+            "CPU": "Community Policing Unit (CPU)",
+            "COUNTER_TERROR": "Counter Terror Unit",
+            "DEU": "Drug Enforcement Unit (DEU)",
+            "FIRE_RESCUE": "Fire & Rescue",
+            "GENERAL_PATROL": "General Patrol",
+            "ISU": "Intelligence & Surveillance Unit (ISU)",
+            "K9": "K9 / Canine Unit",
+            "QUICK_RESPONSE": "Quick Response Team",
+            "RRU": "Rapid Response Unit (RRU)",
+            "TRAFFIC": "Traffic Police",
+            "TPU": "Traffic Police Unit (TPU)",
+            "VPU": "Victim Protection Unit (VPU)",
+        }[code],
+        "tactic": _UNIT_TACTICS[code],
+    }
+    for code in _UNIT_TACTICS
+    if code not in _HOTSPOT_EXCLUDED_UNITS
+}
 
-def _resolve_unit(unit: Optional[str]) -> Optional[str]:
-    """Strip CID/RIB (investigation-only bodies); return all other units unchanged."""
-    if not unit:
+_registry_cache: Optional[Dict[str, Dict[str, str]]] = None
+
+_CRIME_UNIT_HINTS: List[Tuple[re.Pattern[str], Dict[str, float]]] = [
+    (
+        re.compile(r"terror|explosive|bomb|extremist|hostage", re.I),
+        {"COUNTER_TERROR": 9.0, "RRU": 2.0, "ISU": 1.5},
+    ),
+    (
+        re.compile(r"traffic|accident|collision|reckless|speeding|road|vehicle|driving", re.I),
+        {"TRAFFIC": 7.0, "TPU": 7.0, "GENERAL_PATROL": 1.0},
+    ),
+    (
+        re.compile(r"theft|steal|stolen|robbery|burglary|pickpocket|snatch|break[\s-]?in", re.I),
+        {"QUICK_RESPONSE": 5.0, "RRU": 4.0, "CPU": 4.0, "K9": 3.0},
+    ),
+    (
+        re.compile(r"assault|fight|attack|violence|weapon|stabbing|shooting|murder", re.I),
+        {"RRU": 8.0, "QUICK_RESPONSE": 6.0, "VPU": 2.0},
+    ),
+    (
+        re.compile(r"drug|narcotic|traffick|substance|dealer", re.I),
+        {"DEU": 9.0, "ISU": 2.0, "QUICK_RESPONSE": 2.0},
+    ),
+    (
+        re.compile(r"fraud|scam|financial|cyber|identity", re.I),
+        {"AFU": 9.0, "ISU": 2.0},
+    ),
+    (
+        re.compile(r"domestic|gender|child|victim|abuse", re.I),
+        {"VPU": 8.0, "CPU": 3.0},
+    ),
+    (
+        re.compile(r"vandal|damage|destruction|graffiti|property", re.I),
+        {"CPU": 5.0, "GENERAL_PATROL": 4.0},
+    ),
+    (
+        re.compile(r"suspicious|loiter|stalk|harass|threat|intimidat", re.I),
+        {"ISU": 7.0, "CPU": 3.0, "GENERAL_PATROL": 2.0},
+    ),
+    (
+        re.compile(r"fire|rescue|burn", re.I),
+        {"FIRE_RESCUE": 9.0, "QUICK_RESPONSE": 2.0},
+    ),
+]
+
+
+def load_hotspot_deployment_units(db: Any = None) -> Dict[str, Dict[str, str]]:
+    """Tactical deployment registry: built-in codes merged with active DB rows."""
+    global _registry_cache
+    merged: Dict[str, Dict[str, str]] = dict(_DEFAULT_HOTSPOT_UNITS)
+    if db is not None:
+        try:
+            from app.models.special_assignment_unit import SpecialAssignmentUnit
+
+            rows = (
+                db.query(SpecialAssignmentUnit)
+                .filter(SpecialAssignmentUnit.is_active.is_(True))
+                .order_by(SpecialAssignmentUnit.unit_name)
+                .all()
+            )
+            for row in rows:
+                code = (row.unit_code or "").strip().upper()
+                if not code or code in _HOTSPOT_EXCLUDED_UNITS:
+                    continue
+                merged[code] = {
+                    "name": (row.unit_name or code).strip(),
+                    "tactic": _UNIT_TACTICS.get(
+                        code,
+                        (row.description or "targeted security operations").strip()[:120],
+                    ),
+                }
+            _registry_cache = merged
+            return merged
+        except Exception as exc:
+            logger.warning("Could not load special_assignment_units for hotspots: %s", exc)
+    if _registry_cache:
+        return _registry_cache
+    return merged
+
+
+def clear_hotspot_units_registry_cache() -> None:
+    global _registry_cache
+    _registry_cache = None
+
+
+def _resolve_unit(unit: Optional[str], registry: Dict[str, Dict[str, str]]) -> Optional[str]:
+    if not unit or not registry:
         return None
-    u = unit.strip().upper()
-    if any(excl in u for excl in _INVESTIGATION_ONLY):
+    raw = unit.strip().upper().replace(" ", "_")
+    if raw in registry:
+        return raw
+    if raw in _HOTSPOT_EXCLUDED_UNITS:
         return None
-    return unit.strip()
+    for code in registry:
+        if code in raw or raw in code:
+            return code
+    return None
 
 
-def _unit_tactic(unit: Optional[str]) -> str:
-    """Return the tactical approach for a unit code, or generic 'security patrol'."""
-    if not unit:
-        return "security patrol"
-    u = unit.strip().upper()
-    for code, tactic in _UNIT_TACTICS.items():
-        if code in u:
-            return tactic
-    return "security patrol"
+def _unit_tactic(unit_code: Optional[str], registry: Dict[str, Dict[str, str]]) -> str:
+    code = _resolve_unit(unit_code, registry) or "GENERAL_PATROL"
+    if code in registry:
+        return registry[code]["tactic"]
+    return _UNIT_TACTICS.get(code, "targeted security operations")
 
 
-# ── Operation duration helpers ────────────────────────────────────────────────
+def _score_crime_text(text: str, registry: Dict[str, Dict[str, str]]) -> Dict[str, float]:
+    scores = {code: 0.0 for code in registry}
+    t = (text or "").strip()
+    if not t:
+        return scores
+    for pattern, weights in _CRIME_UNIT_HINTS:
+        if pattern.search(t):
+            for code, w in weights.items():
+                if code in registry:
+                    scores[code] = scores.get(code, 0.0) + w
+    return scores
+
+
+def _pick_hotspot_deployment_plan(
+    *,
+    classification: str,
+    incident_count: int,
+    dominant_crime: Optional[str],
+    cluster_kind: str,
+    incident_mix: Optional[Dict[str, int]],
+    registry: Dict[str, Dict[str, str]],
+    incident_type_unit_hint: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Rule-based primary + support unit from crime mix, volume, and incident-type hint."""
+    totals = {code: 0.0 for code in registry}
+
+    if incident_mix:
+        for name, count in incident_mix.items():
+            c = max(1, int(count or 0))
+            for code, w in _score_crime_text(name, registry).items():
+                totals[code] += w * c
+    elif dominant_crime:
+        for code, w in _score_crime_text(dominant_crime, registry).items():
+            totals[code] += w * max(1, incident_count)
+
+    hint = _resolve_unit(incident_type_unit_hint, registry)
+    if hint:
+        totals[hint] = totals.get(hint, 0.0) + 5.0
+
+    if sum(totals.values()) < 0.1:
+        totals["GENERAL_PATROL"] = totals.get("GENERAL_PATROL", 0.0) + 3.0
+
+    cls = (classification or "").strip().lower()
+    if cls in {"critical", "active"}:
+        for code in ("RRU", "QUICK_RESPONSE"):
+            if code in registry:
+                totals[code] = totals.get(code, 0.0) + 2.5
+    if cluster_kind == "mixed_hotspot" and incident_count >= 6:
+        if "QUICK_RESPONSE" in registry:
+            totals["QUICK_RESPONSE"] = totals.get("QUICK_RESPONSE", 0.0) + 2.0
+        if "CPU" in registry:
+            totals["CPU"] = totals.get("CPU", 0.0) + 1.5
+
+    ranked = sorted(totals.items(), key=lambda x: x[1], reverse=True)
+    primary_code = ranked[0][0] if ranked else "GENERAL_PATROL"
+    support_code: Optional[str] = None
+    if len(ranked) > 1 and ranked[1][1] >= ranked[0][1] * 0.4:
+        support_code = ranked[1][0]
+        if support_code == primary_code and len(ranked) > 2:
+            support_code = ranked[2][0]
+
+    units_out: List[Dict[str, str]] = [
+        {
+            "unit_code": primary_code,
+            "unit_name": registry[primary_code]["name"],
+            "role": "primary",
+        },
+    ]
+    if support_code and support_code != primary_code:
+        units_out.append(
+            {
+                "unit_code": support_code,
+                "unit_name": registry[support_code]["name"],
+                "role": "support",
+            }
+        )
+
+    return {
+        "primary_code": primary_code,
+        "primary_name": registry[primary_code]["name"],
+        "support_code": support_code,
+        "support_name": registry[support_code]["name"] if support_code else None,
+        "recommended_units": units_out,
+    }
+
+
+def _build_citizen_advisory(
+    *,
+    area_label: Optional[str],
+    dominant_crime: Optional[str],
+    incident_count: int,
+    classification: str,
+    cluster_kind: str,
+    incident_mix: Optional[Dict[str, int]],
+    verified_report_count: int = 0,
+) -> str:
+    area = (area_label or "this area").strip()
+    crime = (dominant_crime or "incidents").strip().lower()
+    cls = (classification or "").strip().lower()
+
+    if verified_report_count >= max(2, incident_count // 2) and incident_count >= 2:
+        return (
+            f"Police have responded to recent reports in {area}. Thank you for sharing information. "
+            f"Please stay alert and report anything new or serious you notice."
+        )
+
+    if re.search(r"theft|robbery|burglary|steal", crime, re.I) or (
+        incident_mix
+        and sum(
+            c
+            for n, c in incident_mix.items()
+            if re.search(r"theft|robbery|burglary|steal", n, re.I)
+        )
+        >= 2
+    ):
+        return (
+            f"There have been theft-related reports near {area}. Secure valuables, watch shared spaces, "
+            f"and report suspicious activity promptly so patrols can act."
+        )
+
+    if re.search(r"traffic|accident|road|vehicle", crime, re.I):
+        return (
+            f"Traffic-related incidents have been reported around {area}. Use caution on the road "
+            f"and report dangerous driving or serious accidents to police."
+        )
+
+    if cls in {"critical", "active"} or cluster_kind == "mixed_hotspot":
+        return (
+            f"Police are monitoring increased incident reports in {area}. Avoid unnecessary risk, "
+            f"look out for neighbours, and report emergencies or serious concerns immediately."
+        )
+
+    return (
+        f"Occasional incident reports have been noted in {area}. Remain observant and contact police "
+        f"if you see anything that should be investigated."
+    )
+
 
 def _suggest_duration_hours(classification: str, cluster_kind: str) -> int:
-    """Return the recommended total operation duration in hours.
-
-    Severity bands:
-      critical / mixed  → 48 h continuous (situation may escalate)
-      active            → 24 h operation
-      emerging          → 12 h operation
-      low_activity      →  6 h observation window
-    """
     if cluster_kind == "mixed_hotspot" or classification == "critical":
         return 48
     if classification == "active":
@@ -81,44 +311,29 @@ def _suggest_duration_hours(classification: str, cluster_kind: str) -> int:
 
 
 def _concentrate_window(peak_time: Optional[str], duration_hours: int) -> Optional[str]:
-    """Derive a concentration window around the known peak activity hour.
-
-    Extends the peak 2-hour window by buffer hours on each side so officers
-    know when to intensify presence without staying at peak alert for the
-    entire operation.
-
-    Buffer sizing:
-      48 h operation → ±4 h around peak  (8-hour intensive block)
-      24 h           → ±3 h              (6-hour intensive block)
-      12 h           → ±2 h              (4-hour intensive block)
-       6 h           → ±1 h              (3-hour intensive block)
-    """
     if not peak_time:
         return None
     try:
-        # peak_time format: "HH:00–HH:00"
         start_str = peak_time.split("–")[0].strip()
         peak_hour = int(start_str.split(":")[0])
     except Exception:
         return None
 
-    if duration_hours >= 48:
-        buf = 4
-    elif duration_hours >= 24:
-        buf = 3
-    elif duration_hours >= 12:
-        buf = 2
-    else:
-        buf = 1
-
+    buf = 4 if duration_hours >= 48 else 3 if duration_hours >= 24 else 2 if duration_hours >= 12 else 1
     c_start = (peak_hour - buf) % 24
-    c_end   = (peak_hour + 2 + buf) % 24   # +2 because peak window is 2 h wide
+    c_end = (peak_hour + 2 + buf) % 24
     return f"{c_start:02d}:00–{c_end:02d}:00"
 
 
-# ── Prompt builder ────────────────────────────────────────────────────────────
+def _mix_summary(incident_mix: Optional[Dict[str, int]], dominant_crime: Optional[str]) -> str:
+    if incident_mix:
+        top = sorted(incident_mix.items(), key=lambda x: x[1], reverse=True)[:4]
+        return ", ".join(f"{name} ({cnt})" for name, cnt in top)
+    return dominant_crime or "mixed incidents"
+
 
 def _build_prompt(
+    *,
     classification: str,
     incident_count: int,
     dominant_crime: Optional[str],
@@ -126,71 +341,65 @@ def _build_prompt(
     area_label: Optional[str],
     incident_mix: Optional[Dict[str, int]],
     peak_time: Optional[str],
-    recommended_unit: Optional[str],
+    plan: Dict[str, Any],
     operation_hours: int,
     concentrate_window: Optional[str],
+    citizen_advisory: str,
+    registry: Dict[str, Dict[str, str]],
 ) -> str:
-    crime      = dominant_crime or "mixed incidents"
-    area       = area_label or "the area"
-    unit       = recommended_unit or "General Patrol"
-    tactic     = _unit_tactic(recommended_unit)
-    conc_note  = (
-        f"Concentrate operations between {concentrate_window}."
-        if concentrate_window else "No peak window identified — distribute evenly."
-    )
-
+    area = area_label or "the area"
     mix_lines = ""
     if incident_mix:
         sorted_mix = sorted(incident_mix.items(), key=lambda x: x[1], reverse=True)
         mix_lines = "\n".join(f"  - {name}: {count}" for name, count in sorted_mix)
 
-    return f"""You are a police intelligence analyst for the Rwanda National Police in Musanze District.
-A DBSCAN algorithm has detected a crime hotspot. Produce an operational briefing.
+    primary = plan["primary_name"]
+    support = plan.get("support_name")
+    units_line = primary + (f" with {support} support" if support else "")
+    tactic = _unit_tactic(plan["primary_code"], registry)
+    allowed_units = ", ".join(sorted(u["name"] for u in registry.values()))
+    conc_note = (
+        f"Concentrate operations between {concentrate_window}."
+        if concentrate_window
+        else "Distribute patrol evenly across the operation period."
+    )
+
+    return f"""You are a police intelligence analyst for Rwanda National Police (Musanze District).
+Write a UNIQUE briefing for this specific hotspot — do not reuse generic wording from other clusters.
 
 Hotspot data:
-- Classification          : {classification}
-- Cluster type            : {cluster_kind}
-- Location                : {area}
-- Total incidents         : {incident_count}
-- Dominant crime          : {crime}
-- Incident mix            :
-{mix_lines if mix_lines else "  - " + crime}
-- Peak activity window    : {peak_time or "unknown"}
-- Assigned unit           : {unit}
-- Unit tactical role      : {tactic}
-- Recommended operation   : {operation_hours}-hour operation
-- Concentration window    : {conc_note}
+- Classification       : {classification}
+- Cluster type         : {cluster_kind}
+- Location             : {area}
+- Total incidents      : {incident_count}
+- Dominant crime       : {dominant_crime or "mixed"}
+- Incident mix         :
+{mix_lines if mix_lines else "  - " + (dominant_crime or "unknown")}
+- Peak activity        : {peak_time or "unknown"}
+- Deploy units         : {units_line}
+- Primary tactic       : {tactic}
+- Operation duration   : {operation_hours} hours
+- Concentration window : {conc_note}
+- Citizen message hint : {citizen_advisory}
 
-Write a police intelligence briefing in JSON with these exact keys:
+Allowed deployment units (pick from this list only; do NOT use RIB/CID/LIB investigation units):
+  {allowed_units}
+
+Return JSON only:
 {{
-  "recommendation": "...",
-  "narrative": "...",
-  "status": "..."
-}}
-
-WORD COUNT REQUIREMENTS — these are hard requirements, not suggestions:
-  recommendation : 20–40 words
-  narrative      : 50–80 words
-
-EXAMPLE of a correctly sized output (do NOT copy this — use the real data above):
-{{
-  "recommendation": "Activate RRU immediately for a 48-hour rapid armed response and tactical intervention operation in Cyuve, concentrating patrol and interdiction efforts between 17:00 and 03:00 to disrupt the ongoing assault pattern.",
-  "narrative": "A critical assault hotspot has been confirmed in Cyuve with 6 verified incidents recorded during the current monitoring period, with peak criminal activity concentrated between 21:00 and 23:00. The cluster exhibits rapid escalation characteristics supported by high-confidence evidence from community reports. If immediate tactical intervention is not deployed, further violent incidents are highly probable and the situation risks spreading to neighbouring villages. Commanding officers should treat this as a priority security threat requiring an active operational posture.",
-  "status": "escalation_likely"
+  "recommendation": "<20-40 words: name primary unit, tactic, duration, concentration window, specific to THIS crime mix>",
+  "narrative": "<50-80 words: situation in {area}, counts, peak time, risk, why these units>",
+  "status": "<escalation_likely | monitor_growth | emerging_trend | security_alert>",
+  "citizen_advisory": "<2-3 sentences plain Kinyaranda-friendly English for citizens; calm, no police codes>"
 }}
 
 Rules:
-- recommendation: name the unit ({unit}), its tactic ({tactic}), the {operation_hours}-hour duration, and the concentration window. Write 20–40 words — count before submitting.
-- narrative: cover (1) crime type and location, (2) incident count, (3) peak time, (4) severity, (5) escalation risk if unaddressed. Write 50–80 words in 3–4 full sentences — count before submitting.
-- status must be one of: escalation_likely | monitor_growth | emerging_trend | security_alert
-- Use the correct tactic for {unit} — NOT generic uniform patrol unless CPU is assigned.
-- Use real data only (area, crime types, peak time). Do NOT invent facts.
-- No markdown, no bullet points inside JSON strings.
-- Return ONLY the JSON object, nothing else.
+- recommendation MUST name "{primary}" (and "{support}" if support) — not "multi-unit" without names.
+- Vary wording using the incident mix ({_mix_summary(incident_mix, dominant_crime)}).
+- citizen_advisory: community-facing only; do not mention unit codes or classified tactics.
+- Use real numbers and place names only. No markdown.
 """
 
-
-# ── Providers ─────────────────────────────────────────────────────────────────
 
 def _call_groq(prompt: str) -> Optional[Dict[str, Any]]:
     api_key = os.getenv("GROQ_API_KEY", "").strip()
@@ -198,20 +407,18 @@ def _call_groq(prompt: str) -> Optional[Dict[str, Any]]:
         return None
     try:
         from groq import Groq
+
         client = Groq(api_key=api_key)
         resp = client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model=os.getenv("GROQ_HOTSPOT_MODEL", "llama-3.3-70b-versatile"),
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.6,
-            max_tokens=600,
+            temperature=0.45,
+            max_tokens=700,
+            response_format={"type": "json_object"},
         )
-        text = resp.choices[0].message.content.strip()
-        # Extract JSON block from response (model may wrap with markdown)
-        start = text.find("{")
-        end   = text.rfind("}") + 1
-        return json.loads(text[start:end]) if start != -1 else None
+        return json.loads(resp.choices[0].message.content)
     except Exception as exc:
-        logger.warning("Groq LLM call failed: %s", exc)
+        logger.warning("Groq hotspot recommendation failed: %s", exc)
         return None
 
 
@@ -220,34 +427,23 @@ def _call_gemini(prompt: str) -> Optional[Dict[str, Any]]:
     if not api_key:
         return None
     try:
-        from google import genai
-        from google.genai import types
-        client = genai.Client(api_key=api_key)
-        resp = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.3,
-            ),
+        import google.generativeai as genai
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(
+            "gemini-1.5-flash",
+            generation_config={"response_mime_type": "application/json", "temperature": 0.35},
         )
-        return json.loads(resp.text)
+        return json.loads(model.generate_content(prompt).text)
     except Exception as exc:
-        logger.warning("Gemini LLM call failed: %s", exc)
+        logger.warning("Gemini hotspot recommendation failed: %s", exc)
         return None
 
-
-# ── Cache ─────────────────────────────────────────────────────────────────────
-# Keyed by cluster fingerprint — LLM is called only when cluster data changes.
-# Clear this whenever hotspot clusters are recomputed so weekly/periodic reports
-# always get fresh analysis that reflects the new cluster state.
 
 _recommendation_cache: Dict[tuple, Dict[str, Any]] = {}
 
 
 def clear_recommendation_cache() -> int:
-    """Discard all cached recommendations. Returns the number of entries removed.
-    Call this whenever hotspot clusters are recomputed."""
     count = len(_recommendation_cache)
     _recommendation_cache.clear()
     logger.info("Recommendation cache cleared (%d entries removed).", count)
@@ -262,146 +458,232 @@ def _cache_key(
     area_label: Optional[str],
     peak_time: Optional[str],
     mix_tuple: tuple,
-    recommended_unit: Optional[str],
+    primary_code: str,
 ) -> tuple:
-    return (classification, incident_count, dominant_crime, cluster_kind,
-            area_label, peak_time, mix_tuple, recommended_unit)
+    return (
+        classification,
+        incident_count,
+        dominant_crime,
+        cluster_kind,
+        area_label,
+        peak_time,
+        mix_tuple,
+        primary_code,
+    )
 
 
-# ── Public entry point ────────────────────────────────────────────────────────
+def _template_fallback(
+    *,
+    classification: str,
+    incident_count: int,
+    dominant_crime: Optional[str],
+    cluster_kind: str,
+    area_label: Optional[str],
+    incident_mix: Optional[Dict[str, int]],
+    peak_time: Optional[str],
+    plan: Dict[str, Any],
+    operation_hours: int,
+    concentrate_window: Optional[str],
+    citizen_advisory: str,
+    registry: Dict[str, Dict[str, str]],
+) -> Dict[str, Any]:
+    """Crime- and unit-specific templates using the full tactical unit registry."""
+    area = area_label or "this area"
+    crime = (dominant_crime or "incidents").strip()
+    primary = plan["primary_name"]
+    pcode = plan["primary_code"]
+    support = plan.get("support_name")
+    tactic = _unit_tactic(pcode, registry)
+    dur = f"{operation_hours}-hour"
+    conc = f", concentrating efforts between {concentrate_window}" if concentrate_window else ""
+    peak_note = f" Peak activity is around {peak_time}." if peak_time else ""
+    mix_txt = _mix_summary(incident_mix, dominant_crime)
+    support_clause = f" Coordinate with {support}." if support else ""
+
+    rec = (
+        f"Deploy {primary} for a {dur} {tactic} operation in {area}{conc}."
+        f"{support_clause}"
+    )
+
+    if pcode in ("TRAFFIC", "TPU"):
+        nar = (
+            f"Traffic-related incidents in {area} total {incident_count} verified reports ({mix_txt})."
+            f"{peak_note} Road enforcement and checkpoint presence should reduce repeat collisions and unsafe driving."
+        )
+        status = "monitor_growth" if classification != "critical" else "escalation_likely"
+    elif pcode == "DEU":
+        nar = (
+            f"Drug-related activity in {area} ({incident_count} incidents; {mix_txt}) needs targeted enforcement."
+            f"{peak_note} Covert and overt operations together can disrupt supply patterns."
+        )
+        status = "escalation_likely" if classification in {"critical", "active"} else "monitor_growth"
+    elif pcode in ("RRU", "QUICK_RESPONSE") and re.search(
+        r"assault|violence|theft|robbery", crime, re.I
+    ):
+        nar = (
+            f"High-impact incidents in {area} ({incident_count} reports; {mix_txt}) require rapid tactical response."
+            f"{peak_note} Visible deployment during peak hours can prevent further harm or property loss."
+        )
+        status = "escalation_likely" if classification in {"critical", "active"} else "monitor_growth"
+    elif pcode == "AFU":
+        nar = (
+            f"Fraud or financial-crime reports in {area} ({mix_txt}) need specialist follow-up and public awareness."
+            f"{peak_note} Coordinated outreach can limit further victim losses."
+        )
+        status = "monitor_growth"
+    elif pcode == "VPU":
+        nar = (
+            f"Vulnerable-person incidents in {area} ({incident_count} reports; {mix_txt}) need protective response."
+            f"{peak_note} Victim-centred patrol reduces repeat harm and builds trust."
+        )
+        status = "monitor_growth"
+    elif pcode == "ISU":
+        nar = (
+            f"Suspicious or intelligence-sensitive patterns in {area} ({mix_txt}) warrant discreet assessment."
+            f"{peak_note} Intelligence-led tasks should inform visible patrol timing."
+        )
+        status = "security_alert" if cluster_kind == "mixed_hotspot" else "monitor_growth"
+    elif pcode == "K9":
+        nar = (
+            f"Search and tracking needs in {area} ({incident_count} incidents; {mix_txt}) suit canine support."
+            f"{peak_note} K9 teams can strengthen interdiction during peak activity windows."
+        )
+        status = "monitor_growth"
+    elif pcode == "COUNTER_TERROR":
+        nar = (
+            f"Elevated threat indicators in {area} ({mix_txt}) require counter-terror coordination."
+            f"{peak_note} Treat the cluster as high sensitivity until screening tasks complete."
+        )
+        status = "security_alert"
+    else:
+        nar = (
+            f"Community policing needs in {area} ({incident_count} incidents; {mix_txt}) are best met with steady presence."
+            f"{peak_note} Patrol visibility and local engagement can stabilise the area."
+        )
+        status = "emerging_trend" if classification in {"low_activity", "emerging"} else "monitor_growth"
+
+    if cluster_kind == "mixed_hotspot":
+        status = "security_alert"
+        nar += " Multiple crime types overlap, so coordinated unit coverage is required."
+
+    return {
+        "recommendation": rec,
+        "narrative": nar,
+        "status": status,
+        "citizen_advisory": citizen_advisory,
+    }
+
+
+def _package_result(
+    body: Dict[str, Any],
+    plan: Dict[str, Any],
+    operation_hours: int,
+    concentrate_window: Optional[str],
+) -> Dict[str, Any]:
+    return {
+        "recommendation": str(body.get("recommendation", "")).strip(),
+        "narrative": str(body.get("narrative", "")).strip(),
+        "status": str(body.get("status", "monitor_growth")).strip(),
+        "citizen_advisory": str(body.get("citizen_advisory", "")).strip(),
+        "recommended_unit": plan["primary_code"],
+        "recommended_unit_name": plan["primary_name"],
+        "recommended_units": plan["recommended_units"],
+        "operation_hours": operation_hours,
+        "concentrate_window": concentrate_window,
+    }
+
 
 def generate_recommendation(
     classification: str,
     incident_count: int,
     dominant_crime: Optional[str],
     cluster_kind: str,
-    area_label: Optional[str],
+    area_label: Optional[str] = None,
     incident_mix: Optional[Dict[str, int]] = None,
     peak_time: Optional[str] = None,
     recommended_unit: Optional[str] = None,
+    verified_report_count: int = 0,
+    deployment_units: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     """
-    Return a dict with keys:
-      recommendation, narrative, status, recommended_unit,
-      operation_hours, concentrate_window.
-
-    CID/RIB are silently excluded — their incidents carry no unit assignment.
-    Operation duration and concentration window are computed from classification
-    and peak activity data, then fed into the LLM prompt so recommendations
-    specify exact hours rather than open-ended deployment language.
-
-    Tries Groq → Gemini → template fallback, with in-memory caching.
+    Hotspot briefing: units from ``special_assignment_units`` (minus RIB/CID/LIB)
+    plus crime/volume rules and LLM or template text.
     """
-    resolved_unit      = _resolve_unit(recommended_unit)
-    operation_hours    = _suggest_duration_hours(classification, cluster_kind)
+    registry = deployment_units or load_hotspot_deployment_units()
+    plan = _pick_hotspot_deployment_plan(
+        classification=classification,
+        incident_count=incident_count,
+        dominant_crime=dominant_crime,
+        cluster_kind=cluster_kind,
+        incident_mix=incident_mix,
+        registry=registry,
+        incident_type_unit_hint=recommended_unit,
+    )
+
+    operation_hours = _suggest_duration_hours(classification, cluster_kind)
     concentrate_window = _concentrate_window(peak_time, operation_hours)
+    citizen_advisory = _build_citizen_advisory(
+        area_label=area_label,
+        dominant_crime=dominant_crime,
+        incident_count=incident_count,
+        classification=classification,
+        cluster_kind=cluster_kind,
+        incident_mix=incident_mix,
+        verified_report_count=verified_report_count,
+    )
 
     mix_tuple = tuple(sorted((incident_mix or {}).items()))
     key = _cache_key(
-        classification, incident_count, dominant_crime,
-        cluster_kind, area_label, peak_time, mix_tuple, resolved_unit,
+        classification,
+        incident_count,
+        dominant_crime,
+        cluster_kind,
+        area_label,
+        peak_time,
+        mix_tuple,
+        plan["primary_code"],
     )
     if key in _recommendation_cache:
         return _recommendation_cache[key]
 
     prompt = _build_prompt(
-        classification, incident_count, dominant_crime,
-        cluster_kind, area_label, incident_mix, peak_time,
-        resolved_unit, operation_hours, concentrate_window,
+        classification=classification,
+        incident_count=incident_count,
+        dominant_crime=dominant_crime,
+        cluster_kind=cluster_kind,
+        area_label=area_label,
+        incident_mix=incident_mix,
+        peak_time=peak_time,
+        plan=plan,
+        operation_hours=operation_hours,
+        concentrate_window=concentrate_window,
+        citizen_advisory=citizen_advisory,
+        registry=registry,
     )
 
     result = _call_groq(prompt) or _call_gemini(prompt)
-
-    if result and all(k in result for k in ("recommendation", "narrative", "status")):
-        clean = {
-            "recommendation":    str(result["recommendation"]),
-            "narrative":          str(result["narrative"]),
-            "status":             str(result["status"]),
-            "recommended_unit":   resolved_unit,
-            "operation_hours":    operation_hours,
-            "concentrate_window": concentrate_window,
-        }
+    if result and result.get("recommendation") and result.get("narrative"):
+        if not result.get("citizen_advisory"):
+            result["citizen_advisory"] = citizen_advisory
+        clean = _package_result(result, plan, operation_hours, concentrate_window)
         _recommendation_cache[key] = clean
         return clean
 
-    # ── Template fallback ─────────────────────────────────────────────────────
-    logger.info("Using template fallback for hotspot recommendation (no LLM key configured)")
-    crime  = dominant_crime or "incident"
-    area   = area_label or "this area"
-    unit   = resolved_unit or "patrol units"
-    tactic = _unit_tactic(resolved_unit)
-    dur    = f"{operation_hours}-hour"
-    conc   = (
-        f", concentrating between {concentrate_window}"
-        if concentrate_window else ""
+    logger.info("Hotspot recommendation using template fallback (LLM unavailable or invalid JSON)")
+    fallback = _template_fallback(
+        classification=classification,
+        incident_count=incident_count,
+        dominant_crime=dominant_crime,
+        cluster_kind=cluster_kind,
+        area_label=area_label,
+        incident_mix=incident_mix,
+        peak_time=peak_time,
+        plan=plan,
+        operation_hours=operation_hours,
+        concentrate_window=concentrate_window,
+        citizen_advisory=citizen_advisory,
+        registry=registry,
     )
-    peak_note = f" Peak activity recorded at {peak_time}." if peak_time else ""
-
-    mix_detail = ""
-    if incident_mix and len(incident_mix) > 1:
-        top = sorted(incident_mix.items(), key=lambda x: x[1], reverse=True)[:3]
-        mix_detail = f" The cluster includes {', '.join(f'{v} {k.lower()}' for k, v in top)}."
-
-    if cluster_kind == "mixed_hotspot":
-        fallback = {
-            "recommendation": (
-                f"Deploy {unit} for a {dur} {tactic} operation across {area}{conc}."
-                f" All affected villages must be covered and sector leadership notified."
-            ),
-            "narrative": (
-                f"A mixed crime hotspot has been detected in {area} with {incident_count} verified incidents"
-                f" spanning multiple crime types.{mix_detail}{peak_note}"
-                f" The convergence of different crime categories signals a general security breakdown."
-                f" Immediate coordinated response is required to prevent further deterioration."
-            ),
-            "status": "security_alert",
-        }
-    elif classification == "critical":
-        fallback = {
-            "recommendation": (
-                f"Activate {unit} immediately for a {dur} {tactic} operation targeting"
-                f" the {crime.lower()} cluster in {area}{conc}."
-                f" Report operational status every 6 hours to the duty commander."
-            ),
-            "narrative": (
-                f"A critical {crime.lower()} hotspot has been confirmed in {area} with {incident_count} verified incidents."
-                f"{peak_note}{mix_detail}"
-                f" The cluster score indicates rapid escalation with a high probability of further violence"
-                f" if left unaddressed. Immediate tactical deployment is essential to contain the situation."
-            ),
-            "status": "escalation_likely",
-        }
-    elif classification == "active":
-        fallback = {
-            "recommendation": (
-                f"Task {unit} to conduct a {dur} {tactic} operation focused on {crime.lower()} activity in {area}{conc}."
-                f" Engage cell and village leadership to strengthen community reporting."
-            ),
-            "narrative": (
-                f"An active {crime.lower()} hotspot is developing in {area} with {incident_count} incidents recorded."
-                f"{peak_note}{mix_detail}"
-                f" Incident frequency is growing and the pattern suggests continued escalation without intervention."
-                f" Increased operational presence is required to deter further criminal activity."
-            ),
-            "status": "monitor_growth",
-        }
-    else:
-        fallback = {
-            "recommendation": (
-                f"Direct {unit} to begin a {dur} {tactic} to monitor early {crime.lower()} signals in {area}{conc}."
-                f" Escalate immediately if incident count increases by two or more."
-            ),
-            "narrative": (
-                f"An emerging pattern of {crime.lower()} has been detected in {area} with {incident_count} incident{'' if incident_count == 1 else 's'} reported."
-                f"{peak_note}{mix_detail}"
-                f" The situation is at an early stage but requires monitoring to prevent escalation."
-                f" Early intervention at this stage can significantly reduce the risk of the cluster becoming active."
-            ),
-            "status": "emerging_trend",
-        }
-
-    fallback["recommended_unit"]   = resolved_unit
-    fallback["operation_hours"]    = operation_hours
-    fallback["concentrate_window"] = concentrate_window
-    _recommendation_cache[key] = fallback
-    return fallback
+    clean = _package_result(fallback, plan, operation_hours, concentrate_window)
+    _recommendation_cache[key] = clean
+    return clean

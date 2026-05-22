@@ -28,7 +28,11 @@ from app.core.hotspot_auto import (
 )
 from app.core.village_lookup import get_village_location_info
 from app.core.websocket import manager
-from app.core.llm_recommendations import generate_recommendation, _resolve_unit, clear_recommendation_cache
+from app.core.llm_recommendations import (
+    generate_recommendation,
+    clear_recommendation_cache,
+    load_hotspot_deployment_units,
+)
 
 router = APIRouter(prefix="/hotspots", tags=["hotspots"])
 
@@ -333,9 +337,10 @@ def list_hotspots(
         period_cutoff = datetime.now(timezone.utc) - timedelta(hours=int(time_window_hours))
         query = query.filter(Hotspot.detected_at >= period_cutoff)
     hotspots = query.limit(limit).all()
-    
+    deployment_units = load_hotspot_deployment_units(db)
+
     responses = []
-    
+
     for h in hotspots:
         # Include all clustered reports; some legacy rows may miss village linkage
         # but still have valid coordinates required for map/hotspot analytics.
@@ -463,25 +468,32 @@ def list_hotspots(
 
         cluster_kind = "trend_cluster" if len(incident_mix) <= 1 else "mixed_hotspot"
 
-        # Determine the special assignment unit for the dominant crime type.
-        # For mixed hotspots use the most-frequent crime type; for single-type
-        # clusters use the hotspot's own incident_type directly.
-        # CID and RIB are investigation bodies — _resolve_unit() strips them out.
-        _raw_unit: Optional[str] = None
-        if incident_mix:
-            dominant_name = max(incident_mix, key=lambda k: incident_mix[k])
-            for r in reports_in_cluster:
-                if r.incident_type and r.incident_type.type_name == dominant_name:
-                    _raw_unit = getattr(r.incident_type, "default_special_assignment_unit", None)
-                    break
-        if _raw_unit is None and h.incident_type:
-            _raw_unit = getattr(h.incident_type, "default_special_assignment_unit", None)
-        recommended_unit: Optional[str] = _resolve_unit(_raw_unit)
-
         report_times = [
             r.reported_at for r in reports_in_cluster if r.reported_at is not None
         ]
         peak_time = _compute_peak_window(report_times)
+        verified_count = sum(
+            1
+            for r in reports_in_cluster
+            if (getattr(r, "verification_status", None) or "").strip().lower() == "verified"
+        )
+
+        unit_hint_counts: Dict[str, int] = {}
+        for r in reports_in_cluster:
+            it = getattr(r, "incident_type", None)
+            default_u = getattr(it, "default_special_assignment_unit", None) if it else None
+            if default_u:
+                key_u = str(default_u).strip()
+                unit_hint_counts[key_u] = unit_hint_counts.get(key_u, 0) + 1
+        incident_unit_hint = (
+            max(unit_hint_counts, key=unit_hint_counts.get)
+            if unit_hint_counts
+            else None
+        )
+        if not incident_unit_hint and h.incident_type:
+            incident_unit_hint = getattr(
+                h.incident_type, "default_special_assignment_unit", None
+            )
 
         llm = generate_recommendation(
             classification=classification,
@@ -491,7 +503,9 @@ def list_hotspots(
             area_label=area_label,
             incident_mix=incident_mix,
             peak_time=peak_time,
-            recommended_unit=recommended_unit,
+            verified_report_count=verified_count,
+            recommended_unit=incident_unit_hint,
+            deployment_units=deployment_units,
         )
 
         prediction = _prediction_for_hotspot(
@@ -504,9 +518,12 @@ def list_hotspots(
         prediction["recommendation"]    = llm["recommendation"]
         prediction["narrative"]          = llm["narrative"]
         prediction["status"]             = llm["status"]
-        prediction["recommended_unit"]   = llm.get("recommended_unit")
-        prediction["operation_hours"]    = llm.get("operation_hours")
-        prediction["concentrate_window"] = llm.get("concentrate_window")
+        prediction["recommended_unit"]       = llm.get("recommended_unit")
+        prediction["recommended_unit_name"]  = llm.get("recommended_unit_name")
+        prediction["recommended_units"]      = llm.get("recommended_units")
+        prediction["citizen_advisory"]       = llm.get("citizen_advisory")
+        prediction["operation_hours"]          = llm.get("operation_hours")
+        prediction["concentrate_window"]       = llm.get("concentrate_window")
             
         responses.append(HotspotResponse(
             hotspot_id=h.hotspot_id,
