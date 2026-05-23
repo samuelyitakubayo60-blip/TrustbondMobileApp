@@ -12,6 +12,45 @@ const BASE =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
   "/api";
 
+// ── In-memory GET response cache ─────────────────────────────────────────────
+// Avoids re-fetching unchanged data when the user navigates between screens.
+// TTL: 30 s for most endpoints; 5 s for volatile ones (reports, audit-logs).
+const _cache = new Map();
+
+const CACHE_TTL_DEFAULT = 30_000;
+const CACHE_TTL_SHORT   =  5_000;
+
+const SHORT_TTL_PATHS = ['/api/v1/audit-logs', '/api/v1/reports'];
+
+function _cacheTtl(url) {
+  return SHORT_TTL_PATHS.some((p) => url.includes(p))
+    ? CACHE_TTL_SHORT
+    : CACHE_TTL_DEFAULT;
+}
+
+function _cacheGet(url) {
+  const entry = _cache.get(url);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > _cacheTtl(url)) { _cache.delete(url); return null; }
+  return entry.data;
+}
+
+function _cacheSet(url, data) {
+  _cache.set(url, { data, ts: Date.now() });
+}
+
+/** Invalidate all cached entries whose URL contains the given path segment. */
+export function cacheBust(pathSegment) {
+  for (const key of _cache.keys()) {
+    if (key.includes(pathSegment)) _cache.delete(key);
+  }
+}
+
+/** Clear the entire cache (called on logout). */
+export function cacheClear() {
+  _cache.clear();
+}
+
 // Ensure HTTPS in production environments
 const PRODUCTION_BASE = (() => {
   if (BASE.startsWith("http://") &&
@@ -147,6 +186,18 @@ async function request(method, path, body = null, { token = getToken() } = {}) {
   ) {
     url = url.replace("http://", "https://");
   }
+
+  // Return cached response immediately for GET requests
+  if (method === "GET") {
+    const cached = _cacheGet(url);
+    if (cached !== null) return cached;
+  } else {
+    // Any mutation busts cached entries for the same resource path
+    // e.g. PUT /api/v1/stations/3 busts all /api/v1/stations entries
+    const segment = url.split("?")[0].split("/").slice(0, 6).join("/");
+    cacheBust(segment);
+  }
+
   const opts = {
     method,
     headers: {
@@ -167,7 +218,7 @@ async function request(method, path, body = null, { token = getToken() } = {}) {
     // Handle auth expiry: force logout on 401 so user is prompted to log in again
     if (res.status === 401) {
       setToken(null);
-      // Optional: simple reload to show login screen
+      cacheClear();
       if (typeof window !== "undefined") {
         window.alert(data?.detail || "Session expired. Please log in again.");
         window.location.reload();
@@ -178,6 +229,8 @@ async function request(method, path, body = null, { token = getToken() } = {}) {
     err.data = data;
     throw err;
   }
+
+  if (method === "GET") _cacheSet(url, data);
   return data;
 }
 

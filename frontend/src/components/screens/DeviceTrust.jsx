@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import SkeletonTable from '../Common/SkeletonTable';
 import api from '../../api/client';
 
 // Helper functions for location analysis
@@ -1217,18 +1218,7 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                   </tr>
                 )}
                 {loading && (
-                  <tr>
-                    <td
-                      colSpan={16}
-                      style={{
-                        fontSize: '12px',
-                        color: 'var(--muted)',
-                        textAlign: 'center',
-                      }}
-                    >
-                      Loading...
-                    </td>
-                  </tr>
+                  <SkeletonTable cols={16} rows={7} />
                 )}
               </tbody>
             </table>

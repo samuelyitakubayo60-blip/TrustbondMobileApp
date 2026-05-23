@@ -3,7 +3,7 @@ import api from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 
 /**
- * Security Situation — case management by station (open a station for cases by type).
+ * District Security Situation — dynamic station cards from GET /stations?include_metrics=true
  */
 const SecuritySituation = ({ goToScreen, wsRefreshKey }) => {
   const { user } = useAuth();
@@ -51,12 +51,12 @@ const SecuritySituation = ({ goToScreen, wsRefreshKey }) => {
           <div>
             <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Security Situation</h2>
             <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
-              Case management by station — select a station to view and open active cases grouped
-              by incident type. For district totals only, see{" "}
-              <strong>Overall Security Situation</strong>.{" "}
+              Cases are grouped by station based on incident location.{" "}
               {role === "officer"
                 ? "You see your station only."
-                : "District-wide station view."}
+                : role === "supervisor"
+                  ? "IO view: all stations (management tasks are DPC-only)."
+                  : "District-wide view."}
             </p>
           </div>
           {role === "admin" && (
