@@ -235,24 +235,30 @@ def get_dashboard_stats(
     )
     by_status = {str(r[0]) if r[0] is not None else None: int(r[1]) for r in by_status_rows}
 
-    # Count reports that need police review (pending + under_review)
-    pending_review = (
+    # Pending = not yet reviewed (verification_status pending or under_review)
+    pending = int(
         db.query(func.count(Report.report_id))
-        .filter(report_filter, Report.verification_status.in_(['pending', 'under_review']))
+        .filter(report_filter, Report.verification_status.in_(["pending", "under_review"]))
         .scalar()
         or 0
     )
 
-    # Count flagged reports using is_flagged field
-    flagged_reports = (
+    # Verified = police/system has confirmed the report (same field as pending for consistency)
+    verified = int(
+        db.query(func.count(Report.report_id))
+        .filter(report_filter, Report.verification_status == "verified")
+        .scalar()
+        or 0
+    )
+
+    # Flagged = reports flagged for anomalies / suspicious content
+    flagged = int(
         db.query(func.count(Report.report_id))
         .filter(report_filter, Report.is_flagged == True)
         .scalar()
         or 0
     )
-    pending = int(pending_review)
-    verified = int(by_status.get("verified", 0))
-    flagged = int(flagged_reports)
+    pending_review = pending
     recent_7d_count = db.query(func.count(Report.report_id)).filter(
         report_filter, Report.reported_at >= since_7d
     ).scalar() or 0

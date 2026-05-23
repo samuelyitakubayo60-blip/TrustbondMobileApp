@@ -378,24 +378,19 @@ body {
   --db-text2: var(--text-dim);
   --db-text3: var(--muted);
   --db-blue: var(--accent);
-  --db-blue-dim: rgba(37, 99, 235, 0.09);
+  --db-blue-dim: var(--c-accent-dim);
   --db-green: var(--success);
-  --db-green-dim: rgba(22, 163, 74, 0.09);
+  --db-green-dim: var(--c-success-dim);
   --db-amber: var(--warning);
-  --db-amber-dim: rgba(217, 119, 6, 0.09);
+  --db-amber-dim: var(--c-warning-dim);
   --db-red: var(--danger);
-  --db-red-dim: rgba(220, 38, 38, 0.09);
+  --db-red-dim: var(--c-danger-dim);
   --db-r: var(--r);
   --db-r-sm: var(--rs);
   color: var(--db-text);
 }
 
-body.dark-mode .dashboard-police {
-  --db-blue-dim: rgba(96, 165, 250, 0.12);
-  --db-green-dim: rgba(52, 211, 153, 0.12);
-  --db-amber-dim: rgba(251, 191, 36, 0.12);
-  --db-red-dim: rgba(248, 113, 113, 0.12);
-}
+/* dark-mode dim overrides now handled by --c-*-dim tokens in :root.dark-mode */
 
 .dashboard-police .page-header {
   margin-bottom: 0;
@@ -791,7 +786,7 @@ body.dark-mode .dashboard-police .badge.pending {
 }
 .dashboard-police .view-btn:hover {
   background: var(--db-blue-dim);
-  border-color: rgba(37, 99, 235, 0.22);
+  border-color: var(--c-accent-ring);
 }
 
 .dashboard-police .activity-list {

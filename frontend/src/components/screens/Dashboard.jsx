@@ -347,17 +347,10 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
         <div className="card-header">
           <div className="card-title">{getChartTitle(role)}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <select 
+            <select
+              className="select"
               value={selectedTimeWindow}
               onChange={(e) => setSelectedTimeWindow(Number(e.target.value))}
-              style={{
-                padding: '6px 12px',
-                border: '1px solid #dee2e6',
-                borderRadius: '4px',
-                backgroundColor: '#fff',
-                fontSize: '14px',
-                cursor: 'pointer'
-              }}
             >
               <option value={0.5}>Last 30 minutes</option>
               <option value={1}>Last 1 hour</option>
@@ -541,7 +534,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
                 cy="70"
                 r="52"
                 fill="none"
-                stroke="#E05252"
+                stroke="var(--danger)"
                 strokeWidth="14"
                 strokeDasharray={`${Math.max(1, flaggedPct * 3.26)} 999`}
                 strokeDashoffset="0"
@@ -553,7 +546,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
                 cy="70"
                 r="52"
                 fill="none"
-                stroke="#F0A429"
+                stroke="var(--warning)"
                 strokeWidth="14"
                 strokeDasharray={`${Math.max(1, pendingPct * 3.26)} 999`}
                 strokeDashoffset={`-${Math.max(1, flaggedPct * 3.26)}`}
@@ -565,7 +558,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
                 cy="70"
                 r="52"
                 fill="none"
-                stroke="#3DBE85"
+                stroke="var(--success)"
                 strokeWidth="14"
                 strokeDasharray={`${Math.max(1, verifiedPct * 3.26)} 999`}
                 strokeDashoffset={`-${Math.max(1, (flaggedPct + pendingPct) * 3.26)}`}
@@ -593,30 +586,21 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
             <div className="donut-legend">
               <div className="legend-row">
                 <div className="legend-left">
-                  <span
-                    className="legend-dot"
-                    style={{ background: "#3DBE85" }}
-                  ></span>
+                  <span className="legend-dot" style={{ background: "var(--success)" }}></span>
                   Verified
                 </div>
                 <span className="legend-val">{verified}</span>
               </div>
               <div className="legend-row">
                 <div className="legend-left">
-                  <span
-                    className="legend-dot"
-                    style={{ background: "#F0A429" }}
-                  ></span>
+                  <span className="legend-dot" style={{ background: "var(--warning)" }}></span>
                   Pending
                 </div>
                 <span className="legend-val">{pending}</span>
               </div>
               <div className="legend-row">
                 <div className="legend-left">
-                  <span
-                    className="legend-dot"
-                    style={{ background: "#E05252" }}
-                  ></span>
+                  <span className="legend-dot" style={{ background: "var(--danger)" }}></span>
                   Flagged
                 </div>
                 <span className="legend-val">{flagged}</span>
@@ -740,7 +724,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
                 <div>
                   <div className="hs-name">{h.area_name || "Unknown area"}</div>
                   <div className="hs-sub">
-                    Musanze Â· {h.incident_type_name || "Mixed"}
+                    Musanze &middot; {h.incident_type_name || "Mixed"}
                   </div>
                 </div>
                 <span
