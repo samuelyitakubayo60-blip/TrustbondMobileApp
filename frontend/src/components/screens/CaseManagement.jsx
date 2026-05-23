@@ -48,7 +48,8 @@ const RANGE_OPTIONS = [
 const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
   const [reports, setReports]     = useState([]);
   const [loading, setLoading]     = useState(true);
-  const [range, setRange]         = useState(90);
+  const [error, setError]         = useState('');
+  const [range, setRange]         = useState(null); // default: all time
 
   const pieRef    = useRef(null);
   const lineRef   = useRef(null);
@@ -58,20 +59,21 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
   /* ── Load data ── */
   const load = useCallback(() => {
     setLoading(true);
-    Promise.all([
-      api.get('/api/v1/reports/?limit=2000'),
-      api.get('/api/v1/incident-types/'),
-    ])
-      .then(([reportsRes]) => {
+    setError('');
+    api.get('/api/v1/reports/?limit=500')
+      .then((reportsRes) => {
         let arr = [];
-        if (Array.isArray(reportsRes))      arr = reportsRes;
-        else if (reportsRes?.items)         arr = reportsRes.items;
-        else if (reportsRes?.reports)       arr = reportsRes.reports;
-        else if (reportsRes?.data)          arr = reportsRes.data;
+        if (Array.isArray(reportsRes))  arr = reportsRes;
+        else if (reportsRes?.items)     arr = reportsRes.items;
+        else if (reportsRes?.reports)   arr = reportsRes.reports;
+        else if (reportsRes?.data)      arr = reportsRes.data;
         setReports(arr);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((e) => {
+        setError(e?.message || 'Failed to load reports.');
+        setLoading(false);
+      });
   }, []);
 
   useEffect(() => { load(); }, [load, wsRefreshKey]);
@@ -86,7 +88,8 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
   // Count by incident type, sorted high → low
   const typeCounts = {};
   filteredReports.forEach((r) => {
-    const name = r.incident_type?.type_name || r.incident_type_name || 'Unknown';
+    // API returns a flat field r.incident_type_name
+    const name = r.incident_type_name || r.incident_type?.type_name || r.incident_type?.name || 'Unknown';
     typeCounts[name] = (typeCounts[name] || 0) + 1;
   });
   const typeEntries = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
@@ -258,6 +261,13 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
         <h2>District Security Analysis</h2>
         <p>Visual breakdown of incident trends and type distribution across Musanze District.</p>
       </div>
+
+      {error && (
+        <div className="alert alert-danger" style={{ marginBottom: 12 }}>
+          <span className="alert-icon">!</span>
+          <div>{error}</div>
+        </div>
+      )}
 
       {/* Summary stat cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
