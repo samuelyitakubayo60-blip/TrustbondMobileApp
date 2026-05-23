@@ -137,7 +137,8 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
                 <th>Code</th>
                 <th>Name</th>
                 <th>Description</th>
-                <th>Commander approval</th>
+                <th>Commander</th>
+                <th>Approval</th>
                 <th>Status</th>
                 <th style={{ width: 200 }}>Actions</th>
               </tr>
@@ -145,13 +146,13 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: "center", padding: 24 }}>
+                  <td colSpan={7} style={{ textAlign: "center", padding: 24 }}>
                     Loading…
                   </td>
                 </tr>
               ) : units.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: "center", padding: 24 }}>
+                  <td colSpan={7} style={{ textAlign: "center", padding: 24 }}>
                     No units yet. Click <strong>Add unit</strong> to create one.
                   </td>
                 </tr>
@@ -166,6 +167,11 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
                     <td style={{ fontWeight: 500 }}>{u.unit_name}</td>
                     <td style={{ fontSize: 12, color: 'var(--muted)' }}>
                       {u.description || '—'}
+                    </td>
+                    <td style={{ fontSize: 12 }}>
+                      {u.commander_name || (
+                        <span style={{ color: "var(--muted)" }}>—</span>
+                      )}
                     </td>
                     <td>
                       <span className={`badge ${u.requires_commander_approval ? 'b-orange' : 'b-gray'}`} style={{ fontSize: 10 }}>

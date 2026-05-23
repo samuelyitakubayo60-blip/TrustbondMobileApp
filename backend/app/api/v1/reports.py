@@ -44,6 +44,8 @@ from app.models.police_user import PoliceUser
 from app.models.local_leader import LocalLeader
 from app.api.v1.leader_auth import get_optional_local_leader
 from app.models.report_assignment import ReportAssignment
+from app.models.police_review import PoliceReview
+from app.models.ml_prediction import MLPrediction
 from app.core.security import verify_password
 from app.core.websocket import manager
 from app.api.v1.auth import get_optional_user, get_current_user, get_current_admin_or_supervisor
@@ -3492,7 +3494,7 @@ def list_reports(
     report_status: Optional[str] = Query(None, description="Filter by report status"),
     rule_status: Optional[str] = Query(None, description="Filter by rule status"),
     boundary_status: Optional[str] = Query(None, description="Filter by boundary status"),
-    incident_type_id: Optional[UUID] = Query(None, description="Filter by incident type"),
+    incident_type_id: Optional[int] = Query(None, description="Filter by incident type"),
     village_location_id: Optional[UUID] = Query(None, description="Filter by village location"),
     sector_location_id: Optional[UUID] = Query(None, description="Filter by sector location"),
     from_date: Optional[datetime] = Query(None, description="Filter reports from this date"),

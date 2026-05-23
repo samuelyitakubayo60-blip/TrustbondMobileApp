@@ -7,14 +7,27 @@ const emptyForm = {
   description: "",
   requires_commander_approval: true,
   is_active: true,
+  commander_user_id: "",
 };
 
 const AssignmentUnitModal = ({ isOpen, onClose, mode = "add", unit = null, onSaved }) => {
   const [form, setForm] = useState(emptyForm);
+  const [commanders, setCommanders] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const isEdit = mode === "edit" && unit?.unit_id != null;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    api
+      .get("/api/v1/special-assignment-units/commander-candidates")
+      .then((res) => {
+        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        setCommanders(list);
+      })
+      .catch(() => setCommanders([]));
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -25,6 +38,10 @@ const AssignmentUnitModal = ({ isOpen, onClose, mode = "add", unit = null, onSav
         description: unit.description || "",
         requires_commander_approval: !!unit.requires_commander_approval,
         is_active: unit.is_active !== false,
+        commander_user_id:
+          unit.commander_user_id != null && unit.commander_user_id !== ""
+            ? String(unit.commander_user_id)
+            : "",
       });
     } else {
       setForm({ ...emptyForm });
@@ -38,6 +55,14 @@ const AssignmentUnitModal = ({ isOpen, onClose, mode = "add", unit = null, onSav
     setForm((f) => ({ ...f, [field]: value }));
   };
 
+  const commanderPayload = () => {
+    if (form.commander_user_id === "" || form.commander_user_id == null) {
+      return null;
+    }
+    const id = parseInt(form.commander_user_id, 10);
+    return Number.isFinite(id) ? id : null;
+  };
+
   const submit = async () => {
     const code = form.unit_code.trim();
     const name = form.unit_name.trim();
@@ -49,16 +74,22 @@ const AssignmentUnitModal = ({ isOpen, onClose, mode = "add", unit = null, onSav
       setError("Unit code is required (at least 2 characters).");
       return;
     }
+    if (form.requires_commander_approval && commanderPayload() == null) {
+      setError("Select a unit commander when commander approval is required.");
+      return;
+    }
 
     setSaving(true);
     setError("");
     try {
+      const commanderId = commanderPayload();
       if (isEdit) {
         await api.patch(`/api/v1/special-assignment-units/${unit.unit_id}`, {
           unit_name: name,
           description: form.description.trim() || null,
           requires_commander_approval: form.requires_commander_approval,
           is_active: form.is_active,
+          commander_user_id: commanderId,
         });
       } else {
         await api.post("/api/v1/special-assignment-units/", {
@@ -66,6 +97,7 @@ const AssignmentUnitModal = ({ isOpen, onClose, mode = "add", unit = null, onSav
           unit_name: name,
           description: form.description.trim() || null,
           requires_commander_approval: form.requires_commander_approval,
+          commander_user_id: commanderId,
         });
       }
       onSaved?.();
@@ -106,7 +138,7 @@ const AssignmentUnitModal = ({ isOpen, onClose, mode = "add", unit = null, onSav
                 className="input"
                 required
                 maxLength={50}
-                placeholder="e.g. RIB"
+                placeholder="e.g. RRU"
                 value={form.unit_code}
                 onChange={handleChange("unit_code")}
                 disabled={isEdit}
@@ -124,10 +156,29 @@ const AssignmentUnitModal = ({ isOpen, onClose, mode = "add", unit = null, onSav
                 className="input"
                 required
                 maxLength={100}
-                placeholder="e.g. RIB — Investigation Bureau"
+                placeholder="e.g. Rapid Response Unit"
                 value={form.unit_name}
                 onChange={handleChange("unit_name")}
               />
+            </div>
+            <div className="input-group" style={{ gridColumn: "1 / -1" }}>
+              <div className="input-label">Unit commander</div>
+              <select
+                className="input"
+                value={form.commander_user_id}
+                onChange={handleChange("commander_user_id")}
+              >
+                <option value="">— No commander assigned —</option>
+                {commanders.map((c) => (
+                  <option key={c.police_user_id} value={String(c.police_user_id)}>
+                    {c.label}
+                    {c.role ? ` (${c.role})` : ""}
+                  </option>
+                ))}
+              </select>
+              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
+                Supervisors and admins who can approve deployments for this unit.
+              </div>
             </div>
             <div className="input-group" style={{ gridColumn: "1 / -1" }}>
               <div className="input-label">Description</div>

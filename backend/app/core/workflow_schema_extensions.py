@@ -59,6 +59,10 @@ DDL_STATEMENTS: tuple[str, ...] = (
     );
     """,
     """
+    ALTER TABLE special_assignment_units
+      ADD COLUMN IF NOT EXISTS commander_user_id INTEGER REFERENCES police_users(police_user_id);
+    """,
+    """
     INSERT INTO special_assignment_units (unit_code, unit_name, description)
     VALUES
       ('RIB', 'RIB — Investigation Bureau', 'Serious crime / investigation handover'),

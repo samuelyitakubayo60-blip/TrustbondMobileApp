@@ -4,12 +4,15 @@ LLM-generated hotspot recommendations.
 Hotspot deployments use active tactical units from ``special_assignment_units``
 (investigation-only codes like RIB/CID/LIB are excluded). Cases keep the full unit dropdown.
 
-Priority chain: Groq → Gemini (JSON). When API keys are set, only LLM text is used — no template fallback.
+Priority chain: Groq → Gemini (JSON). Set ``HOTSPOT_LLM_STRICT=true`` to disable template
+fallback when keys are configured (empty briefing on quota failure). Default uses templates
+after LLM failure so the map stays usable.
 """
 import json
 import logging
 import os
 import re
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -18,6 +21,10 @@ logger = logging.getLogger(__name__)
 _groq_skip_reason: Optional[str] = None
 _groq_skip_logged = False
 _last_hotspot_llm_error: Optional[str] = None
+
+# Gemini: backoff after quota/rate-limit errors to avoid log spam
+_gemini_quota_until: float = 0.0
+_gemini_quota_skip_logged = False
 
 _PERMANENT_GROQ_MARKERS = (
     "organization_restricted",
@@ -28,25 +35,75 @@ _PERMANENT_GROQ_MARKERS = (
 
 
 def _hotspot_llm_required() -> bool:
-    """True when .env has GROQ and/or GEMINI keys — LLM-only briefings, no templates."""
+    """True when .env has GROQ and/or GEMINI keys."""
     return bool(
         os.getenv("GROQ_API_KEY", "").strip() or os.getenv("GEMINI_API_KEY", "").strip()
     )
 
 
+def _hotspot_llm_strict() -> bool:
+    """When true and API keys are set, failed LLM calls yield empty text (no template fallback)."""
+    return os.getenv("HOTSPOT_LLM_STRICT", "").strip().lower() in ("1", "true", "yes")
+
+
+def _gemini_quota_blocked() -> bool:
+    return time.time() < _gemini_quota_until
+
+
+def _mark_gemini_quota_cooldown(exc: BaseException, *, seconds: int = 300) -> None:
+    global _gemini_quota_until, _gemini_quota_skip_logged
+    msg = str(exc)
+    if "429" not in msg and "RESOURCE_EXHAUSTED" not in msg and "quota" not in msg.lower():
+        return
+    _gemini_quota_until = max(_gemini_quota_until, time.time() + seconds)
+    if not _gemini_quota_skip_logged:
+        logger.warning(
+            "Gemini quota/rate limit hit; skipping Gemini hotspot calls for %s seconds. "
+            "Enable billing or set HOTSPOT_LLM_STRICT=false (default) for template fallbacks.",
+            seconds,
+        )
+        _gemini_quota_skip_logged = True
+
+
 def _gemini_model_candidates() -> List[str]:
     candidates: List[str] = []
+    deprecated = frozenset({"gemini-1.5-flash-8b", "gemini-1.5-flash"})
     for raw in (
         os.getenv("GEMINI_HOTSPOT_MODEL"),
         os.getenv("GEMINI_MODEL"),
-        "gemini-2.0-flash",
         "gemini-2.5-flash",
-        "gemini-1.5-flash-8b",
+        "gemini-2.0-flash",
     ):
         name = (raw or "").strip()
-        if name and name not in candidates:
+        if name and name not in candidates and name not in deprecated:
             candidates.append(name)
-    return candidates or ["gemini-2.0-flash"]
+    return candidates or ["gemini-2.5-flash", "gemini-2.0-flash"]
+
+
+def _parse_llm_json(text: str) -> Optional[Dict[str, Any]]:
+    """Parse model JSON; attempt light repair on truncated responses."""
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        pass
+
+    match = re.search(r"\{[\s\S]*", raw)
+    if not match:
+        return None
+    fragment = match.group(0).rstrip()
+    if fragment.count("{") > fragment.count("}"):
+        fragment += "}"
+    if fragment.count('"') % 2 == 1:
+        fragment += '"'
+    try:
+        parsed = json.loads(fragment)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        return None
 
 
 def _disable_groq(reason: str) -> None:
@@ -556,12 +613,16 @@ def gemini_generate_json(
         text = (getattr(resp, "text", None) or "").strip()
         if not text:
             return None
-        return json.loads(text)
-    except json.JSONDecodeError as exc:
-        logger.warning("Gemini (%s) returned invalid JSON: %s", model_name, exc)
-        return None
+        parsed = _parse_llm_json(text)
+        if parsed is None:
+            logger.warning("Gemini (%s) returned invalid JSON", model_name)
+        return parsed
     except Exception as exc:
-        logger.warning("Gemini (%s) failed: %s", model_name, exc)
+        _mark_gemini_quota_cooldown(exc)
+        if "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc):
+            logger.warning("Gemini (%s) quota exceeded", model_name)
+        else:
+            logger.warning("Gemini (%s) failed: %s", model_name, exc)
         return None
 
 
@@ -572,23 +633,32 @@ def _call_gemini_model(prompt: str, model_name: str, api_key: str) -> Optional[D
 
 
 def _call_gemini(prompt: str) -> Optional[Dict[str, Any]]:
-    global _last_hotspot_llm_error
+    global _last_hotspot_llm_error, _gemini_quota_skip_logged
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         return None
+    if _gemini_quota_blocked():
+        _last_hotspot_llm_error = "Gemini quota cooldown active"
+        return None
+
     errors: List[str] = []
     for model_name in _gemini_model_candidates():
         parsed = _call_gemini_model(prompt, model_name, api_key)
         if parsed and parsed.get("recommendation") and parsed.get("narrative"):
             logger.info("Hotspot briefing generated via Gemini model %s", model_name)
+            _gemini_quota_skip_logged = False
             return parsed
         errors.append(model_name)
+        if _gemini_quota_blocked():
+            break
+
     _last_hotspot_llm_error = (
         f"Gemini failed for models: {', '.join(errors)}"
         if errors
         else "Gemini returned empty JSON"
     )
-    logger.warning("%s", _last_hotspot_llm_error)
+    if not _gemini_quota_blocked():
+        logger.warning("%s", _last_hotspot_llm_error)
     return None
 
 
@@ -901,7 +971,7 @@ def generate_recommendation(
         _recommendation_cache[key] = clean
         return clean
 
-    if _hotspot_llm_required():
+    if _hotspot_llm_required() and _hotspot_llm_strict():
         logger.error(
             "Hotspot briefing requires LLM output but generation failed. %s",
             _last_hotspot_llm_error or "No provider returned valid JSON.",
@@ -917,6 +987,12 @@ def generate_recommendation(
             operation_hours,
             concentrate_window,
             citizen_advisory_hint=citizen_advisory_hint,
+        )
+
+    if _hotspot_llm_required() and _last_hotspot_llm_error:
+        logger.warning(
+            "Hotspot LLM unavailable; using template briefing. %s",
+            _last_hotspot_llm_error,
         )
 
     fallback = _template_fallback(

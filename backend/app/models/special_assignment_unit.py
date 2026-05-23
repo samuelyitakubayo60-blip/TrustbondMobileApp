@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -12,5 +13,8 @@ class SpecialAssignmentUnit(Base):
     description = Column(String(500))
     is_active = Column(Boolean, default=True)
     requires_commander_approval = Column(Boolean, default=True)
+    commander_user_id = Column(Integer, ForeignKey("police_users.police_user_id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    commander = relationship("PoliceUser", foreign_keys=[commander_user_id])
