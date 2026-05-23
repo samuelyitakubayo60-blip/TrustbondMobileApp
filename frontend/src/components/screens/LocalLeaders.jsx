@@ -93,6 +93,10 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
   const villageGaps = coverageGaps.filter(g => g.location_type === "village");
   const cellGaps    = coverageGaps.filter(g => g.location_type === "cell");
 
+  // Use accurate totals from stats (not limited list lengths)
+  const villagesWithoutLeader = stats?.villages_without_leader ?? villageGaps.length;
+  const cellsWithoutExecutive = stats?.cells_without_executive ?? cellGaps.length;
+
   return (
     <>
       {/* ── Header card ── */}
@@ -125,10 +129,10 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
         </div>
 
         {/* Coverage gaps warning — split by village / cell */}
-        {coverageGaps.length > 0 && (
+        {(villagesWithoutLeader > 0 || cellsWithoutExecutive > 0) && (
           <div style={{ background: 'var(--c-warning-dim)', border: '1px solid var(--c-warning-ring)', borderRadius: 8, padding: '10px 14px', fontSize: 12 }}>
             <div style={{ fontWeight: 700, color: 'var(--warning)', marginBottom: 4 }}>
-              {villageGaps.length} village(s) and {cellGaps.length} cell(s) have no active leader
+              {villagesWithoutLeader} village(s) and {cellsWithoutExecutive} cell(s) have no active leader
             </div>
             <div style={{ color: 'var(--muted)', marginBottom: 8 }}>
               Citizen reports in these areas will not reach a leader until you register one.
@@ -137,7 +141,7 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
               {villageGaps.length > 0 && (
                 <div>
                   <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
-                    Villages without a chief or cell executive ({villageGaps.length})
+                    Villages without a chief ({villagesWithoutLeader} total)
                   </div>
                   <ul style={{ margin: 0, paddingLeft: 16, color: 'var(--muted)' }}>
                     {villageGaps.slice(0, 8).map((g) => (
@@ -146,14 +150,14 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
                         {g.parent_name ? ` (${g.parent_name})` : ""}
                       </li>
                     ))}
-                    {villageGaps.length > 8 && <li>…and {villageGaps.length - 8} more</li>}
+                    {villagesWithoutLeader > 8 && <li>…and {villagesWithoutLeader - Math.min(villageGaps.length, 8)} more</li>}
                   </ul>
                 </div>
               )}
               {cellGaps.length > 0 && (
                 <div>
                   <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
-                    Cells without an executive ({cellGaps.length})
+                    Cells without an executive ({cellsWithoutExecutive} total)
                   </div>
                   <ul style={{ margin: 0, paddingLeft: 16, color: 'var(--muted)' }}>
                     {cellGaps.slice(0, 8).map((g) => (
@@ -162,7 +166,7 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
                         {g.parent_name ? ` (${g.parent_name})` : ""}
                       </li>
                     ))}
-                    {cellGaps.length > 8 && <li>…and {cellGaps.length - 8} more</li>}
+                    {cellsWithoutExecutive > 8 && <li>…and {cellsWithoutExecutive - Math.min(cellGaps.length, 8)} more</li>}
                   </ul>
                 </div>
               )}
