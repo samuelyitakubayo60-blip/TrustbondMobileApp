@@ -95,6 +95,26 @@ def _station_covered_village_ids(db: Session, station_id: int) -> List[int]:
     return sorted({int(r[0]) for r in village_rows if r and r[0] is not None})
 
 
+def _apply_officer_hotspot_scope(query, current_user: PoliceUser, db: Session):
+    """Station commanders see hotspots tied to villages in their station coverage only.
+
+    DPC (admin) and IO (supervisor) see district-wide hotspots.
+    """
+    if getattr(current_user, "role", None) != "officer":
+        return query
+    officer_station_id = getattr(current_user, "station_id", None)
+    if officer_station_id is None:
+        raise HTTPException(status_code=403, detail="Officer station is not configured")
+    covered_village_ids = _station_covered_village_ids(db, officer_station_id)
+    if covered_village_ids:
+        return (
+            query.join(Hotspot.reports)
+            .filter(Report.village_location_id.in_(covered_village_ids))
+            .distinct()
+        )
+    return query.filter(False)
+
+
 def _classify_hotspot(hotspot_score: float) -> str:
     """Classify hotspot based on trust-weighted DBSCAN score (0-100).
 
@@ -279,9 +299,8 @@ def list_hotspots(
 ):
     """List hotspots.
 
-    - Admin: sees all hotspots.
-    - Supervisor: hotspots that include at least one report in their assigned_location_id (if set).
-    - Officer: same sector scoping as supervisor when assigned_location_id is set, otherwise all.
+    - Admin / IO (supervisor): all hotspots district-wide.
+    - Officer: hotspots in their station cell/village coverage only.
     """
     try:
         ensure_hotspots_materialized(db)
@@ -296,9 +315,6 @@ def list_hotspots(
         selectinload(Hotspot.reports).joinedload(Report.incident_type),
         selectinload(Hotspot.reports).selectinload(Report.evidence_files),
     )
-
-    role = getattr(current_user, "role", None)
-    assigned_loc = getattr(current_user, "assigned_location_id", None)
 
     # Apply time-based filtering
     if time_period or hours_back:
@@ -324,33 +340,7 @@ def list_hotspots(
             cutoff_time = datetime.now(timezone.utc) - timedelta(hours=time_filter_hours)
             query = query.filter(Hotspot.detected_at >= cutoff_time)
 
-    # Scope for supervisors/officers by station sector
-    if role == "officer":
-        officer_station_id = getattr(current_user, "station_id", None)
-        if officer_station_id is None:
-            raise HTTPException(status_code=403, detail="Officer station is not configured")
-        covered_village_ids = _station_covered_village_ids(db, officer_station_id)
-        if covered_village_ids:
-            query = (
-                query.join(Hotspot.reports)
-                .filter(Report.village_location_id.in_(covered_village_ids))
-                .distinct()
-            )
-        else:
-            query = query.filter(False)
-    elif role == "supervisor":
-        supervisor_station_id = getattr(current_user, "station_id", None)
-        if supervisor_station_id is None:
-            raise HTTPException(status_code=403, detail="Supervisor station is not configured")
-        covered_village_ids = _station_covered_village_ids(db, supervisor_station_id)
-        if covered_village_ids:
-            query = (
-                query.join(Hotspot.reports)
-                .filter(Report.village_location_id.in_(covered_village_ids))
-                .distinct()
-            )
-        else:
-            query = query.filter(False)
+    query = _apply_officer_hotspot_scope(query, current_user, db)
 
     query = query.order_by(Hotspot.detected_at.desc())
     if risk_level:
@@ -638,35 +628,8 @@ def get_daily_emergencies(
         Hotspot.risk_level.in_(["critical", "active"])
     )
     
-    # Apply role-based filtering (same logic as main endpoint)
-    role = getattr(current_user, "role", None)
-    if role == "officer":
-        officer_station_id = getattr(current_user, "station_id", None)
-        if officer_station_id is None:
-            raise HTTPException(status_code=403, detail="Officer station is not configured")
-        covered_village_ids = _station_covered_village_ids(db, officer_station_id)
-        if covered_village_ids:
-            query = (
-                query.join(Hotspot.reports)
-                .filter(Report.village_location_id.in_(covered_village_ids))
-                .distinct()
-            )
-        else:
-            query = query.filter(False)
-    elif role == "supervisor":
-        supervisor_station_id = getattr(current_user, "station_id", None)
-        if supervisor_station_id is None:
-            raise HTTPException(status_code=403, detail="Supervisor station is not configured")
-        covered_village_ids = _station_covered_village_ids(db, supervisor_station_id)
-        if covered_village_ids:
-            query = (
-                query.join(Hotspot.reports)
-                .filter(Report.village_location_id.in_(covered_village_ids))
-                .distinct()
-            )
-        else:
-            query = query.filter(False)
-    
+    query = _apply_officer_hotspot_scope(query, current_user, db)
+
     # Filter by minimum incident count for emergencies
     emergency_hotspots = []
     for h in query.all():

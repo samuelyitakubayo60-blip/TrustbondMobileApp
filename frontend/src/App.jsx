@@ -77,7 +77,6 @@ function App() {
       case "/reports/detail":
         return "report-detail";
       case "/cases":
-      case "/security-situation":
         return "case-management";
       case "/hotspots":
         return "safety-map"; // Redirect to safety-map
@@ -158,7 +157,6 @@ function App() {
           return rid ? `/reports/${rid}` : "/reports";
         }
       case "case-management":
-      case "security-situation":
         return "/cases";
       case "hotspot-details":
         // Use the hotspotId from the new props or selectedHotspotId to construct URL
@@ -220,7 +218,6 @@ function App() {
       case "/reports/detail":
         return "report-detail";
       case "/cases":
-      case "/security-situation":
         return "case-management";
       case "/hotspots":
         return "safety-map"; // Redirect to safety-map
@@ -445,7 +442,6 @@ function App() {
           />
         );
       case "case-management":
-      case "security-situation":
         return (
           <CaseManagement
             goToScreen={goToScreen}
