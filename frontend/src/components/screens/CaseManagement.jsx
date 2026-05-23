@@ -1,413 +1,412 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Chart from 'chart.js/auto';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 import api from '../../api/client';
-import { useAuth } from '../../context/AuthContext';
-import EditCaseModal from '../Modals/EditCaseModal';
-import ViewCaseModal from '../Modals/ViewCaseModal';
-import {
-  getRoleDisplayName,
-  canHandoverToRib,
-  canCreateCases,
-  canDeleteCases,
-  canManageCases,
-} from '../../utils/roleMapping';
-import { caseDisplayName, caseDisplayRef } from '../../utils/caseDisplay';
 
-const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
-  const { user: me } = useAuth();
-  const role = me?.role || 'officer';
-  const canCreate = canCreateCases(role);
-  const canDelete = canDeleteCases(role);
-  const canUpdateCase = (c) =>
-    canManageCases(role) &&
-    (role === 'admin' || role === 'supervisor' || c.assigned_to_id === me?.police_user_id);
-  const [cases, setCases] = useState([]);
-  const [stats, setStats] = useState(null);
+/** Fill every calendar date between start and end with 0 if missing. */
+const fillDailyGaps = (countsByDate) => {
+  const keys = Object.keys(countsByDate).sort();
+  if (!keys.length) return {};
+  const start = new Date(keys[0]);
+  const end   = new Date();
+  const result = {};
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const key = d.toISOString().slice(0, 10);
+    result[key] = countsByDate[key] ?? 0;
+  }
+  return result;
+};
+
+/**
+ * Colors auto-ranked by frequency: most common → warm (red),
+ * least common → cool (slate). New incident types get colors automatically.
+ */
+const RANKED_PALETTE = [
+  '#EF4444', // rank 1 – highest
+  '#F97316',
+  '#F59E0B',
+  '#EAB308',
+  '#84CC16',
+  '#10B981',
+  '#06B6D4',
+  '#3B82F6',
+  '#0EA5E9',
+  '#64748B', // rank 10+
+];
+
+const getRankedColor = (rank) =>
+  RANKED_PALETTE[Math.min(rank, RANKED_PALETTE.length - 1)];
+
+const RANGE_OPTIONS = [
+  { label: 'Last 30 days',  days: 30  },
+  { label: 'Last 90 days',  days: 90  },
+  { label: 'Last 6 months', days: 180 },
+  { label: 'All time',      days: null },
+];
+
+const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
+  const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editingCase, setEditingCase] = useState(null);
-  const [editOpen, setEditOpen] = useState(false);
-  const [viewingCase, setViewingCase] = useState(null);
-  const [viewOpen, setViewOpen] = useState(false);
-  const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [priorityFilter, setPriorityFilter] = useState('all');
-  const [stationsById, setStationsById] = useState({});
-  const [stationFilter, setStationFilter] = useState('all');
+  const [error, setError]     = useState('');
+  const [range, setRange]     = useState(null); // default: all time
 
-  useEffect(() => {
-    reload();
-  }, [wsRefreshKey]);
+  const pieRef    = useRef(null);
+  const lineRef   = useRef(null);
+  const pieChart  = useRef(null);
+  const lineChart = useRef(null);
 
-  const reload = async () => {
-    let mounted = true;
+  /* ── Load data ── */
+  const load = useCallback(() => {
     setLoading(true);
-    try {
-      const [list, s] = await Promise.all([
-        api.get(statusFilter === 'all' ? '/api/v1/cases/?limit=50&offset=0' : `/api/v1/cases/?limit=50&offset=0&status=${encodeURIComponent(statusFilter)}`),
-        api.get('/api/v1/cases/stats'),
-      ]);
-      if (!mounted) return;
-      setCases(list.items || []);
-      setStats(s || null);
-    } catch {
-      if (!mounted) return;
-    } finally {
-      if (mounted) setLoading(false);
-    }
-    return () => {
-      mounted = false;
-    };
-  };
-
-  // Load stations so we can filter/group by station.
-  useEffect(() => {
-    let cancelled = false;
-    api.get('/api/v1/stations/?only_active=true')
+    setError('');
+    api.get('/api/v1/reports/?limit=500')
       .then((res) => {
-        if (cancelled) return;
-        const map = {};
-        (res?.items || []).forEach((st) => {
-          map[st.station_id] = st;
-        });
-        setStationsById(map);
+        let arr = [];
+        if (Array.isArray(res))  arr = res;
+        else if (res?.items)     arr = res.items;
+        else if (res?.reports)   arr = res.reports;
+        else if (res?.data)      arr = res.data;
+        setReports(arr);
+        setLoading(false);
       })
-      .catch(() => {
-        if (cancelled) return;
-        setStationsById({});
+      .catch((e) => {
+        setError(e?.message || 'Failed to load reports.');
+        setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [wsRefreshKey]);
+  }, []);
 
-  const openCount = stats?.open ?? 0;
-  const inProgress = stats?.in_progress ?? 0;
-  const closed30 = stats?.closed ?? 0;  // simple
-  const merged = stats?.reports_merged ?? 0;
+  useEffect(() => { load(); }, [load, wsRefreshKey]);
 
-  const filteredCases = cases.filter((c) => {
-    if (searchText.trim()) {
-      const q = searchText.trim().toLowerCase();
-      const id = (c.case_number || String(c.case_id)).toLowerCase();
-      const title = (c.title || '').toLowerCase();
-      const loc = (c.location_name || '').toLowerCase();
-      if (!id.includes(q) && !title.includes(q) && !loc.includes(q)) {
-        return false;
-      }
-    }
-    if (priorityFilter !== 'all' && c.priority !== priorityFilter) {
-      return false;
-    }
-    if (stationFilter !== 'all') {
-      const sid = Number(stationFilter);
-      const caseStation = c.station_id ?? c.assigned_to_station_id;
-      if (!caseStation || Number(caseStation) !== sid) {
-        return false;
-      }
-    }
-    return true;
+  /* ── Derived data ── */
+  const filteredReports = reports.filter((r) => {
+    if (!range) return true;
+    const date = new Date(r.reported_at || r.created_at || r.timestamp);
+    return date >= new Date(Date.now() - range * 86_400_000);
   });
 
-  const closedCases = filteredCases.filter(c => c.status === 'closed').slice(0, 3);
+  // Count by incident type, sorted high → low
+  const typeCounts = {};
+  filteredReports.forEach((r) => {
+    const name = r.incident_type_name || r.incident_type?.type_name || r.incident_type?.name || 'Unknown';
+    typeCounts[name] = (typeCounts[name] || 0) + 1;
+  });
+  const typeEntries = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
+  const typeColors  = typeEntries.map((_, i) => getRankedColor(i));
 
-  const stationOptions = Object.values(stationsById).sort((a, b) =>
-    (a.station_name || '').localeCompare(b.station_name || '')
-  );
+  // Daily counts for line chart
+  const dailyRaw = {};
+  filteredReports.forEach((r) => {
+    const raw = r.reported_at || r.created_at || r.timestamp;
+    if (!raw) return;
+    const day = new Date(raw).toISOString().slice(0, 10);
+    dailyRaw[day] = (dailyRaw[day] || 0) + 1;
+  });
+  const daily       = fillDailyGaps(dailyRaw);
+  const dailyLabels = Object.keys(daily);
+  const dailyValues = Object.values(daily);
+
+  /* ── Doughnut chart ── */
+  useEffect(() => {
+    if (!pieRef.current || loading) return;
+    if (pieChart.current) { pieChart.current.destroy(); pieChart.current = null; }
+    if (!typeEntries.length) return;
+
+    const total = filteredReports.length;
+
+    pieChart.current = new Chart(pieRef.current, {
+      type: 'doughnut',
+      plugins: [ChartDataLabels],
+      data: {
+        labels: typeEntries.map(([k]) => k),
+        datasets: [{
+          data: typeEntries.map(([, v]) => v),
+          backgroundColor: typeColors,
+          borderColor: typeColors.map(c => c + 'cc'),
+          borderWidth: 2,
+          hoverOffset: 10,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '50%',
+        plugins: {
+          legend: {
+            position: 'right',
+            labels: {
+              font: { size: 11 },
+              padding: 12,
+              color: getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#1e293b',
+              boxWidth: 12,
+              borderRadius: 3,
+              generateLabels: (chart) => {
+                const ds = chart.data.datasets[0];
+                return chart.data.labels.map((label, i) => ({
+                  text: `${label}  ·  ${ds.data[i]} (${((ds.data[i] / total) * 100).toFixed(0)}%)`,
+                  fillStyle: ds.backgroundColor[i],
+                  strokeStyle: ds.borderColor[i],
+                  lineWidth: 1,
+                  index: i,
+                  hidden: false,
+                }));
+              },
+            },
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const count = ctx.parsed;
+                const pct   = ((count / total) * 100).toFixed(1);
+                return ` ${ctx.label}: ${count} incident${count !== 1 ? 's' : ''} (${pct}%)`;
+              },
+            },
+          },
+          datalabels: {
+            color: '#ffffff',
+            font: { size: 11, weight: 'bold' },
+            formatter: (value) => {
+              const pct = ((value / total) * 100).toFixed(0);
+              return pct >= 5 ? `${pct}%` : '';
+            },
+            textShadowColor: 'rgba(0,0,0,0.4)',
+            textShadowBlur: 3,
+          },
+        },
+      },
+    });
+
+    return () => { if (pieChart.current) { pieChart.current.destroy(); pieChart.current = null; } };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(typeEntries), loading, range]);
+
+  /* ── Line chart ── */
+  useEffect(() => {
+    if (!lineRef.current || loading) return;
+    if (lineChart.current) { lineChart.current.destroy(); lineChart.current = null; }
+    if (!dailyLabels.length) return;
+
+    const style  = getComputedStyle(document.documentElement);
+    const accent = style.getPropertyValue('--accent').trim() || '#3b82f6';
+    const muted  = style.getPropertyValue('--muted').trim()  || '#94a3b8';
+    const border = style.getPropertyValue('--border').trim() || '#e2e8f0';
+
+    lineChart.current = new Chart(lineRef.current, {
+      type: 'line',
+      data: {
+        labels: dailyLabels,
+        datasets: [{
+          label: 'Incidents per day',
+          data: dailyValues,
+          borderColor: accent,
+          backgroundColor: `${accent}22`,
+          borderWidth: 2,
+          pointRadius: dailyLabels.length > 60 ? 0 : 3,
+          pointHoverRadius: 5,
+          fill: true,
+          tension: 0.35,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          datalabels: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ` ${ctx.parsed.y} incident${ctx.parsed.y !== 1 ? 's' : ''}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: muted, font: { size: 10 }, maxTicksLimit: 12, maxRotation: 30 },
+            grid: { display: false },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: muted, font: { size: 11 }, stepSize: 1 },
+            grid: { color: border },
+          },
+        },
+      },
+    });
+
+    return () => { if (lineChart.current) { lineChart.current.destroy(); lineChart.current = null; } };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyLabels.join(','), loading, range]);
+
+  /* ── Summary stats ── */
+  const totalIncidents = filteredReports.length;
+  const topType        = typeEntries[0]?.[0] ?? '—';
+  const topCount       = typeEntries[0]?.[1] ?? 0;
+  const avgPerDay      = dailyLabels.length
+    ? (totalIncidents / dailyLabels.length).toFixed(1)
+    : '0';
+  const peakDayIdx = dailyValues.indexOf(Math.max(...dailyValues, 0));
+  const peakDay    = dailyLabels[peakDayIdx] ?? '—';
 
   return (
     <>
-      {/* ── Case Management header card ── */}
-      <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
-        {/* Title + subtitle + actions row */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 12,
-            marginBottom: 16,
-          }}
-        >
-          <div>
-            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Case Management</h2>
-            <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
-              Multiple verified reports grouped into a single coordinated investigation.
-            </p>
+      <div className="page-header">
+        <h2>District Security Analysis</h2>
+        <p>Visual breakdown of incident trends and type distribution across Musanze District.</p>
+      </div>
+
+      {error && (
+        <div className="alert alert-danger" style={{ marginBottom: 12 }}>
+          <span className="alert-icon">!</span>
+          <div>{error}</div>
+        </div>
+      )}
+
+      {/* Stat cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+        {[
+          { label: 'Total Incidents', value: totalIncidents, sub: range ? `Last ${range} days` : 'All time', cls: 'sb-blue'   },
+          { label: 'Incident Types',  value: typeEntries.length, sub: 'Distinct categories',                 cls: 'sb-orange' },
+          { label: 'Avg / Day',       value: avgPerDay,      sub: 'Daily incident rate',                     cls: 'sb-green'  },
+          { label: 'Most Common',     value: topCount,       sub: topType,                                   cls: 'sb-red'    },
+        ].map((s) => (
+          <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
+            <div className="stat-btn-label">{s.label}</div>
+            <div className="stat-btn-value">{s.value}</div>
+            <div className="stat-btn-sub">{s.sub}</div>
           </div>
-          {canCreate && (
-            <button
-              className="btn btn-primary"
-              style={{ whiteSpace: 'nowrap', alignSelf: 'center' }}
-              onClick={() => openModal('newCase')}
-            >
-              + New Case
-            </button>
+        ))}
+      </div>
+
+      {/* Range selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>Time range:</span>
+        {RANGE_OPTIONS.map((opt) => (
+          <button
+            key={opt.label}
+            type="button"
+            className={`btn btn-sm ${range === opt.days ? 'btn-primary' : 'btn-outline'}`}
+            onClick={() => setRange(opt.days)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Charts row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 16, marginBottom: 16 }}>
+
+        {/* Doughnut */}
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">Incident Type Distribution</div>
+            <span className="badge b-blue" style={{ fontSize: 10 }}>
+              {typeEntries.length} type{typeEntries.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div style={{ padding: '12px 16px 4px' }}>
+            {loading ? (
+              <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 12 }}>Loading…</div>
+            ) : typeEntries.length === 0 ? (
+              <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 12 }}>No incident data for this period.</div>
+            ) : (
+              <div style={{ height: 260, position: 'relative' }}><canvas ref={pieRef} /></div>
+            )}
+          </div>
+
+          {/* Color-rank legend */}
+          {!loading && typeEntries.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--border)', padding: '8px 16px 12px' }}>
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Ranked by frequency — red = highest
+              </div>
+              {typeEntries.map(([name, count], i) => {
+                const pct = ((count / totalIncidents) * 100).toFixed(1);
+                return (
+                  <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>
+                    <div style={{ width: 10, height: 10, borderRadius: 2, flexShrink: 0, background: typeColors[i] }} />
+                    <span style={{ flex: 1, fontSize: 11 }}>{name}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700 }}>{count}</span>
+                    <span style={{ fontSize: 10, color: 'var(--muted)', minWidth: 36, textAlign: 'right' }}>{pct}%</span>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
 
-        {/* Stats — clickable to filter */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-          {[
-            { label: 'Open Cases',      sub: 'Awaiting action',    value: openCount,  cls: 'sb-orange', filter: 'open'         },
-            { label: 'In Progress',     sub: 'Being investigated', value: inProgress, cls: 'sb-blue',   filter: 'investigating' },
-            { label: 'Closed',          sub: 'Resolved cases',     value: closed30,   cls: 'sb-green',  filter: 'closed'       },
-            { label: 'Reports Merged',  sub: 'Across all cases',   value: merged,     cls: 'sb-purple', filter: null           },
-          ].map((s) => (
-            <button
-              key={s.label}
-              onClick={() => {
-                if (!s.filter) return;
-                const next = statusFilter === s.filter ? 'all' : s.filter;
-                setStatusFilter(next);
-                setTimeout(() => reload(), 0);
-              }}
-              className={`stat-btn ${s.cls}${statusFilter === s.filter ? ' active' : ''}`}
-              style={{ cursor: s.filter ? 'pointer' : 'default' }}
-            >
-              <div className="stat-btn-label">{s.label}</div>
-              <div className="stat-btn-value">{s.value}</div>
-              <div className="stat-btn-sub">{s.sub}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: '14px' }}>
-        <div className="filter-row">
-          <input
-            className="input"
-            placeholder="Search by case ID, title, or location..."
-            style={{ flex: 2 }}
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-          />
-          <select
-            className="select"
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              // Reload from backend whenever status changes
-              setTimeout(() => reload(), 0);
-            }}
-          >
-            <option value="all">All Statuses</option>
-            <option value="open">Open</option>
-            <option value="investigating">Investigating</option>
-            <option value="closed">Closed</option>
-          </select>
-          <select
-            className="select"
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
-          >
-            <option value="all">All Priorities</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
-          <select
-            className="select"
-            value={stationFilter}
-            onChange={(e) => setStationFilter(e.target.value)}
-          >
-            <option value="all">All Stations</option>
-            {stationOptions.map((st) => (
-              <option key={st.station_id} value={st.station_id}>
-                {st.station_name}
-                {st.covered_cell_names?.length ? ` (${st.covered_cell_names.length} cells)` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '14px', marginBottom: '14px' }}>
-        {filteredCases.map((c) => {
-          const pri = c.priority || 'medium';
-          const statusLabel =
-            c.status === 'open'         ? 'Open'        :
-            c.status === 'investigating' ? 'In Progress' :
-            c.status === 'closed'        ? 'Closed'      :
-            (c.status || 'open');
-
-          return (
-            <div key={c.case_id} className={`case-card p-${pri}`}>
-              {/* Header: title + inline badges */}
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                  <span style={{ fontWeight: 700, fontSize: 14 }}>{caseDisplayName(c)}</span>
-                  <span className={`p-badge p-${pri}`}>
-                    {pri.charAt(0).toUpperCase() + pri.slice(1)} priority
-                  </span>
-                  <span className={`s-badge s-${c.status || 'open'}`}>
-                    {statusLabel}
-                  </span>
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.4 }}>
-                  {caseDisplayRef(c) ? `${caseDisplayRef(c)} · ` : ''}
-                  {c.location_name || 'Unknown'} · {c.incident_type_name || 'Mixed'} · {c.report_count} reports
-                  {typeof c.average_trust_score === 'number' && (
-                    <span style={{ marginLeft: 6 }}>· avg trust <strong>{Math.round(c.average_trust_score)}</strong>/100</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Description */}
-              <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 10 }}>
-                {c.description || 'Case created from grouped reports.'}
-              </div>
-
-              {/* Assigned + date */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
-                <span>Assigned: <strong style={{ color: 'var(--text)' }}>{c.assigned_to_name || 'Unassigned'}</strong></span>
-                <span>Opened {c.opened_at ? new Date(c.opened_at).toLocaleDateString() : '—'}</span>
-              </div>
-
-              {/* Reports linked bar */}
-              <div style={{ marginBottom: 2 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>
-                  <span>Reports linked</span>
-                  <span>{c.report_count} total</span>
-                </div>
-                <div style={{ height: 5, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
-                  <div className={`prog-fill-${pri}`} style={{ height: '100%', borderRadius: 3, width: `${Math.min(100, c.report_count * 20)}%`, transition: 'width 0.4s' }} />
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-                <button className="btn btn-primary btn-sm" onClick={() => { setViewingCase(c); setViewOpen(true); }}>
-                  View Case
-                </button>
-                {canUpdateCase(c) && (
-                  <button className="btn btn-outline btn-sm" onClick={() => { setEditingCase(c); setEditOpen(true); }}>
-                    Update
-                  </button>
-                )}
-                {canHandoverToRib(role) && c.status === 'closed' && !c.rib_handed_over_at && (
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={async () => {
-                      const confirmed = window.confirm('Hand over this case to RIB? This will mark the case as transferred to the Rwanda Investigation Bureau.');
-                      if (!confirmed) return;
-                      try {
-                        await api.put(`/api/v1/cases/${c.case_id}`, {
-                          rib_handed_over_at: new Date().toISOString(),
-                          rib_handover_summary: 'Case handed over to RIB for further investigation',
-                          status: 'handed_to_rib',
-                        });
-                        reload();
-                      } catch (e) {
-                        window.alert(e?.message || 'Failed to hand over case to RIB.');
-                      }
-                    }}
-                  >
-                    Hand to RIB
-                  </button>
-                )}
-                {canDelete && (
-                  <button
-                    className="btn btn-outline btn-sm"
-                    style={{ color: 'var(--danger)', borderColor: 'transparent' }}
-                    onClick={async () => {
-                      const confirmed = window.confirm('Delete this case? This will unlink all associated reports.');
-                      if (!confirmed) return;
-                      try {
-                        await api.delete(`/api/v1/cases/${c.case_id}`);
-                        reload();
-                      } catch (e) {
-                        window.alert(e?.message || 'Failed to delete case.');
-                      }
-                    }}
-                  >
-                    Delete
-                  </button>
+        {/* Daily trend */}
+        <div className="card">
+          <div className="card-header" style={{ flexWrap: 'wrap', gap: 6 }}>
+            <div>
+              <div className="card-title">Daily Incident Trend</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                Every reported incident tracked day by day
+                {peakDay && peakDay !== '—' && (
+                  <> · Peak: <strong>{peakDay}</strong> ({dailyValues[peakDayIdx]} incidents)</>
                 )}
               </div>
             </div>
-          );
-        })}
-        {(!cases.length && !loading) && (
-          <div style={{ fontSize: '12px', color: 'var(--muted)' }}>No cases yet.</div>
-        )}
-      </div>
-
-      <div className="card">
-        <div className="card-header">
-          <div className="card-title">Recently Closed Cases</div>
-        </div>
-        <div className="tbl-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Case ID</th>
-                <th>Type</th>
-                <th>Location</th>
-                <th>Reports</th>
-                <th>Assigned Officer</th>
-                <th>Opened</th>
-                <th>Closed</th>
-                <th>Outcome</th>
-              </tr>
-            </thead>
-            <tbody>
-              {closedCases.map((c, index) => (
-                <tr key={c.case_id}>
-                  <td style={{ fontSize: "12px", color: "var(--muted)", textAlign: "center" }}>
-                    {index + 1}
-                  </td>
-                  <td style={{ fontWeight: 600, fontSize: '11px' }}>{caseDisplayName(c)}</td>
-                  <td>{c.incident_type_name || '—'}</td>
-                  <td>{c.location_name || '—'}</td>
-                  <td>{c.report_count}</td>
-                  <td>{c.assigned_to_name || '—'}</td>
-                  <td style={{ fontSize: '10px', color: 'var(--muted)' }}>
-                    {c.opened_at ? new Date(c.opened_at).toLocaleDateString() : '—'}
-                  </td>
-                  <td style={{ fontSize: '10px', color: 'var(--muted)' }}>
-                    {c.closed_at ? new Date(c.closed_at).toLocaleDateString() : '—'}
-                  </td>
-                  <td><span className="badge b-green">{c.outcome || 'Resolved'}</span></td>
-                </tr>
-              ))}
-              {(!closedCases.length && !loading) && (
-                <tr>
-                  <td colSpan={9} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
-                    No closed cases.
-                  </td>
-                </tr>
-              )}
-              {loading && (
-                <tr>
-                  <td colSpan={9} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
-                    Loading...
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          </div>
+          <div style={{ padding: '12px 16px 16px' }}>
+            {loading ? (
+              <div style={{ height: 310, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 12 }}>Loading…</div>
+            ) : dailyLabels.length === 0 ? (
+              <div style={{ height: 310, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 12 }}>No incident data for this period.</div>
+            ) : (
+              <div style={{ height: 310, position: 'relative' }}><canvas ref={lineRef} /></div>
+            )}
+          </div>
         </div>
       </div>
 
-      <EditCaseModal
-        isOpen={editOpen}
-        onClose={() => setEditOpen(false)}
-        caseItem={editingCase}
-        onSaved={reload}
-      />
-      <ViewCaseModal
-        isOpen={viewOpen}
-        onClose={() => setViewOpen(false)}
-        caseItem={viewingCase}
-        onEdit={(item) => {
-          setViewOpen(false);
-          setEditingCase(item);
-          setEditOpen(true);
-        }}
-      />
+      {/* Type breakdown table */}
+      {!loading && typeEntries.length > 0 && (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">Incident Type Breakdown</div>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Colors auto-ranked: red = most frequent</span>
+          </div>
+          <div className="tbl-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Incident Type</th>
+                  <th>Count</th>
+                  <th>Share</th>
+                  <th>Distribution</th>
+                </tr>
+              </thead>
+              <tbody>
+                {typeEntries.map(([name, count], i) => {
+                  const pct   = ((count / totalIncidents) * 100).toFixed(1);
+                  const color = typeColors[i];
+                  return (
+                    <tr key={name}>
+                      <td style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', width: 40 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                          <div style={{ width: 10, height: 10, borderRadius: 2, flexShrink: 0, background: color }} />
+                          {i + 1}
+                        </div>
+                      </td>
+                      <td><span style={{ fontWeight: 600, fontSize: 13 }}>{name}</span></td>
+                      <td style={{ fontWeight: 700, fontSize: 14 }}>{count}</td>
+                      <td><span className="badge b-blue" style={{ fontSize: 10 }}>{pct}%</span></td>
+                      <td style={{ minWidth: 120 }}>
+                        <div style={{ background: 'var(--border)', borderRadius: 3, height: 6 }}>
+                          <div style={{ height: 6, borderRadius: 3, width: `${pct}%`, background: color, transition: 'width 0.4s ease' }} />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </>
   );
 };
 
-export default CaseManagement;
+export default DistrictSecurityAnalysis;
