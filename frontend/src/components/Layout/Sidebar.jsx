@@ -139,7 +139,9 @@ const Sidebar = ({
       ? "reports"
       : screenId === "hotspot-details"
         ? "safety-map"
-        : screenId;
+        : screenId === "station-security" || screenId === "case-management"
+          ? "security-situation"
+          : screenId;
 
   const {
     reports: reportsBadge = 0,
@@ -167,11 +169,10 @@ const Sidebar = ({
             icon: "ni-rp",
             badge: reportsBadge,
           },
-          // Case Management - visible to all roles (admin, supervisor, officer)
           {
-            id: "case-management",
+            id: "security-situation",
             idx: 3,
-            label: "Case Management",
+            label: "Security Situation",
             icon: "ni-cm",
             badge: casesBadge,
           },

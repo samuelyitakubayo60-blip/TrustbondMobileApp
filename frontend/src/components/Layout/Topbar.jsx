@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import websocketService from "../../services/websocketService";
 import api from "../../api/client";
 
@@ -12,7 +12,6 @@ const Topbar = ({
   onLogout,
 }) => {
   const [notificationCount, setNotificationCount] = useState(0);
-  const [navigationPath, setNavigationPath] = useState([]);
   const [isMobile, setIsMobile] = useState(false);
 
   const getCurrentDate = () => {
@@ -46,9 +45,9 @@ const Topbar = ({
         { id: "dashboard", label: "Home" },
         { id: "reports", label: "Reports" }
       ],
-      "case-management": [{ id: "dashboard", label: "Home" }],
       "district-security-analysis": [{ id: "dashboard", label: "Home" }],
       "security-situation": [{ id: "dashboard", label: "Home" }],
+      "case-management": [{ id: "dashboard", label: "Home" }],
       "station-security": [
         { id: "dashboard", label: "Home" },
         { id: "security-situation", label: "Security Situation" },
@@ -71,12 +70,24 @@ const Topbar = ({
     return hierarchy[screenId] || [];
   };
 
-  // Update navigation path when screen changes
-  useEffect(() => {
-    const screenId = typeof currentScreen === 'string' ? currentScreen : currentScreen.id;
-    const path = getNavigationHierarchy(screenId);
-    setNavigationPath(path);
-  }, [currentScreen]);
+  const resolvedScreenId =
+    typeof currentScreen === "string" ? currentScreen : currentScreen?.id;
+  const navScreenId =
+    resolvedScreenId === "case-management" ? "security-situation" : resolvedScreenId;
+  const navigationPath = useMemo(
+    () => getNavigationHierarchy(navScreenId),
+    [navScreenId],
+  );
+
+  const pageTitle = useMemo(() => {
+    const screenId =
+      typeof currentScreen === "string" ? currentScreen : currentScreen?.id;
+    if (screenId === "station-security" && currentScreen?.props?.stationName) {
+      return currentScreen.props.stationName;
+    }
+    const resolvedId = screenId === "case-management" ? "security-situation" : screenId;
+    return titles[resolvedId] || titles[screenId] || "Dashboard";
+  }, [currentScreen, titles]);
 
   // Fetch notification count from API
   const fetchNotificationCount = async () => {
@@ -169,7 +180,7 @@ const Topbar = ({
           <div className="topbar-center">
             {isMobile ? (
               <div className="tb-mobile-page-title">
-                {titles[typeof currentScreen === 'string' ? currentScreen : currentScreen.id] || "Dashboard"}
+                {pageTitle}
               </div>
             ) : (
               <div className="tb-context">
@@ -190,7 +201,7 @@ const Topbar = ({
                   
                   {/* Current page (not clickable) */}
                   <span className="tb-breadcrumb-current">
-                    {titles[typeof currentScreen === 'string' ? currentScreen : currentScreen.id] || "Dashboard"}
+                    {pageTitle}
                   </span>
                 </nav>
               </div>

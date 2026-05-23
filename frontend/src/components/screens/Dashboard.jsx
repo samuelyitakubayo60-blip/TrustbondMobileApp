@@ -178,7 +178,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
     const entityId = activity?.entity_id;
     if (!entityId) return;
     if (entityType === "report") return onOpenReport?.(entityId);
-    if (entityType === "case") return goToScreen?.("case-management", 3);
+    if (entityType === "case") return goToScreen?.("security-situation", 3);
     return undefined;
   };
 
@@ -234,7 +234,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
     {
       key: "cases",
       label: "Cases",
-      onClick: () => goToScreen("case-management", 3),
+      onClick: () => goToScreen("security-situation", 3),
       icon: (
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <rect x="2" y="7" width="20" height="14" rx="2" />
@@ -351,7 +351,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
         </div>
         <div
           className="stat-card clickable"
-          onClick={() => goToScreen("case-management", 3)}
+          onClick={() => goToScreen("security-situation", 3)}
           title="Go to case management"
         >
           <span className="stat-link-hint">Open →</span>
@@ -413,7 +413,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              onClick={() => goToScreen("case-management", 3)}
+              onClick={() => goToScreen("security-situation", 3)}
             >
               Open case management
             </button>
