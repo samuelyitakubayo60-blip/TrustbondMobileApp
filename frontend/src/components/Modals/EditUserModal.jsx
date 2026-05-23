@@ -85,15 +85,31 @@ const EditUserModal = ({ isOpen, onClose, user, onSaved }) => {
       is_active: !!form.is_active,
     };
 
+    const effectiveRole = form.role || user?.role || 'officer';
+    const officerMustHaveStation = effectiveRole === 'officer';
+
     // Supervisors can only update basic fields; admin can update all.
-    const payload = isAdmin
-      ? {
-          ...base,
-          badge_number: form.badge_number.trim() || undefined,
-          role: form.role,
-          station_id: form.station_id ? Number(form.station_id) : null,
+    let payload = base;
+    if (isAdmin) {
+      payload = {
+        ...base,
+        badge_number: form.badge_number.trim() || undefined,
+        role: form.role,
+      };
+      if (officerMustHaveStation) {
+        if (!form.station_id) {
+          setError(
+            'Officers must stay assigned to a station. Choose a station to transfer them — do not leave this empty.',
+          );
+          return;
         }
-      : base;
+        payload.station_id = Number(form.station_id);
+      } else if (form.station_id) {
+        payload.station_id = Number(form.station_id);
+      } else {
+        payload.station_id = null;
+      }
+    }
     setSaving(true);
     try {
       if (!user?.police_user_id) throw new Error('No user selected.');
@@ -233,23 +249,35 @@ const EditUserModal = ({ isOpen, onClose, user, onSaved }) => {
             )}
           </div>
           <div className="input-group">
-            <div className="input-label">Assigned Station</div>
+            <div className="input-label">
+              {(form.role || user?.role) === 'officer' ? 'Station (transfer)' : 'Assigned Station'}
+            </div>
             {isAdmin ? (
-              <select
-                className="select"
-                value={form.station_id || ''}
-                onChange={handleChange('station_id')}
-              >
-                <option value="">None</option>
-                {stations.map((s) => (
-                  <option key={s.station_id} value={s.station_id}>
-                    {s.station_name}
-                    {s.covered_cell_names?.length
-                      ? ` (${s.covered_cell_names.length} cells)`
-                      : ''}
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  className="select"
+                  value={form.station_id || ''}
+                  onChange={handleChange('station_id')}
+                  required={(form.role || user?.role) === 'officer'}
+                >
+                  {(form.role || user?.role) !== 'officer' && (
+                    <option value="">None</option>
+                  )}
+                  {stations.map((s) => (
+                    <option key={s.station_id} value={s.station_id}>
+                      {s.station_name}
+                      {s.covered_cell_names?.length
+                        ? ` (${s.covered_cell_names.length} cells)`
+                        : ''}
+                    </option>
+                  ))}
+                </select>
+                {(form.role || user?.role) === 'officer' && (
+                  <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>
+                    Officers cannot be left without a station. Select another station when transferring.
+                  </div>
+                )}
+              </>
             ) : (
               <input className="input" value={stationName} disabled />
             )}

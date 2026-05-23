@@ -50,6 +50,11 @@ const AddUserModal = ({ isOpen, onClose, onSaved }) => {
       return;
     }
 
+    if (form.role === 'officer' && !form.station_id) {
+      setError('Officers must be assigned to a police station.');
+      return;
+    }
+
     const payload = {
       first_name: form.first_name.trim(),
       middle_name: null,
@@ -157,13 +162,16 @@ const AddUserModal = ({ isOpen, onClose, onSaved }) => {
               </select>
             </div>
             <div className="input-group">
-              <div className="input-label">Assigned Station</div>
+              <div className="input-label">
+                {form.role === 'officer' ? 'Assigned Station *' : 'Assigned Station'}
+              </div>
               <select
                 className="select"
                 value={form.station_id}
                 onChange={handleChange("station_id")}
+                required={form.role === 'officer'}
               >
-                <option value="">None</option>
+                {form.role !== 'officer' && <option value="">None</option>}
                 {stations.map((s) => (
                   <option key={s.station_id} value={s.station_id}>
                     {s.station_name}

@@ -95,12 +95,10 @@ def _station_covered_village_ids(db: Session, station_id: int) -> List[int]:
     return sorted({int(r[0]) for r in village_rows if r and r[0] is not None})
 
 
-def _apply_officer_hotspot_scope(query, current_user: PoliceUser, db: Session):
-    """Station commanders see hotspots tied to villages in their station coverage only.
-
-    DPC (admin) and IO (supervisor) see district-wide hotspots.
-    """
-    if getattr(current_user, "role", None) != "officer":
+def _apply_officer_hotspot_scope(query, db: Session, current_user: PoliceUser):
+    """Station commanders see hotspots in their station coverage; DPC and IO see district-wide."""
+    role = getattr(current_user, "role", None)
+    if role != "officer":
         return query
     officer_station_id = getattr(current_user, "station_id", None)
     if officer_station_id is None:
@@ -300,7 +298,7 @@ def list_hotspots(
     """List hotspots.
 
     - Admin / IO (supervisor): all hotspots district-wide.
-    - Officer: hotspots in their station cell/village coverage only.
+    - Officer: hotspots with at least one report in their station cell coverage.
     """
     try:
         ensure_hotspots_materialized(db)
@@ -340,8 +338,7 @@ def list_hotspots(
             cutoff_time = datetime.now(timezone.utc) - timedelta(hours=time_filter_hours)
             query = query.filter(Hotspot.detected_at >= cutoff_time)
 
-    query = _apply_officer_hotspot_scope(query, current_user, db)
-
+    query = _apply_officer_hotspot_scope(query, db, current_user)
     query = query.order_by(Hotspot.detected_at.desc())
     if risk_level:
         rl = risk_level.strip().lower()
@@ -628,7 +625,7 @@ def get_daily_emergencies(
         Hotspot.risk_level.in_(["critical", "active"])
     )
     
-    query = _apply_officer_hotspot_scope(query, current_user, db)
+    query = _apply_officer_hotspot_scope(query, db, current_user)
 
     # Filter by minimum incident count for emergencies
     emergency_hotspots = []

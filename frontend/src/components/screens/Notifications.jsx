@@ -92,7 +92,7 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
       return;
     }
     if (entityType === 'case' && entityId) {
-      goToScreen?.('case-management', 3);
+      goToScreen?.('security-situation', 3);
       return;
     }
     if (entityType === 'hotspot' && entityId) {

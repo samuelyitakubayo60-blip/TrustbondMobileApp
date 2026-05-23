@@ -35,6 +35,8 @@ from app.models.system_config import SystemConfig
 # Badge prefix per role: ADMIN-001, Officer-001, Supervisor-001
 ROLE_BADGE_PREFIX = {"admin": "ADMIN", "officer": "Officer", "supervisor": "Supervisor"}
 
+ROLES_REQUIRING_STATION = frozenset({"officer"})
+
 router = APIRouter(prefix="/police-users", tags=["police-users"])
 
 
@@ -295,6 +297,12 @@ def create_police_user(
         station_id=resolved_station_id,
         is_active=payload.is_active,
     )
+    if user.role in ROLES_REQUIRING_STATION and resolved_station_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Officers must be assigned to a police station when their account is created.",
+        )
+
     db.add(user)
     db.flush()  # assigns user.police_user_id; NOT yet committed
 
@@ -409,8 +417,18 @@ def update_police_user(
         if assigned_loc.location_type != "sector":
             raise HTTPException(status_code=400, detail="Officers must be assigned at sector level, not at village or cell level")
         user.assigned_location_id = payload.assigned_location_id
-    if payload.station_id is not None:
+    fields_set = getattr(payload, "model_fields_set", set())
+    if "station_id" in fields_set:
+        effective_role = user.role
         if payload.station_id is None:
+            if effective_role in ROLES_REQUIRING_STATION:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Cannot remove an officer from their station without assigning another. "
+                        "Select a destination station to transfer them."
+                    ),
+                )
             user.station_id = None
         else:
             station = db.query(Station).get(payload.station_id)
@@ -420,6 +438,11 @@ def update_police_user(
             derived_sector_id = _derive_station_sector_id(db, station)
             if derived_sector_id is not None:
                 user.assigned_location_id = derived_sector_id
+    if user.role in ROLES_REQUIRING_STATION and user.station_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Officers must remain assigned to a police station.",
+        )
     if payload.is_active is not None:
         user.is_active = payload.is_active
     if payload.password is not None:

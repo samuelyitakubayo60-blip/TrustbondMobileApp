@@ -2258,7 +2258,7 @@ const SecurityRecommendations = ({ hotspots, assignmentUnits = [], canDeploy = f
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)" }}>
-            District Hotspot Overview
+            District Security Situation
           </span>
           <span style={{
             fontSize: "9px", fontWeight: 800, letterSpacing: "0.07em",

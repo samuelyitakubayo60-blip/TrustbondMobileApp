@@ -4,6 +4,9 @@ import Dashboard from "./components/screens/Dashboard";
 import Reports from "./components/screens/Reports";
 import ReportDetail from "./components/screens/ReportDetail";
 import CaseManagement from "./components/screens/CaseManagement";
+import OverallSecuritySituation from "./components/screens/OverallSecuritySituation";
+import SecuritySituation from "./components/screens/SecuritySituation";
+import StationSecurityDetail from "./components/screens/StationSecurityDetail";
 import HotspotDetails from "./components/screens/HotspotDetails";
 import SafetyMap from "./components/screens/SafetyMap";
 import DeviceTrust from "./components/screens/DeviceTrust";
@@ -12,8 +15,6 @@ import Users from "./components/screens/Users";
 import IncidentTypes from "./components/screens/IncidentTypes";
 import SpecialAssignmentUnits from "./components/screens/SpecialAssignmentUnits";
 import Stations from "./components/screens/Stations";
-import SecuritySituation from "./components/screens/SecuritySituation";
-import StationSecurityDetail from "./components/screens/StationSecurityDetail";
 import LocalLeaders from "./components/screens/LocalLeaders";
 import AuditLog from "./components/screens/AuditLog";
 import SystemConfig from "./components/screens/SystemConfig";
@@ -78,9 +79,12 @@ function App() {
         return "reports";
       case "/reports/detail":
         return "report-detail";
+      case "/overall-security-situation":
+        return "overall-security-situation";
       case "/cases":
-        return "case-management";
       case "/security-situation":
+        return "security-situation";
+      case "/case-management":
         return "security-situation";
       case "/hotspots":
         return "safety-map"; // Redirect to safety-map
@@ -122,8 +126,6 @@ function App() {
   const [selectedHotspotId, setSelectedHotspotId] = useState(null);
   const [selectedIncidentType, setSelectedIncidentType] = useState(null);
   const [selectedStation, setSelectedStation] = useState(null);
-  const [selectedStationId, setSelectedStationId] = useState(null);
-  const [selectedStationName, setSelectedStationName] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedLocalLeader, setSelectedLocalLeader] = useState(null);
   const [localLeadersRefreshKey, setLocalLeadersRefreshKey] = useState(0);
@@ -162,12 +164,13 @@ function App() {
           const rid = props?.reportId || selectedReportId;
           return rid ? `/reports/${rid}` : "/reports";
         }
+      case "overall-security-situation":
+        return "/overall-security-situation";
       case "case-management":
-        return "/cases";
       case "security-situation":
         return "/security-situation";
       case "station-security": {
-        const sid = props?.stationId || selectedStationId;
+        const sid = props?.stationId;
         return sid ? `/security-situation/station/${sid}` : "/security-situation";
       }
       case "hotspot-details":
@@ -220,12 +223,15 @@ function App() {
     }
     if (path.startsWith("/security-situation/station/")) {
       const parts = path.split("/");
-      // ["", "security-situation", "station", "<id>"]
-      const sid = parts[3] ? Number(parts[3]) : null;
-      if (sid) setSelectedStationId(sid);
-      return "station-security";
+      const stationId = parts[3];
+      if (stationId) {
+        return { id: "station-security", props: { stationId: Number(stationId) || stationId } };
+      }
     }
-    if (path === "/security-situation") {
+    if (path === "/overall-security-situation") {
+      return "overall-security-situation";
+    }
+    if (path === "/case-management") {
       return "security-situation";
     }
 
@@ -236,8 +242,13 @@ function App() {
         return "reports";
       case "/reports/detail":
         return "report-detail";
+      case "/overall-security-situation":
+        return "overall-security-situation";
       case "/cases":
-        return "case-management";
+      case "/security-situation":
+        return "security-situation";
+      case "/case-management":
+        return "security-situation";
       case "/hotspots":
         return "safety-map"; // Redirect to safety-map
       case "/safety-map":
@@ -299,9 +310,10 @@ function App() {
     "report-detail": selectedReportId
       ? `Report Detail — ${String(selectedReportId).slice(0, 8)}`
       : "Report Detail",
-    "case-management": "Case Management",
+    "overall-security-situation": "Overall Security Situation",
     "security-situation": "Security Situation",
-    "station-security": selectedStationName ? `${selectedStationName} — Cases` : "Station Cases",
+    "station-security": "Station Security",
+    "case-management": "Security Situation",
     "hotspot-details": "Hotspot Details",
     hotspots: "Crime Hotspots",
     "safety-map": "Safety Map",
@@ -462,24 +474,18 @@ function App() {
             wsRefreshKey={wsRefreshKey}
           />
         );
-      case "case-management":
+      case "overall-security-situation":
         return (
-          <CaseManagement
+          <OverallSecuritySituation
             goToScreen={goToScreen}
-            openModal={openModal}
             wsRefreshKey={wsRefreshKey}
           />
         );
+      case "case-management":
       case "security-situation":
         return (
           <SecuritySituation
-            goToScreen={(id, idx, props) => {
-              if (id === "station-security" && props?.stationId) {
-                setSelectedStationId(props.stationId);
-                setSelectedStationName(props.stationName || null);
-              }
-              goToScreen(id, idx, props);
-            }}
+            goToScreen={goToScreen}
             wsRefreshKey={wsRefreshKey}
           />
         );
@@ -487,16 +493,8 @@ function App() {
         return (
           <StationSecurityDetail
             goToScreen={goToScreen}
-            stationId={
-              typeof currentScreen === "object"
-                ? currentScreen.props?.stationId
-                : selectedStationId
-            }
-            stationName={
-              typeof currentScreen === "object"
-                ? currentScreen.props?.stationName
-                : selectedStationName
-            }
+            stationId={currentScreen.props?.stationId}
+            stationName={currentScreen.props?.stationName}
             wsRefreshKey={wsRefreshKey}
           />
         );
@@ -755,7 +753,7 @@ function App() {
         onCreated={() => {
           // simple approach: reload case list by returning to screen
           setCurrentScreen("dashboard");
-          setTimeout(() => setCurrentScreen("case-management"), 0);
+          setTimeout(() => setCurrentScreen("security-situation"), 0);
         }}
       />
       <LinkCaseModal

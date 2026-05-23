@@ -178,7 +178,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
     const entityId = activity?.entity_id;
     if (!entityId) return;
     if (entityType === "report") return onOpenReport?.(entityId);
-    if (entityType === "case") return goToScreen?.("case-management", 3);
+    if (entityType === "case") return goToScreen?.("security-situation", 3);
     return undefined;
   };
 
@@ -234,7 +234,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
     {
       key: "cases",
       label: "Cases",
-      onClick: () => goToScreen("case-management", 3),
+      onClick: () => goToScreen("security-situation", 3),
       icon: (
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <rect x="2" y="7" width="20" height="14" rx="2" />
@@ -351,7 +351,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
         </div>
         <div
           className="stat-card clickable"
-          onClick={() => goToScreen("case-management", 3)}
+          onClick={() => goToScreen("security-situation", 3)}
           title="Go to case management"
         >
           <span className="stat-link-hint">Open →</span>
@@ -405,17 +405,24 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
             <div className="card-title">Cases & assignment units</div>
           </div>
           <p style={{ padding: "0 16px 16px", margin: 0, fontSize: 13, color: "var(--muted)" }}>
-            Special assignment units are set on <strong>cases</strong> (when created or in Case
-            Management), not on individual reports. Review pending reports, then open cases to assign
-            units and officers.
+            Special assignment units are set on <strong>cases</strong> (in Security Situation), not on
+            individual reports. Review pending reports, then open Security Situation by station to
+            assign units and officers.
           </p>
           <div style={{ padding: "0 16px 16px", display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              onClick={() => goToScreen("case-management", 3)}
+              onClick={() => goToScreen("security-situation", 3)}
             >
-              Open case management
+              Open Security Situation
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => goToScreen("overall-security-situation", 2)}
+            >
+              District summary
             </button>
             <button
               type="button"
