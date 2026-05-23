@@ -19,7 +19,6 @@ from app.database import get_db
 from app.models.police_user import PoliceUser
 from app.models.station import Station
 from app.models.station_coverage import StationCoverageCell
-from app.models.police_review import PoliceReview
 from app.models.report import Report
 from app.models.location import Location
 from app.schemas.police_user import (
@@ -239,28 +238,6 @@ def list_police_users(
     )
     return users
 
-
-@router.get("/review-stats")
-def get_officer_review_stats(
-    db: Session = Depends(get_db),
-    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)] = None,
-):
-    """
-    Return per-officer review counts (number of police_reviews per police_user_id).
-    Used by the Users screen to show Reviews column.
-    """
-    q = db.query(PoliceReview.police_user_id, func.count(PoliceReview.review_id)).group_by(
-        PoliceReview.police_user_id
-    )
-    if current_user.role == "supervisor":
-        if current_user.station_id is None:
-            raise HTTPException(status_code=403, detail="Supervisor station is not configured")
-        q = q.join(
-            PoliceUser,
-            PoliceUser.police_user_id == PoliceReview.police_user_id,
-        ).filter(PoliceUser.station_id == current_user.station_id)
-    rows = q.all()
-    return {user_id: int(count) for user_id, count in rows}
 
 
 @router.post("/", response_model=PoliceUserResponse, status_code=status.HTTP_201_CREATED)
@@ -502,7 +479,6 @@ def delete_police_user(
         # Delete dependent records (NOT NULL constraints)
         db.query(UserSession).filter(UserSession.police_user_id == user_id).delete(synchronize_session=False)
         db.query(ReportAssignment).filter(ReportAssignment.police_user_id == user_id).delete(synchronize_session=False)
-        db.query(PoliceReview).filter(PoliceReview.police_user_id == user_id).delete(synchronize_session=False)
         db.query(Notification).filter(Notification.police_user_id == user_id).delete(synchronize_session=False)
 
         # Proceed with deleting the user itself

@@ -74,11 +74,60 @@ const AuditLog = ({ wsRefreshKey }) => {
   // Client-side pagination
   const displayLogs = filteredLogs.slice(offset, offset + pageSize);
 
+  const totalEntries = filteredLogs.length;
+  const successCount = filteredLogs.filter(a => a.success !== false).length;
+  const failedCount  = filteredLogs.filter(a => a.success === false).length;
+
+  const exportCsv = () => {
+    if (!logs.length) return;
+    const header = ['created_at','actor_type','actor_name','action_type','entity_type','entity_id','details','result','ip_address','user_agent'];
+    const rows = filteredLogs.map((a) => [
+      a.created_at || '', a.actor_type || '', a.actor_name || '',
+      a.action_type || '', a.entity_type || '', a.entity_id || '',
+      a.details ? JSON.stringify(a.details) : '',
+      a.success ? 'Success' : 'Failed',
+      a.ip_address || '', a.user_agent || '',
+    ]);
+    const csv = [header.join(','), ...rows.map((row) =>
+      row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')
+    )].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'audit_log.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
-      <div className="page-header">
-        <h2>Audit Log</h2>
-        <p>Tamper-evident record of all system actions for accountability and compliance.</p>
+      {/* ── Audit Log header card ── */}
+      <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+          <div>
+            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Audit Log</h2>
+            <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
+              Tamper-evident record of all system actions for accountability and compliance.
+            </p>
+          </div>
+          <button className="btn btn-outline btn-sm" style={{ alignSelf: 'center' }} onClick={exportCsv}>
+            Export CSV
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          {[
+            { label: 'Total entries',  value: logs.length,   cls: 'sb-blue'   },
+            { label: 'Filtered',       value: totalEntries,  cls: 'sb-blue'   },
+            { label: 'Success',        value: successCount,  cls: 'sb-green'  },
+            { label: 'Failed',         value: failedCount,   cls: 'sb-red'    },
+          ].map((s) => (
+            <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
+              <div className="stat-btn-label">{s.label}</div>
+              <div className="stat-btn-value">{s.value}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="card">
@@ -88,49 +137,38 @@ const AuditLog = ({ wsRefreshKey }) => {
             placeholder="Search actor, entity, or details..."
             style={{ flex: 2, minWidth: '120px' }}
             value={searchText}
-            onChange={(e) => {
-              setSearchText(e.target.value);
-              setOffset(0);
-            }}
+            onChange={(e) => { setSearchText(e.target.value); setOffset(0); }}
           />
           <input
             className="input"
             placeholder="Entity type"
             style={{ minWidth: '100px' }}
             value={entityFilter}
-            onChange={(e) => {
-              setEntityFilter(e.target.value);
-              setOffset(0);
-            }}
+            onChange={(e) => { setEntityFilter(e.target.value); setOffset(0); }}
           />
           <input
             className="input"
             placeholder="Action type"
             style={{ minWidth: '120px' }}
             value={actionFilter}
-            onChange={(e) => {
-              setActionFilter(e.target.value);
-              setOffset(0);
-            }}
+            onChange={(e) => { setActionFilter(e.target.value); setOffset(0); }}
           />
           <select
             className="select"
             value={resultFilter}
-            onChange={(e) => {
-              setResultFilter(e.target.value);
-              setOffset(0);
-            }}
+            onChange={(e) => { setResultFilter(e.target.value); setOffset(0); }}
           >
             <option value="all">All Results</option>
             <option value="success">Success</option>
             <option value="failed">Failed</option>
           </select>
           <input
+            className="input"
             type="number"
             min="10"
             max="100"
             placeholder="Rows"
-            style={{ minWidth: "80px" }}
+            style={{ minWidth: '70px' }}
             value={pageSize}
             onChange={(e) => {
               const newSize = Math.max(10, Math.min(100, parseInt(e.target.value) || 50));
@@ -138,64 +176,7 @@ const AuditLog = ({ wsRefreshKey }) => {
               setOffset(0);
             }}
           />
-          <button
-            className="btn btn-outline"
-            onClick={() => {
-              if (!logs.length) return;
-              const filtered = logs.filter((a) => {
-                const q = searchText.trim().toLowerCase();
-                const ent = entityFilter.trim().toLowerCase();
-                const act = actionFilter.trim().toLowerCase();
-                if (ent && (a.entity_type || '').toLowerCase() !== ent) return false;
-                if (act && (a.action_type || '').toLowerCase() !== act) return false;
-                if (!q) return true;
-                const blob = [
-                  a.actor_type,
-                  a.actor_name,
-                  a.action_type,
-                  a.entity_type,
-                  a.entity_id,
-                  a.details,
-                  a.result,
-                ].join(' ');
-                return blob.toLowerCase().includes(q);
-              });
-              const header = [
-                "created_at",
-                "actor_type",
-                "actor_name",
-                "action_type",
-                "entity_type",
-                "entity_id",
-                "details",
-                "result",
-                "ip_address",
-                "user_agent",
-              ];
-              const rows = filtered.map((a) => [
-                a.created_at || "",
-                a.actor_type || "",
-                a.actor_name || "",
-                a.action_type || "",
-                a.entity_type || "",
-                a.entity_id || "",
-                a.details ? JSON.stringify(a.details) : "",
-                a.success ? "Success" : "Failed",
-                a.ip_address || "",
-                a.user_agent || "",
-              ]);
-              const csv = [header.join(","), ...rows.map((row) =>
-                row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")
-              )].join("\n");
-              const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = "audit_log.csv";
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
-          >
+          <button className="btn btn-outline" onClick={exportCsv}>
             Export
           </button>
         </div>
@@ -221,27 +202,25 @@ const AuditLog = ({ wsRefreshKey }) => {
                     {a.created_at ? new Date(a.created_at).toLocaleString() : '—'}
                   </td>
                   <td>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       {a.actor_type === 'police_user' ? (
                         <>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span className="badge b-blue" style={{ fontSize: '9px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span className="badge b-blue" style={{ fontSize: 9 }}>
                               {a.actor_badge || 'BADGE'}
                             </span>
-                            <span style={{ fontSize: '11px', fontWeight: '500' }}>
+                            <span style={{ fontSize: 11, fontWeight: 500 }}>
                               {a.actor_name || 'Unknown Officer'}
                             </span>
                           </div>
-                          <div style={{ fontSize: '9px', color: 'var(--muted)' }}>
-                            Police User
-                          </div>
+                          <div style={{ fontSize: 9, color: 'var(--muted)' }}>Police User</div>
                         </>
                       ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span className="badge b-gray" style={{ fontSize: '9px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span className="badge b-gray" style={{ fontSize: 9 }}>
                             {a.actor_type || 'SYSTEM'}
                           </span>
-                          <span style={{ fontSize: '10px', color: 'var(--muted)' }}>
+                          <span style={{ fontSize: 10, color: 'var(--muted)' }}>
                             {a.actor_name || 'System'}
                           </span>
                         </div>
@@ -251,24 +230,25 @@ const AuditLog = ({ wsRefreshKey }) => {
                   <td>
                     {a.actor_role && (
                       <span className={`badge ${
-                        a.actor_role === 'admin' ? 'b-purple' : 
-                        a.actor_role === 'supervisor' ? 'b-orange' : 
-                        'b-blue'
-                      }`} style={{ fontSize: '8px' }}>
+                        a.actor_role === 'admin'      ? 'b-purple' :
+                        a.actor_role === 'supervisor' ? 'b-orange' : 'b-blue'
+                      }`} style={{ fontSize: 9 }}>
                         {a.actor_role}
                       </span>
                     )}
                   </td>
-                  <td style={{ fontSize: '11px' }}>
+                  <td style={{ fontSize: 11 }}>
                     <div>
-                      <span className="badge b-green" style={{ fontSize: '9px', marginRight: '6px' }}>{a.action_type}</span>
+                      <span className={`badge ${a.success === false ? 'b-red' : 'b-green'}`} style={{ fontSize: 9, marginRight: 6 }}>
+                        {a.action_type}
+                      </span>
                       {a.entity_type && (
-                        <span style={{ fontSize: '10px', color: 'var(--muted)' }}>
-                          {a.entity_type}{a.entity_id ? ` (${a.entity_id})` : ''}
+                        <span style={{ fontSize: 10, color: 'var(--muted)' }}>
+                          {a.entity_type}{a.entity_id ? ` (${String(a.entity_id).slice(0, 8)}…)` : ''}
                         </span>
                       )}
                       {a.details && (
-                        <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {typeof a.details === 'string' ? a.details : JSON.stringify(a.details)}
                         </div>
                       )}

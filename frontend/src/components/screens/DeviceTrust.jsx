@@ -818,42 +818,37 @@ const DeviceTrust = ({ wsRefreshKey }) => {
           </div>
         </div>
       )}
-      <div className="page-header">
-        <h2>Device Trust Management</h2>
-        <p>
-          Pseudonymous device profiles — track reporting patterns, trust
-          scores, and spam behavior without exposing user identity.
-        </p>
-      </div>
+      {/* ── Header card ── */}
+      <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+          <div>
+            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Device Trust Management</h2>
+            <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
+              Pseudonymous device profiles — track reporting patterns, trust scores, and spam behavior without exposing user identity.
+            </p>
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)', background: 'var(--c-accent-dim)', border: '1px solid var(--c-accent-ring)', borderRadius: 6, padding: '5px 10px', width: 'fit-content' }}>
+              <span style={{ fontWeight: 700, color: 'var(--accent)' }}>i</span>
+              Device identifiers are one-way SHA-256 hashes. No personally identifiable information is stored.
+            </div>
+          </div>
+          <button type="button" className="btn btn-outline btn-sm" style={{ alignSelf: 'center' }} onClick={exportCsv}>
+            Export CSV
+          </button>
+        </div>
 
-      <div className="alert alert-info">
-        <span className="alert-icon">i</span>
-        <div>
-          Device identifiers are one-way SHA-256 hashes. No personally
-          identifiable information is stored.
-        </div>
-      </div>
-
-      <div className="stats-row">
-        <div className="stat-card c-blue">
-          <div className="stat-label">Active Devices</div>
-          <div className="stat-value sv-blue">{active}</div>
-          <div className="stat-change">Last 30 days</div>
-        </div>
-        <div className="stat-card c-green">
-          <div className="stat-label">High Trust</div>
-          <div className="stat-value sv-green">{high}</div>
-          <div className="stat-change">Score ≥ 70</div>
-        </div>
-        <div className="stat-card c-orange">
-          <div className="stat-label">Medium Trust</div>
-          <div className="stat-value sv-orange">{medium}</div>
-          <div className="stat-change">Score 40–69</div>
-        </div>
-        <div className="stat-card c-red">
-          <div className="stat-label">Low / Banned</div>
-          <div className="stat-value sv-red">{low + banned}</div>
-          <div className="stat-change">Low trust or banned</div>
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          {[
+            { label: 'Active Devices', value: active,        cls: 'sb-blue'   },
+            { label: 'High Trust',     value: high,          cls: 'sb-green'  },
+            { label: 'Medium Trust',   value: medium,        cls: 'sb-orange' },
+            { label: 'Low / Banned',   value: low + banned,  cls: 'sb-red'    },
+          ].map((s) => (
+            <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
+              <div className="stat-btn-label">{s.label}</div>
+              <div className="stat-btn-value">{s.value}</div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -861,30 +856,17 @@ const DeviceTrust = ({ wsRefreshKey }) => {
         <div className="card" style={{ minWidth: 0, overflow: 'hidden' }}>
           <div className="card-header">
             <div className="card-title">Device Registry</div>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <select
-                className="select"
-                style={{
-                  width: 'auto',
-                  fontSize: '11px',
-                  padding: '4px 8px',
-                }}
-                value={trustLevel}
-                onChange={(e) => setTrustLevel(e.target.value)}
-              >
-                <option value="all">All Trust Levels</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
-              <button
-                className="btn btn-outline btn-sm"
-                type="button"
-                onClick={exportCsv}
-              >
-                Export
-              </button>
-            </div>
+            <select
+              className="select"
+              style={{ width: 'auto', fontSize: '11px', padding: '4px 8px' }}
+              value={trustLevel}
+              onChange={(e) => setTrustLevel(e.target.value)}
+            >
+              <option value="all">All Trust Levels</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
           </div>
 
           <div className="filter-row">
@@ -1194,7 +1176,8 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                               }
                               disabled={busy}
                               style={{
-                                borderColor: 'rgba(239,68,68,.5)',
+                                background: 'var(--c-danger-dim)',
+                                borderColor: 'var(--c-danger-ring)',
                                 color: 'var(--danger)',
                               }}
                             >
@@ -1207,7 +1190,8 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                               onClick={() => unbanDevice(d.device_id)}
                               disabled={busy}
                               style={{
-                                borderColor: 'rgba(52,211,153,.5)',
+                                background: 'var(--c-success-dim)',
+                                borderColor: 'var(--c-success-ring)',
                                 color: 'var(--success)',
                               }}
                             >

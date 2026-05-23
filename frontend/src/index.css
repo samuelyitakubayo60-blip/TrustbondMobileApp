@@ -27,9 +27,9 @@ body {
   --border2: #b0c4e0;
 
   /* ── single accent, no conflicting aliases ── */
-  --accent: #2563eb;
-  --primary: #2563eb;
-  --info: #2563eb;
+  --accent: #0f1f3d;
+  --primary: #0f1f3d;
+  --info: #0f1f3d;
   --cyan: #0891b2; /* real cyan, not an alias of blue */
 
   --success: #16a34a;
@@ -49,17 +49,31 @@ body {
   --muted: #94a3b8;
 
   /* nav tokens derived from accent */
-  --nav-hover-bg: rgba(37, 99, 235, 0.07);
-  --nav-active-bg: rgba(37, 99, 235, 0.11);
-  --nav-active-text: #2563eb;
-  --nav-active-border: rgba(37, 99, 235, 0.22);
-  --nav-badge-bg: #2563eb;
+  --nav-hover-bg: rgba(15, 31, 61, 0.07);
+  --nav-active-bg: rgba(15, 31, 61, 0.11);
+  --nav-active-text: #0f1f3d;
+  --nav-active-border: rgba(15, 31, 61, 0.22);
+  --nav-badge-bg: #0f1f3d;
   --nav-badge-text: #ffffff;
 
   --sidebar-w: 220px;
   --topbar-h: 56px;
   --r: 12px;
   --rs: 7px;
+
+  /* ── semantic dim + ring tokens (light mode) ── */
+  --c-accent-dim:   rgba(15, 31, 61, 0.07);
+  --c-accent-ring:  rgba(15, 31, 61, 0.28);
+  --c-success-dim:  rgba(22, 163, 74, 0.08);
+  --c-success-ring: rgba(22, 163, 74, 0.28);
+  --c-warning-dim:  rgba(217, 119, 6, 0.08);
+  --c-warning-ring: rgba(217, 119, 6, 0.28);
+  --c-danger-dim:   rgba(220, 38, 38, 0.08);
+  --c-danger-ring:  rgba(220, 38, 38, 0.28);
+  --c-purple-dim:   rgba(124, 58, 237, 0.08);
+  --c-purple-ring:  rgba(124, 58, 237, 0.28);
+  --c-muted-dim:    rgba(148, 163, 184, 0.12);
+  --c-muted-ring:   rgba(148, 163, 184, 0.30);
 }
 
 body.light-mode {
@@ -110,6 +124,20 @@ body.dark-mode {
 
   --r: 10px;
   --rs: 6px;
+
+  /* ── semantic dim + ring tokens (dark mode) ── */
+  --c-accent-dim:   rgba(96, 165, 250, 0.12);
+  --c-accent-ring:  rgba(96, 165, 250, 0.32);
+  --c-success-dim:  rgba(52, 211, 153, 0.12);
+  --c-success-ring: rgba(52, 211, 153, 0.32);
+  --c-warning-dim:  rgba(251, 191, 36, 0.12);
+  --c-warning-ring: rgba(251, 191, 36, 0.32);
+  --c-danger-dim:   rgba(248, 113, 113, 0.12);
+  --c-danger-ring:  rgba(248, 113, 113, 0.32);
+  --c-purple-dim:   rgba(167, 139, 250, 0.12);
+  --c-purple-ring:  rgba(167, 139, 250, 0.32);
+  --c-muted-dim:    rgba(100, 116, 139, 0.14);
+  --c-muted-ring:   rgba(100, 116, 139, 0.28);
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -1399,6 +1427,137 @@ body.dark-mode .b-cyan {
   background: rgba(34, 211, 238, 0.16);
   color: #a5f3fc;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   SHARED PRIORITY + STATUS PILLS
+   Use these across all pages — no hardcoded colours in JSX.
+───────────────────────────────────────────────────────────── */
+.p-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.p-badge.p-high,
+.p-badge.p-urgent {
+  color: var(--danger);
+  background: var(--c-danger-dim);
+  border-color: var(--c-danger-ring);
+}
+.p-badge.p-medium {
+  color: var(--warning);
+  background: var(--c-warning-dim);
+  border-color: var(--c-warning-ring);
+}
+.p-badge.p-low {
+  color: var(--muted);
+  background: var(--c-muted-dim);
+  border-color: var(--c-muted-ring);
+}
+
+.s-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.s-badge.s-open {
+  color: var(--warning);
+  background: var(--c-warning-dim);
+  border-color: var(--c-warning-ring);
+}
+.s-badge.s-investigating {
+  color: var(--accent);
+  background: var(--c-accent-dim);
+  border-color: var(--c-accent-ring);
+}
+.s-badge.s-closed {
+  color: var(--success);
+  background: var(--c-success-dim);
+  border-color: var(--c-success-ring);
+}
+.s-badge.s-handed_to_rib {
+  color: var(--purple);
+  background: var(--c-purple-dim);
+  border-color: var(--c-purple-ring);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   CASE CARD — consistent navy-blue left accent border
+   Priority colour is shown only via the badge text, not the border.
+───────────────────────────────────────────────────────────── */
+.case-card.p-high,
+.case-card.p-urgent,
+.case-card.p-medium,
+.case-card.p-low {
+  border-left: 4px solid var(--accent) !important;
+}
+
+/* Progress bar fill — accent (navy) for all, keeps UI unified */
+.prog-fill-high,
+.prog-fill-medium,
+.prog-fill-low { background: var(--accent) !important; }
+
+/* ─────────────────────────────────────────────────────────────
+   STAT BUTTONS — shared across Reports, Case Management, etc.
+   Usage: className="stat-btn sb-blue active" (active = selected)
+───────────────────────────────────────────────────────────── */
+.stat-btn {
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 12px 16px;
+  text-align: left;
+  outline: none;
+  background: var(--surface);
+  transition: box-shadow 0.15s, border-color 0.15s, background 0.15s;
+  border: 1.5px solid var(--border2);
+}
+.stat-btn-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.stat-btn-value { font-size: 26px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+.stat-btn-sub   { font-size: 11px; color: var(--muted); }
+
+.stat-btn.sb-blue   { border-color: var(--c-accent-ring);  }
+.stat-btn.sb-orange { border-color: var(--c-warning-ring); }
+.stat-btn.sb-green  { border-color: var(--c-success-ring); }
+.stat-btn.sb-red    { border-color: var(--c-danger-ring);  }
+.stat-btn.sb-purple { border-color: var(--c-purple-ring);  }
+
+.stat-btn.sb-blue   .stat-btn-value { color: var(--accent);  }
+.stat-btn.sb-orange .stat-btn-value { color: var(--warning); }
+.stat-btn.sb-green  .stat-btn-value { color: var(--success); }
+.stat-btn.sb-red    .stat-btn-value { color: var(--danger);  }
+.stat-btn.sb-purple .stat-btn-value { color: var(--purple);  }
+
+.stat-btn.sb-blue.active   { background: var(--c-accent-dim);   border-color: var(--accent);   box-shadow: 0 0 0 2px var(--c-accent-ring);  }
+.stat-btn.sb-orange.active { background: var(--c-warning-dim);  border-color: var(--warning);  box-shadow: 0 0 0 2px var(--c-warning-ring); }
+.stat-btn.sb-green.active  { background: var(--c-success-dim);  border-color: var(--success);  box-shadow: 0 0 0 2px var(--c-success-ring); }
+.stat-btn.sb-red.active    { background: var(--c-danger-dim);   border-color: var(--danger);   box-shadow: 0 0 0 2px var(--c-danger-ring);  }
+.stat-btn.sb-purple.active { background: var(--c-purple-dim);   border-color: var(--purple);   box-shadow: 0 0 0 2px var(--c-purple-ring);  }
+
+/* ─────────────────────────────────────────────────────────────
+   PIPELINE STEP PILLS — used in header cards
+───────────────────────────────────────────────────────────── */
+.pipeline-step {
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pipeline-step.ps-muted  { color: var(--muted);   }
+.pipeline-step.ps-blue   { color: var(--accent);  }
+.pipeline-step.ps-orange { color: var(--warning); }
+.pipeline-step.ps-green  { color: var(--success); }
 
 /* ─────────────────────────────────────────────────────────────
    TRUST BAR

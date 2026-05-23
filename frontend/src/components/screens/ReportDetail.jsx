@@ -248,57 +248,23 @@ const relativeTime = (isoLike) => {
 // Verification helper functions
 const isReportVerified = (report, mlPrediction) => {
   const status = (report.rule_status || "").toLowerCase();
-  const hasOfficerConfirmed = report.reviews?.some(
-    (rv) => (rv.decision || "").toLowerCase() === "confirmed",
-  );
-
-  if (hasOfficerConfirmed) {
-    return true; // Officer-verified
-  }
 
   if (status === "passed") {
-    // Check ML confidence
     if (
       mlPrediction &&
       mlPrediction.trust_score !== null &&
       mlPrediction.trust_score !== undefined
     ) {
       const mlConfidence = parseFloat(mlPrediction.trust_score) || 0;
-      return mlConfidence >= 70; // Auto-verified if ML confidence >= 70 (optimized threshold)
+      return mlConfidence >= 70;
     }
   }
 
-  return false; // Not verified
+  return false;
 };
 
 const getVerificationStatus = (report, mlPrediction) => {
   const status = (report.rule_status || "").toLowerCase();
-  const hasOfficerConfirmed = report.reviews?.some(
-    (rv) => (rv.decision || "").toLowerCase() === "confirmed",
-  );
-
-  if (hasOfficerConfirmed) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          fontSize: "11px",
-        }}
-      >
-        <span style={{ color: "#4caf50", fontWeight: 600 }}>
-          Officer verified
-        </span>
-        <span style={{ color: "#666" }}>
-          — Confirmed by{" "}
-          {report.reviews.find(
-            (rv) => (rv.decision || "").toLowerCase() === "confirmed",
-          )?.reviewer_name || "officer"}
-        </span>
-      </div>
-    );
-  }
 
   if (status === "passed") {
     if (
@@ -391,7 +357,7 @@ const getVerificationStatus = (report, mlPrediction) => {
           <span style={{ color: "#ff9800", fontWeight: 600 }}>
             No ML Analysis
           </span>
-          <span style={{ color: "#666" }}>- Requires officer verification</span>
+          <span style={{ color: "#666" }}>- Awaiting community leader verification</span>
         </div>
       );
     }
@@ -411,7 +377,7 @@ const getVerificationStatus = (report, mlPrediction) => {
           Pending Review
         </span>
         <span style={{ color: "#666" }}>
-          - Needs officer assignment and confirmation
+          - Awaiting local leader community verification
         </span>
       </div>
     );
@@ -452,13 +418,6 @@ const getVerificationStatus = (report, mlPrediction) => {
 
 const getVerificationRequirements = (report, mlPrediction) => {
   const status = (report.rule_status || "").toLowerCase();
-  const hasOfficerConfirmed = report.reviews?.some(
-    (rv) => (rv.decision || "").toLowerCase() === "confirmed",
-  );
-
-  if (hasOfficerConfirmed) {
-    return null; // Already verified
-  }
 
   if (status === "passed") {
     if (
@@ -472,16 +431,10 @@ const getVerificationRequirements = (report, mlPrediction) => {
         return (
           <div>
             <div style={{ marginBottom: "4px" }}>
-              ML confidence too low ({mlConfidence.toFixed(1)}% &lt; 70%)
-            </div>
-            <div style={{ marginBottom: "4px" }}>
-              <strong>Option 1:</strong> Assign to officer for confirmation
-            </div>
-            <div style={{ marginBottom: "4px" }}>
-              <strong>Option 2:</strong> Wait for more reports from this device
+              AI confidence too low ({mlConfidence.toFixed(1)}% &lt; 70%) — awaiting community leader verification.
             </div>
             <div>
-              <strong>Option 3:</strong> Flag if suspicious patterns detected
+              A local leader covering this area has been notified to verify this report.
             </div>
           </div>
         );
@@ -506,7 +459,7 @@ const getVerificationRequirements = (report, mlPrediction) => {
           </div>
           {textConfidence < 70 && (
             <div>
-              <strong>Recommended:</strong> Assign to officer for manual verification due to low confidence
+              <strong>Note:</strong> Low confidence — local leader has been notified for community verification.
             </div>
           )}
         </div>
@@ -516,7 +469,7 @@ const getVerificationRequirements = (report, mlPrediction) => {
         <div>
           <div style={{ marginBottom: "4px" }}>No ML analysis available</div>
           <div>
-            <strong>Required:</strong> Assign to officer for manual verification
+            <strong>Note:</strong> Local leader has been notified for community verification.
           </div>
         </div>
       );
@@ -527,10 +480,10 @@ const getVerificationRequirements = (report, mlPrediction) => {
     return (
       <div>
         <div style={{ marginBottom: "4px" }}>
-          Report status is "pending" (needs officer review)
+          Report is pending — awaiting AI or community verification.
         </div>
         <div>
-          <strong>Required:</strong> Assign to officer and get confirmation
+          <strong>Note:</strong> Local leader has been notified to verify this report.
         </div>
       </div>
     );
@@ -553,7 +506,7 @@ const getVerificationRequirements = (report, mlPrediction) => {
     <div>
       <div style={{ marginBottom: "4px" }}>Verification status unclear</div>
       <div>
-        <strong>Required:</strong> Assign to officer for review
+        <strong>Note:</strong> Local leader has been notified for community verification.
       </div>
     </div>
   );
@@ -567,10 +520,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
-  const [savingDecision, setSavingDecision] = useState("");
-  const [showReasonModal, setShowReasonModal] = useState(false);
-  const [pendingDecision, setPendingDecision] = useState("");
-  const [reviewReason, setReviewReason] = useState("");
   const [mlPrediction, setMlPrediction] = useState(null);
   const [mlLoading, setMlLoading] = useState(false);
   const [relatedReports, setRelatedReports] = useState([]);
@@ -724,64 +673,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
       setReport(res);
     } catch {
       // Keep optimistic UI if background refresh fails.
-    }
-  };
-
-  const submitReview = async (decision) => {
-    if (!reportId) return;
-    
-    // Show reason modal first
-    setPendingDecision(decision);
-    setReviewReason("");
-    setShowReasonModal(true);
-  };
-
-  const confirmReview = async () => {
-    if (!reportId || !pendingDecision) return;
-    setSavingDecision(pendingDecision);
-    setError("");
-    setActionMessage("");
-    try {
-      const reviewRes = await api.post(`/api/v1/reports/${reportId}/reviews`, {
-        decision: pendingDecision,
-        review_note: reviewReason,
-      });
-      const review =
-        reviewRes && typeof reviewRes === "object"
-          ? reviewRes
-          : {
-              review_id: `${reportId}-${pendingDecision}-${Date.now()}`,
-              report_id: reportId,
-              police_user_id: me?.police_user_id,
-              decision: pendingDecision,
-              review_note: reviewReason,
-              created_at: new Date().toISOString(),
-            };
-
-      setReport((prev) => ({
-        ...prev,
-        reviews: [...(prev.reviews || []), review],
-        verification_status:
-          pendingDecision === "confirmed" ? "verified" : "flagged",
-      }));
-
-      setActionMessage(
-        pendingDecision === "confirmed"
-          ? "✅ Report verified successfully"
-          : "🚩 Report flagged for review"
-      );
-
-      // Close modal and reset
-      setShowReasonModal(false);
-      setPendingDecision("");
-      setReviewReason("");
-
-      // Keep server truth in sync without changing the current screen.
-      refreshInBackground();
-    } catch (e) {
-      setError(e?.message || "Failed to submit review.");
-    } finally {
-      setSavingDecision("");
     }
   };
 
@@ -984,7 +875,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
             fontSize: "18px",
           }}
         >
-          Report {idLabel}
+          {report.incident_type_name || idLabel}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span className={`badge ${operationalPipelineBadgeClass(report)}`}>
@@ -1007,26 +898,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
             flexWrap: "wrap",
           }}
         >
-          {/* Review Status Buttons: available to all roles */}
-          <button
-            className="btn btn-success btn-sm"
-            onClick={() => submitReview("confirmed")}
-            disabled={!!savingDecision}
-            style={{ display: "flex", alignItems: "center", gap: 4 }}
-          >
-            {savingDecision === "confirmed"
-              ? "Verifying…"
-              : "Verify report"}
-          </button>
-          <button
-            className="btn btn-danger btn-sm"
-            onClick={() => submitReview("rejected")}
-            disabled={!!savingDecision}
-            style={{ display: "flex", alignItems: "center", gap: 4 }}
-          >
-            {savingDecision === "rejected" ? "Flagging…" : "Flag report"}
-          </button>
-          
           {/* Assignment and Case Management: admin/supervisor only */}
           {(role === "admin" || role === "supervisor" || role === "officer") && (
             <>
@@ -2358,7 +2229,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
 
               <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
                 <div style={{ padding: "10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
-                  <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 4 }}>AI + Police verification</div>
+                  <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 4 }}>AI verification</div>
                   <div style={{ fontSize: "11px", color: "var(--muted)", marginBottom: 6 }}>
                     {formatTechnicalStatus(report)}
                   </div>
@@ -2448,46 +2319,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 <div style={{ marginTop: 10, padding: "10px", borderRadius: 8, background: "rgba(255, 152, 0, 0.12)", border: "1px solid rgba(255, 152, 0, 0.35)" }}>
                   <div style={{ fontSize: "11px", fontWeight: 700, marginBottom: 4 }}>Flag reason</div>
                   <div style={{ fontSize: "11px", color: "var(--text)" }}>{friendlyFlagReason(report.flag_reason)}</div>
-                </div>
-              )}
-
-              {report.reviews && report.reviews.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>Review History</div>
-                  <div style={{ display: "grid", gap: 6 }}>
-                    {report.reviews.slice().reverse().map((review, index) => (
-                      <div
-                        key={review.review_id || index}
-                        style={{
-                          padding: "8px",
-                          borderRadius: 6,
-                          background: "var(--surface2)",
-                          border: "1px solid var(--border2)",
-                        }}
-                      >
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
-                          <strong>
-                            {review.decision === "confirmed"
-                              ? "Confirmed"
-                              : review.decision === "rejected"
-                                ? "Rejected"
-                                : review.decision}
-                          </strong>
-                          <span style={{ color: "var(--muted)" }}>
-                            {review.reviewed_at ? formatLocalDateTime(review.reviewed_at) : "Unknown time"}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: 2 }}>
-                          By: {review.reviewer_name || "Officer"}
-                        </div>
-                        {review.review_note && (
-                          <div style={{ fontSize: "10px", marginTop: 4 }}>
-                            "{review.review_note}"
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
                 </div>
               )}
 
@@ -2759,57 +2590,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
           </div>
         </div>
       </div>
-
-      {/* Review Reason Modal */}
-      {showReasonModal && (
-        <div className="modal-overlay open" onClick={(e) => e.target === e.currentTarget && setShowReasonModal(false)}>
-          <div className="modal">
-            <div className="modal-header">
-              <div className="modal-title">
-                {pendingDecision === "confirmed" ? "Verify Report" : "Flag Report"}
-              </div>
-              <div className="modal-close" onClick={() => setShowReasonModal(false)}>✕</div>
-            </div>
-
-            <div className="input-group">
-              <div className="input-label">Reason *</div>
-              <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '6px' }}>
-                Please provide a reason for {pendingDecision === "confirmed" ? "verifying" : "flagging"} this report.
-              </div>
-              <textarea
-                rows="4"
-                placeholder={pendingDecision === "confirmed" 
-                  ? "Explain why this report is verified and legitimate..." 
-                  : "Explain why this report is being flagged..."
-                }
-                value={reviewReason}
-                onChange={(e) => setReviewReason(e.target.value)}
-                style={{ width: '100%', padding: '8px', border: '1px solid var(--border)', borderRadius: '4px' }}
-              />
-            </div>
-            
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button 
-                className="btn btn-outline" 
-                onClick={() => setShowReasonModal(false)} 
-                disabled={!!savingDecision}
-              >
-                Cancel
-              </button>
-              <button 
-                className={`btn ${pendingDecision === "confirmed" ? "btn-success" : "btn-danger"}`} 
-                onClick={confirmReview} 
-                disabled={!reviewReason.trim() || !!savingDecision}
-              >
-                {savingDecision === pendingDecision 
-                  ? (pendingDecision === "confirmed" ? "Verifying…" : "Flagging…")
-                  : (pendingDecision === "confirmed" ? "Verify" : "Flag")
-                }
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Case Linking Modal */}
       {showLinkCaseModal && (

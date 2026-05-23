@@ -251,54 +251,84 @@ const Reports = ({
 
   return (
     <>
-      <div className="page-header">
-        <h2>Reports</h2>
-        <p>
-          Each report needs <strong>two gates</strong> before cases and hotspots: (1) AI/police
-          verification, then (2) local leader confirmation. Use the operational column and queue
-          presets to match the workflow diagram.
-        </p>
-      </div>
-
+      {/* ── Reports header card ── */}
       <div
-        className="alert alert-info"
-        style={{ marginBottom: 14, fontSize: 13, lineHeight: 1.5 }}
+        className="card"
+        style={{ marginBottom: 20, padding: "20px 24px 16px" }}
       >
-        <span className="alert-icon">i</span>
-        <div>
-          <strong>Pipeline:</strong> Citizen submit → AI threshold → police review if needed →
-          leader confirms → <em>Cases & hotspots</em> only when police verified <em>and</em> leader
-          confirmed. Leader confirmed while police still pending →{" "}
-          <strong>Pending for ops</strong>.
-        </div>
-      </div>
+        {/* Title + pipeline flow */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 12,
+            marginBottom: 16,
+          }}
+        >
+          <div>
+            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Reports</h2>
+            <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
+              Two gates required before a report feeds cases &amp; hotspots.
+            </p>
+          </div>
 
-      {queuePreset !== "none" ? (
-        <div className="alert alert-info" style={{ marginBottom: 14 }}>
-          <span className="alert-icon">i</span>
-          <div style={{ fontSize: "13px", lineHeight: 1.45 }}>
-            <strong>{queueConfig.label}</strong>
-            <div style={{ marginTop: 6 }}>{queueConfig.hint}</div>
+          {/* Pipeline steps */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            {[
+              { label: "Citizen submits", cls: "ps-muted"  },
+              { label: "AI verification", cls: "ps-blue"   },
+              { label: "Leader confirms", cls: "ps-orange"  },
+              { label: "Cases & hotspots", cls: "ps-green" },
+            ].map((step, i, arr) => (
+              <React.Fragment key={step.label}>
+                <span className={`pipeline-step ${step.cls}`}>{step.label}</span>
+                {i < arr.length - 1 && (
+                  <span style={{ color: "var(--muted)", fontSize: 14 }}>→</span>
+                )}
+              </React.Fragment>
+            ))}
           </div>
         </div>
-      ) : null}
 
-      <div className="stats-row">
-        <div className="stat-card c-blue">
-          <div className="stat-label">All Reports</div>
-          <div className="stat-value sv-blue">{allReports}</div>
-        </div>
-        <div className="stat-card c-orange">
-          <div className="stat-label">Pending review</div>
-          <div className="stat-value sv-orange">{pending}</div>
-        </div>
-        <div className="stat-card c-green">
-          <div className="stat-label">Verified</div>
-          <div className="stat-value sv-green">{verified}</div>
-        </div>
-        <div className="stat-card c-red">
-          <div className="stat-label">Flagged</div>
-          <div className="stat-value sv-red">{flagged}</div>
+        {/* Queue preset hint */}
+        {queuePreset !== "none" && (
+          <div
+            style={{
+              marginBottom: 14,
+              padding: "10px 14px",
+              borderRadius: 8,
+              background: "var(--c-accent-dim)",
+              border: "1px solid var(--c-accent-ring)",
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            <strong>{queueConfig.label}</strong>
+            <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 12 }}>
+              {queueConfig.hint}
+            </div>
+          </div>
+        )}
+
+        {/* Stats — clickable to filter */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+          {[
+            { label: "All Reports",   value: allReports, cls: "sb-blue",   filter: "all"     },
+            { label: "Pending review", value: pending,   cls: "sb-orange", filter: "pending"  },
+            { label: "Verified",       value: verified,  cls: "sb-green",  filter: "verified" },
+            { label: "Flagged",        value: flagged,   cls: "sb-red",    filter: "flagged"  },
+          ].map((s) => (
+            <button
+              key={s.filter}
+              onClick={() => { setStatusFilter(s.filter); setOffset(0); }}
+              className={`stat-btn ${s.cls}${statusFilter === s.filter ? " active" : ""}`}
+            >
+              <div className="stat-btn-label">{s.label}</div>
+              <div className="stat-btn-value">{s.value}</div>
+            </button>
+          ))}
         </div>
       </div>
 
@@ -472,7 +502,7 @@ const Reports = ({
                 <th style={{ minWidth: 110, whiteSpace: "nowrap" }}>
                   Priority
                 </th>
-                <th style={{ minWidth: 180 }}>AI + Police verification</th>
+                <th style={{ minWidth: 180 }}>AI Verification</th>
                 <th style={{ minWidth: 150 }}>Community (leader)</th>
                 <th style={{ minWidth: 140 }}>Operational status</th>
                 <th>Date</th>
@@ -612,19 +642,23 @@ const Reports = ({
                       {vs ? (
                         <span
                           className={`badge ${
-                            vs === "under_review" || vs === "pending"
+                            vs === "under_review"
                               ? "b-orange"
-                              : vs === "verified"
-                                ? "b-green"
-                                : "b-red"
+                              : vs === "pending"
+                                ? "b-orange"
+                                : vs === "verified"
+                                  ? "b-green"
+                                  : "b-red"
                           }`}
                           style={{ display: "inline-block", marginBottom: 6 }}
                         >
-                          {vs === "pending" || vs === "under_review"
-                            ? "Police: pending"
-                            : vs === "verified"
-                              ? "Police: confirmed"
-                              : "Police: rejected"}
+                          {vs === "under_review"
+                            ? "Under review"
+                            : vs === "pending"
+                              ? "Pending"
+                              : vs === "verified"
+                                ? "AI verified"
+                                : "Rejected"}
                         </span>
                       ) : (
                         <span className="badge b-gray">{r.status || "—"}</span>

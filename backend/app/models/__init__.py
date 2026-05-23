@@ -6,7 +6,6 @@ from app.models.report import Report
 from app.models.evidence_file import EvidenceFile
 from app.models.ml_prediction import MLPrediction
 from app.models.police_user import PoliceUser
-from app.models.police_review import PoliceReview
 from app.models.hotspot import Hotspot
 from app.models.report_assignment import ReportAssignment
 from app.models.notification import Notification
@@ -32,7 +31,6 @@ __all__ = [
     "EvidenceFile",
     "MLPrediction",
     "PoliceUser",
-    "PoliceReview",
     "Hotspot",
     "ReportAssignment",
     "Notification",

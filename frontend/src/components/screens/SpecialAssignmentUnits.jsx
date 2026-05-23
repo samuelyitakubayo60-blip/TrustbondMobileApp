@@ -67,20 +67,40 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
     }
   };
 
+  const activeCount   = units.filter(u =>  u.is_active).length;
+  const inactiveCount = units.filter(u => !u.is_active).length;
+  const approvalCount = units.filter(u =>  u.requires_commander_approval).length;
+
   return (
     <>
-      <div className="page-header" style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-start", justifyContent: "space-between" }}>
-        <div>
-          <h2>Assignment units</h2>
-          <p>
-            Units used when routing cases (auto-created from incident types), case
-            updates, and deployment decisions. Incident types store a default unit
-            code applied to new auto-cases.
-          </p>
+      {/* ── Header card ── */}
+      <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+          <div>
+            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Assignment Units</h2>
+            <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
+              Units used when routing cases (auto-created from incident types), case updates, and deployment decisions.
+            </p>
+          </div>
+          <button type="button" className="btn btn-primary" style={{ alignSelf: 'center' }} onClick={openAdd}>
+            + Add unit
+          </button>
         </div>
-        <button type="button" className="btn btn-primary" onClick={openAdd}>
-          + Add unit
-        </button>
+
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          {[
+            { label: 'Total units',        value: units.length,   cls: 'sb-blue'   },
+            { label: 'Active',             value: activeCount,    cls: 'sb-green'  },
+            { label: 'Inactive',           value: inactiveCount,  cls: 'sb-red'    },
+            { label: 'Needs approval',     value: approvalCount,  cls: 'sb-orange' },
+          ].map((s) => (
+            <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
+              <div className="stat-btn-label">{s.label}</div>
+              <div className="stat-btn-value">{s.value}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {error && (
@@ -101,15 +121,7 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
       <div className="card">
         <div className="card-header">
           <div className="card-title">Registered units</div>
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 12,
-              cursor: "pointer",
-            }}
-          >
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
             <input
               type="checkbox"
               checked={showInactive}
@@ -147,33 +159,33 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
                 units.map((u) => (
                   <tr key={u.unit_id}>
                     <td>
-                      <code>{u.unit_code}</code>
+                      <span className="badge b-blue" style={{ fontSize: 10, fontFamily: 'monospace' }}>
+                        {u.unit_code}
+                      </span>
                     </td>
-                    <td>{u.unit_name}</td>
-                    <td style={{ fontSize: 12, color: "var(--muted)" }}>
-                      {u.description || "—"}
+                    <td style={{ fontWeight: 500 }}>{u.unit_name}</td>
+                    <td style={{ fontSize: 12, color: 'var(--muted)' }}>
+                      {u.description || '—'}
                     </td>
-                    <td>{u.requires_commander_approval ? "Yes" : "No"}</td>
                     <td>
-                      <span
-                        className={`badge ${u.is_active ? "b-green" : "b-gray"}`}
-                      >
-                        {u.is_active ? "Active" : "Inactive"}
+                      <span className={`badge ${u.requires_commander_approval ? 'b-orange' : 'b-gray'}`} style={{ fontSize: 10 }}>
+                        {u.requires_commander_approval ? 'Required' : 'Not required'}
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          onClick={() => openEdit(u)}
-                        >
+                      <span className={`badge ${u.is_active ? 'b-green' : 'b-gray'}`}>
+                        {u.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button type="button" className="btn btn-outline btn-sm" onClick={() => openEdit(u)}>
                           Edit
                         </button>
                         <button
                           type="button"
-                          className="btn btn-outline btn-sm"
-                          style={{ color: "var(--danger)" }}
+                          className="btn btn-sm"
+                          style={{ background: 'var(--c-danger-dim)', color: 'var(--danger)', border: '1px solid var(--c-danger-ring)', cursor: 'pointer' }}
                           onClick={() => handleDelete(u)}
                         >
                           Delete

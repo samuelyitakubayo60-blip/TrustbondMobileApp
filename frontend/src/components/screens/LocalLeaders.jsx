@@ -10,6 +10,7 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
   const PAGE_SIZE = 20;
   const [leaders, setLeaders] = useState([]);
   const [coverageGaps, setCoverageGaps] = useState([]);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchText, setSearchText] = useState("");
@@ -20,12 +21,14 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
   const loadLeaders = useCallback(async () => {
     setLoading(true);
     try {
-      const [res, gapsRes] = await Promise.all([
+      const [res, gapsRes, statsRes] = await Promise.all([
         api.get("/api/v1/local-leaders/"),
-        api.get("/api/v1/local-leaders/coverage-gaps?limit=50"),
+        api.get("/api/v1/local-leaders/coverage-gaps?limit=1000"),
+        api.get("/api/v1/local-leaders/stats"),
       ]);
       setLeaders(res || []);
       setCoverageGaps(gapsRes?.items || []);
+      setStats(statsRes || null);
       setError("");
     } catch (e) {
       setError(e?.message || "Failed to load local leaders.");
@@ -67,55 +70,97 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
     [filteredLeaders, offset, pageSize]
   );
 
+  const villageGaps = coverageGaps.filter(g => g.location_type === "village");
+  const cellGaps    = coverageGaps.filter(g => g.location_type === "cell");
+
   return (
     <>
-      <div className="page-header">
-        <h2>Local Leaders</h2>
-        <p>
-          Register village chiefs and cell executives. Leaders request setup/login codes from the app
-          (sent by email via server SMTP configuration).
-        </p>
+      {/* ── Header card ── */}
+      <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+          <div>
+            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Local Leaders</h2>
+            <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
+              Register village chiefs and cell executives. Leaders request setup/login codes from the app (sent by email via server SMTP configuration).
+            </p>
+          </div>
+          <button type="button" className="btn btn-primary" style={{ alignSelf: 'center' }} onClick={() => onAddLeader?.()}>
+            + Add Local Leader
+          </button>
+        </div>
+
+        {/* Stats — accurate counts from the database */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: coverageGaps.length > 0 ? 16 : 0 }}>
+          {[
+            { label: 'Village Chiefs',        value: stats?.village_chiefs      ?? '—', cls: 'sb-blue'   },
+            { label: 'Cell Executives',       value: stats?.cell_executives     ?? '—', cls: 'sb-green'  },
+            { label: 'Villages w/o Leader',   value: stats?.villages_without_leader ?? '—', cls: 'sb-orange' },
+            { label: 'Cells w/o Executive',   value: stats?.cells_without_executive ?? '—', cls: 'sb-red'    },
+          ].map((s) => (
+            <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
+              <div className="stat-btn-label">{s.label}</div>
+              <div className="stat-btn-value">{s.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Coverage gaps warning — split by village / cell */}
+        {coverageGaps.length > 0 && (
+          <div style={{ background: 'var(--c-warning-dim)', border: '1px solid var(--c-warning-ring)', borderRadius: 8, padding: '10px 14px', fontSize: 12 }}>
+            <div style={{ fontWeight: 700, color: 'var(--warning)', marginBottom: 4 }}>
+              {villageGaps.length} village(s) and {cellGaps.length} cell(s) have no active leader
+            </div>
+            <div style={{ color: 'var(--muted)', marginBottom: 8 }}>
+              Citizen reports in these areas will not reach a leader until you register one.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {villageGaps.length > 0 && (
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+                    Villages without a chief or cell executive ({villageGaps.length})
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: 16, color: 'var(--muted)' }}>
+                    {villageGaps.slice(0, 8).map((g) => (
+                      <li key={g.location_id}>
+                        <span style={{ color: 'var(--text)' }}>{g.location_name}</span>
+                        {g.parent_name ? ` (${g.parent_name})` : ""}
+                      </li>
+                    ))}
+                    {villageGaps.length > 8 && <li>…and {villageGaps.length - 8} more</li>}
+                  </ul>
+                </div>
+              )}
+              {cellGaps.length > 0 && (
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+                    Cells without an executive ({cellGaps.length})
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: 16, color: 'var(--muted)' }}>
+                    {cellGaps.slice(0, 8).map((g) => (
+                      <li key={g.location_id}>
+                        <span style={{ color: 'var(--text)' }}>{g.location_name}</span>
+                        {g.parent_name ? ` (${g.parent_name})` : ""}
+                      </li>
+                    ))}
+                    {cellGaps.length > 8 && <li>…and {cellGaps.length - 8} more</li>}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {error && (
-        <div className="alert alert-danger" style={{ marginBottom: "12px" }}>
+        <div className="alert alert-danger" style={{ marginBottom: 12 }}>
           <span className="alert-icon">!</span>
           <div>{error}</div>
-        </div>
-      )}
-
-      {coverageGaps.length > 0 && (
-        <div className="alert alert-warning" style={{ marginBottom: "12px" }}>
-          <span className="alert-icon">!</span>
-          <div>
-            <strong>{coverageGaps.length} area(s) have no active local leader.</strong>
-            <p style={{ margin: "6px 0 0", fontSize: 13 }}>
-              Citizen reports in these areas will not reach a village chief or cell executive until you
-              register one. Admins also receive an in-app alert when a report is submitted in an
-              uncovered area.
-            </p>
-            <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12 }}>
-              {coverageGaps.slice(0, 8).map((g) => (
-                <li key={`${g.location_type}-${g.location_id}`}>
-                  {g.location_name}
-                  {g.parent_name ? ` (${g.parent_name})` : ""} —{" "}
-                  {g.location_type === "cell" ? "missing cell executive" : "no chief or cell executive"}
-                </li>
-              ))}
-              {coverageGaps.length > 8 ? (
-                <li>…and {coverageGaps.length - 8} more</li>
-              ) : null}
-            </ul>
-          </div>
         </div>
       )}
 
       <div className="card">
         <div className="card-header">
           <div className="card-title">Registered Local Leaders</div>
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => onAddLeader?.()}>
-            Add Local Leader
-          </button>
         </div>
         <div className="filter-row">
           <input
@@ -141,11 +186,12 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
             <option value="inactive">Inactive</option>
           </select>
           <input
+            className="input"
             type="number"
             min="5"
             max="100"
             placeholder="Rows"
-            style={{ minWidth: "80px" }}
+            style={{ minWidth: "70px" }}
             value={pageSize}
             onChange={(e) => {
               const newSize = Math.max(5, Math.min(100, parseInt(e.target.value, 10) || PAGE_SIZE));
@@ -194,7 +240,12 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
                       <button type="button" className="btn btn-outline btn-sm" onClick={() => onEditLeader?.(l)}>
                         Edit
                       </button>
-                      <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteLeader(l)}>
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{ background: 'var(--c-danger-dim)', color: 'var(--danger)', border: '1px solid var(--c-danger-ring)', cursor: 'pointer' }}
+                        onClick={() => deleteLeader(l)}
+                      >
                         Delete
                       </button>
                     </div>

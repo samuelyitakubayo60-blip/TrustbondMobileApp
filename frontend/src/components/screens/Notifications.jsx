@@ -142,105 +142,105 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
     goToScreen?.('reports', 1);
   };
 
+  const typeColor = (type) => {
+    if (type === 'report')     return 'sb-blue';
+    if (type === 'hotspot')    return 'sb-orange';
+    if (type === 'assignment') return 'sb-green';
+    if (type === 'system')     return 'sb-purple';
+    return 'sb-blue';
+  };
+
   return (
     <>
-      <div className="page-header">
-        <h2>Notifications</h2>
-        <p>System alerts, hotspot escalations, and high-priority report notifications.</p>
+      {/* ── Notifications header card ── */}
+      <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+          <div>
+            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Notifications</h2>
+            <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
+              System alerts, hotspot escalations, and high-priority report notifications.
+            </p>
+          </div>
+          <button className="btn btn-outline btn-sm" style={{ alignSelf: 'center' }} type="button" onClick={markAllRead}>
+            Mark all read
+          </button>
+        </div>
+
+        {/* Summary stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          {[
+            { label: 'Unread',      value: unread,                                    cls: 'sb-red'    },
+            { label: 'Total',       value: items.length,                              cls: 'sb-blue'   },
+            { label: 'Reports',     value: items.filter(n => n.type === 'report').length,     cls: 'sb-blue'   },
+            { label: 'Hotspots',    value: items.filter(n => n.type === 'hotspot').length,    cls: 'sb-orange' },
+          ].map((s) => (
+            <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
+              <div className="stat-btn-label">{s.label}</div>
+              <div className="stat-btn-value">{s.value}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div className="g2-fixed">
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">All Notifications</div>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button
-                className="btn btn-outline btn-sm"
-                type="button"
-                onClick={markAllRead}
-              >
-                Mark all read
-              </button>
-            </div>
-          </div>
+      {/* ── Notifications list ── */}
+      <div className="card">
+        {/* Filters */}
+        <div className="filter-row" style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)' }}>
+          <input
+            className="input"
+            placeholder="Search title, message, or entity..."
+            style={{ flex: 2, minWidth: '140px' }}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+          <select className="select" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+            <option value="all">All Types</option>
+            <option value="report">Report</option>
+            <option value="assignment">Assignment</option>
+            <option value="hotspot">Hotspot</option>
+            <option value="system">System</option>
+          </select>
+        </div>
 
-          <div className="filter-row" style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)' }}>
-            <input
-              className="input"
-              placeholder="Search title, message, or entity..."
-              style={{ flex: 2, minWidth: '140px' }}
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-            />
-            <select
-              className="select"
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-            >
-              <option value="all">All Types</option>
-              <option value="report">Report</option>
-              <option value="assignment">Assignment</option>
-              <option value="hotspot">Hotspot</option>
-              <option value="system">System</option>
-            </select>
-          </div>
-
-          {filtered.map((n) => {
-            // All notifications are now clickable
-            return (
+        {/* List */}
+        {filtered.map((n) => (
+          <div
+            className="notif-item"
+            key={n.notification_id}
+            onClick={() => openNotificationTarget(n)}
+            style={{
+              cursor: 'pointer',
+              borderLeft: n.is_read ? 'none' : '3px solid var(--accent)',
+              background: n.is_read ? 'transparent' : 'var(--c-accent-dim)',
+            }}
+          >
             <div
-              className="notif-item"
-              key={n.notification_id}
-              onClick={() => openNotificationTarget(n)}
-              style={{ cursor: 'pointer' }}
+              className="notif-icon"
+              style={{ background: 'var(--c-accent-dim)', color: 'var(--accent)', fontWeight: 700 }}
             >
-              <div className="notif-icon" style={{ background: 'rgba(79, 142, 247, 0.18)' }}>
-                {n.type?.toUpperCase().slice(0, 4) || 'INFO'}
-              </div>
-              <div className="notif-body">
-                <div className="notif-title">{n.title}</div>
-                <div className="notif-desc">{friendlyFlagReason(n.message)}</div>
-                <div className="notif-time">
-                  {formatRelativeTime(n.created_at)} · {n.is_read ? 'Read' : 'Unread'}
-                  {' · Click to open'}
-                </div>
-              </div>
-              <div style={{ flexShrink: 0 }}>
-                <span className={`badge ${n.is_read ? 'b-blue' : 'b-red'}`}>
-                  {n.type || 'info'}
-                </span>
+              {n.type?.toUpperCase().slice(0, 4) || 'INFO'}
+            </div>
+            <div className="notif-body">
+              <div className="notif-title">{n.title}</div>
+              <div className="notif-desc">{friendlyFlagReason(n.message)}</div>
+              <div className="notif-time">
+                {formatRelativeTime(n.created_at)} · {n.is_read ? 'Read' : <strong style={{ color: 'var(--accent)' }}>Unread</strong>}
+                {' · Click to open'}
               </div>
             </div>
-          )})}
-          {(!filtered.length && !loading) && (
-            <div style={{ fontSize: '12px', color: 'var(--muted)', padding: '10px 14px' }}>
-              No notifications.
-            </div>
-          )}
-          {loading && (
-            <div style={{ fontSize: '12px', color: 'var(--muted)', padding: '10px 14px' }}>
-              Loading...
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* Keep settings static */}
-          {/* ...your existing Notification Settings card... */}
-
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">Notification Summary</div>
-            </div>
-            <div className="status-row">
-              <span>Unread</span>
-              <strong style={{ color: 'var(--danger)' }}>{unread}</strong>
-            </div>
-            <div className="status-row">
-              <span>Total loaded</span><strong>{items.length}</strong>
+            <div style={{ flexShrink: 0 }}>
+              <span className={`badge ${n.is_read ? 'b-gray' : 'b-blue'}`}>
+                {n.type || 'info'}
+              </span>
             </div>
           </div>
-        </div>
+        ))}
+        {(!filtered.length && !loading) && (
+          <div style={{ fontSize: '12px', color: 'var(--muted)', padding: '14px' }}>No notifications.</div>
+        )}
+        {loading && (
+          <div style={{ fontSize: '12px', color: 'var(--muted)', padding: '14px' }}>Loading...</div>
+        )}
       </div>
     </>
   );

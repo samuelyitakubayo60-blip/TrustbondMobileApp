@@ -14,7 +14,6 @@ from app.models import (
     EvidenceFile,
     MLPrediction,
     PoliceUser,
-    PoliceReview,
     Hotspot,
     ReportAssignment,
     Notification,

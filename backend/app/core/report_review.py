@@ -1,32 +1,13 @@
 """
-Single source of truth for police-facing report review state.
-
-- `needs_police_review_clause()` must match dashboard `pending` / `pending_review` counts
-  in `app.api.v1.stats.get_dashboard_stats`.
-- Trust display: prefer latest ML prediction trust, else device aggregate (same as list API).
+Report verification utilities: ML prediction label resolution and trust scoring.
+Trust display: prefer latest ML prediction trust, else device aggregate (same as list API).
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import and_, or_
-
 from app.models.report import Report
-
-
-def needs_police_review_clause():
-    """SQLAlchemy filter: reports that still need police/verification attention."""
-    return or_(
-        Report.status == "pending",
-        and_(
-            Report.verification_status.in_(["pending", "under_review"]),
-            or_(
-                Report.status.is_(None),
-                ~Report.status.in_(["verified", "flagged", "rejected"]),
-            ),
-        ),
-    )
 
 
 def apply_rules_to_prediction_label(report: Any, raw_label: Optional[str]) -> Optional[str]:

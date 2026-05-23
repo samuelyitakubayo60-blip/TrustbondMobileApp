@@ -10,6 +10,7 @@ from app.models.evidence_file import EvidenceFile
 from app.models.report import Report
 from app.schemas.hotspot import HotspotResponse
 from app.core.village_lookup import get_village_location_info
+from app.core.llm_recommendations import generate_citizen_advisory
 
 router = APIRouter(prefix="/public/hotspots", tags=["public"])
 
@@ -113,30 +114,37 @@ def list_public_hotspots(
         hotspots = [h for h, _ in nearby[:limit]]
     else:
         hotspots = hotspots[:limit]
-    return [
-        HotspotResponse(
-            hotspot_id=h.hotspot_id,
-            center_lat=h.center_lat,
-            center_long=h.center_long,
-            radius_meters=h.radius_meters,
-            incident_count=h.incident_count,
-            risk_level=h.risk_level,
-            time_window_hours=h.time_window_hours,
-            detected_at=h.detected_at,
-            incident_type_id=h.incident_type_id,
-            incident_type_name=h.incident_type.type_name if h.incident_type else None,
-            classification=(
-                "critical"
-                if h.risk_level == "critical"
-                else "active"
-                if h.risk_level == "high"
-                else "emerging"
-                if h.risk_level == "medium"
-                else "low_activity"
-            ),
+    responses = []
+    for h in hotspots:
+        classification = (
+            "critical" if h.risk_level == "critical"
+            else "active" if h.risk_level == "high"
+            else "emerging" if h.risk_level == "medium"
+            else "low_activity"
         )
-        for h in hotspots
-    ]
+        incident_type_name = h.incident_type.type_name if h.incident_type else None
+        advisory = generate_citizen_advisory(
+            classification=classification,
+            incident_count=int(h.incident_count or 0),
+            dominant_crime=incident_type_name,
+        )
+        responses.append(
+            HotspotResponse(
+                hotspot_id=h.hotspot_id,
+                center_lat=h.center_lat,
+                center_long=h.center_long,
+                radius_meters=h.radius_meters,
+                incident_count=h.incident_count,
+                risk_level=h.risk_level,
+                time_window_hours=h.time_window_hours,
+                detected_at=h.detected_at,
+                incident_type_id=h.incident_type_id,
+                incident_type_name=incident_type_name,
+                classification=classification,
+                prediction={"citizen_advisory": advisory},
+            )
+        )
+    return responses
 
 
 @router.get("/{hotspot_id}", response_model=HotspotResponse)

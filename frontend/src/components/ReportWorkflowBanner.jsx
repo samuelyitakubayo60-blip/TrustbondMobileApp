@@ -85,7 +85,7 @@ export default function ReportWorkflowBanner({ report, compact = false }) {
             borderTop: "1px solid var(--border2)",
           }}
         >
-          Citizen submit → AI threshold/rules → police review if needed → local leader confirms →
+          Citizen submit → AI threshold/rules → local leader confirms →
           cases & hotspot clusters only when both verification gates pass.
         </div>
       </div>

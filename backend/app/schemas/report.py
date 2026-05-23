@@ -183,26 +183,8 @@ class AssignCreate(BaseModel):
     assignment_note: Optional[str] = None  # Notes explaining why this assignment is needed
 
 
-class ReviewResponse(BaseModel):
-    review_id: UUID
-    report_id: UUID
-    police_user_id: int
-    decision: str
-    review_note: Optional[str] = None
-    reviewed_at: datetime
-    reviewer_name: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-
-class ReviewCreate(BaseModel):
-    decision: str  # confirmed, rejected, investigation
-    review_note: Optional[str] = None
-
-
 class ReportDetailResponse(ReportResponse):
-    """Report with evidence files, assignments, and reviews (for police dashboard)."""
+    """Report with evidence files and assignments (for police dashboard)."""
     trust_score_note: Optional[str] = None
     """Explains how headline trust relates to the scorecard (e.g. flagged but mid-range score)."""
     incident_latitude: Optional[Decimal] = None
@@ -213,7 +195,6 @@ class ReportDetailResponse(ReportResponse):
     incident_sector_name: Optional[str] = None
     evidence_files: list[EvidenceFileResponse] = []
     assignments: list[AssignmentResponse] = []
-    reviews: list[ReviewResponse] = []
 
 
 class ReportListResponse(BaseModel):

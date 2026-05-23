@@ -107,11 +107,7 @@ def _report_trust_score(report: Report) -> float:
     if ml_score is not None:
         return max(0.0, min(100.0, ml_score))
 
-    officer_confirmed = any(
-        (rv.decision or "").lower() == "confirmed"
-        for rv in (getattr(report, "police_reviews", None) or [])
-    )
-    if officer_confirmed or (report.verification_status or "").lower() == "verified":
+    if (report.verification_status or "").lower() == "verified":
         return 90.0
     if (report.rule_status or "").lower() == "passed":
         return 65.0
@@ -138,11 +134,7 @@ def _is_report_eligible(
     if require_leader_confirmation:
         return report_ready_for_cases_and_hotspots(report)
 
-    officer_confirmed = any(
-        (rv.decision or "").lower() == "confirmed"
-        for rv in (getattr(report, "police_reviews", None) or [])
-    )
-    return verification == "verified" or status == "verified" or officer_confirmed
+    return verification == "verified" or status == "verified"
 
 
 def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -252,7 +244,6 @@ def create_hotspots_from_reports(
             Location.is_active == True,
         )
         .options(
-            selectinload(Report.police_reviews),
             selectinload(Report.ml_predictions),
         )
     )

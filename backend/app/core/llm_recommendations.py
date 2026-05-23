@@ -942,3 +942,93 @@ def generate_recommendation(
     )
     _recommendation_cache[key] = clean
     return clean
+
+
+# ── Public / citizen-only advisory (no unit or tactical details) ──────────────
+
+_citizen_advisory_cache: Dict[tuple, str] = {}
+
+
+def _build_citizen_advisory_prompt(
+    *,
+    classification: str,
+    incident_count: int,
+    dominant_crime: Optional[str],
+    area_label: Optional[str],
+    incident_mix: Optional[Dict[str, int]],
+) -> str:
+    area = area_label or "your area"
+    crime = dominant_crime or "incidents"
+    mix_lines = ""
+    if incident_mix:
+        top = sorted(incident_mix.items(), key=lambda x: x[1], reverse=True)[:4]
+        mix_lines = ", ".join(f"{name} ({cnt})" for name, cnt in top)
+
+    return f"""You are writing a short public safety notice for citizens in Musanze, Rwanda.
+
+Situation:
+- Area              : {area}
+- Security level    : {classification}
+- Incident type     : {crime}
+- Incident count    : {incident_count}
+- Incident breakdown: {mix_lines or crime}
+
+Write 2–3 plain sentences in calm, clear English for the general public.
+Tell them:
+1. What kind of security situation has been reported nearby.
+2. What practical steps they should take (e.g. stay alert, secure valuables, avoid the area at night, report anything suspicious).
+3. Encourage them to report incidents through the TrustBond app.
+
+STRICT RULES — your response must NOT mention:
+- Any police unit names, team names, or department codes (e.g. RRU, DEU, CPU).
+- Any police tactics, deployments, or operational plans.
+- Any classified or internal police information.
+
+Return JSON only:
+{{
+  "advisory": "<2-3 sentences, plain citizen-facing English>"
+}}
+"""
+
+
+def generate_citizen_advisory(
+    classification: str,
+    incident_count: int,
+    dominant_crime: Optional[str],
+    area_label: Optional[str] = None,
+    incident_mix: Optional[Dict[str, int]] = None,
+) -> str:
+    """
+    Generate a plain-language public safety advisory for citizens.
+    Contains no police unit names, tactical details, or operational information.
+    Falls back to a template when no LLM key is configured.
+    """
+    mix_tuple = tuple(sorted((incident_mix or {}).items()))
+    cache_key = (classification, incident_count, dominant_crime, area_label, mix_tuple)
+    if cache_key in _citizen_advisory_cache:
+        return _citizen_advisory_cache[cache_key]
+
+    prompt = _build_citizen_advisory_prompt(
+        classification=classification,
+        incident_count=incident_count,
+        dominant_crime=dominant_crime,
+        area_label=area_label,
+        incident_mix=incident_mix,
+    )
+
+    result = _call_hotspot_llm(prompt)
+    advisory = (result or {}).get("advisory", "").strip()
+
+    if not advisory:
+        # Template fallback — still unit-free
+        advisory = _build_citizen_advisory(
+            area_label=area_label,
+            dominant_crime=dominant_crime,
+            incident_count=incident_count,
+            classification=classification,
+            cluster_kind="single_type",
+            incident_mix=incident_mix,
+        )
+
+    _citizen_advisory_cache[cache_key] = advisory
+    return advisory

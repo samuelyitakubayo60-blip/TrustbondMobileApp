@@ -4,7 +4,7 @@ import re
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.api.v1.auth import get_current_admin
@@ -120,11 +120,85 @@ def _replace_coverage(db: Session, leader_id: int, location_ids: list[int]) -> N
         db.add(LocalLeaderCoverageLocation(local_leader_id=leader_id, location_id=lid))
 
 
+@router.get("/stats")
+def get_leader_stats(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+):
+    """Accurate counts: leaders by role, locations covered vs uncovered."""
+    # Count active leaders by role
+    village_chiefs = db.query(func.count(LocalLeader.local_leader_id)).filter(
+        LocalLeader.role == "chief_of_village",
+        LocalLeader.is_active.is_(True),
+    ).scalar() or 0
+
+    cell_executives = db.query(func.count(LocalLeader.local_leader_id)).filter(
+        LocalLeader.role == "executive_of_cell",
+        LocalLeader.is_active.is_(True),
+    ).scalar() or 0
+
+    total_villages = db.query(func.count(Location.location_id)).filter(
+        Location.location_type == "village",
+        Location.is_active.is_(True),
+    ).scalar() or 0
+
+    total_cells = db.query(func.count(Location.location_id)).filter(
+        Location.location_type == "cell",
+        Location.is_active.is_(True),
+    ).scalar() or 0
+
+    # Cells that have at least one active cell executive assigned
+    covered_cell_subq = (
+        db.query(LocalLeaderCoverageLocation.location_id)
+        .join(LocalLeader, LocalLeader.local_leader_id == LocalLeaderCoverageLocation.local_leader_id)
+        .filter(
+            LocalLeader.is_active.is_(True),
+            LocalLeader.role == "executive_of_cell",
+        )
+        .distinct()
+        .subquery()
+    )
+    cells_without_executive = db.query(func.count(Location.location_id)).filter(
+        Location.location_type == "cell",
+        Location.is_active.is_(True),
+        ~Location.location_id.in_(covered_cell_subq),
+    ).scalar() or 0
+
+    # Locations covered by ANY active leader (village chiefs + cell executives)
+    directly_covered_subq = (
+        db.query(LocalLeaderCoverageLocation.location_id)
+        .join(LocalLeader, LocalLeader.local_leader_id == LocalLeaderCoverageLocation.local_leader_id)
+        .filter(LocalLeader.is_active.is_(True))
+        .distinct()
+        .subquery()
+    )
+
+    # Villages not directly covered AND whose parent cell also has no active executive
+    villages_without_leader = db.query(func.count(Location.location_id)).filter(
+        Location.location_type == "village",
+        Location.is_active.is_(True),
+        ~Location.location_id.in_(directly_covered_subq),
+        or_(
+            Location.parent_location_id.is_(None),
+            ~Location.parent_location_id.in_(covered_cell_subq),
+        ),
+    ).scalar() or 0
+
+    return {
+        "village_chiefs": int(village_chiefs),
+        "cell_executives": int(cell_executives),
+        "total_villages": int(total_villages),
+        "total_cells": int(total_cells),
+        "villages_without_leader": int(villages_without_leader),
+        "cells_without_executive": int(cells_without_executive),
+    }
+
+
 @router.get("/coverage-gaps", response_model=LeaderCoverageGapsResponse)
 def list_leader_coverage_gaps(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
-    limit: int = Query(200, ge=1, le=1000),
+    limit: int = Query(500, ge=1, le=2000),
 ):
     """Villages/cells with no active local leader registered (admin warning)."""
     raw = find_leader_coverage_gaps(db, limit=limit)

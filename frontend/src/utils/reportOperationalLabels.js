@@ -1,35 +1,21 @@
-/** Human labels for separating police/AI verification from community (local leader) confirmation. */
+/** Human labels for AI verification and community (local leader) confirmation. */
 
 export function formatTechnicalStatus(report) {
   const vs = (report?.verification_status || "").trim().toLowerCase();
   const rs = (report?.rule_status || "").trim().toLowerCase();
-  const policeVerified = vs === "verified" || vs === "rejected";
 
-  const aiParts = [];
-  if (rs === "passed") aiParts.push("AI verification: passed");
-  else if (rs === "flagged") aiParts.push("AI verification: needs review");
-  else if (rs === "rejected") aiParts.push("AI verification: rejected");
-  else if (rs === "pending") aiParts.push("AI verification: pending");
+  const parts = [];
+  if (rs === "passed") parts.push("AI verification: passed");
+  else if (rs === "flagged") parts.push("AI verification: needs review");
+  else if (rs === "rejected") parts.push("AI verification: rejected");
+  else if (rs === "pending") parts.push("AI verification: pending");
 
-  // Police confirmation is the human / station step.
-  const policeParts = [];
-  if (vs === "under_review") policeParts.push("Police review: pending");
-  else if (vs === "pending") policeParts.push("Police review: pending");
-  else if (vs === "verified") {
-    if (report?.verified_by) {
-      const name = (report?.verified_by_name || "").trim();
-      const role = (report?.verified_by_role || "").trim();
-      const who = [role, name].filter(Boolean).join(" · ");
-      policeParts.push(who ? `Police confirmed (${who})` : "Police confirmed");
-    } else {
-      policeParts.push("Auto-verified (AI)");
-    }
-  } else if (vs === "rejected") {
-    policeParts.push("Police rejected");
-  }
+  if (vs === "under_review") parts.push("Under review");
+  else if (vs === "pending") parts.push("Pending");
+  else if (vs === "verified") parts.push("Auto-verified (AI)");
+  else if (vs === "rejected") parts.push("Rejected");
 
-  const parts = [...aiParts, ...policeParts].filter(Boolean);
-  return parts.join(" · ") || "—";
+  return parts.filter(Boolean).join(" · ") || "—";
 }
 
 export function formatCommunityConfirmation(report) {
@@ -58,7 +44,7 @@ export function communityBadgeClass(report) {
   return "b-orange";
 }
 
-/** Mirrors backend hotspot_auto._is_report_eligible (police + leader gate when enabled server-side). */
+/** Mirrors backend hotspot_auto._is_report_eligible (AI gate when enabled server-side). */
 export function policeVerificationOkForHotspots(report) {
   const status = (report?.status || "").trim().toLowerCase();
   const verification = (report?.verification_status || "").trim().toLowerCase();
@@ -66,12 +52,8 @@ export function policeVerificationOkForHotspots(report) {
   if (status === "rejected" || verification === "rejected" || ruleStatus === "rejected") {
     return { ok: false, reason: "rejected" };
   }
-  const officerConfirmed =
-    Array.isArray(report?.reviews) &&
-    report.reviews.some((rv) => (rv.decision || "").trim().toLowerCase() === "confirmed");
-  const policeOk =
-    verification === "verified" || status === "verified" || officerConfirmed;
-  return { ok: policeOk, reason: policeOk ? null : "police_pending" };
+  const aiOk = verification === "verified" || status === "verified";
+  return { ok: aiOk, reason: aiOk ? null : "ai_pending" };
 }
 
 /** Mirrors backend leader_workflow.report_meets_leader_confirmation. */
@@ -89,8 +71,8 @@ export function reportReadyForCasesAndHotspots(report) {
 }
 
 /**
- * Single operational state aligned with the police dashboard workflow diagram.
- * @returns {'eligible'|'leader_confirmed_police_pending'|'leader_rejected'|'awaiting_leader'|'police_review_queue'|'rejected'}
+ * Single operational state aligned with the dashboard workflow diagram.
+ * @returns {'eligible'|'leader_confirmed_ai_pending'|'leader_rejected'|'awaiting_leader'|'ai_review_queue'|'rejected'}
  */
 export function getOperationalPipelineState(report) {
   const pv = policeVerificationOkForHotspots(report);
@@ -100,21 +82,21 @@ export function getOperationalPipelineState(report) {
   if (!pv.ok && pv.reason === "rejected") return "rejected";
   if (ls === "rejected") return "leader_rejected";
   if (pv.ok && leaderOk) return "eligible";
-  if (!pv.ok && ls === "confirmed") return "leader_confirmed_police_pending";
+  if (!pv.ok && ls === "confirmed") return "leader_confirmed_ai_pending";
   if (pv.ok && !leaderOk) return "awaiting_leader";
-  return "police_review_queue";
+  return "ai_review_queue";
 }
 
 const PIPELINE_META = {
   eligible: {
     label: "Cases & hotspots",
     badge: "b-green",
-    hint: "Police/AI verified and local leader confirmed. Report can feed auto-cases and hotspot clustering.",
+    hint: "AI verified and local leader confirmed. Report can feed auto-cases and hotspot clustering.",
   },
-  leader_confirmed_police_pending: {
+  leader_confirmed_ai_pending: {
     label: "Pending for ops",
     badge: "b-orange",
-    hint: "Leader confirmed but police verification is not complete yet. Stays out of cases/hotspots until police verifies.",
+    hint: "Leader confirmed but AI verification is not complete yet. Stays out of cases/hotspots until AI verifies.",
   },
   leader_rejected: {
     label: "Out of cases/hotspots",
@@ -124,17 +106,17 @@ const PIPELINE_META = {
   awaiting_leader: {
     label: "Awaiting leader",
     badge: "b-orange",
-    hint: "Police/AI step passed or in progress; waiting for village/cell leader community confirmation.",
+    hint: "AI verification passed; waiting for village/cell leader community confirmation.",
   },
-  police_review_queue: {
-    label: "Police review queue",
+  ai_review_queue: {
+    label: "Awaiting AI review",
     badge: "b-orange",
-    hint: "Needs police screening (AI under_review, pending, or flagged). Leader input may still be pending.",
+    hint: "AI scoring pending or under review. Local leader notification sent if needed.",
   },
   rejected: {
     label: "Rejected",
     badge: "b-red",
-    hint: "Report rejected by rules, AI threshold, or police. Not used for cases or hotspots unless overturned on review.",
+    hint: "Report rejected by rules or AI threshold. Not used for cases or hotspots.",
   },
 };
 
@@ -161,13 +143,13 @@ export function operationalGateChecklist(report) {
   return [
     {
       key: "ai_police",
-      label: "1. AI / police verification",
+      label: "1. AI verification",
       done: pv.ok,
       detail: pv.ok
-        ? "Verified (AI threshold or police review)"
+        ? "Verified (AI threshold)"
         : pv.reason === "rejected"
           ? "Rejected"
-          : "Pending — under_review or awaiting officer",
+          : "Pending — AI scoring under review",
     },
     {
       key: "leader",
@@ -199,7 +181,7 @@ export function formatHotspotClusteringCue(report) {
   if (reportReadyForCasesAndHotspots(report)) {
     return {
       excluded: false,
-      text: "Cases & hotspots: eligible — police/AI verified and local leader confirmed.",
+      text: "Cases & hotspots: eligible — AI verified and local leader confirmed.",
     };
   }
   const state = getOperationalPipelineState(report);

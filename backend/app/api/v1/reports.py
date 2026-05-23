@@ -39,14 +39,11 @@ from app.schemas.report import (
     EvidencePreview,
     AssignmentResponse,
     AssignCreate,
-    ReviewResponse,
-    ReviewCreate,
 )
 from app.models.police_user import PoliceUser
 from app.models.local_leader import LocalLeader
 from app.api.v1.leader_auth import get_optional_local_leader
 from app.models.report_assignment import ReportAssignment
-from app.models.police_review import PoliceReview
 from app.core.security import verify_password
 from app.core.websocket import manager
 from app.api.v1.auth import get_optional_user, get_current_user, get_current_admin_or_supervisor
@@ -60,10 +57,7 @@ from app.core.report_rules import (
     enhanced_screen_recording_detection,
     validate_location_consistency
 )
-from app.core.report_review import (
-    needs_police_review_clause,
-    resolve_ml_prediction_for_report,
-)
+from app.core.report_review import resolve_ml_prediction_for_report
 from app.core.credibility_model import score_report_credibility, update_device_ml_aggregates, _json_safe
 from app.core.report_credibility_summary import report_credibility_api_fields
 from app.core.natural_language_scorer import analyze_description_quality
@@ -2808,10 +2802,6 @@ def _purge_outside_musanze_reports(db: Session, recompute_hotspots: bool = True)
             {"ids": outside_ids},
         )
         db.execute(
-            text("DELETE FROM police_reviews WHERE report_id = ANY(:ids)"),
-            {"ids": outside_ids},
-        )
-        db.execute(
             text("DELETE FROM report_assignments WHERE report_id = ANY(:ids)"),
             {"ids": outside_ids},
         )
@@ -3253,8 +3243,8 @@ def create_report(
         report.feature_vector = _json_safe(fv)
 
     # Note: submission-guidance (mobile guidance) has been removed from the product.
-    # For text-only reports we keep the existing pipeline and record a lightweight NL analysis
-    # (no auto-reject here; rule engine + police review still apply).
+    # For text-only reports we keep the existing pipeline and record a lightweight NL analysis.
+    # Police no longer review reports directly — AI + local leader are the verification gates.
     # Local leader submissions skip server-side NL/semantic/ML — mobile gates already ran on device.
     if submitting_leader is None and not evidence_metadata_list:
         try:
@@ -3448,9 +3438,30 @@ def create_report(
         raise HTTPException(status_code=500, detail=f"Failed to save report: {e}")
 
     if submitting_leader is None and report.village_location_id is not None:
-        from app.core.leader_notifications import notify_local_leaders_new_report_task
+        from app.core.leader_notifications import notify_local_leaders_needs_verification_task
 
-        background_tasks.add_task(notify_local_leaders_new_report_task, str(report.report_id))
+        ai_verified = report.verification_status == "verified" and report.status == "verified"
+        has_evidence = bool(
+            getattr(report, "evidence_files", None)
+            or (
+                isinstance(report.feature_vector, dict)
+                and report.feature_vector.get("evidence_validations")
+            )
+        )
+
+        if ai_verified:
+            # AI (with or without evidence) is confident — treat as equivalent to leader verification.
+            # No human gate needed; set leader_verification_status to confirmed automatically.
+            report.leader_verification_status = "confirmed"
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+        else:
+            # AI could not fully confirm (pending / under_review / flagged).
+            # Notify local leader to do community verification regardless of evidence.
+            background_tasks.add_task(notify_local_leaders_needs_verification_task, str(report.report_id))
+
     elif submitting_leader is not None:
         from app.core.leader_verification_notifications import (
             notify_police_leader_submitted_report_task,
@@ -3502,6 +3513,7 @@ def list_reports(
         None,
         description="When true, only reports filed by a logged-in local leader",
     ),
+    priority: Optional[str] = Query(None, description="Filter by priority: low, medium, high, urgent"),
 ):
     """List reports.
 
@@ -3693,6 +3705,10 @@ def list_reports(
     elif submitted_by_leader is False:
         query = query.filter(Report.submitted_by_local_leader_id.is_(None))
 
+    if priority:
+        p = priority.strip().lower()
+        query = query.filter(Report.priority == p)
+
     total = query.count()
     reports = (
         query.order_by(Report.reported_at.desc())
@@ -3709,405 +3725,6 @@ def list_reports(
     )
 
 
-@router.post("/{report_id}/reviews", response_model=ReviewResponse, status_code=201)
-def add_review(
-    report_id: UUID,
-    body: ReviewCreate,
-    request: Request,
-    background_tasks: BackgroundTasks,
-    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
-    db: Session = Depends(get_db),
-):
-    """
-    Add a police review (decision + note).
-
-    - Admin / Supervisor: any report they can see.
-    - Officer: only for reports assigned to them.
-    """
-    if body.decision not in ("confirmed", "rejected", "investigation"):
-        raise HTTPException(status_code=400, detail="decision must be confirmed, rejected, or investigation")
-
-    report = db.query(Report).filter(Report.report_id == report_id).first()
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-
-    role = getattr(current_user, "role", None)
-    if role == "officer":
-        assigned = (
-            db.query(ReportAssignment)
-            .filter(
-                ReportAssignment.report_id == report_id,
-                ReportAssignment.police_user_id == current_user.police_user_id,
-            )
-            .first()
-        )
-        if not assigned:
-            raise HTTPException(
-                status_code=403,
-                detail="You can only review reports assigned to you",
-            )
-
-    from app.core.leader_workflow import report_is_leader_submitted
-    from app.core.verification_orchestrator import run_citizen_verification_pipeline
-
-    if not report_is_leader_submitted(report):
-        fv_police = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
-        if not isinstance(fv_police.get("unified_validation"), dict):
-            try:
-                device_pre = db.query(Device).filter(Device.device_id == report.device_id).first()
-                if device_pre is not None:
-                    evidence_files_pre = (
-                        db.query(EvidenceFile)
-                        .filter(EvidenceFile.report_id == report.report_id)
-                        .all()
-                    )
-                    validations_pre = (
-                        fv_police.get("evidence_validations")
-                        if isinstance(fv_police.get("evidence_validations"), list)
-                        else []
-                    )
-                    run_citizen_verification_pipeline(
-                        db,
-                        report,
-                        device_pre,
-                        evidence_files=evidence_files_pre,
-                        evidence_validations=validations_pre,
-                        compute_scorecard_fn=_compute_threshold_scorecard,
-                    )
-                    _apply_post_pipeline_evidence_checks(
-                        report,
-                        db,
-                        description=report.description or "",
-                    )
-                    db.flush()
-            except Exception as exc:
-                logger.warning(
-                    "Pre-review verification pipeline failed for report %s: %s",
-                    report_id,
-                    exc,
-                )
-
-    # Update report verification and status when police confirms or rejects
-    now_utc = datetime.now(timezone.utc)
-
-    # Update ML prediction based on police review (human oversight)
-    decision = (body.decision or "").strip().lower()
-
-    if decision == "confirmed":
-        # Police confirmed report - update ML to learn from this
-        report.verified_at = now_utc
-        report.verified_by = current_user.police_user_id  # Add who verified it
-        report.rule_status = "passed"
-        report.status = "verified"
-        report.verification_status = "verified"
-        report.is_flagged = False
-        report.flag_reason = None
-        
-        # Get ML max trust score from config
-        from app.database import SessionLocal
-        from app.models.system_config import SystemConfig
-        
-        db_config = SessionLocal()
-        try:
-            max_trust_config = db_config.query(SystemConfig).filter(
-                SystemConfig.config_key == 'ml.max_trust_score'
-            ).first()
-            max_trust_score = float(max_trust_config.config_value.get('value', 95.0)) if max_trust_config else 95.0
-        finally:
-            db_config.close()
-        
-        # Update ML prediction to reflect human confirmation
-        existing_ml = db.query(MLPrediction).filter(
-            MLPrediction.report_id == report_id
-        ).order_by(MLPrediction.evaluated_at.desc()).first()
-        
-        if existing_ml:
-            # Police confirmation = at least 90; preserve higher scores already given
-            current_score = float(existing_ml.trust_score or 50.0)
-            police_score = max(90.0, min(current_score, max_trust_score))
-            existing_ml.trust_score = Decimal(str(round(police_score, 2)))
-            existing_ml.prediction_label = "likely_real"
-            existing_ml.confidence = Decimal("0.95")
-            existing_ml.is_final = True
-        else:
-            police_score = max(90.0, max_trust_score)
-            new_ml = MLPrediction(
-                prediction_id=uuid4(),
-                report_id=report_id,
-                trust_score=Decimal(str(round(police_score, 2))),
-                prediction_label="likely_real",
-                confidence=Decimal("0.95"),
-                model_type="human_override",
-                is_final=True,
-                evaluated_at=now_utc
-            )
-            db.add(new_ml)
-        
-        # Update device trust score based on successful human confirmation.
-        # Keep step small to avoid over-inflating trust from a single review.
-        if hasattr(report, "device") and report.device and hasattr(report.device, "device_trust_score"):
-            current_device_score = float(report.device.device_trust_score) if report.device.device_trust_score else 50.0
-            # Increase by a small bounded step.
-            new_device_score = min(100.0, current_device_score + 2.0)
-            report.device.device_trust_score = Decimal(str(new_device_score))
-        
-        # Update trusted_reports count
-        if hasattr(report.device, "trusted_reports"):
-            report.device.trusted_reports = (report.device.trusted_reports or 0) + 1
-        
-    elif decision == "rejected":
-        # Police rejected report - update ML to learn from this
-        report.verified_at = now_utc
-        report.verified_by = current_user.police_user_id  # Add who verified it
-        report.rule_status = "rejected"
-        report.status = "rejected"
-        report.verification_status = "rejected"
-        report.is_flagged = True
-        report.flag_reason = body.review_note or "rejected_by_reviewer"
-        
-        # Get ML min trust score from config
-        from app.database import SessionLocal
-        from app.models.system_config import SystemConfig
-        
-        db_config = SessionLocal()
-        try:
-            min_trust_config = db_config.query(SystemConfig).filter(
-                SystemConfig.config_key == 'ml.min_trust_score'
-            ).first()
-            min_trust_score = float(min_trust_config.config_value.get('value', 5.0)) if min_trust_config else 5.0
-        finally:
-            db_config.close()
-        
-        # Update ML prediction to reflect human rejection
-        existing_ml = db.query(MLPrediction).filter(
-            MLPrediction.report_id == report_id
-        ).order_by(MLPrediction.evaluated_at.desc()).first()
-        
-        if existing_ml:
-            # Human rejection decreases trust score and sets label to fake
-            existing_ml.trust_score = Decimal(str(min_trust_score))
-            existing_ml.prediction_label = "fake"
-            existing_ml.confidence = Decimal("0.95")  # High confidence in this assessment
-            existing_ml.is_final = True
-        else:
-            # Create new ML prediction if none exists
-            new_ml = MLPrediction(
-                prediction_id=uuid4(),
-                report_id=report_id,
-                trust_score=Decimal(str(min_trust_score)),
-                prediction_label="fake",
-                confidence=Decimal("0.95"),
-                model_type="human_override",
-                is_final=True,
-                evaluated_at=now_utc
-            )
-            db.add(new_ml)
-        
-        # Update device trust score based on human rejection.
-        # Keep reduction small to avoid dangerous one-shot collapses.
-        if hasattr(report, "device") and report.device and hasattr(report.device, "device_trust_score"):
-            current_device_score = float(report.device.device_trust_score) if report.device.device_trust_score else 50.0
-            # Decrease by a small bounded step.
-            new_device_score = max(0.0, current_device_score - 3.0)
-            report.device.device_trust_score = Decimal(str(new_device_score))
-        
-        # Update flagged_reports count
-        if hasattr(report.device, "flagged_reports"):
-            report.device.flagged_reports = (report.device.flagged_reports or 0) + 1
-        
-    else:
-        # Human review for flagged reports - police can make final decisions
-        report.verification_status = "verified"
-        report.status = "verified"
-        report.is_flagged = False
-        report.flag_reason = None
-        if body.review_note:
-            print(f" POLICE VERIFIED: Report {report_id} manually verified - {body.review_note}")
-        else:
-            print(f" POLICE VERIFIED: Report {report_id} manually verified")
-
-    ml_prediction_tmp = resolve_ml_prediction_for_report(report)
-    semantic_alignment_meta = None
-    if isinstance(report.feature_vector, dict):
-        semantic_alignment_meta = report.feature_vector.get("semantic_alignment")
-    ai_trust_score = (
-        float(ml_prediction_tmp.trust_score)
-        if getattr(ml_prediction_tmp, "trust_score", None) is not None
-        else None
-    )
-    ai_label = getattr(ml_prediction_tmp, "prediction_label", None)
-    ai_trust_score, ai_label = _rule_adjusted_trust_label(report, ai_trust_score, ai_label)
-    _persist_adjusted_ml_prediction(db, ml_prediction_tmp, ai_trust_score, ai_label)
-    scorecard_now = (
-        report.feature_vector.get("threshold_scorecard")
-        if isinstance(getattr(report, "feature_vector", None), dict)
-        and isinstance(report.feature_vector.get("threshold_scorecard"), dict)
-        else None
-    )
-    unified_now = (
-        report.feature_vector.get("unified_validation")
-        if isinstance(getattr(report, "feature_vector", None), dict)
-        and isinstance(report.feature_vector.get("unified_validation"), dict)
-        else None
-    )
-    report.ai_verification_reason = _compose_ai_verification_reason(
-        verification_status=report.verification_status,
-        rule_status=report.rule_status,
-        is_flagged=report.is_flagged,
-        flag_reason=report.flag_reason,
-        ml_prediction_label=ai_label,
-        trust_score=ai_trust_score,
-        semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
-        incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
-        reporter_description=report.description,
-        context_tags=list(getattr(report, "context_tags", None) or []),
-        reviewer_note=body.review_note,
-        unified_validation=unified_now,
-        scorecard=scorecard_now,
-        latitude=getattr(report, "latitude", None),
-        longitude=getattr(report, "longitude", None),
-        gps_accuracy=getattr(report, "gps_accuracy", None),
-        location_label=_human_location_chain_from_report(report),
-        description_credibility=_description_credibility_from_report(report),
-        text_only_reason_codes=_text_only_reason_codes_from_report(report),
-    )
-    report.ai_evidence_description = None
-    validations_police = (
-        report.feature_vector.get("evidence_validations")
-        if isinstance(getattr(report, "feature_vector", None), dict)
-        and isinstance(report.feature_vector.get("evidence_validations"), list)
-        else []
-    )
-    snapshot = _build_ai_analysis_snapshot(
-        verification_status=report.verification_status,
-        rule_status=report.rule_status,
-        is_flagged=report.is_flagged,
-        flag_reason=report.flag_reason,
-        ml_prediction_label=ai_label,
-        trust_score=ai_trust_score,
-        semantic_alignment=semantic_alignment_meta if isinstance(semantic_alignment_meta, dict) else None,
-        incident_type_name=getattr(getattr(report, "incident_type", None), "type_name", None),
-        reporter_description=report.description,
-        context_tags=list(getattr(report, "context_tags", None) or []),
-        unified_validation=unified_now,
-        scorecard=scorecard_now,
-        evidence_validations=validations_police,
-        evidence_file_count=len(getattr(report, "evidence_files", []) or []),
-        latitude=getattr(report, "latitude", None),
-        longitude=getattr(report, "longitude", None),
-        gps_accuracy=getattr(report, "gps_accuracy", None),
-        location_label=_human_location_chain_from_report(report),
-    )
-    _persist_ai_analysis_snapshot(report, snapshot)
-
-    existing_review = (
-        db.query(PoliceReview)
-        .filter(
-            PoliceReview.report_id == report_id,
-            PoliceReview.police_user_id == current_user.police_user_id,
-        )
-        .first()
-    )
-
-    if existing_review:
-        review = existing_review
-        review.decision = body.decision
-        review.review_note = body.review_note
-        review.reviewed_at = now_utc
-    else:
-        review = PoliceReview(
-            review_id=uuid4(),
-            report_id=report_id,
-            police_user_id=current_user.police_user_id,
-            decision=body.decision,
-            review_note=body.review_note,
-        )
-        db.add(review)
-    # Get client IP and user agent for audit logging
-    client_ip = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-    
-    try:
-        # Recompute device aggregates after police final decision and ML override updates.
-        if getattr(report, "device", None) is not None:
-            update_device_ml_aggregates(db, report.device, window=30)
-
-        db.commit()
-        
-        # Log the successful action
-        log_action(
-            db,
-            "report_reviewed",
-            actor_type="police_user",
-            actor_id=current_user.police_user_id,
-            entity_type="report",
-            entity_id=str(report_id),
-            action_details={
-                "decision": body.decision,
-                "updated_existing_review": bool(existing_review),
-            },
-            ip_address=client_ip,
-            user_agent=user_agent,
-            success=True,
-        )
-    except Exception as e:
-        db.rollback()
-        # Check if it's a duplicate key error
-        if "duplicate key value violates unique constraint" in str(e) and "police_reviews_report_id_police_user_id_key" in str(e):
-            raise HTTPException(status_code=400, detail="You have already reviewed this report")
-        raise
-
-    # Create notifications for report review
-    from app.api.v1.notifications import create_role_notifications, create_notification
-    
-    # Notify admins and supervisors about the review decision
-    decision_text = body.decision.upper()
-    create_role_notifications(
-        db,
-        title=f"Report {decision_text}",
-        message=f"Report {report.report_number} has been {body.decision} by {current_user.first_name} {current_user.last_name}.",
-        notif_type="report",
-        related_entity_type="report",
-        related_entity_id=str(report_id),
-        target_roles=["admin", "supervisor"],
-        target_location_id=report.village_location_id,
-        exclude_user_id=current_user.police_user_id,
-    )
-    
-    # If there was an assigned officer, notify them about the review
-    if hasattr(report, 'assignments') and report.assignments:
-        for assignment in report.assignments:
-            if assignment.police_user_id != current_user.police_user_id:
-                create_notification(
-                    db,
-                    police_user_id=assignment.police_user_id,
-                    title=f"Assigned Report {decision_text}",
-                    message=f"Report {report.report_number} you were assigned has been {body.decision}.",
-                    notif_type="report",
-                    related_entity_type="report",
-                    related_entity_id=str(report_id),
-                )
-    db.commit()
-    db.refresh(review)
-    reviewer_name = f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email
-    
-    # Trigger real-time automation after police review decisions.
-    # Cases need verified outcomes; hotspots should refresh for any final decision change.
-    if report.verification_status == "verified":
-        background_tasks.add_task(run_auto_case_for_report, str(report.report_id))
-    background_tasks.add_task(run_hotspot_auto)
-    
-    background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "report", "action": "reviewed"})
-
-    return ReviewResponse(
-        review_id=review.review_id,
-        report_id=review.report_id,
-        police_user_id=review.police_user_id,
-        decision=review.decision,
-        review_note=review.review_note,
-        reviewed_at=review.reviewed_at,
-        reviewer_name=reviewer_name,
-    )
 
 
 @router.get("/{report_id}", response_model=ReportDetailResponse)
@@ -4129,14 +3746,13 @@ def get_report(
             .joinedload(Location.parent)
             .joinedload(Location.parent),
             joinedload(Report.evidence_files),
-            joinedload(Report.police_reviews).joinedload(PoliceReview.police_user),
             joinedload(Report.assignments).joinedload(ReportAssignment.police_user).joinedload(PoliceUser.station),
             selectinload(Report.ml_predictions),
         )
         .filter(Report.report_id == report_id)
         .first()
     )
-    
+
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
@@ -4151,46 +3767,6 @@ def get_report(
         raise HTTPException(status_code=401, detail="Authentication required")
 
     return _build_report_detail_response(report, db, for_police_viewer=True)
-
-
-@router.get("/{report_id}/reviews", response_model=List[ReviewResponse])
-def get_reviews(
-    report_id: UUID,
-    current_user: Annotated[PoliceUser, Depends(get_current_user)],
-    db: Session = Depends(get_db),
-):
-    """Get all reviews for a report."""
-    from sqlalchemy.orm import joinedload
-    
-    report = (
-        db.query(Report)
-        .options(joinedload(Report.police_reviews).joinedload(PoliceReview.police_user))
-        .filter(Report.report_id == report_id)
-        .first()
-    )
-    
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-    
-    review_list = []
-    if getattr(report, "police_reviews", None):
-        for r in report.police_reviews:
-            reviewer_name = None
-            if r.police_user:
-                reviewer_name = f"{r.police_user.first_name or ''} {r.police_user.last_name or ''}".strip() or r.police_user.email
-            review_list.append(
-                ReviewResponse(
-                    review_id=r.review_id,
-                    report_id=r.report_id,
-                    police_user_id=r.police_user_id,
-                    decision=r.decision,
-                    review_note=r.review_note,
-                    reviewed_at=r.reviewed_at,
-                    reviewer_name=reviewer_name,
-                )
-            )
-    
-    return review_list
 
 
 @router.get("/{report_id}/related", response_model=List[ReportResponse])
@@ -4229,7 +3805,6 @@ def get_related_reports(
             joinedload(Report.incident_type),
             joinedload(Report.village_location),
             joinedload(Report.evidence_files),
-            joinedload(Report.police_reviews).joinedload(PoliceReview.police_user),
         )
         .filter(
             and_(
@@ -6306,28 +5881,6 @@ def _build_report_detail_response(
                 )
             )
 
-    # Build reviews list (no reviewer identity for reporter-facing payloads)
-    review_list = []
-    if hasattr(report, 'police_reviews') and report.police_reviews:
-        for review in report.police_reviews:
-            reviewer_name = None
-            if for_police_viewer and review.police_user:
-                first_name = (getattr(review.police_user, "first_name", None) or "").strip()
-                last_name = (getattr(review.police_user, "last_name", None) or "").strip()
-                full_name = f"{first_name} {last_name}".strip()
-                reviewer_name = full_name or getattr(review.police_user, "badge_number", None)
-            review_list.append(
-                ReviewResponse(
-                    review_id=review.review_id,
-                    report_id=review.report_id,
-                    police_user_id=review.police_user_id if for_police_viewer else 0,
-                    decision=review.decision,
-                    review_note=review.review_note,
-                    reviewed_at=review.reviewed_at,
-                    reviewer_name=reviewer_name,
-                )
-            )
-
     return ReportDetailResponse(
         report_id=report.report_id,
         report_number=getattr(report, "report_number", None),
@@ -6394,7 +5947,6 @@ def _build_report_detail_response(
             for ef in report.evidence_files
         ],
         assignments=assignment_list,
-        reviews=review_list,
         community_votes=community_votes,
         user_vote=user_vote,
         metadata_json=device_metadata,

@@ -828,13 +828,34 @@ class _HomeScreenState extends State<HomeScreen>
 
   // ── Safety Tips ─────────────────────────────────────────────────────────────
 
+  static const _fallbackTips = [
+    ('🔔', 'Stay Alert', 'Keep aware of your surroundings at all times.'),
+    ('📱', 'Report Fast', 'Report incidents quickly — early reports save lives.'),
+    ('👥', 'Travel Together', 'Move in groups especially at night or in risky areas.'),
+    ('📍', 'Share Location', 'Let trusted contacts know where you are.'),
+  ];
+
   Widget _buildSafetyTips() {
-    const tips = [
-      ('🔔', 'Stay Alert', 'Keep aware of your surroundings at all times.'),
-      ('📱', 'Report Fast', 'Report incidents quickly — early reports save lives.'),
-      ('👥', 'Travel Together', 'Move in groups especially at night or in risky areas.'),
-      ('📍', 'Share Location', 'Let trusted contacts know where you are.'),
-    ];
+    // Build tip cards from nearby hotspot citizen advisories (LLM-generated).
+    // Each advisory is split on ". " so long sentences become separate cards.
+    final liveTips = <(String, String, String)>[];
+    for (final h in _nearbyHotspots) {
+      final advisory = h.citizenAdvisory?.trim() ?? '';
+      if (advisory.isEmpty) continue;
+      final sentences = advisory
+          .split(RegExp(r'\.\s+'))
+          .map((s) => s.trim())
+          .where((s) => s.length > 10)
+          .toList();
+      for (final sentence in sentences) {
+        final text = sentence.endsWith('.') ? sentence : '$sentence.';
+        liveTips.add((_riskIcon(h.riskLevel), h.incidentTypeName ?? 'Advisory', text));
+        if (liveTips.length >= 6) break;
+      }
+      if (liveTips.length >= 6) break;
+    }
+
+    final tips = liveTips.isNotEmpty ? liveTips : _fallbackTips;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -894,6 +915,21 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       ],
     );
+  }
+
+  String _riskIcon(String riskLevel) {
+    switch (riskLevel.toLowerCase()) {
+      case 'critical':
+        return '🚨';
+      case 'high':
+      case 'active':
+        return '⚠️';
+      case 'medium':
+      case 'emerging':
+        return '🔶';
+      default:
+        return '🛡️';
+    }
   }
 
   // ── Map Section ─────────────────────────────────────────────────────────────

@@ -76,11 +76,36 @@ const ActiveSessions = ({ wsRefreshKey }) => {
     }
   };
 
+  const activeCount  = sessions.filter(s => !s.revoked_at).length;
+  const revokedCount = sessions.filter(s =>  s.revoked_at).length;
+
   return (
     <>
-      <div className="page-header">
-        <h2>Active Sessions</h2>
-        <p>Recent login sessions, IP addresses, and user agents for security review.</p>
+      {/* ── Header card ── */}
+      <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+          <div>
+            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Active Sessions</h2>
+            <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
+              Recent login sessions, IP addresses, and user agents for security review.
+            </p>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          {[
+            { label: 'Total sessions', value: sessions.length,  cls: 'sb-blue'   },
+            { label: 'Active',         value: activeCount,       cls: 'sb-green'  },
+            { label: 'Revoked',        value: revokedCount,      cls: 'sb-red'    },
+            { label: 'Filtered',       value: filteredSessions.length, cls: 'sb-blue' },
+          ].map((s) => (
+            <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
+              <div className="stat-btn-label">{s.label}</div>
+              <div className="stat-btn-value">{s.value}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="card">
@@ -90,29 +115,24 @@ const ActiveSessions = ({ wsRefreshKey }) => {
             placeholder="Search by user name..."
             style={{ flex: 2 }}
             value={searchText}
-            onChange={(e) => {
-              setSearchText(e.target.value);
-              setOffset(0);
-            }}
+            onChange={(e) => { setSearchText(e.target.value); setOffset(0); }}
           />
           <select
             className="select"
             value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setOffset(0);
-            }}
+            onChange={(e) => { setStatusFilter(e.target.value); setOffset(0); }}
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>
             <option value="revoked">Revoked</option>
           </select>
           <input
+            className="input"
             type="number"
             min="10"
             max="100"
             placeholder="Rows"
-            style={{ minWidth: "80px" }}
+            style={{ minWidth: '70px' }}
             value={pageSize}
             onChange={(e) => {
               const newSize = Math.max(10, Math.min(100, parseInt(e.target.value) || 25));
@@ -143,7 +163,12 @@ const ActiveSessions = ({ wsRefreshKey }) => {
                     {offset + index + 1}
                   </td>
                   <td style={{ fontSize: '11px' }}>
-                    {s.user_name || `User #${s.police_user_id}`}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>{s.user_name || `User #${s.police_user_id}`}</span>
+                      <span className={`badge ${s.revoked_at ? 'b-red' : 'b-green'}`} style={{ fontSize: 9 }}>
+                        {s.revoked_at ? 'revoked' : 'active'}
+                      </span>
+                    </div>
                   </td>
                   <td
                     style={{
@@ -183,17 +208,17 @@ const ActiveSessions = ({ wsRefreshKey }) => {
                       : '—'}
                   </td>
                   <td>
-                    <button
-                      className="btn btn-outline btn-sm"
-                      onClick={() => revokeSession(s.police_user_id)}
-                      disabled={!!s.revoked_at}
-                      style={{ 
-                        opacity: s.revoked_at ? 0.5 : 1,
-                        cursor: s.revoked_at ? 'not-allowed' : 'pointer'
-                      }}
-                    >
-                      {s.revoked_at ? 'Revoked' : 'Revoke'}
-                    </button>
+                    {!s.revoked_at ? (
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => revokeSession(s.police_user_id)}
+                        style={{ background: 'var(--c-danger-dim)', color: 'var(--danger)', border: '1px solid var(--c-danger-ring)', cursor: 'pointer' }}
+                      >
+                        Revoke
+                      </button>
+                    ) : (
+                      <span className="badge b-gray" style={{ fontSize: 10 }}>Revoked</span>
+                    )}
                   </td>
                 </tr>
               ))}

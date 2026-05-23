@@ -14,24 +14,40 @@ from app.core.leader_coverage import active_leader_ids_covering_village
 from app.core.leader_coverage_notifications import notify_admins_leader_coverage_gap_task
 
 
+def _get_report_and_leaders(db, report_id: str):
+    """Shared helper: load report + active leader IDs covering its village."""
+    report = (
+        db.query(Report)
+        .options(joinedload(Report.village_location))
+        .filter(Report.report_id == report_id)
+        .first()
+    )
+    if not report or report.submitted_by_local_leader_id is not None:
+        return None, []
+    village_id = report.village_location_id
+    if village_id is None:
+        return report, []
+    leader_ids = active_leader_ids_covering_village(db, int(village_id))
+    return report, leader_ids
+
+
 def notify_local_leaders_new_report_task(report_id: str) -> None:
+    """Kept for backward compatibility — prefer notify_local_leaders_needs_verification_task."""
+    notify_local_leaders_needs_verification_task(report_id)
+
+
+def notify_local_leaders_needs_verification_task(report_id: str) -> None:
+    """
+    Alert local leaders that a citizen report in their area needs community verification.
+    Called when the AI pipeline could not fully confirm the report (pending / under_review).
+    """
     db = SessionLocal()
     try:
-        report = (
-            db.query(Report)
-            .options(joinedload(Report.village_location))
-            .filter(Report.report_id == report_id)
-            .first()
-        )
-        if not report or report.submitted_by_local_leader_id is not None:
+        report, leader_ids = _get_report_and_leaders(db, report_id)
+        if report is None:
             return
-        village_id = report.village_location_id
-        if village_id is None:
-            return
-
-        leader_ids = active_leader_ids_covering_village(db, int(village_id))
         if not leader_ids:
-            notify_admins_leader_coverage_gap_task(str(report.report_id))
+            notify_admins_leader_coverage_gap_task(report_id)
             return
 
         email_on = getattr(settings, "notify_local_leaders_new_report_email", True)
@@ -39,10 +55,7 @@ def notify_local_leaders_new_report_task(report_id: str) -> None:
         if not email_on and not fcm_on:
             return
 
-        vname = None
-        if report.village_location:
-            vname = report.village_location.location_name
-
+        vname = report.village_location.location_name if report.village_location else None
         rnum = getattr(report, "report_number", None)
         ref = str(rnum) if rnum else str(report.report_id)[:8]
         rid = str(report.report_id)
@@ -59,8 +72,7 @@ def notify_local_leaders_new_report_task(report_id: str) -> None:
                     vname,
                 )
             if fcm_on and fcm_is_configured():
-                fcm_tok = getattr(leader, "fcm_device_token", None) or ""
-                fcm_tok = fcm_tok.strip()
+                fcm_tok = (getattr(leader, "fcm_device_token", None) or "").strip()
                 if fcm_tok:
                     send_leader_new_report_notification(fcm_tok, ref, vname, rid)
     finally:

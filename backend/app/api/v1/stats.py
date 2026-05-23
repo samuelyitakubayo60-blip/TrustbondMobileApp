@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func, or_
 
 from app.database import get_db
-from app.core.report_review import needs_police_review_clause
 from app.core.report_list_trust import resolve_report_list_trust_score
 from app.core.village_lookup import get_village_location_info
 from app.models.report import Report
@@ -121,38 +120,38 @@ def get_station_stats(
         Report.trust_score >= 80
     ).scalar() or 0
     
-    # Auto-confirmed reports (verified without police review)
+    # AI-confirmed reports (verified by AI pipeline)
     auto_confirmed_reports = db.query(func.count(Report.report_id)).filter(
         station_report_filter,
         Report.verification_status == 'verified',
-        Report.police_review_id.is_(None)
+        or_(Report.leader_verification_status.is_(None), Report.leader_verification_status != 'confirmed')
     ).scalar() or 0
-    
-    # Confirmed by officer (verified with police review)
+
+    # Confirmed by local leader (community verification)
     officer_confirmed_reports = db.query(func.count(Report.report_id)).filter(
         station_report_filter,
         Report.verification_status == 'verified',
-        Report.police_review_id.isnot(None)
+        Report.leader_verification_status == 'confirmed'
     ).scalar() or 0
-    
+
     # Rejected reports
     rejected_reports = db.query(func.count(Report.report_id)).filter(
         station_report_filter,
         Report.status == 'rejected'
     ).scalar() or 0
-    
-    # Auto-rejected reports (rejected without police review)
+
+    # Auto-rejected reports (rejected by AI pipeline without leader review)
     auto_rejected_reports = db.query(func.count(Report.report_id)).filter(
         station_report_filter,
         Report.status == 'rejected',
-        Report.police_review_id.is_(None)
+        or_(Report.leader_verification_status.is_(None), Report.leader_verification_status != 'rejected')
     ).scalar() or 0
-    
-    # Manually rejected reports (rejected with police review)
+
+    # Rejected by local leader
     manually_rejected_reports = db.query(func.count(Report.report_id)).filter(
         station_report_filter,
         Report.status == 'rejected',
-        Report.police_review_id.isnot(None)
+        Report.leader_verification_status == 'rejected'
     ).scalar() or 0
     
     return {
