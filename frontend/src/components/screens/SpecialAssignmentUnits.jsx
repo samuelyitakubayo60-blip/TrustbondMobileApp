@@ -6,7 +6,7 @@ import AssignmentUnitModal from "../Modals/AssignmentUnitModal";
 const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
   const { user } = useAuth();
   const canManage = user?.role === "admin";
-  const canView = canManage || user?.role === "supervisor";
+  const canView = canManage;
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

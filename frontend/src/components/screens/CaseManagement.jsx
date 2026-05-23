@@ -3,13 +3,23 @@ import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import EditCaseModal from '../Modals/EditCaseModal';
 import ViewCaseModal from '../Modals/ViewCaseModal';
-import { getRoleDisplayName, canHandoverToRib, isOperationalLead } from '../../utils/roleMapping';
+import {
+  getRoleDisplayName,
+  canHandoverToRib,
+  canCreateCases,
+  canDeleteCases,
+  canManageCases,
+} from '../../utils/roleMapping';
 import { caseDisplayName, caseDisplayRef } from '../../utils/caseDisplay';
 
 const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
   const { user: me } = useAuth();
   const role = me?.role || 'officer';
-  const isAdminOrSupervisor = isOperationalLead(role);
+  const canCreate = canCreateCases(role);
+  const canDelete = canDeleteCases(role);
+  const canUpdateCase = (c) =>
+    canManageCases(role) &&
+    (role === 'admin' || role === 'supervisor' || c.assigned_to_id === me?.police_user_id);
   const [cases, setCases] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -124,7 +134,7 @@ const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
               Multiple verified reports grouped into a single coordinated investigation.
             </p>
           </div>
-          {isAdminOrSupervisor && (
+          {canCreate && (
             <button
               className="btn btn-primary"
               style={{ whiteSpace: 'nowrap', alignSelf: 'center' }}
@@ -269,7 +279,7 @@ const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
                 <button className="btn btn-primary btn-sm" onClick={() => { setViewingCase(c); setViewOpen(true); }}>
                   View Case
                 </button>
-                {(isAdminOrSupervisor || (role === 'officer' && c.assigned_to_id === me?.police_user_id)) && (
+                {canUpdateCase(c) && (
                   <button className="btn btn-outline btn-sm" onClick={() => { setEditingCase(c); setEditOpen(true); }}>
                     Update
                   </button>
@@ -295,7 +305,7 @@ const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
                     Hand to RIB
                   </button>
                 )}
-                {isAdminOrSupervisor && (
+                {canDelete && (
                   <button
                     className="btn btn-outline btn-sm"
                     style={{ color: 'var(--danger)', borderColor: 'transparent' }}

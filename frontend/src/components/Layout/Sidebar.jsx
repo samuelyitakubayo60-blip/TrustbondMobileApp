@@ -224,15 +224,7 @@ const Sidebar = ({
                 },
               ]
             : role === "supervisor"
-            ? [
-                { id: "users", idx: 8, label: "Users", icon: "ni-us" },
-                {
-                  id: "special-assignment-units",
-                  idx: 17,
-                  label: "Assignment Units",
-                  icon: "ni-st",
-                },
-              ]
+            ? [{ id: "users", idx: 8, label: "Users", icon: "ni-us" }]
             : role === "officer"
             ? [{ id: "users", idx: 8, label: "Users", icon: "ni-us" }]
             : []),

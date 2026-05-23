@@ -33,6 +33,22 @@ import StationModal from "./components/Modals/StationModal";
 import StationDetailModal from "./components/Modals/StationDetailModal";
 import LocalLeaderModal from "./components/Modals/LocalLeaderModal";
 import api from "./api/client";
+import { canAccessScreen } from "./utils/roleMapping";
+
+function AccessDenied({ goToScreen }) {
+  return (
+    <div className="card" style={{ padding: 24, maxWidth: 480 }}>
+      <h2 style={{ marginTop: 0 }}>Access denied</h2>
+      <p style={{ color: "var(--muted)", fontSize: 14 }}>
+        You do not have permission to open this page. Configuration and district
+        admin tools are available to DPC only.
+      </p>
+      <button type="button" className="btn btn-primary" onClick={() => goToScreen("dashboard", 0)}>
+        Back to dashboard
+      </button>
+    </div>
+  );
+}
 
 function App() {
   const { user, loading, logout } = useAuth();
@@ -392,6 +408,10 @@ function App() {
   const renderScreen = () => {
     const screenId =
       typeof currentScreen === "string" ? currentScreen : currentScreen.id;
+
+    if (!canAccessScreen(screenId, user?.role)) {
+      return <AccessDenied goToScreen={goToScreen} />;
+    }
 
     switch (screenId) {
       case "dashboard":

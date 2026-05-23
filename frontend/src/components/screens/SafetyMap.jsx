@@ -15,6 +15,7 @@ import "leaflet/dist/leaflet.css";
 import api from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { policeVerificationOkForHotspots } from "../../utils/reportOperationalLabels";
+import { canDeployHotspotUnits } from "../../utils/roleMapping";
 
 const MUSANZE_CENTER = [-1.5042, 29.638]; // Musanze district center
 const MUSANZE_ZOOM = 12;
@@ -301,7 +302,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   const [mapZoom, setMapZoom] = useState(MUSANZE_ZOOM);
   const [assignmentUnits, setAssignmentUnits] = useState([]);
   const { user: me } = useAuth();
-  const canDeployHotspot = me?.role === "admin" || me?.role === "supervisor";
+  const canDeployHotspot = canDeployHotspotUnits(me?.role);
 
   useEffect(() => {
     api

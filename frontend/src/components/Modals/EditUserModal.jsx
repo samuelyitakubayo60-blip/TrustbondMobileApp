@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { canCreateUsers, canDeleteUsers } from '../../utils/roleMapping';
 
 const EditUserModal = ({ isOpen, onClose, user, onSaved }) => {
   const { user: me } = useAuth();
   const role = me?.role || 'officer';
-  const isAdmin = role === 'admin';
+  const isAdmin = canCreateUsers(role);
+  const canDelete = canDeleteUsers(role);
 
   const emptyForm = useMemo(
     () => ({
@@ -106,7 +108,7 @@ const EditUserModal = ({ isOpen, onClose, user, onSaved }) => {
   };
 
   const deleteUser = async () => {
-    if (!isAdmin) return;
+    if (!canDelete) return;
     if (!user?.police_user_id) return;
     if (!window.confirm('Delete this user account? This cannot be undone.')) return;
     setSaving(true);

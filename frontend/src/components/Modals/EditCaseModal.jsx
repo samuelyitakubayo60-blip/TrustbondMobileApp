@@ -3,6 +3,7 @@ import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { parseApiDate } from '../../utils/dateTime';
 import SpecialAssignmentUnitSelect from '../SpecialAssignmentUnitSelect';
+import { canEditCaseLeadFields } from '../../utils/roleMapping';
 import { caseDisplayName, caseDisplayRef } from '../../utils/caseDisplay';
 
 function toDatetimeLocalValue(iso) {
@@ -15,7 +16,7 @@ function toDatetimeLocalValue(iso) {
 const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
   const { user: me } = useAuth();
   const role = me?.role || 'officer';
-  const isAdminOrSupervisor = role === 'admin' || role === 'supervisor' || role === 'officer';
+  const canEditLead = canEditCaseLeadFields(role);
 
   const [status, setStatus] = useState(caseItem?.status || 'open');
   const [priority, setPriority] = useState(caseItem?.priority || 'medium');
@@ -47,7 +48,7 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
 
   // Load officer options for assignment when admin/supervisor.
   useEffect(() => {
-    if (!isOpen || !isAdminOrSupervisor) return;
+    if (!isOpen || !canEditLead) return;
     let cancelled = false;
     
     // Get station_id from the assigned officer or case location
@@ -102,7 +103,7 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
     return () => {
       cancelled = true;
     };
-  }, [isOpen, isAdminOrSupervisor, caseItem?.assigned_to_id, caseItem?.location_id]);
+  }, [isOpen, canEditLead, caseItem?.assigned_to_id, caseItem?.location_id]);
 
   if (!isOpen || !caseItem) return null;
 
@@ -113,7 +114,7 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
       status,
       description,
       outcome,
-      ...(isAdminOrSupervisor
+      ...(canEditLead
         ? {
             priority,
             assigned_to_id: assignedToId || null,
@@ -174,14 +175,14 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
               className="select"
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
-              disabled={!isAdminOrSupervisor}
+              disabled={!canEditLead}
             >
               <option value="high">high</option>
               <option value="medium">medium</option>
               <option value="low">low</option>
             </select>
           </div>
-          {isAdminOrSupervisor && (
+          {canEditLead && (
             <div className="input-group">
               <div className="input-label">Assign Officer</div>
               <select
@@ -220,7 +221,7 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
           ></textarea>
         </div>
 
-        {isAdminOrSupervisor && (
+        {canEditLead && (
           <>
             <div className="input-group">
               <div className="input-label">RIB</div>

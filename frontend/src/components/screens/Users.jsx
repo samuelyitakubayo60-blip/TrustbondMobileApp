@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { staffRoleLabel } from '../../utils/roleLabels';
+import { canCreateUsers, canDeleteUsers, canEditUsers } from '../../utils/roleMapping';
 import { getRoleDisplayName } from '../../utils/roleMapping';
 
 const PAGE_SIZE = 20;
@@ -9,7 +10,9 @@ const PAGE_SIZE = 20;
 const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }) => {
   const { user: me } = useAuth();
   const role = me?.role || 'officer';
-  const isAdmin = role === 'admin';
+  const canAdd = canCreateUsers(role);
+  const canEdit = canEditUsers(role);
+  const canDelete = canDeleteUsers(role);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stationsById, setStationsById] = useState({});
@@ -69,7 +72,7 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
   }, []);
 
   const deleteUser = async (user) => {
-    if (!isAdmin) return;
+    if (!canDelete) return;
     const confirmed = window.confirm(`Delete user "${user.first_name} ${user.last_name}"? This cannot be undone.`);
     if (!confirmed) return;
 
@@ -164,7 +167,7 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
       <div className="card">
         <div className="card-header">
           <div className="card-title">Officer Roster</div>
-          {isAdmin && (
+          {canAdd && (
             <button className="btn btn-primary btn-sm" onClick={() => openModal('addUser')}>Add User</button>
           )}
         </div>
@@ -275,15 +278,19 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '4px' }}>
-                      <button className="btn btn-outline btn-sm" onClick={() => onEditUser?.(u)}>Edit</button>
-                      <button
-                        className="btn btn-outline btn-sm"
-                        style={{ color: u.is_active ? 'var(--danger)' : 'var(--success)', borderColor: 'transparent' }}
-                        onClick={() => toggleActive(u)}
-                      >
-                        {u.is_active ? 'Deactivate' : 'Activate'}
-                      </button>
-                      {isAdmin && (
+                      {canEdit && (
+                        <button className="btn btn-outline btn-sm" onClick={() => onEditUser?.(u)}>Edit</button>
+                      )}
+                      {canEdit && (
+                        <button
+                          className="btn btn-outline btn-sm"
+                          style={{ color: u.is_active ? 'var(--danger)' : 'var(--success)', borderColor: 'transparent' }}
+                          onClick={() => toggleActive(u)}
+                        >
+                          {u.is_active ? 'Deactivate' : 'Activate'}
+                        </button>
+                      )}
+                      {canDelete && (
                         <button
                           className="btn btn-outline btn-sm"
                           style={{ color: 'var(--danger)', borderColor: 'transparent' }}

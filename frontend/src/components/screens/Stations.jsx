@@ -1,9 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
+import { canManageStations } from '../../utils/roleMapping';
 
 const PAGE_SIZE = 20;
 
 const Stations = ({ openModal, wsRefreshKey }) => {
+  const { user: me } = useAuth();
+  const canManage = canManageStations(me?.role);
   const [stations, setStations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
@@ -87,7 +91,9 @@ const Stations = ({ openModal, wsRefreshKey }) => {
       <div className="card">
         <div className="card-header">
           <div className="card-title">Registered Stations</div>
-          <button className="btn btn-primary btn-sm" onClick={() => openModal('addStation')}>Add Station</button>
+          {canManage && (
+            <button className="btn btn-primary btn-sm" onClick={() => openModal('addStation')}>Add Station</button>
+          )}
         </div>
 
         <div className="filter-row">
@@ -196,24 +202,28 @@ const Stations = ({ openModal, wsRefreshKey }) => {
                       >
                         View Details
                       </button>
-                      <button
-                        className="btn btn-outline btn-sm"
-                        onClick={() => openModal('editStation', s)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="btn btn-outline btn-sm"
-                        onClick={() => handleToggleActive(s)}
-                      >
-                        {s.is_active ? 'Deactivate' : 'Activate'}
-                      </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => handleDelete(s)}
-                      >
-                        Delete
-                      </button>
+                      {canManage && (
+                        <>
+                          <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => openModal('editStation', s)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => handleToggleActive(s)}
+                          >
+                            {s.is_active ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleDelete(s)}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client';
 import Chart from 'chart.js/auto';
+import { useAuth } from '../../context/AuthContext';
+import { canManageAssignmentUnits, canManageIncidentTypes } from '../../utils/roleMapping';
 
 const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey, goToScreen }) => {
+  const { user: me } = useAuth();
+  const role = me?.role || 'officer';
+  const canManage = canManageIncidentTypes(role);
   const [types, setTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [incidentChart, setIncidentChart] = useState(null);
@@ -368,7 +373,7 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
         <div className="card-header">
           <div className="card-title">Incident Categories</div>
           <div style={{ display: "flex", gap: 8 }}>
-            {goToScreen && (
+            {canManage && goToScreen && canManageAssignmentUnits(role) && (
               <button
                 type="button"
                 className="btn btn-outline btn-sm"
@@ -377,9 +382,11 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
                 Manage assignment units
               </button>
             )}
-            <button className="btn btn-primary btn-sm" onClick={() => openModal('addIncident')}>
-              Add Type
-            </button>
+            {canManage && (
+              <button className="btn btn-primary btn-sm" onClick={() => openModal('addIncident')}>
+                Add Type
+              </button>
+            )}
           </div>
         </div>
 
@@ -425,26 +432,30 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button
-                          className="btn btn-outline btn-sm"
-                          onClick={() => onEditIncidentType?.(t)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="btn btn-outline btn-sm"
-                          onClick={() => handleToggleActive(t)}
-                        >
-                          {t.is_active ? 'Deactivate' : 'Activate'}
-                        </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => handleDelete(t)}
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      {canManage ? (
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => onEditIncidentType?.(t)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => handleToggleActive(t)}
+                          >
+                            {t.is_active ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleDelete(t)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>View only</span>
+                      )}
                     </td>
                   </tr>
                 );
