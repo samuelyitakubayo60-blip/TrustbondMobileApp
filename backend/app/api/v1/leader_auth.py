@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.core.security import ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token, verify_password
 from app.core.email import is_smtp_configured, send_leader_otp_email
+from app.core.leader_setup_codes import CODE_EXPIRE_MINUTES, issue_password_setup_code
 from app.database import get_db
 from app.models.local_leader import LocalLeader
 from app.models.local_leader_coverage import LocalLeaderCoverageLocation
@@ -141,7 +142,6 @@ def me(
     )
 
 
-CODE_EXPIRE_MINUTES = 10
 LOGIN_CODE_RESEND_COOLDOWN_SECONDS = 30
 
 
@@ -158,25 +158,7 @@ def request_setup_code(payload: LocalLeaderRequestCodeRequest, db: Session = Dep
             detail="Email delivery is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL, or SMTP settings.",
         )
 
-    db.query(LocalLeaderAuthCode).filter(
-        LocalLeaderAuthCode.local_leader_id == leader.local_leader_id,
-        LocalLeaderAuthCode.purpose == "password_setup",
-        LocalLeaderAuthCode.used_at.is_(None),
-    ).delete()
-
-    code = "".join(secrets.choice("0123456789") for _ in range(6))
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=CODE_EXPIRE_MINUTES)
-    row = LocalLeaderAuthCode(
-        local_leader_id=leader.local_leader_id,
-        phone_number=None,
-        code=code,
-        purpose="password_setup",
-        expires_at=expires_at,
-    )
-    db.add(row)
-    db.commit()
-
-    ok, err = send_leader_otp_email(leader.email, code, "password_setup")
+    ok, err = issue_password_setup_code(db, leader)
     if not ok:
         raise HTTPException(status_code=503, detail=err or "Failed to send setup email.")
     return {"message": "If this email is registered, a setup code was sent."}

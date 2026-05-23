@@ -4,7 +4,7 @@ import re
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.v1.auth import get_current_admin
@@ -27,6 +27,7 @@ from app.schemas.local_leader import (
     LocalLeaderUpdate,
 )
 from app.core.leader_coverage import find_leader_coverage_gaps
+from app.core.leader_setup_codes import notify_leader_account_ready
 
 
 router = APIRouter(prefix="/local-leaders", tags=["local-leaders"])
@@ -148,39 +149,37 @@ def get_leader_stats(
     ).scalar() or 0
 
     # Cells that have at least one active cell executive assigned
-    covered_cell_subq = (
-        db.query(LocalLeaderCoverageLocation.location_id)
+    covered_cell_ids = (
+        select(LocalLeaderCoverageLocation.location_id)
         .join(LocalLeader, LocalLeader.local_leader_id == LocalLeaderCoverageLocation.local_leader_id)
-        .filter(
+        .where(
             LocalLeader.is_active.is_(True),
             LocalLeader.role == "executive_of_cell",
         )
         .distinct()
-        .subquery()
     )
     cells_without_executive = db.query(func.count(Location.location_id)).filter(
         Location.location_type == "cell",
         Location.is_active.is_(True),
-        ~Location.location_id.in_(covered_cell_subq),
+        ~Location.location_id.in_(covered_cell_ids),
     ).scalar() or 0
 
     # Locations covered by ANY active leader (village chiefs + cell executives)
-    directly_covered_subq = (
-        db.query(LocalLeaderCoverageLocation.location_id)
+    directly_covered_ids = (
+        select(LocalLeaderCoverageLocation.location_id)
         .join(LocalLeader, LocalLeader.local_leader_id == LocalLeaderCoverageLocation.local_leader_id)
-        .filter(LocalLeader.is_active.is_(True))
+        .where(LocalLeader.is_active.is_(True))
         .distinct()
-        .subquery()
     )
 
     # Villages not directly covered AND whose parent cell also has no active executive
     villages_without_leader = db.query(func.count(Location.location_id)).filter(
         Location.location_type == "village",
         Location.is_active.is_(True),
-        ~Location.location_id.in_(directly_covered_subq),
+        ~Location.location_id.in_(directly_covered_ids),
         or_(
             Location.parent_location_id.is_(None),
-            ~Location.parent_location_id.in_(covered_cell_subq),
+            ~Location.parent_location_id.in_(covered_cell_ids),
         ),
     ).scalar() or 0
 
@@ -252,7 +251,39 @@ def create_local_leader(
     _replace_coverage(db, leader.local_leader_id, covered)
     db.commit()
 
-    return _to_response(db, leader)
+    resp = _to_response(db, leader)
+    sent, send_err = notify_leader_account_ready(leader)
+    resp.account_ready_email_sent = sent
+    resp.account_ready_email_error = send_err
+    return resp
+
+
+@router.post("/{local_leader_id}/send-account-notification")
+def admin_send_account_notification(
+    local_leader_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+):
+    """Resend account-ready notification (no OTP — leader requests setup code in the mobile app)."""
+    leader = db.query(LocalLeader).filter(LocalLeader.local_leader_id == local_leader_id).first()
+    if not leader:
+        raise HTTPException(status_code=404, detail="Local leader not found")
+    if not leader.is_active:
+        raise HTTPException(status_code=400, detail="Leader account is inactive.")
+    if not (leader.email or "").strip():
+        raise HTTPException(status_code=400, detail="Leader has no email address.")
+    if not is_smtp_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Email delivery is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL, or SMTP settings.",
+        )
+    ok, err = notify_leader_account_ready(leader)
+    if not ok:
+        raise HTTPException(status_code=503, detail=err or "Failed to send notification email.")
+    return {
+        "message": f"Account notification sent to {leader.email}. They can request a setup code in the mobile app.",
+        "sent": True,
+    }
 
 
 @router.put("/{local_leader_id}", response_model=LocalLeaderResponse)
@@ -353,7 +384,7 @@ def delete_local_leader(
 
 
 """
-Admin OTP sending removed:
-Local leaders must request setup/login codes themselves via /api/v1/leader-auth/request-setup-code
-and /api/v1/leader-auth/request-login-code.
+On create, an account-ready notification is emailed (no OTP in that mail).
+Leaders request a setup code in the TrustBond mobile app (/leader-auth/request-setup-code).
+Admins can resend the notification via POST /local-leaders/{id}/send-account-notification.
 """

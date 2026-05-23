@@ -137,7 +137,8 @@ class _LeaderSetupPasswordScreenState extends State<LeaderSetupPasswordScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'Step 1: Request a setup code to the email your admin registered.\n'
+                'If your admin registered you, you may have received an email that your account is ready.\n'
+                'Step 1: Request a setup code to your registered email.\n'
                 'Step 2: Enter the code and choose your password.',
                 style: TextStyle(color: AppColors.muted, fontSize: 12),
               ),

@@ -17,6 +17,7 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
   const [statusFilter, setStatusFilter] = useState("all");
   const [offset, setOffset] = useState(0);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const [sendingNotifyId, setSendingNotifyId] = useState(null);
 
   const loadLeaders = useCallback(async () => {
     setLoading(true);
@@ -40,6 +41,25 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
   useEffect(() => {
     loadLeaders();
   }, [loadLeaders, wsRefreshKey, refreshKey]);
+
+  const resendAccountNotification = async (leader) => {
+    if (!leader?.email) {
+      setError("This leader has no email address.");
+      return;
+    }
+    setSendingNotifyId(leader.local_leader_id);
+    setError("");
+    try {
+      const res = await api.post(
+        `/api/v1/local-leaders/${leader.local_leader_id}/send-account-notification`,
+      );
+      window.alert(res?.message || `Account notification sent to ${leader.email}.`);
+    } catch (e) {
+      setError(e?.message || "Failed to send account notification.");
+    } finally {
+      setSendingNotifyId(null);
+    }
+  };
 
   const deleteLeader = async (leader) => {
     const ok = window.confirm(`Delete local leader "${leader.full_name}"?`);
@@ -81,7 +101,7 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
           <div>
             <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Local Leaders</h2>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
-              Register village chiefs and cell executives. Leaders request setup/login codes from the app (sent by email via server SMTP configuration).
+              Register village chiefs and cell executives. They receive an email that their account is ready; they request a setup code in the TrustBond mobile app to choose a password.
             </p>
           </div>
           <button type="button" className="btn btn-primary" style={{ alignSelf: 'center' }} onClick={() => onAddLeader?.()}>
@@ -239,6 +259,15 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
                     <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
                       <button type="button" className="btn btn-outline btn-sm" onClick={() => onEditLeader?.(l)}>
                         Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        disabled={!l.email || sendingNotifyId === l.local_leader_id}
+                        onClick={() => resendAccountNotification(l)}
+                        title={l.email ? "Resend account-ready email (no OTP)" : "No email on file"}
+                      >
+                        {sendingNotifyId === l.local_leader_id ? "Sending…" : "Resend welcome email"}
                       </button>
                       <button
                         type="button"

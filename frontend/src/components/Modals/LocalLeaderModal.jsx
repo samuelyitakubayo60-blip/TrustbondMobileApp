@@ -140,7 +140,18 @@ const LocalLeaderModal = ({ isOpen, onClose, mode = "add", leader = null, onSave
       if (isEdit) {
         await api.put(`/api/v1/local-leaders/${leader.local_leader_id}`, payload);
       } else {
-        await api.post("/api/v1/local-leaders/", payload);
+        const created = await api.post("/api/v1/local-leaders/", payload);
+        if (created?.account_ready_email_sent === false) {
+          window.alert(
+            `Leader created, but the notification email could not be sent: ${
+              created?.account_ready_email_error || "Check Brevo/SMTP configuration on the server."
+            }. Use "Resend welcome email" on the list to retry.`,
+          );
+        } else if (created?.account_ready_email_sent) {
+          window.alert(
+            `Leader created. ${email} was notified to open the TrustBond mobile app and request a setup code to choose a password.`,
+          );
+        }
       }
       onSaved?.();
       onClose?.();
@@ -229,9 +240,8 @@ const LocalLeaderModal = ({ isOpen, onClose, mode = "add", leader = null, onSave
               <span>Active account</span>
             </label>
             <div className="input-group" style={{ gridColumn: "1 / -1", fontSize: 12, color: "var(--muted)" }}>
-              Passwords are not entered here. After creating a leader, use <strong>Send setup code</strong> on the
-              list so they receive an email to set a private password, or they sign in with email OTP in the mobile
-              app.
+              Passwords are not entered here. On create, the leader gets an email that their account is ready. They
+              open the TrustBond mobile app, request a setup code, and set their own password.
             </div>
           </div>
         </div>

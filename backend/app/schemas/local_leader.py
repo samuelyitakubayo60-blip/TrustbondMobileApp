@@ -47,6 +47,8 @@ class LocalLeaderResponse(BaseModel):
     covered_location_names: list[str] = Field(default_factory=list)
     created_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
+    account_ready_email_sent: Optional[bool] = None
+    account_ready_email_error: Optional[str] = None
 
     class Config:
         from_attributes = True

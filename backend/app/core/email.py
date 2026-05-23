@@ -425,14 +425,56 @@ TrustBond
     return send_email(to_email.strip(), subject, body_plain, None)
 
 
-def send_leader_otp_email(to_email: str, code: str, purpose: str) -> tuple[bool, str | None]:
+def send_leader_account_ready_email(
+    to_email: str,
+    *,
+    leader_name: str | None = None,
+    role_label: str | None = None,
+) -> tuple[bool, str | None]:
+    """
+    Notify a newly registered local leader that their account exists.
+    Does not include an OTP — the leader requests a setup code in the mobile app.
+    """
+    to_email = (to_email or "").strip()
+    greeting = f"Hello {leader_name}," if leader_name else "Hello,"
+    role_line = f"\nYour role: {role_label}." if role_label else ""
+    subject = "TrustBond — Your local leader account is ready"
+    body_plain = f"""{greeting}
+
+Your TrustBond local leader account has been registered by your police administrator.{role_line}
+
+Open the TrustBond mobile app on your phone:
+1. Go to Local leader sign-in
+2. Choose first-time setup / set password
+3. Enter your email ({to_email}) and tap to send a setup code
+4. Enter the code from your email and choose your password
+
+After that you can sign in with your email and password, or use email OTP login.
+
+If you did not expect this message, contact your police administrator.
+
+TrustBond
+"""
+    return send_email(to_email, subject, body_plain, None)
+
+
+def send_leader_otp_email(
+    to_email: str,
+    code: str,
+    purpose: str,
+    *,
+    leader_name: str | None = None,
+) -> tuple[bool, str | None]:
     """
     purpose: 'login_otp' | 'password_setup'
     """
     to_email = (to_email or "").strip()
+    greeting = f"Hello {leader_name}," if leader_name else "Hello,"
     if purpose == "login_otp":
         subject = "TrustBond — Login verification code"
-        body_plain = f"""Your TrustBond local leader login code is: {code}
+        body_plain = f"""{greeting}
+
+Your TrustBond local leader login code is: {code}
 
 This code expires in 10 minutes. If you did not request it, ignore this email.
 
@@ -440,9 +482,13 @@ TrustBond
 """
     else:
         subject = "TrustBond — Password setup code"
-        body_plain = f"""Your TrustBond local leader password setup code is: {code}
+        body_plain = f"""{greeting}
 
-This code expires in 10 minutes.
+Your TrustBond local leader password setup code is: {code}
+
+This code expires in 10 minutes. Open the TrustBond mobile app, go to leader first-time setup, and enter this code with your email ({to_email}).
+
+If you did not request this code, ignore this email.
 
 TrustBond
 """
