@@ -47,6 +47,11 @@ const Topbar = ({
         { id: "reports", label: "Reports" }
       ],
       "case-management": [{ id: "dashboard", label: "Home" }],
+      "security-situation": [{ id: "dashboard", label: "Home" }],
+      "station-security": [
+        { id: "dashboard", label: "Home" },
+        { id: "security-situation", label: "Security Situation" },
+      ],
       "safety-map": [{ id: "dashboard", label: "Home" }],
       "hotspot-details": [
         { id: "dashboard", label: "Home" },

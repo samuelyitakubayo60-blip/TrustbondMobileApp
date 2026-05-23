@@ -139,7 +139,9 @@ const Sidebar = ({
       ? "reports"
       : screenId === "hotspot-details"
         ? "safety-map"
-        : screenId;
+        : screenId === "station-security"
+          ? "security-situation"
+          : screenId;
 
   const {
     reports: reportsBadge = 0,
@@ -174,6 +176,12 @@ const Sidebar = ({
             label: "Case Management",
             icon: "ni-cm",
             badge: casesBadge,
+          },
+          {
+            id: "security-situation",
+            idx: 4,
+            label: "Security Situation",
+            icon: "ni-st",
           },
           { id: "safety-map", idx: 5, label: "Safety Map", icon: "ni-mp" },
         ],

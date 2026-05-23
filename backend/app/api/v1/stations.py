@@ -25,7 +25,7 @@ from app.schemas.station import (
 router = APIRouter(prefix="/stations", tags=["stations"])
 
 
-_ACTIVE_CASE_STATUSES = ("open", "assigned", "in_progress")
+_ACTIVE_CASE_STATUSES = ("open", "investigating")
 
 
 def _station_case_metrics(db: Session, station_id: int) -> tuple[int, int]:
