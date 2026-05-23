@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import SkeletonTable from '../Common/SkeletonTable';
 import api from '../../api/client';
 
 const PAGE_SIZE = 10;
@@ -19,7 +20,7 @@ const AuditLog = ({ wsRefreshKey }) => {
     setLoading(true);
     
     const params = new URLSearchParams();
-    params.set("limit", String(500)); // Get all data for client-side pagination
+    params.set("limit", String(150));
     
     if (entityFilter.trim()) {
       params.set("entity_type", entityFilter.trim());
@@ -162,20 +163,17 @@ const AuditLog = ({ wsRefreshKey }) => {
             <option value="success">Success</option>
             <option value="failed">Failed</option>
           </select>
-          <input
-            className="input"
-            type="number"
-            min="10"
-            max="100"
-            placeholder="Rows"
-            style={{ minWidth: '70px' }}
+          <select
+            className="select"
+            style={{ width: 'auto' }}
             value={pageSize}
-            onChange={(e) => {
-              const newSize = Math.max(10, Math.min(100, parseInt(e.target.value) || 50));
-              setPageSize(newSize);
-              setOffset(0);
-            }}
-          />
+            onChange={(e) => { setPageSize(Number(e.target.value)); setOffset(0); }}
+          >
+            <option value={10}>10 / page</option>
+            <option value={25}>25 / page</option>
+            <option value={50}>50 / page</option>
+            <option value={100}>100 / page</option>
+          </select>
           <button className="btn btn-outline" onClick={exportCsv}>
             Export
           </button>
@@ -230,8 +228,8 @@ const AuditLog = ({ wsRefreshKey }) => {
                   <td>
                     {a.actor_role && (
                       <span className={`badge ${
-                        a.actor_role === 'admin'      ? 'b-purple' :
-                        a.actor_role === 'supervisor' ? 'b-orange' : 'b-blue'
+                        a.actor_role === 'admin'      ? 'b-orange' :
+                        a.actor_role === 'supervisor' ? 'b-green' : 'b-blue'
                       }`} style={{ fontSize: 9 }}>
                         {a.actor_role}
                       </span>
@@ -263,13 +261,7 @@ const AuditLog = ({ wsRefreshKey }) => {
                   </td>
                 </tr>
               )}
-              {loading && (
-                <tr>
-                  <td colSpan={5} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
-                    Loading...
-                  </td>
-                </tr>
-              )}
+              {loading && <SkeletonTable cols={5} rows={8} />}
             </tbody>
           </table>
         </div>

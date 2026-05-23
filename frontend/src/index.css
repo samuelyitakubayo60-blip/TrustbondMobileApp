@@ -2370,10 +2370,6 @@ textarea:focus {
   border-color: var(--success);
   color: var(--success);
 }
-.smx-filter-chip.tone-violet.btn-outline:hover {
-  border-color: var(--purple);
-  color: var(--purple);
-}
 .smx-filter-chip.tone-info.btn-outline:hover {
   border-color: var(--accent);
   color: var(--accent);

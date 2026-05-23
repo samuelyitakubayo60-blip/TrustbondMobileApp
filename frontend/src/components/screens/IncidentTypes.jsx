@@ -1,267 +1,145 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import SkeletonTable from '../Common/SkeletonTable';
 import api from '../../api/client';
 import Chart from 'chart.js/auto';
 import { useAuth } from '../../context/AuthContext';
 import { canManageAssignmentUnits, canManageIncidentTypes } from '../../utils/roleMapping';
 
+const SEV_LEVEL = (val) => {
+  if (val >= 1.6) return { label: 'Severe', badge: 'b-red' };
+  if (val >= 1.3) return { label: 'High', badge: 'b-orange' };
+  if (val >= 1.1) return { label: 'Medium', badge: 'b-blue' };
+  return { label: 'Low', badge: 'b-gray' };
+};
+
 const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey, goToScreen }) => {
   const { user: me } = useAuth();
   const role = me?.role || 'officer';
   const canManage = canManageIncidentTypes(role);
+
   const [types, setTypes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [incidentChart, setIncidentChart] = useState(null);
-  const [chartData, setChartData] = useState({});
-  const [sortBy, setSortBy] = useState('incidentType');
+  const [chartCounts, setChartCounts] = useState({});
+  const [viewBy, setViewBy] = useState('incidentType');
   const [sortOrder, setSortOrder] = useState('desc');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  const chartRef = useRef(null);
+  const chartInstance = useRef(null);
 
   const loadTypes = () => {
-    Promise.resolve().then(() => setLoading(true));
+    setLoading(true);
     Promise.all([
       api.get('/api/v1/incident-types/?include_inactive=true'),
-      api.get('/api/v1/reports/?limit=100')
+      api.get('/api/v1/reports/?limit=100'),
     ])
       .then(([typesRes, reportsRes]) => {
         setTypes(typesRes || []);
-        processChartData(reportsRes || []);
+        buildChartCounts(reportsRes);
         setLoading(false);
       })
-      .catch((error) => {
-        console.error('Error loading data:', error);
-        // Still set types even if reports fail
+      .catch(() => {
         api.get('/api/v1/incident-types/?include_inactive=true')
-          .then((typesRes) => {
-            setTypes(typesRes || []);
-            setLoading(false);
-          })
-          .catch(() => { setLoading(false); });
+          .then((res) => { setTypes(res || []); setLoading(false); })
+          .catch(() => setLoading(false));
       });
   };
 
-  const processChartData = (reports) => {
-    console.log('📊 Processing chart data:', reports);
-    
-    // Handle different API response structures
-    let reportsArray = [];
-    if (Array.isArray(reports)) {
-      reportsArray = reports;
-    } else if (reports && reports.data && Array.isArray(reports.data)) {
-      reportsArray = reports.data;
-    } else if (reports && reports.items && Array.isArray(reports.items)) {
-      reportsArray = reports.items;
-    } else if (reports && reports.reports && Array.isArray(reports.reports)) {
-      reportsArray = reports.reports;
-    } else {
-      console.warn('⚠️ No valid reports array found in response:', reports);
-      setChartData({ incidentTypes: {} });
-      return;
-    }
-    
-    console.log('📊 Reports array to process:', reportsArray);
-    
-    const incidentTypeCounts = {};
-    const sectorCounts = {};
-    const stationCounts = {};
-    
-    reportsArray.forEach(report => {
-      // Incident type counts
-      const incidentName = report.incident_type?.type_name || report.incident_type_name || `Type ${report.incident_type_id || 'Unknown'}`;
-      incidentTypeCounts[incidentName] = (incidentTypeCounts[incidentName] || 0) + 1;
-      
-      // Sector counts - Extract from backend location hierarchy
-      let sectorName = 'Unknown Sector';
-      
-      // Use the sector_name provided by the backend from location hierarchy
-      if (report.sector_name) {
-        sectorName = report.sector_name;
-      }
-      // Fallback to direct sector references if available
-      else if (report.sector) {
-        sectorName = report.sector;
-      }
-      
-      // Map to known Musanze sectors if possible
-      const musanzeSectors = [
-        'Busogo', 'Cyuve', 'Gaculiro', 'Gashaki', 'Gataraga', 
-        'Kimonyi', 'Kinigi', 'Mukingo', 'Muhoza', 'Nkotsi', 
-        'Nyange', 'Remera', 'Ruhengeri', 'Rwinzovu', 'Shingiro'
-      ];
-      
-      if (musanzeSectors.includes(sectorName)) {
-        sectorCounts[sectorName] = (sectorCounts[sectorName] || 0) + 1;
-      } else if (sectorName !== 'Unknown Sector') {
-        // Only use "Other/Unknown" if we have actual sector data but it's not in known list
-        sectorCounts['Other/Unknown'] = (sectorCounts['Other/Unknown'] || 0) + 1;
-      }
-      // Don't count "Unknown Sector" - we'll handle this differently
-      
-      // Police station grouping - Extract from backend assigned_station data
-      let stationName = 'Unknown Station';
-      
-      // Use the assigned_station provided by the backend from police user assignments
-      if (report.assigned_station && report.assigned_station.station_name) {
-        stationName = report.assigned_station.station_name;
-      }
-      // Fallback to direct station references if available
-      else if (report.station_name) {
-        stationName = report.station_name;
-      } else if (report.station) {
-        stationName = report.station;
-      }
-      
-      // Known Musanze area police stations from station table
-      const knownStations = [
-        'Musanze Central Police Station', 'Kinigi Police Station', 
-        'Busogo Police Station', 'Cyuve Police Station', 'Gashaki Police Station',
-        'Ruhengeri Police Station', 'Muhoza Police Station'
-      ];
-      
-      if (knownStations.includes(stationName)) {
-        stationCounts[stationName] = (stationCounts[stationName] || 0) + 1;
-      } else if (stationName !== 'Unknown Station') {
-        // Count other stations that might exist in the database
-        stationCounts[stationName] = (stationCounts[stationName] || 0) + 1;
-      } else {
-        // Only count as unassigned if no station assignment found
-        stationCounts['Unassigned'] = (stationCounts['Unassigned'] || 0) + 1;
-      }
+  const buildChartCounts = (reports) => {
+    let arr = [];
+    if (Array.isArray(reports)) arr = reports;
+    else if (reports?.items) arr = reports.items;
+    else if (reports?.data) arr = reports.data;
+    else if (reports?.reports) arr = reports.reports;
+
+    const byType = {};
+    const bySector = {};
+    const byStation = {};
+
+    arr.forEach((r) => {
+      const typeName = r.incident_type?.type_name || r.incident_type_name || 'Unknown';
+      byType[typeName] = (byType[typeName] || 0) + 1;
+
+      const sector = r.sector_name || r.sector || null;
+      if (sector) bySector[sector] = (bySector[sector] || 0) + 1;
+
+      const station = r.assigned_station?.station_name || r.station_name || r.station || null;
+      if (station) byStation[station] = (byStation[station] || 0) + 1;
     });
-    
-    console.log('📊 Processed data:', { incidentTypeCounts, sectorCounts, stationCounts });
-    
-    // Post-process to handle misleading labels
-    const processedSectors = { ...sectorCounts };
-    const processedStations = { ...stationCounts };
-    
-    // Handle sector data - if only "Other/Unknown" exists, rename it to be more descriptive
-    const sectorKeys = Object.keys(processedSectors);
-    if (sectorKeys.length === 1 && sectorKeys[0] === 'Other/Unknown') {
-      processedSectors['No Sector Data Available'] = processedSectors['Other/Unknown'];
-      delete processedSectors['Other/Unknown'];
-    }
-    
-    // Handle station data - if only "Unassigned" exists, rename it to be more descriptive
-    const stationKeys = Object.keys(processedStations);
-    if (stationKeys.length === 1 && stationKeys[0] === 'Unassigned') {
-      processedStations['No Station Assignment Data'] = processedStations['Unassigned'];
-      delete processedStations['Unassigned'];
-    }
-    
-    setChartData({
-      incidentTypes: incidentTypeCounts,
-      sectors: processedSectors,
-      stations: processedStations
-    });
+
+    setChartCounts({ incidentType: byType, sector: bySector, stations: byStation });
   };
 
-  const getSortedChartData = () => {
-    let data = {};
-    
-    switch (sortBy) {
-      case 'incidentType':
-        data = chartData.incidentTypes || {};
-        break;
-      case 'sector':
-        data = chartData.sectors || {};
-        break;
-      case 'stations':
-        data = chartData.stations || {};
-        break;
-      default:
-        data = chartData.incidentTypes || {};
-    }
-    
-    // Sort the data
-    const sortedEntries = Object.entries(data).sort((a, b) => {
-      if (sortOrder === 'desc') {
-        return b[1] - a[1];
-      } else {
-        return a[1] - b[1];
-      }
-    });
-    
+  const getChartDataset = () => {
+    const raw = chartCounts[viewBy] || {};
+    const entries = Object.entries(raw).sort((a, b) =>
+      sortOrder === 'desc' ? b[1] - a[1] : a[1] - b[1]
+    );
     return {
-      labels: sortedEntries.map(([key]) => key),
-      data: sortedEntries.map(([, value]) => value)
+      labels: entries.length ? entries.map(([k]) => k) : ['No data'],
+      data: entries.length ? entries.map(([, v]) => v) : [0],
     };
   };
 
-  const createIncidentChart = () => {
-    const canvas = document.getElementById('incidentChart');
-    if (!canvas) return;
-
-    // Clear canvas manually
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+  useEffect(() => {
+    if (!chartRef.current) return;
+    if (chartInstance.current) {
+      chartInstance.current.destroy();
+      chartInstance.current = null;
     }
+    const { labels, data } = getChartDataset();
 
-    // Destroy existing chart
-    if (incidentChart) {
-      incidentChart.destroy();
-      setIncidentChart(null);
-    }
+    // Read design-system colors at render time so chart matches the active theme
+    const style = getComputedStyle(document.documentElement);
+    const accent = style.getPropertyValue('--accent').trim() || '#3b82f6';
+    const muted  = style.getPropertyValue('--muted').trim()  || '#94a3b8';
+    const border = style.getPropertyValue('--border').trim() || '#e2e8f0';
 
-    const sortedData = getSortedChartData();
-    
-    // Always render chart, even with no data
-    const labels = sortedData.labels.length > 0 ? sortedData.labels : ['No Data'];
-    const data = sortedData.data.length > 0 ? sortedData.data : [0];
+    // Build per-bar colors keyed to severity thresholds when viewing by incident type
+    const bgColors = data.map(() => `${accent}c0`);   // accent @ ~75% opacity
+    const bdColors = data.map(() => accent);
 
-    // Get chart title based on sort type
-    const getChartTitle = () => {
-      switch (sortBy) {
-        case 'incidentType':
-          return '⚠️ Incident Type Distribution';
-        case 'sector':
-          return '🏛️ Incident Distribution by Sector';
-        case 'stations':
-          return '🚔 Incident Distribution by Police Station';
-        default:
-          return '⚠️ Incident Type Distribution';
-      }
-    };
-
-    const chart = new Chart(ctx, {
+    chartInstance.current = new Chart(chartRef.current, {
       type: 'bar',
       data: {
-        labels: labels,
+        labels,
         datasets: [{
-          label: 'Incident Count',
-          data: data,
-          backgroundColor: 'rgba(147, 51, 234, 0.8)',
-          borderColor: 'rgba(147, 51, 234, 1)',
-          borderWidth: 1
-        }]
+          label: 'Incidents',
+          data,
+          backgroundColor: bgColors,
+          borderColor: bdColors,
+          borderWidth: 1,
+          borderRadius: 4,
+        }],
       },
       options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: {
-          title: {
-            display: true,
-            text: getChartTitle()
-          }
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.parsed.y} incident${ctx.parsed.y !== 1 ? 's' : ''}` } },
         },
         scales: {
           y: {
             beginAtZero: true,
-            title: {
-              display: true,
-              text: 'Number of Incidents'
-            }
-          }
-        }
-      }
+            ticks: { stepSize: 1, color: muted, font: { size: 11 } },
+            grid: { color: `${border}` },
+          },
+          x: {
+            ticks: { maxRotation: 40, font: { size: 11 }, color: muted },
+            grid: { display: false },
+          },
+        },
+      },
     });
-    
-    setIncidentChart(chart);
-  };
-
-  useEffect(() => {
-    if (Object.keys(chartData).length > 0) {
-      createIncidentChart();
-    }
-  }, [chartData, sortBy, sortOrder]);
+    return () => {
+      if (chartInstance.current) {
+        chartInstance.current.destroy();
+        chartInstance.current = null;
+      }
+    };
+  }, [chartCounts, viewBy, sortOrder]);
 
   useEffect(() => {
     loadTypes();
@@ -273,9 +151,7 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
         is_active: !type.is_active,
       });
       setTypes((prev) =>
-        prev.map((t) =>
-          t.incident_type_id === updated.incident_type_id ? updated : t
-        )
+        prev.map((t) => (t.incident_type_id === updated.incident_type_id ? updated : t))
       );
     } catch (e) {
       window.alert(e.message || 'Failed to update incident type status');
@@ -283,18 +159,30 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
   };
 
   const handleDelete = async (type) => {
-    if (!window.confirm(`Delete incident type "${type.type_name}"? This cannot be undone.`)) {
-      return;
-    }
+    if (!window.confirm(`Delete incident type "${type.type_name}"? This cannot be undone.`)) return;
     try {
       await api.delete(`/api/v1/incident-types/${type.incident_type_id}`);
-      setTypes((prev) =>
-        prev.filter((t) => t.incident_type_id !== type.incident_type_id)
-      );
+      setTypes((prev) => prev.filter((t) => t.incident_type_id !== type.incident_type_id));
     } catch (e) {
       window.alert(e.message || 'Failed to delete incident type');
     }
   };
+
+  const filtered = types.filter((t) => {
+    if (statusFilter === 'active' && !t.is_active) return false;
+    if (statusFilter === 'inactive' && t.is_active) return false;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      if (!(t.type_name || '').toLowerCase().includes(q) && !(t.description || '').toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const totalActive = types.filter((t) => t.is_active).length;
+  const totalInactive = types.length - totalActive;
+  const maxSev = types.reduce((m, t) => Math.max(m, Number(t.severity_weight ?? 1)), 0);
+
+  const VIEW_LABELS = { incidentType: 'By Type', sector: 'By Sector', stations: 'By Station' };
 
   return (
     <>
@@ -303,90 +191,97 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
         <p>Configure categories and priority levels for incident reporting and analysis.</p>
       </div>
 
-      <div className="alert alert-info">
-        <span className="alert-icon">i</span>
-        <div>Priority level affects incident ranking and alert severity.</div>
+      {/* Summary stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+        {[
+          { label: 'Total Types', value: types.length, sub: 'Registered categories', cls: 'sb-blue' },
+          { label: 'Active', value: totalActive, sub: 'Currently in use', cls: totalActive ? 'sb-green' : 'sb-gray' },
+          { label: 'Inactive', value: totalInactive, sub: 'Disabled categories', cls: totalInactive ? 'sb-orange' : 'sb-gray' },
+        ].map((s) => (
+          <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
+            <div className="stat-btn-label">{s.label}</div>
+            <div className="stat-btn-value">{s.value}</div>
+            <div className="stat-btn-sub">{s.sub}</div>
+          </div>
+        ))}
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <div className="card-title">Incident Distribution Analysis</div>
-        </div>
-        <div className="card-body">
-          {/* Sorting Controls */}
-          <div className="mb-4" style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)' }}>
-                Sort by:
-              </label>
-              <select 
-                value={sortBy} 
-                onChange={(e) => setSortBy(e.target.value)}
-                style={{ 
-                  padding: '6px 10px', 
-                  border: '1px solid var(--border)', 
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  backgroundColor: 'var(--background)',
-                  color: 'var(--text-primary)'
-                }}
-              >
-                <option value="incidentType">Incident Type</option>
-                <option value="sector">Sector</option>
-                <option value="stations">Police Station</option>
-              </select>
+      {/* Distribution chart */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-header" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <div className="card-title">Distribution Analysis</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {Object.entries(VIEW_LABELS).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`btn btn-sm ${viewBy === key ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => setViewBy(key)}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)' }}>
-                Order:
-              </label>
-              <select 
-                value={sortOrder} 
-                onChange={(e) => setSortOrder(e.target.value)}
-                style={{ 
-                  padding: '6px 10px', 
-                  border: '1px solid var(--border)', 
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  backgroundColor: 'var(--background)',
-                  color: 'var(--text-primary)'
-                }}
-              >
-                <option value="desc">Highest First</option>
-                <option value="asc">Lowest First</option>
-              </select>
-            </div>
+            <select
+              className="select"
+              style={{ width: 'auto', fontSize: 12, padding: '4px 8px', height: 'auto' }}
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value)}
+            >
+              <option value="desc">Highest first</option>
+              <option value="asc">Lowest first</option>
+            </select>
           </div>
-          
-          <canvas id="incidentChart" width="400" height="200"></canvas>
-          <div className="mt-4 text-sm text-gray-600">
-            <p><strong>📊 Incident Distribution Analysis</strong></p>
-            <p>This interactive chart displays incident breakdown by different categories. 
-            Use the sorting controls above to analyze patterns by incident type, sector, or severity level. 
-            Understanding these distributions helps allocate resources effectively and identify emerging trends.</p>
+        </div>
+        <div style={{ padding: '16px 20px' }}>
+          <div style={{ height: 220, position: 'relative' }}>
+            <canvas ref={chartRef} />
           </div>
         </div>
       </div>
 
+      {/* Categories table */}
       <div className="card">
-        <div className="card-header">
+        <div className="card-header" style={{ flexWrap: 'wrap', gap: 8 }}>
           <div className="card-title">Incident Categories</div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
             {canManage && goToScreen && canManageAssignmentUnits(role) && (
               <button
                 type="button"
                 className="btn btn-outline btn-sm"
-                onClick={() => goToScreen("special-assignment-units", 17)}
+                onClick={() => goToScreen('special-assignment-units', 17)}
               >
-                Manage assignment units
+                Assignment Units
               </button>
             )}
             {canManage && (
               <button className="btn btn-primary btn-sm" onClick={() => openModal('addIncident')}>
-                Add Type
+                + Add Type
               </button>
             )}
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
+          <div className="filter-row">
+            <input
+              className="input"
+              placeholder="Search by name or description…"
+              style={{ flex: 2 }}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <select
+              className="select"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All Statuses</option>
+              <option value="active">Active only</option>
+              <option value="inactive">Inactive only</option>
+            </select>
           </div>
         </div>
 
@@ -400,40 +295,69 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
                 <th>Severity</th>
                 <th>Level</th>
                 <th>Status</th>
-                <th>Actions</th>
+                {canManage && <th />}
               </tr>
             </thead>
             <tbody>
-              {types.map((t, index) => {
-                const sev = Number(t.severity_weight ?? 1).toFixed(2);
-                let level = 'Low';
-                let badge = 'b-gray';
+              {loading && <SkeletonTable cols={canManage ? 7 : 6} rows={5} />}
+              {!loading && filtered.length === 0 && (
+                <tr>
+                  <td colSpan={canManage ? 7 : 6} style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 12, padding: 32 }}>
+                    {types.length === 0 ? 'No incident types configured.' : 'No types match the current filters.'}
+                    {types.length > 0 && search && (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        style={{ marginLeft: 8 }}
+                        onClick={() => { setSearch(''); setStatusFilter('all'); }}
+                      >
+                        Clear filters
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )}
+              {!loading && filtered.map((t, index) => {
                 const val = Number(t.severity_weight ?? 1);
-                if (val >= 1.6) { level = 'Severe'; badge = 'b-red'; }
-                else if (val >= 1.3) { level = 'High'; badge = 'b-orange'; }
-                else if (val >= 1.1) { level = 'Medium'; badge = 'b-blue'; }
+                const { label, badge } = SEV_LEVEL(val);
+                const barPct = maxSev > 0 ? Math.round((val / maxSev) * 100) : 0;
 
                 return (
                   <tr key={t.incident_type_id}>
-                    <td style={{ fontSize: "12px", color: "var(--muted)", textAlign: "center" }}>
+                    <td style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', width: 36 }}>
                       {index + 1}
                     </td>
-                    <td><strong>{t.type_name}</strong></td>
-                    <td style={{ fontSize: '11px', color: 'var(--muted)' }}>{t.description || '—'}</td>
                     <td>
-                      <span style={{ fontFamily: '"Syne", sans-serif', fontWeight: 800 }}>
-                        {sev}
-                      </span>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{t.type_name}</div>
                     </td>
-                    <td><span className={`badge ${badge}`}>{level}</span></td>
+                    <td style={{ fontSize: 11, color: 'var(--muted)', maxWidth: 220 }}>
+                      {t.description || <span style={{ fontStyle: 'italic' }}>No description</span>}
+                    </td>
+                    <td style={{ minWidth: 90 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 3 }}>
+                        {val.toFixed(2)}
+                      </div>
+                      <div style={{ background: 'var(--border)', borderRadius: 3, height: 4, width: 72 }}>
+                        <div
+                          style={{
+                            height: 4,
+                            borderRadius: 3,
+                            width: `${barPct}%`,
+                            background: val >= 1.6 ? 'var(--danger)' : val >= 1.3 ? 'var(--warning)' : val >= 1.1 ? 'var(--accent)' : 'var(--text-dim)',
+                            transition: 'width 0.3s',
+                          }}
+                        />
+                      </div>
+                    </td>
+                    <td><span className={`badge ${badge}`}>{label}</span></td>
                     <td>
-                      <span className={`badge ${t.is_active ? 'b-green' : 'b-red'}`}>
+                      <span className={`badge ${t.is_active ? 'b-green' : 'b-gray'}`}>
                         {t.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td>
-                      {canManage ? (
-                        <div style={{ display: 'flex', gap: '4px' }}>
+                    {canManage && (
+                      <td>
+                        <div style={{ display: 'flex', gap: 4 }}>
                           <button
                             className="btn btn-outline btn-sm"
                             onClick={() => onEditIncidentType?.(t)}
@@ -453,30 +377,20 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
                             Delete
                           </button>
                         </div>
-                      ) : (
-                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>View only</span>
-                      )}
-                    </td>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
-              {(!types.length && !loading) && (
-                <tr>
-                  <td colSpan={7} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
-                    No incident types found.
-                  </td>
-                </tr>
-              )}
-              {loading && (
-                <tr>
-                  <td colSpan={7} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
-                    Loading...
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
+
+        {!loading && filtered.length > 0 && (search || statusFilter !== 'all') && (
+          <div style={{ textAlign: 'right', fontSize: 12, color: 'var(--muted)', padding: '8px 16px' }}>
+            Showing {filtered.length} of {types.length} type{types.length !== 1 ? 's' : ''}
+          </div>
+        )}
       </div>
     </>
   );

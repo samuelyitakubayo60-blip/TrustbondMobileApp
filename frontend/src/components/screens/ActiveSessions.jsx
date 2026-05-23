@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import SkeletonTable from '../Common/SkeletonTable';
 import api from '../../api/client';
 
 const PAGE_SIZE = 10;
@@ -126,20 +127,16 @@ const ActiveSessions = ({ wsRefreshKey }) => {
             <option value="active">Active</option>
             <option value="revoked">Revoked</option>
           </select>
-          <input
-            className="input"
-            type="number"
-            min="10"
-            max="100"
-            placeholder="Rows"
-            style={{ minWidth: '70px' }}
+          <select
+            className="select"
+            style={{ width: 'auto' }}
             value={pageSize}
-            onChange={(e) => {
-              const newSize = Math.max(10, Math.min(100, parseInt(e.target.value) || 25));
-              setPageSize(newSize);
-              setOffset(0);
-            }}
-          />
+            onChange={(e) => { setPageSize(Number(e.target.value)); setOffset(0); }}
+          >
+            <option value={10}>10 / page</option>
+            <option value={25}>25 / page</option>
+            <option value={50}>50 / page</option>
+          </select>
         </div>
 
         <div className="tbl-wrap">
@@ -236,20 +233,7 @@ const ActiveSessions = ({ wsRefreshKey }) => {
                   </td>
                 </tr>
               )}
-              {loading && (
-                <tr>
-                  <td
-                    colSpan={8}
-                    style={{
-                      fontSize: '12px',
-                      color: 'var(--muted)',
-                      textAlign: 'center',
-                    }}
-                  >
-                    Loading…
-                  </td>
-                </tr>
-              )}
+              {loading && <SkeletonTable cols={8} rows={6} />}
             </tbody>
           </table>
         </div>

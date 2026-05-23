@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import SkeletonTable from '../Common/SkeletonTable';
 import api from "../../api/client";
 import { formatLocalDate } from "../../utils/dateTime";
 import { useAuth } from "../../context/AuthContext";
@@ -334,23 +335,16 @@ const Reports = ({
 
       <div className="card">
         <div className="filter-row">
-          <input
-            className="input"
-            type="number"
-            min="5"
-            max="100"
-            placeholder="Rows"
-            style={{ minWidth: "80px" }}
+          <select
+            className="select"
+            style={{ width: 'auto' }}
             value={pageSize}
-            onChange={(e) => {
-              const newSize = Math.max(
-                5,
-                Math.min(100, parseInt(e.target.value) || 20),
-              );
-              setPageSize(newSize);
-              setOffset(0);
-            }}
-          />
+            onChange={(e) => { setPageSize(Number(e.target.value)); setOffset(0); }}
+          >
+            <option value={10}>10 / page</option>
+            <option value={20}>20 / page</option>
+            <option value={50}>50 / page</option>
+          </select>
           <input
             className="input"
             placeholder="Search by ID, type, or location..."
@@ -719,20 +713,7 @@ const Reports = ({
                   </td>
                 </tr>
               )}
-              {loading && (
-                <tr>
-                  <td
-                    colSpan={12}
-                    style={{
-                      fontSize: "12px",
-                      color: "var(--muted)",
-                      textAlign: "center",
-                    }}
-                  >
-                    Loading...
-                  </td>
-                </tr>
-              )}
+              {loading && <SkeletonTable cols={12} rows={8} />}
             </tbody>
           </table>
         </div>

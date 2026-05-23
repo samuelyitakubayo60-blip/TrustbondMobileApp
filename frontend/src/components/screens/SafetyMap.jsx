@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import SkeletonTable from "../Common/SkeletonTable";
 import {
   MapContainer,
   TileLayer,
@@ -111,7 +112,7 @@ const incidentTone = {
   theft: "danger",
   assault: "danger",
   vandalism: "warning",
-  suspicious: "violet",
+  suspicious: "info",
   traffic: "info",
   drug: "success",
   "drug activity": "success",
@@ -636,13 +637,13 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   const INCIDENT_TYPE_COLORS = {
     "Theft":               "#F59E0B",
     "Assault":             "#EF4444",
-    "Vandalism":           "#8B5CF6",
-    "Domestic Violence":   "#EC4899",
+    "Vandalism":           "#F97316",
+    "Domestic Violence":   "#EF4444",
     "Drug Activity":       "#10B981",
     "Fraud/Scam":          "#3B82F6",
-    "Harassment":          "#F97316",
-    "Suspicious Activity": "#6B7280",
-    "Traffic Incident":    "#06B6D4",
+    "Harassment":          "#EAB308",
+    "Suspicious Activity": "#06B6D4",
+    "Traffic Incident":    "#64748B",
   };
 
   /** Deterministic HSL colour from any string — same name always → same colour. */
@@ -662,18 +663,18 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       "#00e5b4",
       "#0099ff",
       "#ff6b35",
-      "#6c63ff",
       "#00ced1",
+      "#00acc1",
       "#ff3b5c",
       "#ffd700",
       "#48b8d0",
-      "#f472b6",
-      "#34d399",
-      "#a78bfa",
-      "#fbbf24",
       "#38bdf8",
+      "#34d399",
+      "#fbbf24",
+      "#f59e0b",
+      "#06b6d4",
       "#f87171",
-      "#818cf8",
+      "#0ea5e9",
     ];
     if (!sector) return palette[0];
     const hash = Array.from(sector).reduce(
@@ -693,17 +694,17 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     "#E53935", // red
     "#FB8C00", // orange
     "#00ACC1", // cyan
-    "#8E24AA", // violet
+    "#0EA5E9", // sky
     "#F4511E", // deep orange
     "#039BE5", // light blue
     "#7CB342", // light green
-    "#E91E63", // pink
+    "#F59E0B", // amber
   ];
 
-  /** Noise / outlier colour — fixed purple per spec. */
-  const NOISE_COLOR = "#8E24AA";
-  /** Star centroid colour — fixed hot-pink per spec. */
-  const STAR_COLOR = "#E91E63";
+  /** Noise / outlier colour — slate gray. */
+  const NOISE_COLOR = "#64748B";
+  /** Star centroid colour — amber. */
+  const STAR_COLOR = "#F59E0B";
 
   const getClusterColor = (idx) => CLUSTER_PALETTE[idx % CLUSTER_PALETTE.length];
 
@@ -820,25 +821,11 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       <div className="page-header smx-page-header">
         <h2>Community Safety Map</h2>
         <p>
-          Musanze District safety map. <strong>DBSCAN hotspot clusters</strong> are shown as
-          coloured circles — <strong style={{ color: "#ef4444" }}>red</strong> (high-risk),{" "}
-          <strong style={{ color: "#ca8a04" }}>yellow</strong> (medium-risk),{" "}
-          <strong style={{ color: "#16a34a" }}>green</strong> (low-risk). Use the Time Period
-          panel to highlight a window; clusters outside the window appear faded.
+          DBSCAN hotspot clusters — <strong style={{ color: "#ef4444" }}>red</strong> (high),{" "}
+          <strong style={{ color: "#ca8a04" }}>yellow</strong> (medium),{" "}
+          <strong style={{ color: "#16a34a" }}>green</strong> (low). Clusters outside the selected
+          time window appear faded.
         </p>
-      </div>
-
-      <div className="alert alert-info">
-        <span className="alert-icon">i</span>
-        <div>
-          Musanze District safety map shows persisted <strong>DBSCAN hotspot clusters</strong> only
-          (coloured circles with incident counts). Individual incident pins are hidden so the map
-          stays focused on cluster risk zones.
-          <span style={{ display: "block", marginTop: "0.65rem" }}>
-            Use the <strong>Time Period</strong> panel to highlight a window; clusters outside that
-            window appear faded (35% opacity).
-          </span>
-        </div>
       </div>
 
       <div className="smx-filter-row">
@@ -1327,142 +1314,32 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             </button>
           </div>
 
-          {/* Simple Status Summary */}
-          <div
-            style={{
-              padding: "12px 14px",
-              marginBottom: "14px",
-              backgroundColor: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "8px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "12px",
-                fontWeight: "600",
-                marginBottom: "8px",
-                color: "var(--text)",
-              }}
-            >
-              Risk Summary
-            </div>
-            <div style={{ display: "flex", gap: "12px", fontSize: "11px" }}>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: "#dc3545",
-                  }}
-                ></div>
-                <span>
-                  Critical: <strong>{hotspotStats.risk_counts.critical}</strong>
-                </span>
+          {/* Risk Summary */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+            {[
+              { label: "Critical", value: hotspotStats.risk_counts.critical, cls: "sb-red" },
+              { label: "Warning",  value: hotspotStats.risk_counts.warning,  cls: "sb-orange" },
+              { label: "Normal",   value: hotspotStats.risk_counts.normal,   cls: "sb-green" },
+            ].map((s) => (
+              <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: "default", padding: "8px 10px" }}>
+                <div className="stat-btn-label" style={{ fontSize: 10 }}>{s.label}</div>
+                <div className="stat-btn-value" style={{ fontSize: 18 }}>{s.value}</div>
               </div>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: "#fd7e14",
-                  }}
-                ></div>
-                <span>
-                  Warning: <strong>{hotspotStats.risk_counts.warning}</strong>
-                </span>
-              </div>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: "#28a745",
-                  }}
-                ></div>
-                <span>
-                  Normal: <strong>{hotspotStats.risk_counts.normal}</strong>
-                </span>
-              </div>
-            </div>
+            ))}
           </div>
 
-          {/* Cluster Formation Status */}
-          <div
-            style={{
-              padding: "12px 14px",
-              marginBottom: "14px",
-              backgroundColor: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "8px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "12px",
-                fontWeight: "600",
-                marginBottom: "8px",
-                color: "var(--text)",
-              }}
-            >
-              Formation Stages
-            </div>
-            <div style={{ display: "flex", gap: "12px", fontSize: "11px" }}>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: "#34d399",
-                  }}
-                ></div>
-                <span>
-                  Emerging: <strong>{hotspotStats.stage_counts.emerging}</strong>
-                </span>
+          {/* Formation Stages */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+            {[
+              { label: "Emerging", value: hotspotStats.stage_counts.emerging, cls: "sb-blue" },
+              { label: "Active",   value: hotspotStats.stage_counts.active,   cls: "sb-orange" },
+              { label: "Intense",  value: hotspotStats.stage_counts.intense,  cls: "sb-red" },
+            ].map((s) => (
+              <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: "default", padding: "8px 10px" }}>
+                <div className="stat-btn-label" style={{ fontSize: 10 }}>{s.label}</div>
+                <div className="stat-btn-value" style={{ fontSize: 18 }}>{s.value}</div>
               </div>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: "#fb923c",
-                  }}
-                ></div>
-                <span>
-                  Active: <strong>{hotspotStats.stage_counts.active}</strong>
-                </span>
-              </div>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: "#dc3545",
-                  }}
-                ></div>
-                <span>
-                  Intense: <strong>{hotspotStats.stage_counts.intense}</strong>
-                </span>
-              </div>
-            </div>
+            ))}
           </div>
 
           <div className="card smx-side-card">
@@ -1519,80 +1396,46 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                 marginTop: "12px",
               }}
             >
-              <div style={{ marginBottom: "12px" }}>
-                <div
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: "600",
-                    marginBottom: "8px",
-                    color: "var(--text)",
-                  }}
-                >
+              <div style={{ marginBottom: 12 }}>
+                <div className="card-title" style={{ fontSize: 12, marginBottom: 8 }}>
                   Emergency Detection
                 </div>
-                <button
-                  className="btn btn-outline btn-sm"
-                  style={{ width: "100%", marginBottom: "8px" }}
-                  onClick={() => {
-                    // Load emergency hotspots for last 24 hours
-                    api
-                      .get(
-                        "/api/v1/hotspots/emergencies?days_back=1&min_incidents=3",
-                      )
-                      .then((res) => {
-                        if (res && res.length > 0) {
-                          alert(
-                            `🚨 ${res.length} emergency hotspot(s) detected!\n\nCheck the map for critical incidents requiring immediate attention.`,
-                          );
-                        } else {
-                          alert(
-                            "✅ No emergency hotspots detected in the last 24 hours.",
-                          );
-                        }
-                      })
-                      .catch(() => {
-                        alert("Failed to load emergency data.");
-                      });
-                  }}
-                >
-                  🚨 Check 24h Emergencies
-                </button>
-                <button
-                  className="btn btn-outline btn-sm"
-                  style={{ width: "100%", marginBottom: "4px" }}
-                  onClick={() => {
-                    // Load emergency hotspots for last 7 days
-                    api
-                      .get(
-                        "/api/v1/hotspots/emergencies?days_back=7&min_incidents=5",
-                      )
-                      .then((res) => {
-                        if (res && res.length > 0) {
-                          alert(
-                            `⚠️ ${res.length} high-priority hotspot(s) detected in the last week!\n\nThese areas may require increased patrol presence.`,
-                          );
-                        } else {
-                          alert(
-                            "✅ No high-priority hotspots detected in the last week.",
-                          );
-                        }
-                      })
-                      .catch(() => {
-                        alert("Failed to load emergency data.");
-                      });
-                  }}
-                >
-                  📊 Check Week Trends
-                </button>
-                <div
-                  style={{
-                    fontSize: "10px",
-                    color: "var(--muted)",
-                    marginTop: "4px",
-                  }}
-                >
-                  Emergency detection finds critical clusters with multiple
-                  incidents requiring immediate attention.
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <button
+                    className="btn btn-outline btn-sm btn-full"
+                    onClick={() => {
+                      api.get("/api/v1/hotspots/emergencies?days_back=1&min_incidents=3")
+                        .then((res) => {
+                          if (res && res.length > 0) {
+                            alert(`${res.length} emergency hotspot(s) detected in the last 24 h. Check the map for critical areas.`);
+                          } else {
+                            alert("No emergency hotspots detected in the last 24 hours.");
+                          }
+                        })
+                        .catch(() => alert("Failed to load emergency data."));
+                    }}
+                  >
+                    Check 24h Emergencies
+                  </button>
+                  <button
+                    className="btn btn-outline btn-sm btn-full"
+                    onClick={() => {
+                      api.get("/api/v1/hotspots/emergencies?days_back=7&min_incidents=5")
+                        .then((res) => {
+                          if (res && res.length > 0) {
+                            alert(`${res.length} high-priority hotspot(s) detected in the last week. These areas may need increased patrol.`);
+                          } else {
+                            alert("No high-priority hotspots detected in the last week.");
+                          }
+                        })
+                        .catch(() => alert("Failed to load emergency data."));
+                    }}
+                  >
+                    Check Week Trends
+                  </button>
+                </div>
+                <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>
+                  Finds critical clusters with multiple incidents requiring immediate attention.
                 </div>
               </div>
             </div>
@@ -2019,20 +1862,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                     </td>
                   </tr>
                 )}
-                {loading && (
-                  <tr>
-                    <td
-                      colSpan={11}
-                      style={{
-                        fontSize: "12px",
-                        color: "var(--muted)",
-                        textAlign: "center",
-                      }}
-                    >
-                      Loading hotspots...
-                    </td>
-                  </tr>
-                )}
+                {loading && <SkeletonTable cols={11} rows={6} />}
               </tbody>
             </table>
           </div>

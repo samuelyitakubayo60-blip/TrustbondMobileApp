@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import SkeletonTable from '../Common/SkeletonTable';
 import {
   Circle,
   CircleMarker,
@@ -519,20 +520,7 @@ const Hotspots = ({ wsRefreshKey }) => {
                     </td>
                   </tr>
                 )}
-                {loading && (
-                  <tr>
-                    <td
-                      colSpan={11}
-                      style={{
-                        fontSize: "12px",
-                        color: "var(--muted)",
-                        textAlign: "center",
-                      }}
-                    >
-                      Loading...
-                    </td>
-                  </tr>
-                )}
+                {loading && <SkeletonTable cols={11} rows={6} />}
               </tbody>
             </table>
           </div>

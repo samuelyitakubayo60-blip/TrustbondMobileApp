@@ -409,7 +409,7 @@ def update_police_user(
         if assigned_loc.location_type != "sector":
             raise HTTPException(status_code=400, detail="Officers must be assigned at sector level, not at village or cell level")
         user.assigned_location_id = payload.assigned_location_id
-    if payload.station_id is not None:
+    if "station_id" in payload.model_fields_set:
         if payload.station_id is None:
             user.station_id = None
         else:

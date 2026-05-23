@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import SkeletonTable from '../Common/SkeletonTable';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import EditCaseModal from '../Modals/EditCaseModal';
@@ -378,13 +379,7 @@ const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
                   </td>
                 </tr>
               )}
-              {loading && (
-                <tr>
-                  <td colSpan={9} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
-                    Loading...
-                  </td>
-                </tr>
-              )}
+              {loading && <SkeletonTable cols={9} rows={6} />}
             </tbody>
           </table>
         </div>
