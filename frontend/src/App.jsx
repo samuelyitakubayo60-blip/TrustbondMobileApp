@@ -4,6 +4,7 @@ import Dashboard from "./components/screens/Dashboard";
 import Reports from "./components/screens/Reports";
 import ReportDetail from "./components/screens/ReportDetail";
 import CaseManagement from "./components/screens/CaseManagement";
+import DistrictSecurityAnalysis from "./components/screens/DistrictSecurityAnalysis";
 import HotspotDetails from "./components/screens/HotspotDetails";
 import SafetyMap from "./components/screens/SafetyMap";
 import DeviceTrust from "./components/screens/DeviceTrust";
@@ -87,6 +88,8 @@ function App() {
         return "device-trust";
       case "/geographic-intelligence":
         return "geographic-intelligence";
+      case "/district-security-analysis":
+        return "district-security-analysis";
       case "/users":
         return "users";
       case "/incident-types":
@@ -168,6 +171,8 @@ function App() {
         return "/safety-map";
       case "device-trust":
         return "/device-trust";
+      case "district-security-analysis":
+        return "/district-security-analysis";
       case "users":
         return "/users";
       case "incident-types":
@@ -284,6 +289,7 @@ function App() {
       ? `Report Detail — ${String(selectedReportId).slice(0, 8)}`
       : "Report Detail",
     "case-management": "Case Management",
+    "district-security-analysis": "District Security Analysis",
     "hotspot-details": "Hotspot Details",
     hotspots: "Crime Hotspots",
     "safety-map": "Safety Map",
@@ -484,6 +490,8 @@ function App() {
             wsRefreshKey={wsRefreshKey}
           />
         );
+      case "district-security-analysis":
+        return <DistrictSecurityAnalysis wsRefreshKey={wsRefreshKey} />;
       case "users":
         return (
           <Users

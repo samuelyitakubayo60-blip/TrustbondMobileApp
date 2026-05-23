@@ -67,6 +67,9 @@ export const canAccessScreen = (screenId, role) => {
   if (screenId === 'users') {
     return ['admin', 'supervisor', 'officer'].includes(role);
   }
+  if (screenId === 'district-security-analysis') {
+    return ['admin', 'supervisor', 'officer'].includes(role);
+  }
   return true;
 };
 

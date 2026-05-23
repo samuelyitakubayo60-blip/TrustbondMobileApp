@@ -182,6 +182,12 @@ const Sidebar = ({
         section: "Intelligence",
         items: [
           {
+            id: "district-security-analysis",
+            idx: 4,
+            label: "District Security Analysis",
+            icon: "ni-gi",
+          },
+          {
             id: "device-trust",
             idx: 6,
             label: "Device Trust",

@@ -2,9 +2,9 @@ from datetime import datetime, timezone, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload, selectinload
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, true
 
 from app.database import get_db
 from app.core.report_list_trust import resolve_report_list_trust_score
@@ -21,6 +21,7 @@ from app.api.v1.auth import get_current_user
 from app.models.hotspot import Hotspot
 from app.models.ml_prediction import MLPrediction
 from app.models.case import Case
+from app.models.incident_type import IncidentType
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -43,6 +44,159 @@ def _station_covered_village_ids(db: Session, station: Station) -> set[int]:
             .all()
         }
     return set()
+
+
+def _analysis_report_scope(db: Session, current_user: PoliceUser):
+    """DPC and IO: district-wide. Officers: station cell coverage only."""
+    role = getattr(current_user, "role", None)
+    if role == "officer":
+        station_id = getattr(current_user, "station_id", None)
+        if station_id is None:
+            raise HTTPException(status_code=403, detail="Officer station is not configured")
+        station = db.query(Station).filter(Station.station_id == station_id).first()
+        covered_village_ids = _station_covered_village_ids(db, station) if station else set()
+        scope_filters = [
+            Report.handling_station_id == station_id,
+            Report.assignments.any(
+                ReportAssignment.police_user.has(PoliceUser.station_id == station_id)
+            ),
+        ]
+        if covered_village_ids:
+            scope_filters.append(Report.village_location_id.in_(list(covered_village_ids)))
+        assigned_qs = db.query(Report.report_id).filter(or_(*scope_filters)).distinct()
+        return Report.report_id.in_(assigned_qs)
+    return true()
+
+
+@router.get("/district-security-analysis")
+def get_district_security_analysis(
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    days_back: int = Query(
+        90,
+        ge=0,
+        le=3650,
+        description="Analysis window in days; 0 = all time",
+    ),
+):
+    """
+    Aggregated incident analytics for the District Security Analysis screen.
+    Uses verified police reports in scope (district-wide for DPC/IO, station for officers).
+    """
+    scope = _analysis_report_scope(db, current_user)
+    now = datetime.now(timezone.utc)
+    since = None
+    if days_back > 0:
+        since = now - timedelta(days=days_back)
+
+    base = db.query(Report).filter(
+        scope,
+        Report.verification_status == "verified",
+    )
+    if since is not None:
+        base = base.filter(Report.reported_at >= since)
+
+    total_incidents = int(base.count() or 0)
+
+    time_filters = [Report.reported_at >= since] if since is not None else []
+    scoped_report_ids = (
+        db.query(Report.report_id.label("rid"))
+        .filter(scope, Report.verification_status == "verified", *time_filters)
+        .subquery()
+    )
+    in_scope = Report.report_id.in_(db.query(scoped_report_ids.c.rid))
+    type_rows = (
+        db.query(
+            IncidentType.type_name,
+            func.count(Report.report_id).label("cnt"),
+        )
+        .join(Report, Report.incident_type_id == IncidentType.incident_type_id)
+        .filter(in_scope)
+        .group_by(IncidentType.type_name)
+        .order_by(func.count(Report.report_id).desc())
+        .all()
+    )
+    unknown_count = (
+        db.query(func.count(Report.report_id))
+        .filter(in_scope, Report.incident_type_id.is_(None))
+        .scalar()
+        or 0
+    )
+
+    by_type = []
+    for type_name, cnt in type_rows:
+        name = (type_name or "Unknown").strip() or "Unknown"
+        count = int(cnt or 0)
+        by_type.append(
+            {
+                "type_name": name,
+                "count": count,
+                "percentage": round((count / total_incidents) * 100, 1) if total_incidents else 0,
+            }
+        )
+    if unknown_count:
+        by_type.append(
+            {
+                "type_name": "Unknown",
+                "count": int(unknown_count),
+                "percentage": round((unknown_count / total_incidents) * 100, 1)
+                if total_incidents
+                else 0,
+            }
+        )
+        by_type.sort(key=lambda x: x["count"], reverse=True)
+
+    distinct_types = len(by_type)
+    period_days = days_back if days_back > 0 else None
+    avg_per_day = 0.0
+    if total_incidents and period_days:
+        avg_per_day = round(total_incidents / period_days, 1)
+    elif total_incidents:
+        first_at = (
+            db.query(func.min(Report.reported_at))
+            .filter(scope, Report.verification_status == "verified")
+            .scalar()
+        )
+        if first_at:
+            span_days = max(1, (now - first_at).days or 1)
+            avg_per_day = round(total_incidents / span_days, 1)
+        else:
+            avg_per_day = float(total_incidents)
+
+    most_common = by_type[0] if by_type else None
+
+    daily_rows = (
+        db.query(
+            func.date(Report.reported_at).label("day"),
+            func.count(Report.report_id).label("cnt"),
+        )
+        .filter(in_scope)
+        .group_by(func.date(Report.reported_at))
+        .order_by(func.date(Report.reported_at))
+        .all()
+    )
+
+    daily_trend = [
+        {"date": row.day.isoformat() if row.day else None, "count": int(row.cnt or 0)}
+        for row in daily_rows
+        if row.day is not None
+    ]
+
+    return {
+        "days_back": days_back,
+        "since": since.isoformat() if since else None,
+        "until": now.isoformat(),
+        "scope": "station" if getattr(current_user, "role", None) == "officer" else "district",
+        "summary": {
+            "total_incidents": total_incidents,
+            "incident_types": distinct_types,
+            "avg_per_day": avg_per_day,
+            "most_common_type": most_common["type_name"] if most_common else None,
+            "most_common_count": most_common["count"] if most_common else 0,
+        },
+        "by_type": by_type,
+        "daily_trend": daily_trend,
+    }
 
 
 @router.get("/station/{station_id}")
@@ -90,14 +244,14 @@ def get_station_stats(
     # Verified reports
     verified_reports = db.query(func.count(Report.report_id)).filter(
         station_report_filter,
-        Report.verified == True
+        Report.verification_status == "verified",
     ).scalar() or 0
     
     # Pending reports (not verified, not rejected)
     pending_reports = db.query(func.count(Report.report_id)).filter(
         station_report_filter,
-        Report.verified == False,
-        or_(Report.status.is_(None), Report.status != 'rejected')
+        Report.verification_status.in_(["pending", "under_review"]),
+        or_(Report.status.is_(None), Report.status != "rejected"),
     ).scalar() or 0
     
     # Active cases for this station
