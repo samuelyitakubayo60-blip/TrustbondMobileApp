@@ -12,7 +12,6 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
   const isAdmin = role === 'admin';
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [reviewCounts, setReviewCounts] = useState({});
   const [stationsById, setStationsById] = useState({});
   const [searchText, setSearchText] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -46,24 +45,6 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
   useEffect(() => {
     loadUsers();
   }, [loadUsers, refreshKey, wsRefreshKey]);
-
-  // Load per-officer review counts for Reviews column
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .get('/api/v1/police-users/review-stats')
-      .then((res) => {
-        if (cancelled) return;
-        setReviewCounts(res || {});
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setReviewCounts({});
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshKey, wsRefreshKey]);
 
   // Load stations so we can group/filter users by station.
   useEffect(() => {
@@ -264,7 +245,6 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
                 <th>Email</th>
                 <th>Role</th>
                 <th>Station</th>
-                <th>Reviews</th>
                 <th>Status</th>
                 <th>Last Login</th>
                 <th>Actions</th>
@@ -285,7 +265,6 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
                       ? stationsById[u.station_id].station_name
                       : '—'}
                   </td>
-                  <td>{reviewCounts[u.police_user_id] ?? '—'}</td>
                   <td>
                     <span className={`badge ${u.is_active ? 'b-green' : 'b-red'}`}>
                       {u.is_active ? 'Active' : 'Inactive'}
