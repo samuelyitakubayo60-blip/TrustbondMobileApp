@@ -26,6 +26,15 @@ from app.models.incident_type import IncidentType
 router = APIRouter(prefix="/stats", tags=["stats"])
 
 
+def _as_utc_aware(dt: datetime | None) -> datetime | None:
+    """Normalize DB datetimes so they can be compared/subtracted with UTC now."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def _station_covered_village_ids(db: Session, station: Station) -> set[int]:
     covered_cell_ids = {
         int(row[0])
@@ -158,7 +167,8 @@ def get_district_security_analysis(
             .scalar()
         )
         if first_at:
-            span_days = max(1, (now - first_at).days or 1)
+            first_utc = _as_utc_aware(first_at)
+            span_days = max(1, (now - first_utc).days or 1)
             avg_per_day = round(total_incidents / span_days, 1)
         else:
             avg_per_day = float(total_incidents)
@@ -685,10 +695,7 @@ def get_dashboard_stats(
         .first()
     )
     if latest_pred and latest_pred.evaluated_at:
-        eval_ts = latest_pred.evaluated_at
-        # Normalise to timezone-aware UTC so subtraction is safe even if the column is naive.
-        if eval_ts.tzinfo is None:
-            eval_ts = eval_ts.replace(tzinfo=timezone.utc)
+        eval_ts = _as_utc_aware(latest_pred.evaluated_at)
         age = now - eval_ts
         if age <= timedelta(hours=24):
             ml_status = "Online"
@@ -709,9 +716,7 @@ def get_dashboard_stats(
         else None
     )
     if last_hotspot_detected:
-        # Normalise to timezone-aware UTC so subtraction is safe even if the column is naive.
-        if last_hotspot_detected.tzinfo is None:
-            last_hotspot_detected = last_hotspot_detected.replace(tzinfo=timezone.utc)
+        last_hotspot_detected = _as_utc_aware(last_hotspot_detected)
         age_hs = now - last_hotspot_detected
         if age_hs <= timedelta(hours=24):
             hs_status = "Running"
