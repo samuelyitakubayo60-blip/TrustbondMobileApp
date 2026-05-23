@@ -4,8 +4,6 @@ import Dashboard from "./components/screens/Dashboard";
 import Reports from "./components/screens/Reports";
 import ReportDetail from "./components/screens/ReportDetail";
 import CaseManagement from "./components/screens/CaseManagement";
-import SecuritySituation from "./components/screens/SecuritySituation";
-import StationSecurityDetail from "./components/screens/StationSecurityDetail";
 import HotspotDetails from "./components/screens/HotspotDetails";
 import SafetyMap from "./components/screens/SafetyMap";
 import DeviceTrust from "./components/screens/DeviceTrust";
@@ -55,13 +53,6 @@ function App() {
     if (path.startsWith("/reports/") && path !== "/reports" && path !== "/reports/detail") {
       return "report-detail";
     }
-    if (path.startsWith("/security-situation/station/")) {
-      const parts = path.split("/");
-      const stationId = parts[3];
-      if (stationId) {
-        return { id: "station-security", props: { stationId: Number(stationId) || stationId } };
-      }
-    }
     switch (path) {
       case "/":
         return "dashboard";
@@ -71,7 +62,7 @@ function App() {
         return "report-detail";
       case "/cases":
       case "/security-situation":
-        return "security-situation";
+        return "case-management";
       case "/hotspots":
         return "safety-map"; // Redirect to safety-map
       case "/safety-map":
@@ -152,11 +143,7 @@ function App() {
         }
       case "case-management":
       case "security-situation":
-        return "/security-situation";
-      case "station-security": {
-        const sid = props?.stationId;
-        return sid ? `/security-situation/station/${sid}` : "/security-situation";
-      }
+        return "/cases";
       case "hotspot-details":
         // Use the hotspotId from the new props or selectedHotspotId to construct URL
         const hotspotId = props?.hotspotId || selectedHotspotId;
@@ -205,12 +192,8 @@ function App() {
       if (rid) setSelectedReportId(rid);
       return "report-detail";
     }
-    if (path.startsWith("/security-situation/station/")) {
-      const parts = path.split("/");
-      const stationId = parts[3];
-      if (stationId) {
-        return { id: "station-security", props: { stationId: Number(stationId) || stationId } };
-      }
+    if (path.startsWith("/security-situation")) {
+      return "case-management";
     }
 
     switch (path) {
@@ -222,7 +205,7 @@ function App() {
         return "report-detail";
       case "/cases":
       case "/security-situation":
-        return "security-situation";
+        return "case-management";
       case "/hotspots":
         return "safety-map"; // Redirect to safety-map
       case "/safety-map":
@@ -284,9 +267,7 @@ function App() {
     "report-detail": selectedReportId
       ? `Report Detail — ${String(selectedReportId).slice(0, 8)}`
       : "Report Detail",
-    "case-management": "Security Situation",
-    "security-situation": "Security Situation",
-    "station-security": "Station Security",
+    "case-management": "Case Management",
     "hotspot-details": "Hotspot Details",
     hotspots: "Crime Hotspots",
     "safety-map": "Safety Map",
@@ -446,17 +427,9 @@ function App() {
       case "case-management":
       case "security-situation":
         return (
-          <SecuritySituation
+          <CaseManagement
             goToScreen={goToScreen}
-            wsRefreshKey={wsRefreshKey}
-          />
-        );
-      case "station-security":
-        return (
-          <StationSecurityDetail
-            goToScreen={goToScreen}
-            stationId={currentScreen.props?.stationId}
-            stationName={currentScreen.props?.stationName}
+            openModal={openModal}
             wsRefreshKey={wsRefreshKey}
           />
         );

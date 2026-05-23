@@ -103,15 +103,28 @@ def _report_in_supervisor_scope(report: Report, station_id: int, location_ids: s
 
 
 def _role_uses_station_scope(role: Optional[str]) -> bool:
-    """Station commanders (officers) are scoped to their station; IO/admin see district-wide."""
-    return role == "officer"
+    return role in ("supervisor", "officer")
 
 
-def _officer_station_id(current_user: PoliceUser) -> int:
-    station_id = getattr(current_user, "station_id", None)
-    if station_id is None:
-        raise HTTPException(status_code=403, detail="Officer station is not configured")
-    return int(station_id)
+def _apply_case_list_scope(query, current_user: PoliceUser, db: Session):
+    """Supervisor / officer: cases in their station coverage (admin sees all)."""
+    if not _role_uses_station_scope(current_user.role):
+        return query
+    station_id, location_ids = _supervisor_scope(current_user, db)
+    if location_ids:
+        return query.filter(
+            or_(
+                Case.station_id == station_id,
+                Case.assigned_to.has(PoliceUser.station_id == station_id),
+                Case.location_id.in_(location_ids),
+            )
+        )
+    return query.filter(
+        or_(
+            Case.station_id == station_id,
+            Case.assigned_to.has(PoliceUser.station_id == station_id),
+        )
+    )
 
 
 def _incident_case_title(type_name: str) -> str:
@@ -282,8 +295,8 @@ def list_cases(
 ):
     """List cases with optional status filter.
 
-    - Admin / IO (supervisor): all cases district-wide.
-    - Officer (station commander): cases for their station only.
+    - Admin: all cases.
+    - Supervisor / Officer: cases in their station coverage (same scope).
     """
     query = db.query(Case).options(
         joinedload(Case.location),
@@ -295,14 +308,7 @@ def list_cases(
         .selectinload(Report.ml_predictions),
     )
 
-    if _role_uses_station_scope(current_user.role):
-        sid = _officer_station_id(current_user)
-        query = query.filter(
-            or_(
-                Case.station_id == sid,
-                Case.assigned_to.has(PoliceUser.station_id == sid),
-            )
-        )
+    query = _apply_case_list_scope(query, current_user, db)
 
     if status:
         query = query.filter(Case.status == status)
@@ -471,17 +477,17 @@ def create_case(
     db: Session = Depends(get_db),
 ):
     """Create a new case, optionally linking reports and assigning an officer."""
-    officer_station_id = None
-    officer_location_ids: set[int] = set()
+    supervisor_station_id = None
+    supervisor_location_ids: set[int] = set()
     if _role_uses_station_scope(current_user.role):
-        officer_station_id = _officer_station_id(current_user)
-        _, officer_location_ids = _supervisor_scope(current_user, db)
-        if payload.location_id is not None and officer_location_ids:
-            if payload.location_id not in officer_location_ids:
-                raise HTTPException(
-                    status_code=403,
-                    detail="You can only create cases in your station area",
-                )
+        supervisor_station_id, supervisor_location_ids = _supervisor_scope(current_user, db)
+        if payload.location_id is not None:
+            if supervisor_location_ids and payload.location_id not in supervisor_location_ids:
+                if payload.location_id != supervisor_station_id:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You can only create cases in your assigned location",
+                    )
 
     from app.models.incident_type import IncidentType
 
@@ -517,7 +523,7 @@ def create_case(
         if r:
             if _role_uses_station_scope(current_user.role):
                 if not _report_in_supervisor_scope(
-                    r, officer_station_id, officer_location_ids, db
+                    r, supervisor_station_id, supervisor_location_ids, db
                 ):
                     raise HTTPException(
                         status_code=403,
@@ -557,7 +563,7 @@ def create_case(
         if not officer:
             raise HTTPException(status_code=400, detail="Assigned officer not found or inactive")
         if _role_uses_station_scope(current_user.role):
-            if officer.station_id != officer_station_id:
+            if officer.station_id != supervisor_station_id:
                 raise HTTPException(
                     status_code=403,
                     detail="You can only assign cases to officers in your station",
@@ -625,15 +631,7 @@ def get_case_stats(
     from sqlalchemy import func
 
     # Apply scope
-    base_q = db.query(Case)
-    if _role_uses_station_scope(current_user.role):
-        sid = _officer_station_id(current_user)
-        base_q = base_q.filter(
-            or_(
-                Case.station_id == sid,
-                Case.assigned_to.has(PoliceUser.station_id == sid),
-            )
-        )
+    base_q = _apply_case_list_scope(db.query(Case), current_user, db)
 
     def _count(q_filter):
         max_retries = 3
