@@ -273,70 +273,89 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
 
   return (
     <div className="dashboard-police">
-      <div className="page-header">
-        <div className="page-title">
-          Welcome back,{" "}
-          {user ? `${user.first_name} ${user.last_name}` : "Officer"}
-        </div>
-        <div className="page-sub">
-          {role === "officer"
-            ? "Here's what's happening in your station area right now."
-            : "Here's what's happening in Musanze District right now."}
-        </div>
-      </div>
-
-      <div className="alert-banner">
-        <span className="alert-icon">!</span>
-        <span>
-          {role === "officer"
-            ? `${pending} reports in your station need a decision.`
-            : `${pending} reports are pending review and require verification.`}
-        </span>
-        <button
-          type="button"
-          className="alert-link"
-          onClick={() =>
-            goToScreen("reports", 1, {
-              initialStatusFilter: role === "officer" ? "pending" : "pending",
-            })
-          }
-        >
-          {role === "officer" ? "Review station reports" : "Review now"}
-        </button>
-      </div>
-
-      <div className="stat-grid">
-        <div className="stat-card">
-          <div className="stat-label">
-            {role === "officer" ? "Station reports" : "Total reports"}
+      {/* ── Welcome header ── */}
+      <div className="card" style={{ marginBottom: 16, padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <div className="page-title" style={{ marginBottom: 2 }}>
+            Welcome back, {user ? `${user.first_name} ${user.last_name}` : "Officer"}
           </div>
+          <div className="page-sub">
+            {role === "officer"
+              ? "Here's what's happening in your station area right now."
+              : "Here's what's happening in Musanze District right now."}
+          </div>
+        </div>
+        {pending > 0 && (
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => goToScreen("reports", 1, { initialStatusFilter: "pending" })}
+            style={{ flexShrink: 0 }}
+          >
+            Review {pending} pending
+          </button>
+        )}
+      </div>
+
+      {/* ── Stat cards — all clickable ── */}
+      <div className="stat-grid">
+        <div
+          className="stat-card clickable"
+          onClick={() => goToScreen("reports", 1)}
+          title="View all reports"
+        >
+          <span className="stat-link-hint">View all →</span>
+          <div className="stat-label">{role === "officer" ? "Station reports" : "Total reports"}</div>
           <div className="stat-value neutral">{total}</div>
           <div className="stat-meta">{myScope ? "Your scope" : "All time"}</div>
         </div>
-        <div className="stat-card">
+        <div
+          className="stat-card clickable"
+          onClick={() => goToScreen("reports", 1)}
+          title="Reports in last 7 days"
+        >
+          <span className="stat-link-hint">View →</span>
           <div className="stat-label">Last 7 days</div>
           <div className="stat-value neutral">{recent7}</div>
           <div className="stat-meta">Recent activity</div>
         </div>
-        <div className="stat-card">
+        <div
+          className="stat-card clickable"
+          onClick={() => goToScreen("reports", 1, { initialStatusFilter: "pending" })}
+          title="Review pending reports"
+        >
+          <span className="stat-link-hint">Review →</span>
           <div className="stat-label">Pending review</div>
           <div className="stat-value amber">{pending}</div>
           <div className="stat-meta">Needs action</div>
         </div>
-        <div className="stat-card">
+        <div
+          className="stat-card clickable"
+          onClick={() => goToScreen("reports", 1, { initialStatusFilter: "verified" })}
+          title="View verified reports"
+        >
+          <span className="stat-link-hint">View →</span>
           <div className="stat-label">Verified</div>
           <div className="stat-value green">{verified}</div>
           <div className="stat-meta">Verification successful</div>
         </div>
-        <div className="stat-card">
+        <div
+          className="stat-card clickable"
+          onClick={() => goToScreen("reports", 1, { initialStatusFilter: "flagged" })}
+          title="View flagged reports"
+        >
+          <span className="stat-link-hint">Review →</span>
           <div className="stat-label">Flagged</div>
           <div className="stat-value red">{flagged}</div>
           <div className="stat-meta">Anomalies detected</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-label">
-            {role === "officer" ? "Station open cases" : "Open cases"}
-          </div>
+        <div
+          className="stat-card clickable"
+          onClick={() => goToScreen("case-management", 3)}
+          title="Go to case management"
+        >
+          <span className="stat-link-hint">Open →</span>
+          <div className="stat-label">{role === "officer" ? "Station open cases" : "Open cases"}</div>
           <div className="stat-value neutral">{openCases}</div>
           <div className="stat-meta">Case files</div>
         </div>
