@@ -38,9 +38,20 @@ class HotspotResponse(BaseModel):
     prediction: Optional[Dict[str, Any]] = None
     boundary_points: Optional[List[List[float]]] = []
     incident_points: Optional[List[Dict[str, Any]]] = []
+    assigned_unit_code: Optional[str] = None
+    assigned_unit_name: Optional[str] = None
+    deployed_at: Optional[datetime] = None
+    deployment_note: Optional[str] = None
+    controlled_by_user_id: Optional[int] = None
+    controlled_by_name: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class HotspotDeployRequest(BaseModel):
+    unit_code: str
+    note: Optional[str] = None
 
 
 class HotspotIncidentResponse(BaseModel):

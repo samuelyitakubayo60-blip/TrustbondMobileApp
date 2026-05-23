@@ -5,7 +5,8 @@ import AssignmentUnitModal from "../Modals/AssignmentUnitModal";
 
 const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
   const { user } = useAuth();
-  const canManage = user?.role === "admin" || user?.role === "supervisor";
+  const canManage = user?.role === "admin";
+  const canView = canManage || user?.role === "supervisor";
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -74,8 +75,6 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
 
   const activeCount   = units.filter(u =>  u.is_active).length;
   const inactiveCount = units.filter(u => !u.is_active).length;
-  const approvalCount = units.filter(u =>  u.requires_commander_approval).length;
-
   return (
     <>
       {/* ── Header card ── */}
@@ -95,12 +94,11 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
         </div>
 
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
           {[
             { label: 'Total units',        value: units.length,   cls: 'sb-blue'   },
             { label: 'Active',             value: activeCount,    cls: 'sb-green'  },
             { label: 'Inactive',           value: inactiveCount,  cls: 'sb-red'    },
-            { label: 'Needs approval',     value: approvalCount,  cls: 'sb-orange' },
           ].map((s) => (
             <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
               <div className="stat-btn-label">{s.label}</div>
@@ -110,10 +108,17 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
         </div>
       </div>
 
-      {!canManage && (
+      {!canView && (
         <div className="alert alert-warn" style={{ marginBottom: 12 }}>
           <span className="alert-icon">!</span>
-          <div>View only — only admins and supervisors can add or edit assignment units.</div>
+          <div>You do not have access to assignment units.</div>
+        </div>
+      )}
+
+      {canView && !canManage && (
+        <div className="alert alert-warn" style={{ marginBottom: 12 }}>
+          <span className="alert-icon">!</span>
+          <div>View only — only DPC (admin) can create or edit assignment units.</div>
         </div>
       )}
 
@@ -152,7 +157,6 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
                 <th>Name</th>
                 <th>Description</th>
                 <th>Commander</th>
-                <th>Approval</th>
                 <th>Status</th>
                 <th style={{ width: 200 }}>Actions</th>
               </tr>
@@ -160,13 +164,13 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: "center", padding: 24 }}>
+                  <td colSpan={6} style={{ textAlign: "center", padding: 24 }}>
                     Loading…
                   </td>
                 </tr>
               ) : units.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: "center", padding: 24 }}>
+                  <td colSpan={6} style={{ textAlign: "center", padding: 24 }}>
                     No units yet. Click <strong>Add unit</strong> to create one.
                   </td>
                 </tr>
@@ -186,11 +190,6 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
                       {u.commander_name || (
                         <span style={{ color: "var(--muted)" }}>—</span>
                       )}
-                    </td>
-                    <td>
-                      <span className={`badge ${u.requires_commander_approval ? 'b-orange' : 'b-gray'}`} style={{ fontSize: 10 }}>
-                        {u.requires_commander_approval ? 'Required' : 'Not required'}
-                      </span>
                     </td>
                     <td>
                       <span className={`badge ${u.is_active ? 'b-green' : 'b-gray'}`}>

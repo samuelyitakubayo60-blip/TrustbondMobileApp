@@ -1,7 +1,4 @@
-"""Idempotent DDL for workflow / leader / incident-type columns.
-
-Used on startup (so production matches ORM) and by scripts/ensure_workflow_leader_extensions.py.
-"""
+"""Idempotent DDL for workflow / leader / incident-type / station columns."""
 
 from __future__ import annotations
 
@@ -10,7 +7,6 @@ import logging
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-# Keep in sync with SQLAlchemy models (reports, cases, local_leaders, local_leader_auth_codes, incident_types).
 DDL_STATEMENTS: tuple[str, ...] = (
     """
     ALTER TABLE reports
@@ -20,6 +16,12 @@ DDL_STATEMENTS: tuple[str, ...] = (
     """
     CREATE INDEX IF NOT EXISTS ix_reports_submitted_by_local_leader_id
       ON reports (submitted_by_local_leader_id);
+    """,
+    """
+    ALTER TABLE cases ADD COLUMN IF NOT EXISTS station_id INTEGER REFERENCES stations(station_id);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_cases_station_id ON cases (station_id);
     """,
     """
     ALTER TABLE cases ADD COLUMN IF NOT EXISTS special_assignment_unit VARCHAR(80);
@@ -63,6 +65,26 @@ DDL_STATEMENTS: tuple[str, ...] = (
       ADD COLUMN IF NOT EXISTS commander_user_id INTEGER REFERENCES police_users(police_user_id);
     """,
     """
+    ALTER TABLE hotspots ADD COLUMN IF NOT EXISTS assigned_unit_code VARCHAR(80);
+    """,
+    """
+    ALTER TABLE hotspots ADD COLUMN IF NOT EXISTS controlled_by_user_id INTEGER REFERENCES police_users(police_user_id);
+    """,
+    """
+    ALTER TABLE hotspots ADD COLUMN IF NOT EXISTS deployed_at TIMESTAMPTZ;
+    """,
+    """
+    ALTER TABLE hotspots ADD COLUMN IF NOT EXISTS deployment_note VARCHAR(500);
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS station_coverage_cells (
+      station_coverage_cell_id SERIAL PRIMARY KEY,
+      station_id INTEGER NOT NULL REFERENCES stations(station_id) ON DELETE CASCADE,
+      cell_location_id INTEGER NOT NULL REFERENCES locations(location_id),
+      UNIQUE (station_id, cell_location_id)
+    );
+    """,
+    """
     INSERT INTO special_assignment_units (unit_code, unit_name, description)
     VALUES
       ('RIB', 'RIB — Investigation Bureau', 'Serious crime / investigation handover'),
@@ -74,9 +96,9 @@ DDL_STATEMENTS: tuple[str, ...] = (
     ON CONFLICT (unit_code) DO NOTHING;
     """,
 )
+
 _log = logging.getLogger(__name__)
 
-# One-time-style data fix; run from the ensure script, not every app startup.
 LEADER_VERIFIED_BACKFILL_SQL = """
 UPDATE reports
 SET leader_verification_status = 'confirmed'
@@ -86,13 +108,11 @@ WHERE verification_status = 'verified'
 
 
 def apply_workflow_schema_ddl(engine: Engine) -> None:
-    """Add missing columns/indexes. Safe to call on every deploy."""
     for stmt in DDL_STATEMENTS:
         try:
             with engine.begin() as conn:
                 conn.execute(text(stmt))
         except Exception as exc:
-            # Best-effort startup alignment: continue so one timeout/lock does not block other fixes.
             _log.warning("Workflow DDL statement failed: %s", exc)
 
 

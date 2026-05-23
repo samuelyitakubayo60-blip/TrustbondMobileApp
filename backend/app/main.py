@@ -75,6 +75,17 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         _log.warning("Workflow schema DDL ensure failed (check DB permissions): %s", exc)
 
+    try:
+        from app.database import SessionLocal
+        from app.core.case_station_backfill import backfill_case_station_ids
+
+        with SessionLocal() as db:
+            result = backfill_case_station_ids(db, limit=2000)
+            if result.get("updated"):
+                _log.info("Startup case station backfill: %s", result)
+    except Exception as exc:
+        _log.warning("Case station backfill on startup skipped: %s", exc)
+
     # Warm-up AI narrative/semantic components on startup (best-effort).
     try:
         from app.api.v1.reports import warmup_narrative_models_on_startup

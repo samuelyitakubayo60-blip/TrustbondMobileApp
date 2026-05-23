@@ -62,11 +62,29 @@ class StationUpdate(BaseModel):
 class StationResponse(StationBase):
   station_id: int
   covered_cell_names: list[str] = Field(default_factory=list)
+  active_case_count: Optional[int] = None
+  total_incident_count: Optional[int] = None
   created_at: Optional[datetime] = None
   updated_at: Optional[datetime] = None
 
   class Config:
     from_attributes = True
+
+
+class StationIncidentGroup(BaseModel):
+  incident_type_id: Optional[int] = None
+  incident_type_name: str
+  case_count: int = 0
+  incident_count: int = 0
+  cases: list[dict] = Field(default_factory=list)
+
+
+class StationCasesResponse(BaseModel):
+  station_id: int
+  station_name: str
+  active_case_count: int = 0
+  total_incident_count: int = 0
+  groups: list[StationIncidentGroup] = Field(default_factory=list)
 
 
 class StationListResponse(BaseModel):

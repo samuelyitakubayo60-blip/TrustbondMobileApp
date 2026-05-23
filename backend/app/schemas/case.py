@@ -47,6 +47,8 @@ class CaseResponse(BaseModel):
     assigned_to_id: Optional[int] = None
     assigned_to_name: Optional[str] = None
     assigned_to_station_id: Optional[int] = None
+    station_id: Optional[int] = None
+    station_name: Optional[str] = None
     created_by: Optional[int] = None
     report_count: int = 0
     opened_at: Optional[datetime] = None

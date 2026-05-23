@@ -133,12 +133,15 @@ const Sidebar = ({
   };
 
   // Map detail screens back to their parent nav item for highlighting.
+  const screenId = typeof currentScreen === "string" ? currentScreen : currentScreen?.id;
   const sidebarActiveScreen =
-    currentScreen === "report-detail"
+    screenId === "report-detail"
       ? "reports"
-      : currentScreen === "hotspot-details"
+      : screenId === "hotspot-details"
         ? "safety-map"
-        : currentScreen;
+        : screenId === "station-security"
+          ? "security-situation"
+          : screenId;
 
   const {
     reports: reportsBadge = 0,
@@ -168,9 +171,9 @@ const Sidebar = ({
           },
           // Case Management - visible to all roles (admin, supervisor, officer)
           {
-            id: "case-management",
+            id: "security-situation",
             idx: 3,
-            label: "Case Management",
+            label: "Security Situation",
             icon: "ni-cm",
             badge: casesBadge,
           },
@@ -231,13 +234,9 @@ const Sidebar = ({
                   label: "Assignment Units",
                   icon: "ni-st",
                 },
-                { id: "stations", idx: 10, label: "Stations", icon: "ni-st" },
               ]
             : role === "officer"
-            ? [
-                { id: "users", idx: 8, label: "Users", icon: "ni-us" },
-                { id: "stations", idx: 10, label: "Stations", icon: "ni-st" },
-              ]
+            ? [{ id: "users", idx: 8, label: "Users", icon: "ni-us" }]
             : []),
         ],
       },

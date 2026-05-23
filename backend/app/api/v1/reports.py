@@ -5437,6 +5437,15 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
         
         case_lat = sum(r.latitude for r in reports) / len(reports)
         case_lon = sum(r.longitude for r in reports) / len(reports)
+        from app.core.station_assignment import resolve_station_id
+
+        resolved_station_id = resolve_station_id(
+            db,
+            latitude=float(case_lat),
+            longitude=float(case_lon),
+            village_location_id=getattr(report, "village_location_id", None),
+            location_id=getattr(report, "location_id", None),
+        )
         officer_id = _assign_officer_to_case_based_on_location(db, float(case_lat), float(case_lon))
         
         itype = (
@@ -5490,6 +5499,7 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
                 priority=priority,
                 status='open',
                 assigned_to_id=officer_id,
+                station_id=resolved_station_id,
                 created_by=1,
                 created_at=datetime.now(timezone.utc),
                 updated_at=datetime.now(timezone.utc),
@@ -5522,9 +5532,11 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
                 )
             )
         
-        # Update report status to indicate they're in a case
+        # Update report status and station ownership
         for report in reports:
             report.status = "verified"
+            if resolved_station_id is not None:
+                report.handling_station_id = resolved_station_id
         
         db.commit()
         stats['cases_created'] += 1

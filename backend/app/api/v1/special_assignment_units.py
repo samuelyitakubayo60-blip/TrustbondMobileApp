@@ -44,11 +44,11 @@ def _unit_dict(unit: SpecialAssignmentUnit) -> dict:
 
 
 def _require_unit_manager(current_user: PoliceUser) -> None:
-    """Admin and supervisors manage units; officers can list only."""
-    if getattr(current_user, "role", None) not in ("admin", "supervisor"):
+    """Only DPC (admin) creates/edits units; IO and officers can list."""
+    if getattr(current_user, "role", None) != "admin":
         raise HTTPException(
             status_code=403,
-            detail="Only admins and supervisors can manage assignment units",
+            detail="Only admins can manage assignment units",
         )
 
 

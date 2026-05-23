@@ -12,18 +12,47 @@ from app.models.station import Station
 from app.models.station_coverage import StationCoverageCell
 from app.models.location import Location
 from app.models.police_user import PoliceUser
-from app.api.v1.auth import get_current_admin_or_supervisor, get_current_user
+from app.api.v1.auth import get_current_admin, get_current_admin_or_supervisor, get_current_user
 from app.schemas.station import (
     StationCreate,
     StationUpdate,
     StationResponse,
     StationListResponse,
+    StationCasesResponse,
+    StationIncidentGroup,
 )
 
 router = APIRouter(prefix="/stations", tags=["stations"])
 
 
-def _to_response(st: Station) -> StationResponse:
+_ACTIVE_CASE_STATUSES = ("open", "assigned", "in_progress")
+
+
+def _station_case_metrics(db: Session, station_id: int) -> tuple[int, int]:
+    from app.models.case import Case
+
+    active = (
+        db.query(func.count(Case.case_id))
+        .filter(
+            Case.station_id == station_id,
+            Case.status.in_(_ACTIVE_CASE_STATUSES),
+        )
+        .scalar()
+        or 0
+    )
+    incidents = (
+        db.query(func.coalesce(func.sum(Case.report_count), 0))
+        .filter(
+            Case.station_id == station_id,
+            Case.status.in_(_ACTIVE_CASE_STATUSES),
+        )
+        .scalar()
+        or 0
+    )
+    return int(active), int(incidents)
+
+
+def _to_response(st: Station, *, metrics: tuple[int, int] | None = None) -> StationResponse:
     covered_cells = sorted(
         [
             cc
@@ -33,6 +62,8 @@ def _to_response(st: Station) -> StationResponse:
         ],
         key=lambda cc: (cc.cell_location.location_name or "").lower(),
     )
+    active_cases = metrics[0] if metrics else None
+    total_incidents = metrics[1] if metrics else None
     return StationResponse(
         station_id=st.station_id,
         station_code=st.station_code,
@@ -46,6 +77,8 @@ def _to_response(st: Station) -> StationResponse:
         is_active=st.is_active,
         covered_cell_ids=[cc.cell_location_id for cc in covered_cells],
         covered_cell_names=[cc.cell_location.location_name for cc in covered_cells],
+        active_case_count=active_cases,
+        total_incident_count=total_incidents,
         created_at=st.created_at,
         updated_at=st.updated_at,
     )
@@ -163,9 +196,15 @@ def list_stations(
     db: Session = Depends(get_db),
     search: Optional[str] = Query(None),
     only_active: bool = Query(False),
+    include_metrics: bool = Query(
+        False,
+        description="Include active case and incident counts per station (Security Situation cards).",
+    ),
 ):
-    """List police stations (read-only for officers)."""
+    """List police stations. Officers only see their own station."""
     q = db.query(Station)
+    if getattr(current_user, "role", None) == "officer" and current_user.station_id:
+        q = q.filter(Station.station_id == current_user.station_id)
     if only_active:
         q = q.filter(Station.is_active == True)
     if search:
@@ -186,13 +225,85 @@ def list_stations(
         # Table not migrated yet: still return stations without coverage details.
         total = q.count()
         items = q.order_by(Station.station_name.asc()).all()
-    return StationListResponse(items=[_to_response(s) for s in items], total=total)
+    responses = []
+    for s in items:
+        metrics = _station_case_metrics(db, s.station_id) if include_metrics else None
+        responses.append(_to_response(s, metrics=metrics))
+    return StationListResponse(items=responses, total=total)
+
+
+@router.get("/{station_id}/cases", response_model=StationCasesResponse)
+def get_station_cases(
+    station_id: int,
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    status: Optional[str] = Query(None, description="Filter cases by status"),
+):
+    """Cases auto-assigned to this station, grouped by incident type."""
+    from app.models.case import Case
+    from app.api.v1.cases import _case_to_response
+
+    station = db.query(Station).filter(Station.station_id == station_id).first()
+    if not station:
+        raise HTTPException(status_code=404, detail="Station not found")
+
+    if current_user.role == "officer":
+        if current_user.station_id != station_id:
+            raise HTTPException(status_code=403, detail="Not your station")
+
+    q = (
+        db.query(Case)
+        .options(
+            joinedload(Case.location),
+            joinedload(Case.incident_type),
+            joinedload(Case.assigned_to),
+            joinedload(Case.station),
+        )
+        .filter(Case.station_id == station_id)
+    )
+    if status:
+        q = q.filter(Case.status == status)
+    else:
+        q = q.filter(Case.status.in_(_ACTIVE_CASE_STATUSES))
+
+    cases = q.order_by(Case.opened_at.desc()).all()
+    active_count, incident_count = _station_case_metrics(db, station_id)
+
+    grouped: dict[int | None, dict] = {}
+    for c in cases:
+        key = c.incident_type_id
+        if key not in grouped:
+            grouped[key] = {
+                "incident_type_id": c.incident_type_id,
+                "incident_type_name": c.incident_type.type_name if c.incident_type else "Other",
+                "case_count": 0,
+                "incident_count": 0,
+                "cases": [],
+            }
+        grouped[key]["case_count"] += 1
+        grouped[key]["incident_count"] += int(c.report_count or 0)
+        grouped[key]["cases"].append(_case_to_response(c).model_dump())
+
+    groups = [
+        StationIncidentGroup(**g)
+        for g in sorted(
+            grouped.values(),
+            key=lambda x: (-x["incident_count"], x["incident_type_name"]),
+        )
+    ]
+    return StationCasesResponse(
+        station_id=station.station_id,
+        station_name=station.station_name,
+        active_case_count=active_count,
+        total_incident_count=incident_count,
+        groups=groups,
+    )
 
 
 @router.post("/", response_model=StationResponse, status_code=status.HTTP_201_CREATED)
 def create_station(
     payload: StationCreate,
-    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)],
+    current_user: Annotated[PoliceUser, Depends(get_current_admin)],
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
@@ -275,7 +386,7 @@ def get_station(
 def update_station(
     station_id: int,
     payload: StationUpdate,
-    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)],
+    current_user: Annotated[PoliceUser, Depends(get_current_admin)],
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
@@ -340,7 +451,7 @@ def update_station(
 @router.delete("/{station_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_station(
     station_id: int,
-    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)],
+    current_user: Annotated[PoliceUser, Depends(get_current_admin)],
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):

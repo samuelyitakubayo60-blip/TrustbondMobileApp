@@ -17,6 +17,7 @@ class Case(Base):
     location_id = Column(Integer, ForeignKey("locations.location_id"))
     incident_type_id = Column(SmallInteger, ForeignKey("incident_types.incident_type_id"))
     assigned_to_id = Column(Integer, ForeignKey("police_users.police_user_id"))
+    station_id = Column(Integer, ForeignKey("stations.station_id"), nullable=True)
     created_by = Column(Integer, ForeignKey("police_users.police_user_id"))
     report_count = Column(Integer, default=0)
     latitude = Column(Numeric(10, 7))
@@ -35,6 +36,7 @@ class Case(Base):
     location = relationship("Location", backref="cases")
     incident_type = relationship("IncidentType", backref="cases")
     assigned_to = relationship("PoliceUser", foreign_keys=[assigned_to_id])
+    station = relationship("Station", foreign_keys=[station_id])
     created_by_user = relationship("PoliceUser", foreign_keys=[created_by])
 
 

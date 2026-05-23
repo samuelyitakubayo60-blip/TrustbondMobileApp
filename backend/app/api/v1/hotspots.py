@@ -14,7 +14,7 @@ from app.models.hotspot import Hotspot, hotspot_reports_table
 from app.models.report import Report
 from app.api.v1.auth import get_current_user, get_current_admin_or_supervisor
 from app.models.police_user import PoliceUser
-from app.schemas.hotspot import HotspotResponse, HotspotIncidentResponse
+from app.schemas.hotspot import HotspotResponse, HotspotIncidentResponse, HotspotDeployRequest
 from app.schemas.report import EvidenceFileResponse
 from app.core.hotspot_auto import (
     create_hotspots_from_reports,
@@ -36,6 +36,39 @@ from app.core.llm_recommendations import (
 )
 
 router = APIRouter(prefix="/hotspots", tags=["hotspots"])
+
+
+def _deployment_fields_for_hotspot(db: Session, h: Hotspot) -> dict:
+    from app.models.special_assignment_unit import SpecialAssignmentUnit
+
+    unit_name = None
+    code = getattr(h, "assigned_unit_code", None)
+    if code:
+        row = (
+            db.query(SpecialAssignmentUnit.unit_name)
+            .filter(SpecialAssignmentUnit.unit_code == code)
+            .first()
+        )
+        unit_name = row[0] if row else code
+    controlled_name = None
+    ctrl = getattr(h, "controlled_by", None)
+    if ctrl:
+        parts = [ctrl.first_name or "", ctrl.last_name or ""]
+        controlled_name = " ".join(p for p in parts if p).strip() or ctrl.email
+    elif getattr(h, "controlled_by_user_id", None):
+        u = db.query(PoliceUser).filter(PoliceUser.police_user_id == h.controlled_by_user_id).first()
+        if u:
+            parts = [u.first_name or "", u.last_name or ""]
+            controlled_name = " ".join(p for p in parts if p).strip() or u.email
+    return {
+        "assigned_unit_code": code,
+        "assigned_unit_name": unit_name,
+        "deployed_at": getattr(h, "deployed_at", None),
+        "deployment_note": getattr(h, "deployment_note", None),
+        "controlled_by_user_id": getattr(h, "controlled_by_user_id", None),
+        "controlled_by_name": controlled_name,
+    }
+
 
 def _station_covered_village_ids(db: Session, station_id: int) -> List[int]:
     """Return village ids covered by a station via station_coverage_cells."""
@@ -257,6 +290,7 @@ def list_hotspots(
 
     query = db.query(Hotspot).options(
         joinedload(Hotspot.incident_type),
+        joinedload(Hotspot.controlled_by),
         selectinload(Hotspot.reports).selectinload(Report.ml_predictions),
         selectinload(Hotspot.reports).joinedload(Report.village_location),
         selectinload(Hotspot.reports).joinedload(Report.incident_type),
@@ -541,6 +575,7 @@ def list_hotspots(
             detected_at=h.detected_at,
             incident_type_id=h.incident_type_id,
             incident_type_name=h.incident_type.type_name if h.incident_type else None,
+            **_deployment_fields_for_hotspot(db, h),
             evidence_files=[
                 {
                     "evidence_id": str(e.evidence_id),
@@ -593,6 +628,7 @@ def get_daily_emergencies(
     # Query for critical hotspots within the time period
     query = db.query(Hotspot).options(
         joinedload(Hotspot.incident_type),
+        joinedload(Hotspot.controlled_by),
         selectinload(Hotspot.reports).selectinload(Report.ml_predictions),
         selectinload(Hotspot.reports).joinedload(Report.village_location),
         selectinload(Hotspot.reports).joinedload(Report.incident_type),
@@ -1043,3 +1079,79 @@ async def get_hotspot_stats(
     except Exception as e:
         logger.error(f"Error getting hotspot stats: {e}")
         raise HTTPException(status_code=500, detail="Failed to get hotspot statistics")
+
+
+def _load_hotspot_for_ops(db: Session, hotspot_id: int) -> Hotspot:
+    h = (
+        db.query(Hotspot)
+        .options(
+            selectinload(Hotspot.reports).joinedload(Report.village_location),
+            joinedload(Hotspot.controlled_by),
+        )
+        .filter(Hotspot.hotspot_id == hotspot_id)
+        .first()
+    )
+    if not h:
+        raise HTTPException(status_code=404, detail="Hotspot not found")
+    return h
+
+
+@router.post("/{hotspot_id}/take-control")
+def take_control_hotspot(
+    hotspot_id: int,
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)] = None,
+):
+    """IO/DPC takes operational control of a hotspot cluster."""
+    if current_user.role not in ("admin", "supervisor"):
+        raise HTTPException(status_code=403, detail="Only IO or DPC can take hotspot control")
+    from app.core.hotspot_deployment import take_hotspot_control
+
+    h = _load_hotspot_for_ops(db, hotspot_id)
+    take_hotspot_control(db, h, current_user)
+    parts = [current_user.first_name or "", current_user.last_name or ""]
+    name = " ".join(p for p in parts if p).strip() or current_user.email
+    return {
+        "message": f"Hotspot #{hotspot_id} is now under your control.",
+        "controlled_by_user_id": current_user.police_user_id,
+        "controlled_by_name": name,
+    }
+
+
+@router.post("/{hotspot_id}/deploy")
+def deploy_unit_to_hotspot(
+    hotspot_id: int,
+    payload: HotspotDeployRequest,
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)] = None,
+):
+    """Deploy a special assignment unit to a hotspot; emails the unit commander."""
+    if current_user.role not in ("admin", "supervisor"):
+        raise HTTPException(status_code=403, detail="Only IO or DPC can authorize deployment")
+    from app.core.hotspot_deployment import deploy_hotspot_unit
+
+    h = _load_hotspot_for_ops(db, hotspot_id)
+    try:
+        _, unit, meta = deploy_hotspot_unit(
+            db,
+            h,
+            unit_code=payload.unit_code,
+            decided_by=current_user,
+            note=payload.note,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    msg = f"Unit {unit.unit_name} ({unit.unit_code}) deployed to hotspot #{hotspot_id}."
+    if meta.get("email_sent"):
+        msg += f" Commander notified at {meta.get('commander_email')}."
+    elif meta.get("email_error"):
+        msg += f" Warning: commander email failed — {meta['email_error']}."
+    return {
+        "message": msg,
+        "hotspot_id": hotspot_id,
+        "assigned_unit_code": unit.unit_code,
+        "assigned_unit_name": unit.unit_name,
+        "email_sent": meta.get("email_sent", False),
+        "email_error": meta.get("email_error"),
+    }

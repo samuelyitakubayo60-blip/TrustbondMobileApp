@@ -24,7 +24,12 @@ class Hotspot(Base):
     time_window_hours = Column(Integer, nullable=False)
     detected_at = Column(DateTime(timezone=True), server_default=func.now())
     incident_type_id = Column(SmallInteger, ForeignKey("incident_types.incident_type_id"), nullable=True)  # same place + same type
+    assigned_unit_code = Column(String(80), nullable=True)
+    controlled_by_user_id = Column(Integer, ForeignKey("police_users.police_user_id"), nullable=True)
+    deployed_at = Column(DateTime(timezone=True), nullable=True)
+    deployment_note = Column(String(500), nullable=True)
 
+    controlled_by = relationship("PoliceUser", foreign_keys=[controlled_by_user_id])
     reports = relationship(
         "Report",
         secondary=hotspot_reports_table,

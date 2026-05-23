@@ -89,8 +89,8 @@ const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
     }
     if (stationFilter !== 'all') {
       const sid = Number(stationFilter);
-      // Case has location_id; station mapping is indirect, so we use assigned officer's station when available.
-      if (!c.assigned_to_station_id || c.assigned_to_station_id !== sid) {
+      const caseStation = c.station_id ?? c.assigned_to_station_id;
+      if (!caseStation || Number(caseStation) !== sid) {
         return false;
       }
     }

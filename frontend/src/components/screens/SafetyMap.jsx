@@ -13,6 +13,7 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import api from "../../api/client";
+import { useAuth } from "../../context/AuthContext";
 import { policeVerificationOkForHotspots } from "../../utils/reportOperationalLabels";
 
 const MUSANZE_CENTER = [-1.5042, 29.638]; // Musanze district center
@@ -298,6 +299,16 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     trust_min: 50,
   });
   const [mapZoom, setMapZoom] = useState(MUSANZE_ZOOM);
+  const [assignmentUnits, setAssignmentUnits] = useState([]);
+  const { user: me } = useAuth();
+  const canDeployHotspot = me?.role === "admin" || me?.role === "supervisor";
+
+  useEffect(() => {
+    api
+      .get("/api/v1/special-assignment-units/")
+      .then((res) => setAssignmentUnits(res || []))
+      .catch(() => setAssignmentUnits([]));
+  }, []);
 
   const loadHistoricalHotspots = () => {
     setLoading(true);
@@ -2189,7 +2200,12 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                 </div>
               </div>
             ) : (
-              <SecurityRecommendations hotspots={filteredHistoricalHotspots} />
+              <SecurityRecommendations
+                hotspots={filteredHistoricalHotspots}
+                assignmentUnits={assignmentUnits}
+                canDeploy={canDeployHotspot}
+                onReload={loadHistoricalHotspots}
+              />
             )}
           </div>
         </div>
@@ -2302,7 +2318,48 @@ function buildAction(h, unit) {
 }
 
 // Security Recommendations Component
-const SecurityRecommendations = ({ hotspots }) => {
+const SecurityRecommendations = ({ hotspots, assignmentUnits = [], canDeploy = false, onReload }) => {
+  const [deployingId, setDeployingId] = useState(null);
+  const [takingId, setTakingId] = useState(null);
+  const [deployUnit, setDeployUnit] = useState({});
+  const [deployNote, setDeployNote] = useState({});
+  const [actionError, setActionError] = useState("");
+
+  const handleTakeControl = async (hotspotId) => {
+    setTakingId(hotspotId);
+    setActionError("");
+    try {
+      await api.post(`/api/v1/hotspots/${hotspotId}/take-control`);
+      onReload?.();
+    } catch (e) {
+      setActionError(e?.message || "Failed to take control");
+    } finally {
+      setTakingId(null);
+    }
+  };
+
+  const handleDeploy = async (hotspotId) => {
+    const code = deployUnit[hotspotId];
+    if (!code) {
+      setActionError("Select a unit to deploy.");
+      return;
+    }
+    setDeployingId(hotspotId);
+    setActionError("");
+    try {
+      const res = await api.post(`/api/v1/hotspots/${hotspotId}/deploy`, {
+        unit_code: code,
+        note: deployNote[hotspotId] || null,
+      });
+      window.alert(res?.message || "Unit deployed.");
+      onReload?.();
+    } catch (e) {
+      setActionError(e?.message || "Deployment failed");
+    } finally {
+      setDeployingId(null);
+    }
+  };
+
   const sorted = useMemo(() => {
     if (!hotspots || hotspots.length === 0) return [];
     return [...hotspots]
@@ -2334,6 +2391,12 @@ const SecurityRecommendations = ({ hotspots }) => {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      {actionError && (
+        <div className="alert alert-danger" style={{ marginBottom: 4 }}>
+          <span className="alert-icon">!</span>
+          <div>{actionError}</div>
+        </div>
+      )}
       {/* District situation overview bar */}
       <div style={{
         padding: "10px 12px",
@@ -2601,6 +2664,84 @@ const SecurityRecommendations = ({ hotspots }) => {
                   </div>
                 )}
 
+                {(h.assigned_unit_code || h.controlled_by_name || h.deployed_at) && (
+                  <div style={{
+                    fontSize: "10px", color: "var(--text)", padding: "6px 10px",
+                    borderRadius: "6px", backgroundColor: "var(--background)",
+                    border: "1px solid var(--border)",
+                  }}>
+                    {h.controlled_by_name && (
+                      <span style={{ marginRight: 10 }}>
+                        Control: <strong>{h.controlled_by_name}</strong>
+                      </span>
+                    )}
+                    {h.assigned_unit_name && (
+                      <span style={{ marginRight: 10 }}>
+                        Deployed: <strong>{h.assigned_unit_name}</strong>
+                      </span>
+                    )}
+                    {h.deployed_at && (
+                      <span style={{ color: "var(--muted)" }}>
+                        {new Date(h.deployed_at).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {canDeploy && (
+                  <div style={{
+                    display: "flex", flexDirection: "column", gap: 8,
+                    padding: "8px 10px", borderRadius: "6px",
+                    border: "1px dashed var(--border)",
+                    backgroundColor: "var(--background)",
+                  }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        disabled={takingId === h.hotspot_id}
+                        onClick={() => handleTakeControl(h.hotspot_id)}
+                      >
+                        {takingId === h.hotspot_id ? "…" : "Take control"}
+                      </button>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      <select
+                        className="select"
+                        style={{ flex: 1, minWidth: 140, fontSize: 11 }}
+                        value={deployUnit[h.hotspot_id] || ""}
+                        onChange={(e) =>
+                          setDeployUnit((prev) => ({ ...prev, [h.hotspot_id]: e.target.value }))
+                        }
+                      >
+                        <option value="">Select unit to deploy…</option>
+                        {(assignmentUnits || []).filter((u) => u.is_active !== false).map((u) => (
+                          <option key={u.unit_code} value={u.unit_code}>
+                            {u.unit_name} ({u.unit_code})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={deployingId === h.hotspot_id}
+                        onClick={() => handleDeploy(h.hotspot_id)}
+                      >
+                        {deployingId === h.hotspot_id ? "Deploying…" : "Deploy unit"}
+                      </button>
+                    </div>
+                    <input
+                      className="input"
+                      style={{ fontSize: 11 }}
+                      placeholder="Optional deployment note for commander"
+                      value={deployNote[h.hotspot_id] || ""}
+                      onChange={(e) =>
+                        setDeployNote((prev) => ({ ...prev, [h.hotspot_id]: e.target.value }))
+                      }
+                    />
+                  </div>
+                )}
+
                 {/* Metadata strip */}
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", fontSize: "10px", color: "var(--muted)" }}>
                   <span>Trust: <strong style={{ color: "var(--text)" }}>{Math.round(h.avg_trust_score || 0)}%</strong></span>
@@ -2617,7 +2758,9 @@ const SecurityRecommendations = ({ hotspots }) => {
       })}
 
       <div style={{ fontSize: "10px", color: "var(--muted)", textAlign: "center", paddingTop: "2px" }}>
-        Recommendations derived from live verified hotspot data · Commanding officer approval required before execution
+        {canDeploy
+          ? "IO/DPC: take control, then deploy a unit — the unit commander is emailed automatically."
+          : "Recommendations from live verified hotspot data."}
       </div>
     </div>
   );

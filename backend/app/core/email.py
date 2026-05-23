@@ -458,6 +458,36 @@ TrustBond
     return send_email(to_email, subject, body_plain, None)
 
 
+def send_unit_commander_hotspot_deployment_email(
+    to_email: str,
+    *,
+    commander_name: str,
+    unit_name: str,
+    unit_code: str,
+    hotspot_id: int,
+    incident_count: int,
+    area_label: str,
+    deployed_by_name: str,
+    note: str | None = None,
+) -> tuple[bool, str | None]:
+    """Notify the special-assignment unit commander that their unit was deployed to a hotspot."""
+    subject = f"TrustBond — Deployment order: {unit_name} to {area_label}"
+    body_plain = f"""Hello {commander_name},
+
+You are the commander for {unit_name} ({unit_code}).
+
+{deployed_by_name} has deployed your unit to hotspot #{hotspot_id} in {area_label}.
+Verified incidents in this cluster: {incident_count}.
+
+Please coordinate your team and acknowledge deployment in the TrustBond dashboard.
+
+{f'Note: {note}' if note else ''}
+
+TrustBond Police Operations
+"""
+    return send_email(to_email.strip(), subject, body_plain.strip(), None)
+
+
 def send_leader_otp_email(
     to_email: str,
     code: str,
