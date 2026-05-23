@@ -3,6 +3,7 @@ import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { parseApiDate } from '../../utils/dateTime';
 import SpecialAssignmentUnitSelect from '../SpecialAssignmentUnitSelect';
+import { caseDisplayName, caseDisplayRef } from '../../utils/caseDisplay';
 
 function toDatetimeLocalValue(iso) {
   const d = parseApiDate(iso);
@@ -14,7 +15,7 @@ function toDatetimeLocalValue(iso) {
 const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
   const { user: me } = useAuth();
   const role = me?.role || 'officer';
-  const isAdminOrSupervisor = role === 'admin' || role === 'supervisor';
+  const isAdminOrSupervisor = role === 'admin' || role === 'supervisor' || role === 'officer';
 
   const [status, setStatus] = useState(caseItem?.status || 'open');
   const [priority, setPriority] = useState(caseItem?.priority || 'medium');
@@ -141,7 +142,8 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
       <div className="modal">
         <div className="modal-header">
           <div className="modal-title">
-            Update Case — {caseItem.case_number || String(caseItem.case_id).slice(0, 8)}
+            Update Case — {caseDisplayName(caseItem)}
+            {caseDisplayRef(caseItem) ? ` (${caseDisplayRef(caseItem)})` : ''}
           </div>
           <div className="modal-close" onClick={onClose}>✕</div>
         </div>

@@ -116,10 +116,11 @@ async def get_current_admin(
 async def get_current_admin_or_supervisor(
     current_user: Annotated[PoliceUser, Depends(get_current_user)],
 ) -> PoliceUser:
-    if current_user.role not in ("admin", "supervisor"):
+    """Admin, IO (supervisor), and officers — same operational APIs (assign, cases, intel)."""
+    if current_user.role not in ("admin", "supervisor", "officer"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin or supervisor access required",
+            detail="Admin, supervisor, or officer access required",
         )
     return current_user
 

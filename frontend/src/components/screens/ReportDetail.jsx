@@ -1028,7 +1028,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
           </button>
           
           {/* Assignment and Case Management: admin/supervisor only */}
-          {(role === "admin" || role === "supervisor") && (
+          {(role === "admin" || role === "supervisor" || role === "officer") && (
             <>
               <button
                 className="btn btn-primary btn-sm"

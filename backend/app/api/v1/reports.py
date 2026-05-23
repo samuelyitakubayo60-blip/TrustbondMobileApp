@@ -3567,14 +3567,8 @@ def list_reports(
     
     role = getattr(current_user, "role", None)
     
-    # Officers see only reports assigned to them
-    if role == "officer":
-        query = query.join(Report.assignments).filter(
-            ReportAssignment.police_user_id == current_user.police_user_id
-        ).distinct()
-    
-    # Supervisors are restricted to their own station's sector.
-    elif role == "supervisor":
+    # Officers and supervisors: station / cell / village coverage (same scope).
+    if role in ("officer", "supervisor"):
         supervisor_station_id = getattr(current_user, "station_id", None)
         if supervisor_station_id is None:
             raise HTTPException(
@@ -5878,7 +5872,9 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
 
         # Case title = incident type name; all same-type reports from same station
         # are consolidated here as new reports arrive.
-        title = f"{type_name} Cases"
+        title = f"{type_name} case" if type_name else "Incident case"
+        if type_name and type_name.lower().endswith(" cases"):
+            title = f"{type_name[:-6].strip()} case"
         description = (
             f"Auto-generated consolidated case for {type_name} incidents. "
             f"Currently tracking {len(reports)} verified report(s). "

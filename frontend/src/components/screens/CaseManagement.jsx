@@ -3,12 +3,13 @@ import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import EditCaseModal from '../Modals/EditCaseModal';
 import ViewCaseModal from '../Modals/ViewCaseModal';
-import { getRoleDisplayName, canHandoverToRib } from '../../utils/roleMapping';
+import { getRoleDisplayName, canHandoverToRib, isOperationalLead } from '../../utils/roleMapping';
+import { caseDisplayName, caseDisplayRef } from '../../utils/caseDisplay';
 
 const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
   const { user: me } = useAuth();
   const role = me?.role || 'officer';
-  const isAdminOrSupervisor = role === 'admin' || role === 'supervisor';
+  const isAdminOrSupervisor = isOperationalLead(role);
   const [cases, setCases] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -189,8 +190,9 @@ const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
           <div className="case-card" key={c.case_id}>
             <div className="case-card-header">
               <div>
-                <div className="case-id">{c.case_number || String(c.case_id).slice(0, 8)}</div>
+                <div className="case-id">{caseDisplayName(c)}</div>
                 <div className="case-meta">
+                  {caseDisplayRef(c) ? `${caseDisplayRef(c)} · ` : ''}
                   {c.location_name || 'Unknown'} · {c.incident_type_name || 'Mixed'} · {c.report_count} reports
                 </div>
                 {typeof c.average_trust_score === 'number' && (
@@ -335,7 +337,7 @@ const CaseManagement = ({ goToScreen, openModal, wsRefreshKey }) => {
                   <td style={{ fontSize: "12px", color: "var(--muted)", textAlign: "center" }}>
                     {index + 1}
                   </td>
-                  <td style={{ fontWeight: 600, fontSize: '11px' }}>{c.case_number}</td>
+                  <td style={{ fontWeight: 600, fontSize: '11px' }}>{caseDisplayName(c)}</td>
                   <td>{c.incident_type_name || '—'}</td>
                   <td>{c.location_name || '—'}</td>
                   <td>{c.report_count}</td>

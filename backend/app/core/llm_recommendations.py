@@ -4,7 +4,7 @@ LLM-generated hotspot recommendations.
 Hotspot deployments use active tactical units from ``special_assignment_units``
 (investigation-only codes like RIB/CID/LIB are excluded). Cases keep the full unit dropdown.
 
-Priority chain: Groq → Gemini → crime-specific template fallback.
+Priority chain: Groq → Gemini (JSON). When API keys are set, only LLM text is used — no template fallback.
 """
 import json
 import logging
@@ -13,6 +13,52 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+# Groq: skip repeat calls only after permanent account errors
+_groq_skip_reason: Optional[str] = None
+_groq_skip_logged = False
+_last_hotspot_llm_error: Optional[str] = None
+
+_PERMANENT_GROQ_MARKERS = (
+    "organization_restricted",
+    "invalid_api_key",
+    "authentication",
+    "permission_denied",
+)
+
+
+def _hotspot_llm_required() -> bool:
+    """True when .env has GROQ and/or GEMINI keys — LLM-only briefings, no templates."""
+    return bool(
+        os.getenv("GROQ_API_KEY", "").strip() or os.getenv("GEMINI_API_KEY", "").strip()
+    )
+
+
+def _gemini_model_candidates() -> List[str]:
+    candidates: List[str] = []
+    for raw in (
+        os.getenv("GEMINI_HOTSPOT_MODEL"),
+        os.getenv("GEMINI_MODEL"),
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-1.5-flash-8b",
+    ):
+        name = (raw or "").strip()
+        if name and name not in candidates:
+            candidates.append(name)
+    return candidates or ["gemini-2.0-flash"]
+
+
+def _disable_groq(reason: str) -> None:
+    global _groq_skip_reason, _groq_skip_logged
+    _groq_skip_reason = reason[:240]
+    if not _groq_skip_logged:
+        logger.warning(
+            "Groq hotspot LLM unavailable for this process: %s",
+            _groq_skip_reason,
+        )
+        _groq_skip_logged = True
+
 
 # Investigation / case-handover units — not for hotspot tactical deployment
 _HOTSPOT_EXCLUDED_UNITS = frozenset({"RIB", "CID", "LIB"})
@@ -248,6 +294,22 @@ def _pick_hotspot_deployment_plan(
     }
 
 
+def _theft_incident_weight(
+    dominant_crime: Optional[str],
+    incident_mix: Optional[Dict[str, int]],
+) -> int:
+    total = 0
+    if incident_mix:
+        for name, count in incident_mix.items():
+            if re.search(r"theft|robbery|burglary|steal|stolen|pickpocket", name, re.I):
+                total += int(count or 0)
+    elif dominant_crime and re.search(
+        r"theft|robbery|burglary|steal|stolen|pickpocket", dominant_crime, re.I
+    ):
+        total = 1
+    return total
+
+
 def _build_citizen_advisory(
     *,
     area_label: Optional[str],
@@ -257,29 +319,45 @@ def _build_citizen_advisory(
     cluster_kind: str,
     incident_mix: Optional[Dict[str, int]],
     verified_report_count: int = 0,
+    cluster_case_context: Optional[Dict[str, Any]] = None,
 ) -> str:
+    """
+    Community-facing notice (plain language). Uses case outcomes when available:
+    e.g. suspect apprehended vs ongoing watch-and-report for theft clusters.
+    """
     area = (area_label or "this area").strip()
     crime = (dominant_crime or "incidents").strip().lower()
     cls = (classification or "").strip().lower()
+    ctx = cluster_case_context or {}
+    theft_count = _theft_incident_weight(dominant_crime, incident_mix)
+    is_theft_cluster = theft_count >= 1 or bool(
+        re.search(r"theft|robbery|burglary|steal", crime, re.I)
+    )
+
+    if ctx.get("suspect_apprehended") and is_theft_cluster:
+        return (
+            f"Police have acted on theft-related reports in {area}. A suspect was apprehended "
+            f"in connection with investigations linked to this area. Thank you to residents who reported. "
+            f"Please continue to secure valuables and report anything new or seriously concerning."
+        )
+
+    if ctx.get("closed_cases", 0) >= 1 and is_theft_cluster:
+        return (
+            f"Police have closed at least one investigation tied to theft reports near {area}. "
+            f"Thank you for reporting. Stay alert, protect your property, and contact police if you see "
+            f"new suspicious activity or anything that should be investigated urgently."
+        )
 
     if verified_report_count >= max(2, incident_count // 2) and incident_count >= 2:
         return (
-            f"Police have responded to recent reports in {area}. Thank you for sharing information. "
-            f"Please stay alert and report anything new or serious you notice."
+            f"Police have responded to recent verified reports in {area}. Thank you for sharing information. "
+            f"Please stay alert and report anything new or seriously concerning."
         )
 
-    if re.search(r"theft|robbery|burglary|steal", crime, re.I) or (
-        incident_mix
-        and sum(
-            c
-            for n, c in incident_mix.items()
-            if re.search(r"theft|robbery|burglary|steal", n, re.I)
-        )
-        >= 2
-    ):
+    if is_theft_cluster:
         return (
-            f"There have been theft-related reports near {area}. Secure valuables, watch shared spaces, "
-            f"and report suspicious activity promptly so patrols can act."
+            f"There have been theft-related reports near {area}. Secure valuables and shared spaces, "
+            f"watch for suspicious behaviour, and report anything serious to police so patrols can respond."
         )
 
     if re.search(r"traffic|accident|road|vehicle", crime, re.I):
@@ -402,6 +480,10 @@ Rules:
 
 
 def _call_groq(prompt: str) -> Optional[Dict[str, Any]]:
+    if _groq_skip_reason:
+        return None
+    if os.getenv("HOTSPOT_SKIP_GROQ", "").strip().lower() in ("1", "true", "yes"):
+        return None
     api_key = os.getenv("GROQ_API_KEY", "").strip()
     if not api_key:
         return None
@@ -418,26 +500,115 @@ def _call_groq(prompt: str) -> Optional[Dict[str, Any]]:
         )
         return json.loads(resp.choices[0].message.content)
     except Exception as exc:
-        logger.warning("Groq hotspot recommendation failed: %s", exc)
+        err = str(exc).lower()
+        if any(marker in err for marker in _PERMANENT_GROQ_MARKERS):
+            _disable_groq(str(exc))
+        else:
+            logger.warning("Groq hotspot recommendation failed: %s", exc)
         return None
+
+
+_gemini_sdk_missing_logged = False
+
+
+def verify_google_genai_installed() -> bool:
+    """True if ``google-genai`` package is importable (installed on deploy)."""
+    try:
+        from google import genai  # noqa: F401
+        from google.genai import types  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def gemini_generate_json(
+    prompt: str,
+    api_key: str,
+    model_name: str,
+    *,
+    max_tokens: int = 700,
+    temperature: float = 0.35,
+) -> Optional[Dict[str, Any]]:
+    """Call Gemini via ``google.genai`` (installed as ``google-genai`` on deploy)."""
+    global _gemini_sdk_missing_logged
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        if not _gemini_sdk_missing_logged:
+            logger.error(
+                "google-genai is not installed. Add google-genai to requirements.txt and redeploy."
+            )
+            _gemini_sdk_missing_logged = True
+        return None
+
+    try:
+        client = genai.Client(api_key=api_key)
+        resp = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+            ),
+        )
+        text = (getattr(resp, "text", None) or "").strip()
+        if not text:
+            return None
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        logger.warning("Gemini (%s) returned invalid JSON: %s", model_name, exc)
+        return None
+    except Exception as exc:
+        logger.warning("Gemini (%s) failed: %s", model_name, exc)
+        return None
+
+
+def _call_gemini_model(prompt: str, model_name: str, api_key: str) -> Optional[Dict[str, Any]]:
+    return gemini_generate_json(
+        prompt, api_key, model_name, max_tokens=700, temperature=0.35
+    )
 
 
 def _call_gemini(prompt: str) -> Optional[Dict[str, Any]]:
+    global _last_hotspot_llm_error
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         return None
-    try:
-        import google.generativeai as genai
+    errors: List[str] = []
+    for model_name in _gemini_model_candidates():
+        parsed = _call_gemini_model(prompt, model_name, api_key)
+        if parsed and parsed.get("recommendation") and parsed.get("narrative"):
+            logger.info("Hotspot briefing generated via Gemini model %s", model_name)
+            return parsed
+        errors.append(model_name)
+    _last_hotspot_llm_error = (
+        f"Gemini failed for models: {', '.join(errors)}"
+        if errors
+        else "Gemini returned empty JSON"
+    )
+    logger.warning("%s", _last_hotspot_llm_error)
+    return None
 
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(
-            "gemini-1.5-flash",
-            generation_config={"response_mime_type": "application/json", "temperature": 0.35},
-        )
-        return json.loads(model.generate_content(prompt).text)
-    except Exception as exc:
-        logger.warning("Gemini hotspot recommendation failed: %s", exc)
-        return None
+
+def _call_hotspot_llm(prompt: str) -> Optional[Dict[str, Any]]:
+    global _last_hotspot_llm_error
+    _last_hotspot_llm_error = None
+
+    if os.getenv("GEMINI_API_KEY", "").strip():
+        gemini_result = _call_gemini(prompt)
+        if gemini_result and gemini_result.get("recommendation") and gemini_result.get("narrative"):
+            return gemini_result
+
+    result = _call_groq(prompt)
+    if result and result.get("recommendation") and result.get("narrative"):
+        return result
+    if _groq_skip_reason and not _last_hotspot_llm_error:
+        _last_hotspot_llm_error = f"Groq: {_groq_skip_reason}"
+    elif not _last_hotspot_llm_error:
+        _last_hotspot_llm_error = "No LLM provider returned valid JSON"
+    return None
 
 
 _recommendation_cache: Dict[tuple, Dict[str, Any]] = {}
@@ -459,7 +630,9 @@ def _cache_key(
     peak_time: Optional[str],
     mix_tuple: tuple,
     primary_code: str,
+    cluster_case_context: Optional[Dict[str, Any]] = None,
 ) -> tuple:
+    ctx = cluster_case_context or {}
     return (
         classification,
         incident_count,
@@ -469,6 +642,9 @@ def _cache_key(
         peak_time,
         mix_tuple,
         primary_code,
+        ctx.get("suspect_apprehended"),
+        ctx.get("closed_cases"),
+        ctx.get("linked_cases"),
     )
 
 
@@ -579,17 +755,64 @@ def _package_result(
     plan: Dict[str, Any],
     operation_hours: int,
     concentrate_window: Optional[str],
+    *,
+    citizen_advisory_hint: str = "",
 ) -> Dict[str, Any]:
+    llm_citizen = str(body.get("citizen_advisory", "")).strip()
+    citizen = llm_citizen or (citizen_advisory_hint or "").strip()
     return {
         "recommendation": str(body.get("recommendation", "")).strip(),
         "narrative": str(body.get("narrative", "")).strip(),
         "status": str(body.get("status", "monitor_growth")).strip(),
-        "citizen_advisory": str(body.get("citizen_advisory", "")).strip(),
+        "citizen_advisory": citizen,
         "recommended_unit": plan["primary_code"],
         "recommended_unit_name": plan["primary_name"],
         "recommended_units": plan["recommended_units"],
         "operation_hours": operation_hours,
         "concentrate_window": concentrate_window,
+    }
+
+
+def gather_cluster_case_context(db: Any, report_ids: List[Any]) -> Dict[str, Any]:
+    """Linked case outcomes for citizen advisories (LIB/RIB investigation is separate)."""
+    if not db or not report_ids:
+        return {}
+    try:
+        from app.models.case import Case, CaseReport
+
+        cases = (
+            db.query(Case)
+            .join(CaseReport, CaseReport.case_id == Case.case_id)
+            .filter(CaseReport.report_id.in_(list(report_ids)))
+            .all()
+        )
+    except Exception as exc:
+        logger.debug("Could not load cluster case context: %s", exc)
+        return {}
+
+    closed = 0
+    suspect_apprehended = False
+    apprehend_markers = (
+        "apprehend",
+        "arrest",
+        "arrested",
+        "caught",
+        "custody",
+        "suspect_identified",
+        "suspect identified",
+    )
+    for case in cases:
+        status = (getattr(case, "status", None) or "").strip().lower()
+        if status in {"closed", "resolved"} or getattr(case, "closed_at", None):
+            closed += 1
+        outcome = (getattr(case, "outcome", None) or "").strip().lower()
+        if any(m in outcome for m in apprehend_markers):
+            suspect_apprehended = True
+
+    return {
+        "linked_cases": len(cases),
+        "closed_cases": closed,
+        "suspect_apprehended": suspect_apprehended,
     }
 
 
@@ -604,10 +827,11 @@ def generate_recommendation(
     recommended_unit: Optional[str] = None,
     verified_report_count: int = 0,
     deployment_units: Optional[Dict[str, Dict[str, str]]] = None,
+    cluster_case_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Hotspot briefing: units from ``special_assignment_units`` (minus RIB/CID/LIB)
-    plus crime/volume rules and LLM or template text.
+    Hotspot briefing: rule-picked units + Groq/Gemini JSON text when API keys are set.
+    No template fallback when ``GROQ_API_KEY`` / ``GEMINI_API_KEY`` are configured.
     """
     registry = deployment_units or load_hotspot_deployment_units()
     plan = _pick_hotspot_deployment_plan(
@@ -622,7 +846,7 @@ def generate_recommendation(
 
     operation_hours = _suggest_duration_hours(classification, cluster_kind)
     concentrate_window = _concentrate_window(peak_time, operation_hours)
-    citizen_advisory = _build_citizen_advisory(
+    citizen_advisory_hint = _build_citizen_advisory(
         area_label=area_label,
         dominant_crime=dominant_crime,
         incident_count=incident_count,
@@ -630,6 +854,7 @@ def generate_recommendation(
         cluster_kind=cluster_kind,
         incident_mix=incident_mix,
         verified_report_count=verified_report_count,
+        cluster_case_context=cluster_case_context,
     )
 
     mix_tuple = tuple(sorted((incident_mix or {}).items()))
@@ -642,6 +867,7 @@ def generate_recommendation(
         peak_time,
         mix_tuple,
         plan["primary_code"],
+        cluster_case_context,
     )
     if key in _recommendation_cache:
         return _recommendation_cache[key]
@@ -657,19 +883,42 @@ def generate_recommendation(
         plan=plan,
         operation_hours=operation_hours,
         concentrate_window=concentrate_window,
-        citizen_advisory=citizen_advisory,
+        citizen_advisory=citizen_advisory_hint,
         registry=registry,
     )
 
-    result = _call_groq(prompt) or _call_gemini(prompt)
+    result = _call_hotspot_llm(prompt)
     if result and result.get("recommendation") and result.get("narrative"):
-        if not result.get("citizen_advisory"):
-            result["citizen_advisory"] = citizen_advisory
-        clean = _package_result(result, plan, operation_hours, concentrate_window)
+        if not result.get("citizen_advisory") and not _hotspot_llm_required():
+            result["citizen_advisory"] = citizen_advisory_hint
+        clean = _package_result(
+            result,
+            plan,
+            operation_hours,
+            concentrate_window,
+            citizen_advisory_hint=citizen_advisory_hint,
+        )
         _recommendation_cache[key] = clean
         return clean
 
-    logger.info("Hotspot recommendation using template fallback (LLM unavailable or invalid JSON)")
+    if _hotspot_llm_required():
+        logger.error(
+            "Hotspot briefing requires LLM output but generation failed. %s",
+            _last_hotspot_llm_error or "No provider returned valid JSON.",
+        )
+        return _package_result(
+            {
+                "recommendation": "",
+                "narrative": "",
+                "status": "monitor_growth",
+                "citizen_advisory": "",
+            },
+            plan,
+            operation_hours,
+            concentrate_window,
+            citizen_advisory_hint=citizen_advisory_hint,
+        )
+
     fallback = _template_fallback(
         classification=classification,
         incident_count=incident_count,
@@ -681,9 +930,15 @@ def generate_recommendation(
         plan=plan,
         operation_hours=operation_hours,
         concentrate_window=concentrate_window,
-        citizen_advisory=citizen_advisory,
+        citizen_advisory=citizen_advisory_hint,
         registry=registry,
     )
-    clean = _package_result(fallback, plan, operation_hours, concentrate_window)
+    clean = _package_result(
+        fallback,
+        plan,
+        operation_hours,
+        concentrate_window,
+        citizen_advisory_hint=citizen_advisory_hint,
+    )
     _recommendation_cache[key] = clean
     return clean

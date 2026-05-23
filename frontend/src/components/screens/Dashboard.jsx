@@ -43,10 +43,9 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
     switch(role) {
       case "admin": 
         return "Musanze District Performance Overview";
-      case "supervisor": 
+      case "supervisor":
+      case "officer":
         return "Station Performance Overview";
-      case "officer": 
-        return "My Performance Overview";
       default: 
         return "Performance Overview";
     }
@@ -55,11 +54,10 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
   // Get role-based chart type
   const getChartType = (role) => {
     switch(role) {
-      case "admin": 
+      case "admin":
       case "supervisor":
+      case "officer":
         return "sectorPerformance";
-      case "officer": 
-        return "personalPerformance";
       default: 
         return "sectorPerformance";
     }
@@ -75,10 +73,8 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
         endpoint = `/api/v1/geographic-intelligence/sector-performance?time_window_hours=${timeWindow}`;
         break;
       case "supervisor":
-        endpoint = `/api/v1/geographic-intelligence/station-performance?time_window_hours=${timeWindow}`;
-        break;
       case "officer":
-        endpoint = `/api/v1/geographic-intelligence/officer-performance?time_window_hours=${timeWindow}`;
+        endpoint = `/api/v1/geographic-intelligence/station-performance?time_window_hours=${timeWindow}`;
         break;
       default:
         endpoint = `/api/v1/geographic-intelligence/sector-performance?time_window_hours=${timeWindow}`;
@@ -249,7 +245,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
     {
       key: "officer",
       label: "Add officer",
-      hidden: !(role === "admin" || role === "supervisor"),
+      hidden: !(role === "admin" || role === "supervisor" || role === "officer"),
       onClick: () => goToScreen("users", 7),
       icon: (
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -284,7 +280,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
         </div>
         <div className="page-sub">
           {role === "officer"
-            ? "Here is your assigned work and reports needing your attention."
+            ? "Here's what's happening in your station area right now."
             : "Here's what's happening in Musanze District right now."}
         </div>
       </div>
@@ -293,7 +289,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
         <span className="alert-icon">!</span>
         <span>
           {role === "officer"
-            ? `${pending} of your assigned reports need a decision.`
+            ? `${pending} reports in your station need a decision.`
             : `${pending} reports are pending review and require verification.`}
         </span>
         <button
@@ -305,14 +301,14 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
             })
           }
         >
-          {role === "officer" ? "Open My Reports" : "Review now"}
+          {role === "officer" ? "Review station reports" : "Review now"}
         </button>
       </div>
 
       <div className="stat-grid">
         <div className="stat-card">
           <div className="stat-label">
-            {role === "officer" ? "Assigned reports" : "Total reports"}
+            {role === "officer" ? "Station reports" : "Total reports"}
           </div>
           <div className="stat-value neutral">{total}</div>
           <div className="stat-meta">{myScope ? "Your scope" : "All time"}</div>
@@ -339,7 +335,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
         </div>
         <div className="stat-card">
           <div className="stat-label">
-            {role === "officer" ? "My open cases" : "Open cases"}
+            {role === "officer" ? "Station open cases" : "Open cases"}
           </div>
           <div className="stat-value neutral">{openCases}</div>
           <div className="stat-meta">Case files</div>
@@ -391,7 +387,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
         </div>
       </div>
 
-      {(role === "supervisor" || role === "admin") && (
+      {(role === "supervisor" || role === "admin" || role === "officer") && (
         <div className="card" style={{ marginBottom: "20px" }}>
           <div className="card-header">
             <div className="card-title">Cases & assignment units</div>

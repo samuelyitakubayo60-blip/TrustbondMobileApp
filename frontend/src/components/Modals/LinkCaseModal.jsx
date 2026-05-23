@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { caseDisplayName, caseDisplayRef } from '../../utils/caseDisplay';
 import api from '../../api/client';
 
 const LinkCaseModal = ({ isOpen, onClose, reportId, onLinked }) => {
@@ -128,7 +129,8 @@ const LinkCaseModal = ({ isOpen, onClose, reportId, onLinked }) => {
                   </td>
                   <td>
                     <div style={{ fontWeight: 600, fontSize: '11px' }}>
-                      {c.case_number || String(c.case_id).slice(0, 8)}
+                      {caseDisplayName(c)}
+                      {caseDisplayRef(c) ? ` · ${caseDisplayRef(c)}` : ''}
                     </div>
                     <div
                       style={{

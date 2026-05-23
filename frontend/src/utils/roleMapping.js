@@ -41,14 +41,18 @@ export const getRolePermissions = (role) => {
   return permissions[role] || [];
 };
 
+export const isOperationalLead = (role) => {
+  return ['admin', 'supervisor', 'officer'].includes(role);
+};
+
 export const canAccessCommanderDashboard = (role) => {
-  return ['admin', 'supervisor'].includes(role);
+  return isOperationalLead(role);
 };
 
 export const canMakeDeploymentDecisions = (role) => {
-  return ['admin', 'supervisor'].includes(role);
+  return isOperationalLead(role);
 };
 
 export const canHandoverToRib = (role) => {
-  return ['admin', 'supervisor'].includes(role);
+  return ['admin', 'supervisor', 'officer'].includes(role);
 };

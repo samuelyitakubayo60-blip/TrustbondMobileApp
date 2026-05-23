@@ -187,12 +187,7 @@ def get_dashboard_stats(
     since_30d = datetime.now(timezone.utc) - timedelta(days=30)
 
     # 1) Build report_filter based on role
-    if current_role == "officer":
-        assigned_ids = db.query(ReportAssignment.report_id).filter(
-            ReportAssignment.police_user_id == current_user.police_user_id
-        ).distinct()
-        report_filter = Report.report_id.in_(assigned_ids)
-    elif current_role == "supervisor":
+    if current_role in ("officer", "supervisor"):
         station_id = getattr(current_user, "station_id", None)
         
         if station_id is not None:
@@ -269,9 +264,7 @@ def get_dashboard_stats(
         case_q = db.query(func.count(Case.case_id)).filter(
             Case.status.in_(["open", "investigating"])
         )
-        if current_role == "officer":
-            case_q = case_q.filter(Case.assigned_to_id == current_user.police_user_id)
-        elif current_role == "supervisor":
+        if current_role in ("officer", "supervisor"):
             station_id = getattr(current_user, "station_id", None)
             if station_id is not None:
                 case_q = case_q.filter(Case.assigned_to.has(PoliceUser.station_id == station_id))

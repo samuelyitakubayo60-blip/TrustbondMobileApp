@@ -64,7 +64,7 @@ websockets==16.0
 xgboost==3.2.0
 requests
 groq
-google-generativeai
+google-genai
 ultralytics
 openai-whisper
 pytesseract

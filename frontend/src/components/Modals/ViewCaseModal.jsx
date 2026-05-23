@@ -6,6 +6,7 @@ import {
   formatCommunityConfirmation,
   communityBadgeClass,
 } from '../../utils/reportOperationalLabels';
+import { caseDisplayName, caseDisplayRef } from '../../utils/caseDisplay';
 
 const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
   const [reports, setReports] = useState([]);
@@ -212,7 +213,8 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
       <div className="modal" style={{ maxWidth: 820 }}>
         <div className="modal-header">
           <div className="modal-title">
-            Case Details - {caseItem.case_number || String(caseItem.case_id).slice(0, 8)}
+            Case Details — {caseDisplayName(caseItem)}
+            {caseDisplayRef(caseItem) ? ` (${caseDisplayRef(caseItem)})` : ''}
           </div>
           <div className="modal-close" onClick={onClose}>x</div>
         </div>
@@ -220,7 +222,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
         <div className="form-grid" style={{ marginBottom: 10 }}>
           <div className="input-group">
             <div className="input-label">Title</div>
-            <div>{caseItem.title || 'Untitled Case'}</div>
+            <div>{caseDisplayName(caseItem)}</div>
           </div>
           <div className="input-group">
             <div className="input-label">Status</div>

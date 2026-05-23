@@ -102,6 +102,21 @@ def _report_in_supervisor_scope(report: Report, station_id: int, location_ids: s
     return False
 
 
+def _role_uses_station_scope(role: Optional[str]) -> bool:
+    return role in ("supervisor", "officer")
+
+
+def _incident_case_title(type_name: str) -> str:
+    name = (type_name or "Incident").strip()
+    if not name:
+        return "Incident case"
+    if name.lower().endswith(" case"):
+        return name
+    if name.lower().endswith(" cases"):
+        return f"{name[:-6].strip()} case"
+    return f"{name} case"
+
+
 def _generate_case_number(db: Session) -> str:
     from datetime import datetime, timezone
     from sqlalchemy import text
@@ -258,8 +273,7 @@ def list_cases(
     """List cases with optional status filter.
 
     - Admin: all cases.
-    - Supervisor: cases in their assigned location (if set).
-    - Officer: cases assigned to them.
+    - Supervisor / Officer: cases in their station coverage (same scope).
     """
     query = db.query(Case).options(
         joinedload(Case.location),
@@ -270,7 +284,7 @@ def list_cases(
         .selectinload(Report.ml_predictions),
     )
 
-    if current_user.role == "supervisor":
+    if _role_uses_station_scope(current_user.role):
         station_id, location_ids = _supervisor_scope(current_user, db)
         if location_ids:
             query = query.filter(
@@ -281,8 +295,6 @@ def list_cases(
             )
         else:
             query = query.filter(Case.assigned_to.has(PoliceUser.station_id == station_id))
-    elif current_user.role == "officer":
-        query = query.filter(Case.assigned_to_id == current_user.police_user_id)
 
     if status:
         query = query.filter(Case.status == status)
@@ -333,7 +345,7 @@ def list_available_reports_for_case(
         )
     )
 
-    if current_user.role == "supervisor":
+    if _role_uses_station_scope(current_user.role):
         supervisor_station_id, sector_location_ids = _supervisor_scope(current_user, db)
         # Use the same logic as the reports API - geographic filtering
         if sector_location_ids:
@@ -453,7 +465,7 @@ def create_case(
     """Create a new case, optionally linking reports and assigning an officer."""
     supervisor_station_id = None
     supervisor_location_ids: set[int] = set()
-    if current_user.role == "supervisor":
+    if _role_uses_station_scope(current_user.role):
         supervisor_station_id, supervisor_location_ids = _supervisor_scope(current_user, db)
         # Allow case creation if:
         # 1. No location specified (will be inferred from reports)
@@ -468,6 +480,18 @@ def create_case(
                         detail="You can only create cases in your assigned location",
                     )
 
+    from app.models.incident_type import IncidentType
+
+    resolved_title = (payload.title or "").strip()
+    if not resolved_title and payload.incident_type_id:
+        itype_row = (
+            db.query(IncidentType)
+            .filter(IncidentType.incident_type_id == payload.incident_type_id)
+            .first()
+        )
+        if itype_row and itype_row.type_name:
+            resolved_title = _incident_case_title(itype_row.type_name)
+
     case_id = uuid4()
     case_number = _generate_case_number(db)
     case = Case(
@@ -475,7 +499,7 @@ def create_case(
         case_number=case_number,
         status="open",
         priority=payload.priority or "medium",
-        title=payload.title,
+        title=resolved_title or None,
         description=payload.description,
         location_id=payload.location_id,
         incident_type_id=payload.incident_type_id,
@@ -484,13 +508,14 @@ def create_case(
     db.add(case)
     db.flush()
 
-    # Attach reports and, if no explicit location was provided, derive sector from first report.
     attached_reports: list[Report] = []
     for rid in payload.report_ids or []:
         r = db.query(Report).filter(Report.report_id == rid).first()
         if r:
-            if current_user.role == "supervisor":
-                if not _report_in_supervisor_scope(r, supervisor_station_id, supervisor_location_ids, db):
+            if _role_uses_station_scope(current_user.role):
+                if not _report_in_supervisor_scope(
+                    r, supervisor_station_id, supervisor_location_ids, db
+                ):
                     raise HTTPException(
                         status_code=403,
                         detail="You can only link reports from your station/location",
@@ -499,6 +524,12 @@ def create_case(
             db.add(cr)
             attached_reports.append(r)
     case.report_count = len(attached_reports)
+
+    if not case.title and attached_reports:
+        first = attached_reports[0]
+        if getattr(first, "incident_type", None) and first.incident_type.type_name:
+            case.title = _incident_case_title(first.incident_type.type_name)
+            case.incident_type_id = case.incident_type_id or first.incident_type_id
 
     # If location_id not provided, try to infer sector from the first report's village_location.
     if case.location_id is None and attached_reports:
@@ -522,7 +553,7 @@ def create_case(
         )
         if not officer:
             raise HTTPException(status_code=400, detail="Assigned officer not found or inactive")
-        if current_user.role == "supervisor":
+        if _role_uses_station_scope(current_user.role):
             if officer.station_id != supervisor_station_id:
                 raise HTTPException(
                     status_code=403,
@@ -554,7 +585,7 @@ def get_case_stats(
 
     # Apply scope
     base_q = db.query(Case)
-    if current_user.role == "supervisor":
+    if _role_uses_station_scope(current_user.role):
         station_id, location_ids = _supervisor_scope(current_user, db)
         if location_ids:
             base_q = base_q.filter(
@@ -565,8 +596,6 @@ def get_case_stats(
             )
         else:
             base_q = base_q.filter(Case.assigned_to.has(PoliceUser.station_id == station_id))
-    elif current_user.role == "officer":
-        base_q = base_q.filter(Case.assigned_to_id == current_user.police_user_id)
 
     def _count(q_filter):
         max_retries = 3
@@ -631,7 +660,7 @@ def get_case(
         joinedload(Case.case_reports).joinedload(CaseReport.report).joinedload(Report.village_location),
     ).filter(Case.case_id == cid)
 
-    if current_user.role == "supervisor":
+    if _role_uses_station_scope(current_user.role):
         station_id, location_ids = _supervisor_scope(current_user, db)
         if location_ids:
             query = query.filter(
@@ -642,8 +671,6 @@ def get_case(
             )
         else:
             query = query.filter(Case.assigned_to.has(PoliceUser.station_id == station_id))
-    elif current_user.role == "officer":
-        query = query.filter(Case.assigned_to_id == current_user.police_user_id)
 
     case = query.first()
     if not case:
@@ -664,7 +691,7 @@ def get_case_reports(
         raise HTTPException(404, "Case not found")
 
     case_query = db.query(Case).filter(Case.case_id == cid)
-    if current_user.role == "supervisor":
+    if _role_uses_station_scope(current_user.role):
         station_id, location_ids = _supervisor_scope(current_user, db)
         if location_ids:
             case_query = case_query.filter(
@@ -674,9 +701,9 @@ def get_case_reports(
                 )
             )
         else:
-            case_query = case_query.filter(Case.assigned_to.has(PoliceUser.station_id == station_id))
-    elif current_user.role == "officer":
-        case_query = case_query.filter(Case.assigned_to_id == current_user.police_user_id)
+            case_query = case_query.filter(
+                Case.assigned_to.has(PoliceUser.station_id == station_id)
+            )
 
     case = case_query.first()
     if not case:
@@ -709,7 +736,7 @@ def update_case(
 
     - Admin: unrestricted.
     - Supervisor: only for cases in their location; assignment only to officers in their station.
-    - Officer: only for cases assigned to them; can update status/description/outcome.
+    - Supervisor / Officer: cases in station coverage; same update fields as IO.
     """
     from uuid import UUID
     from datetime import datetime, timezone
@@ -718,7 +745,7 @@ def update_case(
     except ValueError:
         raise HTTPException(404, "Case not found")
     query = db.query(Case).filter(Case.case_id == cid)
-    if current_user.role == "supervisor":
+    if _role_uses_station_scope(current_user.role):
         station_id, location_ids = _supervisor_scope(current_user, db)
         if location_ids:
             query = query.filter(
@@ -729,70 +756,48 @@ def update_case(
             )
         else:
             query = query.filter(Case.assigned_to.has(PoliceUser.station_id == station_id))
-    elif current_user.role == "officer":
-        query = query.filter(Case.assigned_to_id == current_user.police_user_id)
     case = query.first()
     if not case:
         raise HTTPException(404, "Case not found")
-    # Role-specific update rules
-    if current_user.role == "officer":
-        # Officers: can move between investigating/closed and update notes/outcome.
-        if payload.status is not None:
-            if payload.status not in ("investigating", "closed"):
+    if payload.status is not None:
+        case.status = payload.status
+        if payload.status == "closed":
+            case.closed_at = datetime.now(timezone.utc)
+    if payload.priority is not None:
+        case.priority = payload.priority
+    if payload.assigned_to_id is not None:
+        if _role_uses_station_scope(current_user.role):
+            station_id = _require_supervisor_station_id(current_user)
+            officer = (
+                db.query(PoliceUser)
+                .filter(
+                    PoliceUser.police_user_id == payload.assigned_to_id,
+                    PoliceUser.is_active == True,
+                )
+                .first()
+            )
+            if not officer or officer.station_id != station_id:
                 raise HTTPException(
                     status_code=403,
-                    detail="Officers can only set status to investigating or closed",
+                    detail="You can only assign cases to officers in your station",
                 )
-            case.status = payload.status
-            if payload.status == "closed":
-                case.closed_at = datetime.now(timezone.utc)
-        if payload.description is not None:
-            case.description = payload.description
-        if payload.outcome is not None:
-            case.outcome = payload.outcome
-    else:
-        # Admin / Supervisor logic
-        if payload.status is not None:
-            case.status = payload.status
-            if payload.status == "closed":
-                case.closed_at = datetime.now(timezone.utc)
-        if payload.priority is not None:
-            case.priority = payload.priority
-        if payload.assigned_to_id is not None:
-            # Supervisors may only assign to officers in their station
-            if current_user.role == "supervisor":
-                supervisor_station_id = _require_supervisor_station_id(current_user)
-                officer = (
-                    db.query(PoliceUser)
-                    .filter(
-                        PoliceUser.police_user_id == payload.assigned_to_id,
-                        PoliceUser.is_active == True,
-                    )
-                    .first()
-                )
-                if not officer or officer.station_id != supervisor_station_id:
-                    raise HTTPException(
-                        status_code=403,
-                        detail="You can only assign cases to officers in your station",
-                    )
-                # For supervisors, don't check assigned_location_id - they can assign to any officer in their station
-            case.assigned_to_id = payload.assigned_to_id
-        if payload.title is not None:
-            case.title = payload.title
-        if payload.description is not None:
-            case.description = payload.description
-        if payload.outcome is not None:
-            case.outcome = payload.outcome
-        if payload.special_assignment_unit is not None:
-            case.special_assignment_unit = (payload.special_assignment_unit or "").strip() or None
-        if payload.rib_handover_summary is not None:
-            case.rib_handover_summary = (payload.rib_handover_summary or "").strip() or None
-        if payload.rib_handed_over_at is not None:
-            case.rib_handed_over_at = payload.rib_handed_over_at
-        if payload.rib_handover_prerequisites_acknowledged is not None:
-            case.rib_handover_prerequisites_acknowledged = bool(
-                payload.rib_handover_prerequisites_acknowledged
-            )
+        case.assigned_to_id = payload.assigned_to_id
+    if payload.title is not None:
+        case.title = payload.title
+    if payload.description is not None:
+        case.description = payload.description
+    if payload.outcome is not None:
+        case.outcome = payload.outcome
+    if payload.special_assignment_unit is not None:
+        case.special_assignment_unit = (payload.special_assignment_unit or "").strip() or None
+    if payload.rib_handover_summary is not None:
+        case.rib_handover_summary = (payload.rib_handover_summary or "").strip() or None
+    if payload.rib_handed_over_at is not None:
+        case.rib_handed_over_at = payload.rib_handed_over_at
+    if payload.rib_handover_prerequisites_acknowledged is not None:
+        case.rib_handover_prerequisites_acknowledged = bool(
+            payload.rib_handover_prerequisites_acknowledged
+        )
     db.add(case)
     db.commit()
     db.refresh(case)

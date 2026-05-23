@@ -32,6 +32,7 @@ from app.core.llm_recommendations import (
     generate_recommendation,
     clear_recommendation_cache,
     load_hotspot_deployment_units,
+    gather_cluster_case_context,
 )
 
 router = APIRouter(prefix="/hotspots", tags=["hotspots"])
@@ -495,6 +496,9 @@ def list_hotspots(
                 h.incident_type, "default_special_assignment_unit", None
             )
 
+        report_ids = [r.report_id for r in reports_in_cluster]
+        cluster_case_context = gather_cluster_case_context(db, report_ids)
+
         llm = generate_recommendation(
             classification=classification,
             incident_count=incident_count,
@@ -506,6 +510,7 @@ def list_hotspots(
             verified_report_count=verified_count,
             recommended_unit=incident_unit_hint,
             deployment_units=deployment_units,
+            cluster_case_context=cluster_case_context,
         )
 
         prediction = _prediction_for_hotspot(

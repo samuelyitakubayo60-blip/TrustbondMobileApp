@@ -222,7 +222,7 @@ const Sidebar = ({
                   icon: "ni-as",
                 },
               ]
-            : role === "supervisor"
+            : role === "supervisor" || role === "officer"
             ? [
                 { id: "users", idx: 8, label: "Users", icon: "ni-us" },
                 { id: "stations", idx: 10, label: "Stations", icon: "ni-st" },
@@ -253,11 +253,10 @@ const Sidebar = ({
 
   const allNavItems = getNavigationItems(role, reportsBadge, casesBadge);
 
-  // Filter out sections that should be hidden from officers and supervisors
-  const navItems = allNavItems.filter(section => {
+  // Officers and IOs see Operations + Management (Users/Stations); admin sees full menu.
+  const navItems = allNavItems.filter((section) => {
     if (role === "officer" || role === "supervisor") {
-      // Hide Management and Intelligence sections from officers and supervisors
-      return section.section !== "Management" && section.section !== "Intelligence";
+      return section.section !== "Intelligence";
     }
     return true;
   });

@@ -358,21 +358,34 @@ class NaturalLanguageScorer:
 _REPORT_SEMANTIC_CACHE: Dict[str, Any] = {}
 _REPORT_SEMANTIC_CACHE_MAX = 512
 _REPORT_SEMANTIC_PROVIDER = "groq-gemini-api"
+_report_groq_skip: Optional[str] = None
+_report_gemini_skip: Optional[str] = None
+_report_groq_skip_logged = False
+_report_gemini_skip_logged = False
 
 
 def report_semantic_llm_configured() -> bool:
-    return bool(os.getenv("GROQ_API_KEY", "").strip() or os.getenv("GEMINI_API_KEY", "").strip())
+    has_groq = bool(os.getenv("GROQ_API_KEY", "").strip()) and _report_groq_skip is None
+    has_gemini = bool(os.getenv("GEMINI_API_KEY", "").strip()) and _report_gemini_skip is None
+    return has_groq or has_gemini
+
+
+def _report_gemini_model_name() -> str:
+    return (os.getenv("GEMINI_MODEL") or "gemini-2.0-flash").strip() or "gemini-2.0-flash"
 
 
 def _call_report_semantic_llm(prompt: str, *, max_tokens: int = 300) -> Optional[Dict[str, Any]]:
+    global _report_groq_skip, _report_gemini_skip
+    global _report_groq_skip_logged, _report_gemini_skip_logged
+
     api_key = os.getenv("GROQ_API_KEY", "").strip()
-    if api_key:
+    if api_key and _report_groq_skip is None:
         try:
             from groq import Groq
 
             client = Groq(api_key=api_key)
             resp = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=max_tokens,
@@ -380,22 +393,36 @@ def _call_report_semantic_llm(prompt: str, *, max_tokens: int = 300) -> Optional
             )
             return json.loads(resp.choices[0].message.content)
         except Exception as exc:
-            logger.warning("Groq report semantic call failed: %s", exc)
+            err = str(exc).lower()
+            if "organization_restricted" in err or "invalid_api_key" in err:
+                _report_groq_skip = str(exc)[:240]
+                if not _report_groq_skip_logged:
+                    logger.info(
+                        "Groq report semantic LLM disabled: %s",
+                        _report_groq_skip,
+                    )
+                    _report_groq_skip_logged = True
+            else:
+                logger.warning("Groq report semantic call failed: %s", exc)
 
     gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if gemini_key:
-        try:
-            import google.generativeai as genai
+    if gemini_key and _report_gemini_skip is None:
+        from app.core.llm_recommendations import _gemini_model_candidates, gemini_generate_json
 
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel(
-                "gemini-1.5-flash",
-                generation_config={"response_mime_type": "application/json", "temperature": 0.3},
+        for model_name in _gemini_model_candidates():
+            parsed = gemini_generate_json(
+                prompt,
+                gemini_key,
+                model_name,
+                max_tokens=max_tokens,
+                temperature=0.3,
             )
-            resp = model.generate_content(prompt)
-            return json.loads(resp.text)
-        except Exception as exc:
-            logger.warning("Gemini report semantic call failed: %s", exc)
+            if parsed:
+                return parsed
+        _report_gemini_skip = "Gemini returned no valid JSON for any model"
+        if not _report_gemini_skip_logged:
+            logger.warning("%s", _report_gemini_skip)
+            _report_gemini_skip_logged = True
     return None
 
 
@@ -610,13 +637,28 @@ SELECTED ID: {selected_incident_type_id}
 
 
 def warmup_report_semantic_llm() -> bool:
-    """Startup: confirm Groq/Gemini keys (no embedding model download)."""
+    """Startup: confirm API keys and that google-genai is installed."""
+    from app.core.llm_recommendations import verify_google_genai_installed
+
     if not report_semantic_llm_configured():
         logger.info(
             "Report semantic LLM: no GROQ/GEMINI key — keyword fallbacks for text matching"
         )
         return False
-    logger.info("Report semantic LLM ready (Groq/Gemini)")
+    if os.getenv("GEMINI_API_KEY", "").strip():
+        if verify_google_genai_installed():
+            logger.info("Gemini SDK ready (google-genai package installed)")
+        else:
+            logger.error(
+                "GEMINI_API_KEY is set but google-genai is not installed. "
+                "Add google-genai to requirements.txt and redeploy."
+            )
+            return False
+    if os.getenv("GROQ_API_KEY", "").strip() and os.getenv(
+        "HOTSPOT_SKIP_GROQ", ""
+    ).strip().lower() not in ("1", "true", "yes"):
+        logger.info("Groq API key present (used when Gemini unavailable)")
+    logger.info("Report semantic LLM ready")
     return True
 
 
