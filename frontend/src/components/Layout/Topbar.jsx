@@ -46,7 +46,7 @@ const Topbar = ({
         { id: "dashboard", label: "Home" },
         { id: "reports", label: "Reports" }
       ],
-      "case-management": [{ id: "dashboard", label: "Home" }],
+      "case-management": [{ id: "dashboard", label: "Home" }], // District Security Analysis
       "security-situation": [{ id: "dashboard", label: "Home" }],
       "station-security": [
         { id: "dashboard", label: "Home" },

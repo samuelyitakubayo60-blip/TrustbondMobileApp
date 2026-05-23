@@ -169,14 +169,6 @@ const Sidebar = ({
             icon: "ni-rp",
             badge: reportsBadge,
           },
-          // Case Management - visible to all roles (admin, supervisor, officer)
-          {
-            id: "case-management",
-            idx: 3,
-            label: "Case Management",
-            icon: "ni-cm",
-            badge: casesBadge,
-          },
           {
             id: "security-situation",
             idx: 4,
@@ -194,6 +186,12 @@ const Sidebar = ({
             idx: 6,
             label: "Device Trust",
             icon: "ni-dt",
+          },
+          {
+            id: "case-management",
+            idx: 3,
+            label: "District Security Analysis",
+            icon: "ni-cm",
           },
         ],
       },
@@ -278,9 +276,7 @@ const Sidebar = ({
       ? activeSection
       : "Operations";
 
-  const [openSection, setOpenSection] = useState(
-    role === "admin" ? ["Operations", "Intelligence"] : [defaultOpenSection]
-  );
+  const [openSection, setOpenSection] = useState([defaultOpenSection]);
 
   useEffect(() => {
     setOpenSection(defaultOpenSection);

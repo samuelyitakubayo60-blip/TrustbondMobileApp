@@ -3,7 +3,7 @@ import Layout from "./components/Layout/Layout";
 import Dashboard from "./components/screens/Dashboard";
 import Reports from "./components/screens/Reports";
 import ReportDetail from "./components/screens/ReportDetail";
-import CaseManagement from "./components/screens/CaseManagement";
+import DistrictSecurityAnalysis from "./components/screens/CaseManagement";
 import HotspotDetails from "./components/screens/HotspotDetails";
 import SafetyMap from "./components/screens/SafetyMap";
 import DeviceTrust from "./components/screens/DeviceTrust";
@@ -300,7 +300,7 @@ function App() {
     "report-detail": selectedReportId
       ? `Report Detail — ${String(selectedReportId).slice(0, 8)}`
       : "Report Detail",
-    "case-management": "Case Management",
+    "case-management": "District Security Analysis",
     "security-situation": "Security Situation",
     "station-security": selectedStationName ? `${selectedStationName} — Cases` : "Station Cases",
     "hotspot-details": "Hotspot Details",
@@ -465,9 +465,7 @@ function App() {
         );
       case "case-management":
         return (
-          <CaseManagement
-            goToScreen={goToScreen}
-            openModal={openModal}
+          <DistrictSecurityAnalysis
             wsRefreshKey={wsRefreshKey}
           />
         );
