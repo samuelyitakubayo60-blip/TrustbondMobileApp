@@ -223,12 +223,13 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
         {isAdminOrSupervisor && (
           <>
             <div className="input-group">
-              <div className="input-label">Special assignment unit</div>
+              <div className="input-label">RIB</div>
               <SpecialAssignmentUnitSelect
                 value={specialAssignmentUnit}
                 onChange={setSpecialAssignmentUnit}
-                placeholder="None — select if case goes to a special unit"
+                placeholder="None"
                 allowEmpty
+                ribOnly
               />
             </div>
             <div className="form-grid" style={{ marginBottom: '12px' }}>

@@ -322,7 +322,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
           <div className="form-grid" style={{ marginBottom: 10 }}>
             {caseItem.special_assignment_unit && (
               <div className="input-group">
-                <div className="input-label">Special assignment unit</div>
+                <div className="input-label">RIB</div>
                 <div style={{ fontSize: 13 }}>
                   {unitLabels[caseItem.special_assignment_unit] ||
                     caseItem.special_assignment_unit}

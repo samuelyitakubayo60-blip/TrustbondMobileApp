@@ -8,7 +8,6 @@ class IncidentTypeResponse(BaseModel):
     description: str | None
     severity_weight: Decimal
     is_active: bool
-    default_special_assignment_unit: str | None = None
 
     class Config:
         from_attributes = True
@@ -19,7 +18,6 @@ class IncidentTypeCreate(BaseModel):
     description: str | None = None
     severity_weight: Decimal = Field(default=Decimal("1.00"), ge=0, le=10)
     is_active: bool = True
-    default_special_assignment_unit: str | None = Field(None, max_length=80)
 
 
 class IncidentTypeUpdate(BaseModel):
@@ -27,4 +25,3 @@ class IncidentTypeUpdate(BaseModel):
     description: str | None = None
     severity_weight: Decimal | None = Field(None, ge=0, le=10)
     is_active: bool | None = None
-    default_special_assignment_unit: str | None = Field(None, max_length=80)

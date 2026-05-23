@@ -49,13 +49,11 @@ def create_incident_type(
     existing = db.query(IncidentType).filter(IncidentType.type_name == payload.type_name.strip()).first()
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An incident type with this name already exists")
-    dunit = (payload.default_special_assignment_unit or "").strip() or None
     obj = IncidentType(
         type_name=payload.type_name.strip(),
         description=payload.description.strip() if payload.description else None,
         severity_weight=payload.severity_weight,
         is_active=payload.is_active,
-        default_special_assignment_unit=dunit,
     )
     db.add(obj)
     db.commit()
@@ -108,8 +106,6 @@ def update_incident_type(
         obj.severity_weight = payload.severity_weight
     if payload.is_active is not None:
         obj.is_active = payload.is_active
-    if payload.default_special_assignment_unit is not None:
-        obj.default_special_assignment_unit = (payload.default_special_assignment_unit or "").strip() or None
     db.add(obj)
     db.commit()
     db.refresh(obj)

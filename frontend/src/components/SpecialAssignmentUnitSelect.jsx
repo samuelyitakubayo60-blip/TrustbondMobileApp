@@ -5,6 +5,8 @@ import api from '../api/client';
  * Dropdown for special_assignment_unit / assigned_unit fields.
  * Stores unit_code on the case; displays unit_name in the list.
  */
+const RIB_UNIT_CODE = 'RIB';
+
 const SpecialAssignmentUnitSelect = ({
   value = '',
   onChange,
@@ -13,6 +15,7 @@ const SpecialAssignmentUnitSelect = ({
   placeholder = 'Select unit',
   className = 'select',
   allowEmpty = true,
+  ribOnly = false,
 }) => {
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,11 +28,16 @@ const SpecialAssignmentUnitSelect = ({
         setLoading(true);
         setError(null);
         const response = await api.get('/api/v1/special-assignment-units/');
-        const list = Array.isArray(response?.data)
+        let list = Array.isArray(response?.data)
           ? response.data
           : Array.isArray(response)
             ? response
             : [];
+        if (ribOnly) {
+          list = list.filter(
+            (u) => String(u?.unit_code || '').toUpperCase() === RIB_UNIT_CODE,
+          );
+        }
         if (!cancelled) setUnits(list);
       } catch {
         if (!cancelled) {
@@ -43,7 +51,7 @@ const SpecialAssignmentUnitSelect = ({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [ribOnly]);
 
   const handleChange = (e) => {
     if (typeof onChange === 'function') {

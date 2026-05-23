@@ -4,7 +4,6 @@ import Chart from 'chart.js/auto';
 
 const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey, goToScreen }) => {
   const [types, setTypes] = useState([]);
-  const [unitLabels, setUnitLabels] = useState({});
   const [loading, setLoading] = useState(true);
   const [incidentChart, setIncidentChart] = useState(null);
   const [chartData, setChartData] = useState({});
@@ -263,20 +262,6 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
     loadTypes();
   }, [refreshKey, wsRefreshKey]);
 
-  useEffect(() => {
-    api
-      .get("/api/v1/special-assignment-units/")
-      .then((res) => {
-        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
-        const map = {};
-        list.forEach((u) => {
-          if (u?.unit_code) map[u.unit_code] = u.unit_name || u.unit_code;
-        });
-        setUnitLabels(map);
-      })
-      .catch(() => setUnitLabels({}));
-  }, []);
-
   const handleToggleActive = async (type) => {
     try {
       const updated = await api.put(`/api/v1/incident-types/${type.incident_type_id}`, {
@@ -407,7 +392,6 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
                 <th>Description</th>
                 <th>Severity</th>
                 <th>Level</th>
-                <th>Default unit</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -435,12 +419,6 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
                       </span>
                     </td>
                     <td><span className={`badge ${badge}`}>{level}</span></td>
-                    <td style={{ fontSize: 11 }}>
-                      {t.default_special_assignment_unit
-                        ? unitLabels[t.default_special_assignment_unit] ||
-                          t.default_special_assignment_unit
-                        : "—"}
-                    </td>
                     <td>
                       <span className={`badge ${t.is_active ? 'b-green' : 'b-red'}`}>
                         {t.is_active ? 'Active' : 'Inactive'}

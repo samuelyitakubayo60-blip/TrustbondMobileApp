@@ -5465,11 +5465,6 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
             f"Currently tracking {len(reports)} verified report(s). "
             f"New reports of the same type will be added automatically."
         )
-        default_unit = None
-        if itype is not None:
-            raw_u = getattr(itype, "default_special_assignment_unit", None) or ""
-            default_unit = raw_u.strip() or None
-
         # Collision-safe case number allocation under concurrent auto-case runs.
         case = None
         case_created = False
@@ -5507,7 +5502,6 @@ def _create_case_from_reports(db: Session, reports: List[Report]) -> Dict[str, i
                 location_id=report.location_id,
                 latitude=case_lat,
                 longitude=case_lon,
-                special_assignment_unit=default_unit,
             )
             try:
                 db.add(case)
