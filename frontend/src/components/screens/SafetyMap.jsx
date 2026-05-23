@@ -14,7 +14,6 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import api from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
-import { policeVerificationOkForHotspots } from "../../utils/reportOperationalLabels";
 import { canDeployHotspotUnits } from "../../utils/roleMapping";
 
 const MUSANZE_CENTER = [-1.5042, 29.638]; // Musanze district center
@@ -274,7 +273,6 @@ const ZoomTracker = ({ onZoom }) => {
 
 const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   const [loading, setLoading] = useState(true);
-  const [confirmedOnMap, setConfirmedOnMap] = useState([]);
   const [typeFilter, setTypeFilter] = useState("all"); // 'all' | incident_type_name
   const [timePeriod, setTimePeriod] = useState(DEFAULT_TIME_PERIOD); // '', 'day', 'week', 'month', 'quarter', 'year'
   const [customHours, setCustomHours] = useState(""); // Custom hours input
@@ -331,41 +329,8 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       .catch(() => setLoading(false));
   };
 
-  /** Police-confirmed reports for map pins (full history; filter dims older pins). */
-  const loadConfirmedReportsForMap = async () => {
-    const PAGE = 100; // backend max limit
-    let offset = 0;
-    let all = [];
-    try {
-      while (true) {
-        const res = await api.get(
-          `/api/v1/reports/?limit=${PAGE}&offset=${offset}&verification_status=verified`,
-        );
-        const items = Array.isArray(res?.items) ? res.items : [];
-        all = all.concat(items);
-        if (items.length < PAGE) break; // last page
-        offset += PAGE;
-        if (offset > 2000) break;       // safety cap
-      }
-      const pins = all
-        .filter((r) => policeVerificationOkForHotspots(r).ok)
-        .map((r) => ({
-          report_id: r.report_id,
-          lat: Number(r.latitude),
-          lng: Number(r.longitude),
-          reported_at: r.reported_at,
-          incident_type_name: r.incident_type_name || "Incident",
-        }))
-        .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng));
-      setConfirmedOnMap(pins);
-    } catch {
-      setConfirmedOnMap([]);
-    }
-  };
-
   useEffect(() => {
     loadHistoricalHotspots();
-    loadConfirmedReportsForMap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsRefreshKey]);
 
@@ -477,16 +442,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
         (h.avg_trust_score || 0) >= trustMin,
     );
   }, [historicalHotspots, typeFilter, dbscanParams.min_incidents, dbscanParams.trust_min]);
-
-  const filteredConfirmedOnMap = useMemo(() => {
-    return typeFilter === "all"
-      ? confirmedOnMap
-      : confirmedOnMap.filter(
-          (r) =>
-            (r.incident_type_name || "").toLowerCase() ===
-            typeFilter.toLowerCase(),
-        );
-  }, [confirmedOnMap, typeFilter]);
 
   const plottedHotspots = useMemo(
     () =>
@@ -632,53 +587,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
 
   const getCircleColor = (risk) => getRiskZoneColor(risk);
 
-  /** Haversine distance in metres between two lat/lng points. */
-  const haversineMeters = (lat1, lng1, lat2, lng2) => {
-    const R = 6371000;
-    const toRad = (d) => (d * Math.PI) / 180;
-    const dLat = toRad(lat2 - lat1);
-    const dLng = toRad(lng2 - lng1);
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  };
-
-  /**
-   * Determine a report pin's risk level by checking which hotspot cluster it
-   * falls inside (centre + radius with 1.5× tolerance). Returns the highest
-   * risk level found, or "rare" when the report is isolated.
-   *
-   * Color key:
-   *   red    → high / critical hotspot area
-   *   yellow → medium hotspot area
-   *   green  → low hotspot area
-   *   blue   → rare / isolated (not in any cluster)
-   */
-  const getReportRiskColor = (report, hotspots) => {
-    const rankMap = { critical: 4, high: 3, medium: 2, low: 1 };
-    let bestRank = 0;
-    let bestRisk = null;
-
-    for (const h of hotspots) {
-      if (!Number.isFinite(h.lat) || !Number.isFinite(h.lng)) continue;
-      const dist = haversineMeters(report.lat, report.lng, h.lat, h.lng);
-      const radius = Number(h.radius_meters || 500) * 1.5; // 1.5× tolerance
-      if (dist <= radius) {
-        const rank = rankMap[h.risk_level] || 0;
-        if (rank > bestRank) {
-          bestRank = rank;
-          bestRisk = h.risk_level;
-        }
-      }
-    }
-
-    if (bestRisk === "critical" || bestRisk === "high") return "#ef4444"; // red
-    if (bestRisk === "medium") return "#eab308";                          // yellow
-    if (bestRisk === "low")    return "#22c55e";                          // green
-    return "#3b82f6";                                                     // blue (rare)
-  };
-
   const getReportRiskBorder = (fillColor) => {
     const borders = {
       "#ef4444": "#991b1b",
@@ -693,27 +601,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     if (fillColor === "#ef4444") return "High-risk area";
     if (fillColor === "#eab308") return "Medium-risk area";
     if (fillColor === "#22c55e") return "Low-risk area";
-    return "Rare / isolated";
-  };
-
-  /** Diamond-shaped DivIcon for incident pins — visually distinct from circular hotspot rings. */
-  const createDiamondIcon = (fillColor, borderColor, opacity) => {
-    const size = 16;
-    const half = size / 2;
-    return L.divIcon({
-      className: "",
-      html: `<div style="
-        width:${size}px;height:${size}px;
-        background:${fillColor};
-        border:2.5px solid ${borderColor};
-        transform:rotate(45deg);
-        opacity:${opacity};
-        box-shadow:0 0 0 2px rgba(0,0,0,0.55),0 2px 6px rgba(0,0,0,0.7);
-      "></div>`,
-      iconSize: [size, size],
-      iconAnchor: [half, half],
-      tooltipAnchor: [0, -half - 4],
-    });
+    return "Cluster";
   };
 
   /** Circular cluster badge showing incident count — larger badge for larger groups. */
@@ -932,27 +820,23 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
       <div className="page-header smx-page-header">
         <h2>Community Safety Map</h2>
         <p>
-          Musanze District safety map. Every verified incident is plotted and
-          coloured by risk zone — <strong style={{ color: "#ef4444" }}>red</strong> (high-risk
-          cluster), <strong style={{ color: "#ca8a04" }}>yellow</strong> (medium-risk
-          cluster), <strong style={{ color: "#16a34a" }}>green</strong> (low-risk
-          cluster), <strong style={{ color: "#3b82f6" }}>blue</strong> (rare / isolated).
-          DBSCAN hotspot circles overlay cluster boundaries. Use the Time Period panel
-          to highlight a window; points outside the window appear faded.
+          Musanze District safety map. <strong>DBSCAN hotspot clusters</strong> are shown as
+          coloured circles — <strong style={{ color: "#ef4444" }}>red</strong> (high-risk),{" "}
+          <strong style={{ color: "#ca8a04" }}>yellow</strong> (medium-risk),{" "}
+          <strong style={{ color: "#16a34a" }}>green</strong> (low-risk). Use the Time Period
+          panel to highlight a window; clusters outside the window appear faded.
         </p>
       </div>
 
       <div className="alert alert-info">
         <span className="alert-icon">i</span>
         <div>
-          Musanze District safety map: every <strong>police-verified</strong> incident is
-          plotted and coloured by risk zone — red (high), yellow (medium), green (low),
-          blue (rare / isolated). Persisted <strong>DBSCAN hotspot circles</strong> from the
-          database overlay cluster boundaries; a single verified report can form its own
-          low-risk cluster.
+          Musanze District safety map shows persisted <strong>DBSCAN hotspot clusters</strong> only
+          (coloured circles with incident counts). Individual incident pins are hidden so the map
+          stays focused on cluster risk zones.
           <span style={{ display: "block", marginTop: "0.65rem" }}>
-            Use the <strong>Time Period</strong> panel to highlight a window; incidents
-            outside that window appear faded (35% opacity).
+            Use the <strong>Time Period</strong> panel to highlight a window; clusters outside that
+            window appear faded (35% opacity).
           </span>
         </div>
       </div>
@@ -988,8 +872,8 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             color: "var(--muted)",
           }}
         >
-          Map: {plottedHotspots.length} clusters · {confirmedOnMap.length} verified
-          incidents · highlight: {formatFilterPeriodLabel(timePeriod, customHours)}
+          Map: {plottedHotspots.length} hotspot clusters · highlight:{" "}
+          {formatFilterPeriodLabel(timePeriod, customHours)}
         </span>
       </div>
 
@@ -1106,58 +990,27 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                       />
                     )}
 
-                    {pts.length > 1 && (
-                      <Marker
-                        position={[h.lat, h.lng]}
-                        icon={createClusterIcon(
-                          pts.length || h.incident_count,
-                          zoneColor,
-                          getReportRiskBorder(zoneColor),
-                          alpha,
-                        )}
-                        zIndexOffset={900}
-                      >
-                        <Tooltip direction="top" offset={[0, -18]} opacity={0.97} interactive={false}>
-                          <div style={{ fontSize: "11px", lineHeight: 1.6 }}>
-                            <strong>Cluster {hIdx + 1}</strong>
-                            <br />
-                            {pts.length || h.incident_count} incidents · {getReportRiskLabel(zoneColor)}
-                            <br />
-                            {types.slice(0, 3).join(", ")}
-                          </div>
-                        </Tooltip>
-                      </Marker>
-                    )}
+                    <Marker
+                      position={[h.lat, h.lng]}
+                      icon={createClusterIcon(
+                        pts.length || h.incident_count || 1,
+                        zoneColor,
+                        getReportRiskBorder(zoneColor),
+                        alpha,
+                      )}
+                      zIndexOffset={900}
+                    >
+                      <Tooltip direction="top" offset={[0, -18]} opacity={0.97} interactive={false}>
+                        <div style={{ fontSize: "11px", lineHeight: 1.6 }}>
+                          <strong>Cluster {hIdx + 1}</strong>
+                          <br />
+                          {pts.length || h.incident_count} incidents · {getReportRiskLabel(zoneColor)}
+                          <br />
+                          {types.slice(0, 3).join(", ")}
+                        </div>
+                      </Tooltip>
+                    </Marker>
                   </React.Fragment>
-                );
-              })}
-
-              {filteredConfirmedOnMap.map((r) => {
-                const inFilter = isWithinSelectedFilter(r.reported_at, selectedFilterHours);
-                const alpha = inFilter ? 1 : 0.35;
-                const fill = getReportRiskColor(r, plottedHotspots);
-                const border = getReportRiskBorder(fill);
-                return (
-                  <Marker
-                    key={`inc-${r.report_id}`}
-                    position={[r.lat, r.lng]}
-                    icon={createDiamondIcon(fill, border, alpha)}
-                    zIndexOffset={800}
-                  >
-                    <Tooltip direction="top" offset={[0, -12]} opacity={0.97} interactive={false}>
-                      <div style={{ fontSize: "11px", lineHeight: 1.5 }}>
-                        <strong>{r.incident_type_name || "Incident"}</strong>
-                        <br />
-                        {getReportRiskLabel(fill)}
-                        {!inFilter && (
-                          <>
-                            <br />
-                            <span style={{ color: "var(--muted)" }}>Outside selected period</span>
-                          </>
-                        )}
-                      </div>
-                    </Tooltip>
-                  </Marker>
                 );
               })}
 
@@ -1211,14 +1064,13 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                     { color: "#ef4444", label: "High-risk cluster" },
                     { color: "#eab308", label: "Medium-risk cluster" },
                     { color: "#22c55e", label: "Low-risk cluster" },
-                    { color: "#3b82f6", label: "Rare / isolated incident" },
                   ].map((row) => (
                     <div key={row.label} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
                       <div style={{
-                        width: 10,
-                        height: 10,
+                        width: 12,
+                        height: 12,
                         background: row.color,
-                        transform: "rotate(45deg)",
+                        borderRadius: "50%",
                         border: "1.5px solid rgba(255,255,255,0.35)",
                         flexShrink: 0,
                       }} />
@@ -1226,7 +1078,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                     </div>
                   ))}
                   <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", marginTop: 6, paddingTop: 6, fontSize: 10, color: "#94a3b8" }}>
-                    DBSCAN circles show cluster radius. Outside the selected time period, incidents appear faded.
+                    Numbers show incidents per hotspot cluster. Outside the selected time period, clusters appear faded.
                   </div>
                 </div>
               )}
@@ -1787,7 +1639,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                         time_window_hours: Number(e.target.value),
                       };
                       setDbscanParams(nextParams);
-                      loadConfirmedReportsForMap();
                       loadHistoricalHotspots();
                     }}
                     style={{ width: "100%", fontSize: "12px" }}
@@ -1895,7 +1746,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                       trust_min: Number(dbscanParams.trust_min || 0),
                     });
                     loadHistoricalHotspots();
-                    loadConfirmedReportsForMap();
                   } catch {
                     // non-fatal
                   } finally {
