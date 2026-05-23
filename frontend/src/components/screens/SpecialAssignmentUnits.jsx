@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useState } from "react";
 import api from "../../api/client";
+import { useAuth } from "../../context/AuthContext";
 import AssignmentUnitModal from "../Modals/AssignmentUnitModal";
 
 const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
+  const { user } = useAuth();
+  const canManage = user?.role === "admin" || user?.role === "supervisor";
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -14,9 +17,11 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
   const load = useCallback(() => {
     setLoading(true);
     setError("");
-    const q = showInactive ? "?active_only=false" : "";
+    const path = showInactive
+      ? "/api/v1/special-assignment-units/?active_only=false"
+      : "/api/v1/special-assignment-units/";
     api
-      .get(`/api/v1/special-assignment-units/${q}`)
+      .get(path)
       .then((res) => {
         const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
         setUnits(list);
@@ -82,9 +87,11 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
               Units used when routing cases (auto-created from incident types), case updates, and deployment decisions.
             </p>
           </div>
-          <button type="button" className="btn btn-primary" style={{ alignSelf: 'center' }} onClick={openAdd}>
-            + Add unit
-          </button>
+          {canManage && (
+            <button type="button" className="btn btn-primary" style={{ alignSelf: 'center' }} onClick={openAdd}>
+              + Add unit
+            </button>
+          )}
         </div>
 
         {/* Stats */}
@@ -102,6 +109,13 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
           ))}
         </div>
       </div>
+
+      {!canManage && (
+        <div className="alert alert-warn" style={{ marginBottom: 12 }}>
+          <span className="alert-icon">!</span>
+          <div>View only — only admins and supervisors can add or edit assignment units.</div>
+        </div>
+      )}
 
       {error && (
         <div className="alert alert-danger" style={{ marginBottom: 12 }}>
@@ -184,19 +198,23 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        <button type="button" className="btn btn-outline btn-sm" onClick={() => openEdit(u)}>
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-sm"
-                          style={{ background: 'var(--c-danger-dim)', color: 'var(--danger)', border: '1px solid var(--c-danger-ring)', cursor: 'pointer' }}
-                          onClick={() => handleDelete(u)}
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      {canManage ? (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button type="button" className="btn btn-outline btn-sm" onClick={() => openEdit(u)}>
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            style={{ background: 'var(--c-danger-dim)', color: 'var(--danger)', border: '1px solid var(--c-danger-ring)', cursor: 'pointer' }}
+                            onClick={() => handleDelete(u)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>—</span>
+                      )}
                     </td>
                   </tr>
                 ))

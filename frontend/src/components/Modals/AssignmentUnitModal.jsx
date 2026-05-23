@@ -1,6 +1,17 @@
 import React, { useEffect, useState } from "react";
 import api from "../../api/client";
 
+function formatApiError(err) {
+  const detail = err?.data?.detail ?? err?.message;
+  if (Array.isArray(detail)) {
+    return detail.map((d) => d?.msg || JSON.stringify(d)).join("; ");
+  }
+  if (detail && typeof detail === "object") {
+    return detail.message || JSON.stringify(detail);
+  }
+  return detail || "Request failed";
+}
+
 const emptyForm = {
   unit_code: "",
   unit_name: "",
@@ -13,6 +24,7 @@ const emptyForm = {
 const AssignmentUnitModal = ({ isOpen, onClose, mode = "add", unit = null, onSaved }) => {
   const [form, setForm] = useState(emptyForm);
   const [commanders, setCommanders] = useState([]);
+  const [commandersError, setCommandersError] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -20,13 +32,22 @@ const AssignmentUnitModal = ({ isOpen, onClose, mode = "add", unit = null, onSav
 
   useEffect(() => {
     if (!isOpen) return;
+    setCommandersError("");
     api
       .get("/api/v1/special-assignment-units/commander-candidates")
       .then((res) => {
         const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
         setCommanders(list);
+        if (list.length === 0) {
+          setCommandersError(
+            "No supervisors or admins are available to assign as commander. Create an active supervisor account first.",
+          );
+        }
       })
-      .catch(() => setCommanders([]));
+      .catch((e) => {
+        setCommanders([]);
+        setCommandersError(formatApiError(e) || "Could not load commander list.");
+      });
   }, [isOpen]);
 
   useEffect(() => {
@@ -103,7 +124,7 @@ const AssignmentUnitModal = ({ isOpen, onClose, mode = "add", unit = null, onSav
       onSaved?.();
       onClose?.();
     } catch (e) {
-      setError(e?.message || "Failed to save unit.");
+      setError(formatApiError(e));
     } finally {
       setSaving(false);
     }
@@ -162,7 +183,10 @@ const AssignmentUnitModal = ({ isOpen, onClose, mode = "add", unit = null, onSav
               />
             </div>
             <div className="input-group" style={{ gridColumn: "1 / -1" }}>
-              <div className="input-label">Unit commander</div>
+              <div className="input-label">
+                Unit commander
+                {form.requires_commander_approval ? " *" : ""}
+              </div>
               <select
                 className="input"
                 value={form.commander_user_id}
@@ -176,9 +200,15 @@ const AssignmentUnitModal = ({ isOpen, onClose, mode = "add", unit = null, onSav
                   </option>
                 ))}
               </select>
-              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
-                Supervisors and admins who can approve deployments for this unit.
-              </div>
+              {commandersError ? (
+                <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 6 }}>
+                  {commandersError}
+                </div>
+              ) : (
+                <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
+                  Supervisors and admins who can approve deployments for this unit.
+                </div>
+              )}
             </div>
             <div className="input-group" style={{ gridColumn: "1 / -1" }}>
               <div className="input-label">Description</div>

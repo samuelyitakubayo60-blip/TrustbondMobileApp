@@ -152,6 +152,31 @@ def create_special_assignment_unit(
     return _unit_dict(unit)
 
 
+@router.get("/deployment-stats", response_model=dict)
+def get_deployment_stats(
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
+):
+    """Deployment counts grouped by assigned unit code."""
+    from sqlalchemy import func
+
+    stats = (
+        db.query(
+            DeploymentDecision.assigned_unit,
+            func.count(DeploymentDecision.decision_id).label("deployment_count"),
+        )
+        .filter(DeploymentDecision.assigned_unit.isnot(None))
+        .group_by(DeploymentDecision.assigned_unit)
+        .all()
+    )
+    return {
+        "deployment_stats": [
+            {"unit_code": stat.assigned_unit, "deployment_count": stat.deployment_count}
+            for stat in stats
+        ]
+    }
+
+
 @router.patch("/{unit_id}", response_model=dict)
 def update_special_assignment_unit(
     unit_id: int,
@@ -228,28 +253,3 @@ def delete_special_assignment_unit(
     db.delete(unit)
     db.commit()
     return None
-
-
-@router.get("/deployment-stats", response_model=dict)
-def get_deployment_stats(
-    db: Session = Depends(get_db),
-    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
-):
-    """Deployment counts grouped by assigned unit code."""
-    from sqlalchemy import func
-
-    stats = (
-        db.query(
-            DeploymentDecision.assigned_unit,
-            func.count(DeploymentDecision.decision_id).label("deployment_count"),
-        )
-        .filter(DeploymentDecision.assigned_unit.isnot(None))
-        .group_by(DeploymentDecision.assigned_unit)
-        .all()
-    )
-    return {
-        "deployment_stats": [
-            {"unit_code": stat.assigned_unit, "deployment_count": stat.deployment_count}
-            for stat in stats
-        ]
-    }

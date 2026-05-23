@@ -44,7 +44,6 @@ from app.models.police_user import PoliceUser
 from app.models.local_leader import LocalLeader
 from app.api.v1.leader_auth import get_optional_local_leader
 from app.models.report_assignment import ReportAssignment
-from app.models.police_review import PoliceReview
 from app.models.ml_prediction import MLPrediction
 from app.core.security import verify_password
 from app.core.websocket import manager
