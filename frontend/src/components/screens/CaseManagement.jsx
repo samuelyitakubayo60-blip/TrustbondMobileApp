@@ -18,21 +18,20 @@ const fillDailyGaps = (countsByDate) => {
 };
 
 /**
- * Generate colors ranked by frequency: most common → warm (red/orange),
- * least common → cool (blue/slate). Colors are auto-assigned by rank so
- * adding new incident types never breaks the palette.
+ * Colors auto-ranked by frequency: most common → warm (red),
+ * least common → cool (slate). New incident types get colors automatically.
  */
 const RANKED_PALETTE = [
-  '#EF4444', // rank 1 – highest (red)
-  '#F97316', // rank 2
-  '#F59E0B', // rank 3
-  '#EAB308', // rank 4
-  '#84CC16', // rank 5
-  '#10B981', // rank 6
-  '#06B6D4', // rank 7
-  '#3B82F6', // rank 8
-  '#0EA5E9', // rank 9
-  '#64748B', // rank 10+ (slate)
+  '#EF4444', // rank 1 – highest
+  '#F97316',
+  '#F59E0B',
+  '#EAB308',
+  '#84CC16',
+  '#10B981',
+  '#06B6D4',
+  '#3B82F6',
+  '#0EA5E9',
+  '#64748B', // rank 10+
 ];
 
 const getRankedColor = (rank) =>
@@ -46,10 +45,10 @@ const RANGE_OPTIONS = [
 ];
 
 const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
-  const [reports, setReports]     = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState('');
-  const [range, setRange]         = useState(null); // default: all time
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState('');
+  const [range, setRange]     = useState(null); // default: all time
 
   const pieRef    = useRef(null);
   const lineRef   = useRef(null);
@@ -61,12 +60,12 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
     setLoading(true);
     setError('');
     api.get('/api/v1/reports/?limit=500')
-      .then((reportsRes) => {
+      .then((res) => {
         let arr = [];
-        if (Array.isArray(reportsRes))  arr = reportsRes;
-        else if (reportsRes?.items)     arr = reportsRes.items;
-        else if (reportsRes?.reports)   arr = reportsRes.reports;
-        else if (reportsRes?.data)      arr = reportsRes.data;
+        if (Array.isArray(res))  arr = res;
+        else if (res?.items)     arr = res.items;
+        else if (res?.reports)   arr = res.reports;
+        else if (res?.data)      arr = res.data;
         setReports(arr);
         setLoading(false);
       })
@@ -88,16 +87,13 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
   // Count by incident type, sorted high → low
   const typeCounts = {};
   filteredReports.forEach((r) => {
-    // API returns a flat field r.incident_type_name
     const name = r.incident_type_name || r.incident_type?.type_name || r.incident_type?.name || 'Unknown';
     typeCounts[name] = (typeCounts[name] || 0) + 1;
   });
   const typeEntries = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
+  const typeColors  = typeEntries.map((_, i) => getRankedColor(i));
 
-  // Assign colors by rank (index in sorted array)
-  const typeColors = typeEntries.map((_, i) => getRankedColor(i));
-
-  // Line: count by day
+  // Daily counts for line chart
   const dailyRaw = {};
   filteredReports.forEach((r) => {
     const raw = r.reported_at || r.created_at || r.timestamp;
@@ -109,7 +105,7 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
   const dailyLabels = Object.keys(daily);
   const dailyValues = Object.values(daily);
 
-  /* ── Pie / Doughnut chart ── */
+  /* ── Doughnut chart ── */
   useEffect(() => {
     if (!pieRef.current || loading) return;
     if (pieChart.current) { pieChart.current.destroy(); pieChart.current = null; }
@@ -170,7 +166,6 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
             font: { size: 11, weight: 'bold' },
             formatter: (value) => {
               const pct = ((value / total) * 100).toFixed(0);
-              // Only show label if slice is big enough to fit text
               return pct >= 5 ? `${pct}%` : '';
             },
             textShadowColor: 'rgba(0,0,0,0.4)',
@@ -181,6 +176,7 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
     });
 
     return () => { if (pieChart.current) { pieChart.current.destroy(); pieChart.current = null; } };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(typeEntries), loading, range]);
 
   /* ── Line chart ── */
@@ -225,12 +221,7 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
         },
         scales: {
           x: {
-            ticks: {
-              color: muted,
-              font: { size: 10 },
-              maxTicksLimit: 12,
-              maxRotation: 30,
-            },
+            ticks: { color: muted, font: { size: 10 }, maxTicksLimit: 12, maxRotation: 30 },
             grid: { display: false },
           },
           y: {
@@ -243,13 +234,14 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
     });
 
     return () => { if (lineChart.current) { lineChart.current.destroy(); lineChart.current = null; } };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dailyLabels.join(','), loading, range]);
 
-  /* ── Summary counts ── */
+  /* ── Summary stats ── */
   const totalIncidents = filteredReports.length;
-  const topType   = typeEntries[0]?.[0] ?? '—';
-  const topCount  = typeEntries[0]?.[1] ?? 0;
-  const avgPerDay = dailyLabels.length
+  const topType        = typeEntries[0]?.[0] ?? '—';
+  const topCount       = typeEntries[0]?.[1] ?? 0;
+  const avgPerDay      = dailyLabels.length
     ? (totalIncidents / dailyLabels.length).toFixed(1)
     : '0';
   const peakDayIdx = dailyValues.indexOf(Math.max(...dailyValues, 0));
@@ -269,13 +261,13 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
         </div>
       )}
 
-      {/* Summary stat cards */}
+      {/* Stat cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
         {[
-          { label: 'Total Incidents',  value: totalIncidents, sub: range ? `Last ${range} days` : 'All time',  cls: 'sb-blue'   },
-          { label: 'Incident Types',   value: typeEntries.length, sub: 'Distinct categories',                  cls: 'sb-orange' },
-          { label: 'Avg / Day',        value: avgPerDay,      sub: 'Daily incident rate',                      cls: 'sb-green'  },
-          { label: 'Most Common',      value: topCount,       sub: topType,                                    cls: 'sb-red'    },
+          { label: 'Total Incidents', value: totalIncidents, sub: range ? `Last ${range} days` : 'All time', cls: 'sb-blue'   },
+          { label: 'Incident Types',  value: typeEntries.length, sub: 'Distinct categories',                 cls: 'sb-orange' },
+          { label: 'Avg / Day',       value: avgPerDay,      sub: 'Daily incident rate',                     cls: 'sb-green'  },
+          { label: 'Most Common',     value: topCount,       sub: topType,                                   cls: 'sb-red'    },
         ].map((s) => (
           <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
             <div className="stat-btn-label">{s.label}</div>
@@ -303,7 +295,7 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
       {/* Charts row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 16, marginBottom: 16 }}>
 
-        {/* Pie / Doughnut */}
+        {/* Doughnut */}
         <div className="card">
           <div className="card-header">
             <div className="card-title">Incident Type Distribution</div>
@@ -313,17 +305,11 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
           </div>
           <div style={{ padding: '12px 16px 4px' }}>
             {loading ? (
-              <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 12 }}>
-                Loading…
-              </div>
+              <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 12 }}>Loading…</div>
             ) : typeEntries.length === 0 ? (
-              <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 12 }}>
-                No incident data for this period.
-              </div>
+              <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 12 }}>No incident data for this period.</div>
             ) : (
-              <div style={{ height: 260, position: 'relative' }}>
-                <canvas ref={pieRef} />
-              </div>
+              <div style={{ height: 260, position: 'relative' }}><canvas ref={pieRef} /></div>
             )}
           </div>
 
@@ -348,7 +334,7 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
           )}
         </div>
 
-        {/* Daily trend line */}
+        {/* Daily trend */}
         <div className="card">
           <div className="card-header" style={{ flexWrap: 'wrap', gap: 6 }}>
             <div>
@@ -363,17 +349,11 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
           </div>
           <div style={{ padding: '12px 16px 16px' }}>
             {loading ? (
-              <div style={{ height: 310, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 12 }}>
-                Loading…
-              </div>
+              <div style={{ height: 310, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 12 }}>Loading…</div>
             ) : dailyLabels.length === 0 ? (
-              <div style={{ height: 310, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 12 }}>
-                No incident data for this period.
-              </div>
+              <div style={{ height: 310, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 12 }}>No incident data for this period.</div>
             ) : (
-              <div style={{ height: 310, position: 'relative' }}>
-                <canvas ref={lineRef} />
-              </div>
+              <div style={{ height: 310, position: 'relative' }}><canvas ref={lineRef} /></div>
             )}
           </div>
         </div>
@@ -409,19 +389,12 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
                           {i + 1}
                         </div>
                       </td>
-                      <td>
-                        <span style={{ fontWeight: 600, fontSize: 13 }}>{name}</span>
-                      </td>
+                      <td><span style={{ fontWeight: 600, fontSize: 13 }}>{name}</span></td>
                       <td style={{ fontWeight: 700, fontSize: 14 }}>{count}</td>
                       <td><span className="badge b-blue" style={{ fontSize: 10 }}>{pct}%</span></td>
                       <td style={{ minWidth: 120 }}>
                         <div style={{ background: 'var(--border)', borderRadius: 3, height: 6 }}>
-                          <div style={{
-                            height: 6, borderRadius: 3,
-                            width: `${pct}%`,
-                            background: color,
-                            transition: 'width 0.4s ease',
-                          }} />
+                          <div style={{ height: 6, borderRadius: 3, width: `${pct}%`, background: color, transition: 'width 0.4s ease' }} />
                         </div>
                       </td>
                     </tr>

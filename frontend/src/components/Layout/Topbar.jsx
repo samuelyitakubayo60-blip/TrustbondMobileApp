@@ -46,7 +46,12 @@ const Topbar = ({
         { id: "dashboard", label: "Home" },
         { id: "reports", label: "Reports" }
       ],
+<<<<<<< HEAD
+      "overall-security-situation": [{ id: "dashboard", label: "Home" }],
+      "case-management": [{ id: "dashboard", label: "Home" }],
+=======
       "case-management": [{ id: "dashboard", label: "Home" }], // District Security Analysis
+>>>>>>> 0f6554f50ee5b96454a108b0f5a44f201c356a87
       "security-situation": [{ id: "dashboard", label: "Home" }],
       "station-security": [
         { id: "dashboard", label: "Home" },

@@ -46,28 +46,64 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
     setSaving(false);
   }, [isOpen, caseItem]);
 
-  // Load officer options scoped strictly to the case's own station.
+  // Load officer options for assignment when admin/supervisor.
   useEffect(() => {
-    if (!isOpen || !canEditLead || !caseItem) return;
+    if (!isOpen || !canEditLead) return;
     let cancelled = false;
-
-    const stationId = caseItem.station_id || caseItem.assigned_to_station_id;
-    const path = stationId
-      ? `/api/v1/police-users/options?station_id=${stationId}`
-      : '/api/v1/police-users/options';
-
-    api.get(path)
-      .then((res) => {
+    
+    // Get station_id from the assigned officer or case location
+    const loadOfficers = async () => {
+      try {
+        let stationId = null;
+        
+        // First try to get station from currently assigned officer
+        if (caseItem?.assigned_to_id) {
+          // Get officer details to find their station
+          const officerRes = await api.get(`/api/v1/police-users/${caseItem.assigned_to_id}`);
+          if (officerRes?.station_id) {
+            stationId = officerRes.station_id;
+          }
+        }
+        
+        // If no station from officer, try to get from case location
+        if (!stationId && caseItem?.location_id) {
+          // For now, we'll load all officers since we don't have station from location
+          stationId = null;
+        }
+        
+        const path = stationId
+          ? `/api/v1/police-users/options?station_id=${stationId}`
+          : '/api/v1/police-users/options';
+        
+        const res = await api.get(path);
         if (cancelled) return;
         setOfficers(res || []);
-      })
-      .catch(() => {
+        
+        // Make sure the currently assigned officer is in the list
+        if (assignedToId && !(res || []).some((o) => String(o.police_user_id) === String(assignedToId))) {
+          // If assigned officer not in list, add them
+          const assignedOfficer = res?.find(o => String(o.police_user_id) === String(assignedToId));
+          if (!assignedOfficer && caseItem?.assigned_to_name) {
+            // Add the assigned officer to the list if they exist but weren't in the filtered results
+            setOfficers(prev => [...prev, {
+              police_user_id: caseItem.assigned_to_id,
+              first_name: caseItem.assigned_to_name.split(' ')[0],
+              last_name: caseItem.assigned_to_name.split(' ').slice(1).join(' '),
+            }]);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load officers:', error);
         if (cancelled) return;
         setOfficers([]);
-      });
-
-    return () => { cancelled = true; };
-  }, [isOpen, canEditLead, caseItem?.station_id, caseItem?.assigned_to_station_id]);
+      }
+    };
+    
+    loadOfficers();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, canEditLead, caseItem?.assigned_to_id, caseItem?.location_id]);
 
   if (!isOpen || !caseItem) return null;
 

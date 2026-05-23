@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../../api/client";
-import SkeletonTable from "../Common/SkeletonTable";
 
 const ROLE_LABEL = {
   chief_of_village: "Village chief",
@@ -22,26 +21,21 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
 
   const loadLeaders = useCallback(async () => {
     setLoading(true);
-    setError("");
     try {
-      // Fast path: load the leaders list first so the table appears immediately
-      const res = await api.get("/api/v1/local-leaders/");
+      const [res, gapsRes, statsRes] = await Promise.all([
+        api.get("/api/v1/local-leaders/"),
+        api.get("/api/v1/local-leaders/coverage-gaps?limit=1000"),
+        api.get("/api/v1/local-leaders/stats"),
+      ]);
       setLeaders(res || []);
+      setCoverageGaps(gapsRes?.items || []);
+      setStats(statsRes || null);
+      setError("");
     } catch (e) {
       setError(e?.message || "Failed to load local leaders.");
     } finally {
       setLoading(false);
     }
-
-    // Slow path: load stats + coverage gaps in the background without blocking the table.
-    // Limit gaps to 50 — we only display 8 per type in the UI.
-    Promise.all([
-      api.get("/api/v1/local-leaders/stats").catch(() => null),
-      api.get("/api/v1/local-leaders/coverage-gaps?limit=50").catch(() => null),
-    ]).then(([statsRes, gapsRes]) => {
-      if (statsRes)  setStats(statsRes);
-      if (gapsRes)   setCoverageGaps(gapsRes?.items || []);
-    });
   }, []);
 
   useEffect(() => {
@@ -215,16 +209,20 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
-          <select
-            className="select"
-            style={{ width: "auto" }}
+          <input
+            className="input"
+            type="number"
+            min="5"
+            max="100"
+            placeholder="Rows"
+            style={{ minWidth: "70px" }}
             value={pageSize}
-            onChange={(e) => { setPageSize(Number(e.target.value)); setOffset(0); }}
-          >
-            <option value={10}>10 / page</option>
-            <option value={20}>20 / page</option>
-            <option value={50}>50 / page</option>
-          </select>
+            onChange={(e) => {
+              const newSize = Math.max(5, Math.min(100, parseInt(e.target.value, 10) || PAGE_SIZE));
+              setPageSize(newSize);
+              setOffset(0);
+            }}
+          />
         </div>
         <div className="tbl-wrap">
           <table>
@@ -294,7 +292,13 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
                   </td>
                 </tr>
               )}
-              {loading && <SkeletonTable cols={8} rows={6} />}
+              {loading && (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: "center", color: "var(--muted)" }}>
+                    Loading...
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

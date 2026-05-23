@@ -139,9 +139,7 @@ const Sidebar = ({
       ? "reports"
       : screenId === "hotspot-details"
         ? "safety-map"
-        : screenId === "station-security"
-          ? "security-situation"
-          : screenId;
+        : screenId;
 
   const {
     reports: reportsBadge = 0,
@@ -169,11 +167,13 @@ const Sidebar = ({
             icon: "ni-rp",
             badge: reportsBadge,
           },
+          // Case Management - visible to all roles (admin, supervisor, officer)
           {
-            id: "security-situation",
-            idx: 4,
-            label: "Security Situation",
-            icon: "ni-st",
+            id: "case-management",
+            idx: 3,
+            label: "Case Management",
+            icon: "ni-cm",
+            badge: casesBadge,
           },
           { id: "safety-map", idx: 5, label: "Safety Map", icon: "ni-mp" },
         ],
@@ -186,12 +186,6 @@ const Sidebar = ({
             idx: 6,
             label: "Device Trust",
             icon: "ni-dt",
-          },
-          {
-            id: "case-management",
-            idx: 3,
-            label: "District Security Analysis",
-            icon: "ni-cm",
           },
         ],
       },
@@ -276,7 +270,9 @@ const Sidebar = ({
       ? activeSection
       : "Operations";
 
-  const [openSection, setOpenSection] = useState([defaultOpenSection]);
+  const [openSection, setOpenSection] = useState(
+    role === "admin" ? ["Operations", "Intelligence"] : [defaultOpenSection]
+  );
 
   useEffect(() => {
     setOpenSection(defaultOpenSection);

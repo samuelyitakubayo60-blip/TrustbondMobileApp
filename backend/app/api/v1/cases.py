@@ -17,7 +17,6 @@ from app.models.police_user import PoliceUser
 from app.api.v1.auth import get_current_admin_or_supervisor, get_current_user
 from app.schemas.case import CaseCreate, CaseUpdate, CaseResponse, CaseListResponse, CaseAddReports
 from app.schemas.report import ReportResponse
-from app.api.v1.notifications import create_notification
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -595,40 +594,11 @@ def create_case(
         if off and off.station_id:
             case.station_id = int(off.station_id)
 
-    # After station is resolved, enforce the assigned officer belongs to THAT station.
-    if case.assigned_to_id and case.station_id:
-        off_check = db.query(PoliceUser).filter(
-            PoliceUser.police_user_id == case.assigned_to_id,
-            PoliceUser.is_active == True,
-        ).first()
-        if off_check and off_check.station_id != case.station_id:
-            raise HTTPException(
-                status_code=403,
-                detail="Assigned officer does not belong to the station responsible for this case's location",
-            )
-
     db.commit()
     db.refresh(case)
-
+    
     background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "case", "action": "created"})
-
-    # Notify the assigned officer immediately.
-    if case.assigned_to_id:
-        create_notification(
-            db,
-            police_user_id=case.assigned_to_id,
-            title=f"New Case Assigned: {case.case_number}",
-            message=(
-                f"You have been assigned to case '{case.title or case.case_number}'. "
-                f"Priority: {(case.priority or 'medium').capitalize()}. "
-                f"Please review the linked incidents and begin your investigation."
-            ),
-            notif_type="assignment",
-            related_entity_type="case",
-            related_entity_id=str(case.case_id),
-            send_email=True,
-        )
-
+    
     case = db.query(Case).options(
         joinedload(Case.location),
         joinedload(Case.incident_type),
@@ -825,11 +795,6 @@ def update_case(
     case = query.first()
     if not case:
         raise HTTPException(404, "Case not found")
-
-    # Capture current state before any mutations so we can diff after commit.
-    old_assigned_to_id = case.assigned_to_id
-    old_status = case.status
-
     if payload.status is not None:
         case.status = payload.status
         if payload.status == "closed":
@@ -837,23 +802,21 @@ def update_case(
     if payload.priority is not None:
         case.priority = payload.priority
     if payload.assigned_to_id is not None:
-        officer = (
-            db.query(PoliceUser)
-            .filter(
-                PoliceUser.police_user_id == payload.assigned_to_id,
-                PoliceUser.is_active == True,
+        if _role_uses_station_scope(current_user.role):
+            station_id = _require_supervisor_station_id(current_user)
+            officer = (
+                db.query(PoliceUser)
+                .filter(
+                    PoliceUser.police_user_id == payload.assigned_to_id,
+                    PoliceUser.is_active == True,
+                )
+                .first()
             )
-            .first()
-        )
-        if not officer:
-            raise HTTPException(status_code=400, detail="Assigned officer not found or inactive")
-        # Always enforce the officer must belong to the case's own station,
-        # regardless of who is making the request.
-        if case.station_id and officer.station_id != case.station_id:
-            raise HTTPException(
-                status_code=403,
-                detail="Assigned officer does not belong to the station responsible for this case",
-            )
+            if not officer or officer.station_id != station_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You can only assign cases to officers in your station",
+                )
         case.assigned_to_id = payload.assigned_to_id
     if payload.title is not None:
         case.title = payload.title
@@ -874,50 +837,8 @@ def update_case(
     db.add(case)
     db.commit()
     db.refresh(case)
-
+    
     background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "case", "action": "updated"})
-
-    # ── Notifications ─────────────────────────────────────────────────────────
-    # 1. New officer assigned → tell them they own this case.
-    if payload.assigned_to_id is not None and payload.assigned_to_id != old_assigned_to_id:
-        create_notification(
-            db,
-            police_user_id=payload.assigned_to_id,
-            title=f"Case Assigned to You: {case.case_number}",
-            message=(
-                f"You have been assigned to case '{case.title or case.case_number}'. "
-                f"Priority: {(case.priority or 'medium').capitalize()}. "
-                f"Please review the linked incidents and begin your investigation."
-            ),
-            notif_type="assignment",
-            related_entity_type="case",
-            related_entity_id=str(case.case_id),
-            send_email=True,
-        )
-    # 2. Status changed → notify the currently assigned officer.
-    elif (
-        payload.status is not None
-        and payload.status != old_status
-        and case.assigned_to_id
-    ):
-        status_label = {
-            "open": "re-opened",
-            "investigating": "moved to Investigating",
-            "closed": "closed",
-        }.get(payload.status, payload.status)
-        create_notification(
-            db,
-            police_user_id=case.assigned_to_id,
-            title=f"Case {case.case_number} Status Updated",
-            message=(
-                f"Case '{case.title or case.case_number}' has been {status_label}."
-                + (f" Outcome: {case.outcome}" if case.outcome and payload.status == "closed" else "")
-            ),
-            notif_type="assignment",
-            related_entity_type="case",
-            related_entity_id=str(case.case_id),
-        )
-    # ─────────────────────────────────────────────────────────────────────────
     
     case = db.query(Case).options(
         joinedload(Case.location),
@@ -1216,11 +1137,11 @@ def add_reports_to_case(
         raise HTTPException(404, "Case not found")
 
     # Add new links, avoiding duplicates
-    added = 0
     if payload.report_ids:
         existing_links = {
             cr.report_id for cr in db.query(CaseReport).filter(CaseReport.case_id == cid).all()
         }
+        added = 0
         for rid in payload.report_ids:
             if rid in existing_links:
                 continue
@@ -1263,25 +1184,9 @@ def add_reports_to_case(
     db.add(case)
     db.commit()
     db.refresh(case)
-
+    
     background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "case", "action": "updated"})
-
-    # Notify the assigned officer that new incidents have been linked to their case.
-    if added > 0 and case.assigned_to_id:
-        create_notification(
-            db,
-            police_user_id=case.assigned_to_id,
-            title=f"New Incident(s) on Case {case.case_number}",
-            message=(
-                f"{added} new incident report{'s were' if added > 1 else ' was'} linked to "
-                f"your case '{case.title or case.case_number}'. "
-                f"The case now has {case.report_count} incident report{'s' if case.report_count != 1 else ''}."
-            ),
-            notif_type="assignment",
-            related_entity_type="case",
-            related_entity_id=str(cid),
-        )
-
+    
     case = db.query(Case).options(
         joinedload(Case.location),
         joinedload(Case.incident_type),

@@ -980,7 +980,7 @@ def generate_recommendation(
             {
                 "recommendation": "",
                 "narrative": "",
-                "status": "monitor_growth",
+            "status": "monitor_growth",
                 "citizen_advisory": "",
             },
             plan,
