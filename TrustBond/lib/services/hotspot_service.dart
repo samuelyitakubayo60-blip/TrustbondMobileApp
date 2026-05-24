@@ -147,42 +147,6 @@ class HotspotService {
     );
   }
 
-  Future<List<Hotspot>> getVillageHotspots(int sectorId) async {
-    try {
-      final response = await _client.get(
-        Uri.parse('$_baseUrl/api/v1/public/hotspots'),
-        headers: {'Content-Type': 'application/json'},
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => Hotspot.fromJson(json)).toList();
-      } else {
-        throw Exception('Failed to load village hotspots: ${response.statusCode}');
-      }
-    } catch (_) {
-      rethrow;
-    }
-  }
-
-  Future<List<Hotspot>> getCellHotspots({required int sectorId}) async {
-    try {
-      final response = await _client.get(
-        Uri.parse('$_baseUrl/api/v1/public/hotspots'),
-        headers: {'Content-Type': 'application/json'},
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => Hotspot.fromJson(json)).toList();
-      } else {
-        throw Exception('Failed to load cell hotspots: ${response.statusCode}');
-      }
-    } catch (_) {
-      rethrow;
-    }
-  }
-
   void dispose() {
     _client.close();
   }

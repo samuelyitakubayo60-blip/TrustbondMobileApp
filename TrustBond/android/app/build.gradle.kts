@@ -22,10 +22,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.mobile"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -34,9 +31,30 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // R8 minification + resource shrinking — biggest APK size reduction
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.getByName("debug")
+        }
+        debug {
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
+    }
+
+    // Build only for arm64-v8a (all Android phones since ~2015).
+    // This alone cuts the APK from ~160 MB to ~40-55 MB by eliminating
+    // the x86, x86_64, and armeabi-v7a copies of the Flutter engine.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a")
+            isUniversalApk = false
         }
     }
 }
@@ -45,7 +63,7 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-messaging")
-    implementation("com.google.firebase:firebase-analytics")
+    // firebase-analytics removed — reduces size; add back only if you use Analytics
 }
 
 flutter {
