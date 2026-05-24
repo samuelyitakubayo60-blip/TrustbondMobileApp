@@ -122,9 +122,11 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   }
 
   Future<void> _pickAudio() async {
-    // Audio recording temporarily disabled due to Windows compatibility issues
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Audio recording temporarily disabled on Windows')),
+      const SnackBar(
+        content: Text('Audio recording is not available in this version.'),
+        duration: Duration(seconds: 2),
+      ),
     );
   }
 
@@ -276,7 +278,10 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
         evidenceMetadata: evidenceMetadata,
       );
 
-      if (mobileVerification.status != 'passed') {
+      // Hard block only on confirmed tampering or non-original source.
+      // A 'warning' (e.g. gallery photo) is allowed through — the backend
+      // will down-weight the trust score but must not silently drop the report.
+      if (mobileVerification.status == 'failed') {
         String errorMessage = "Cannot submit report: ";
         if (!mobileVerification.evidenceSourceValid) {
           errorMessage +=
@@ -284,17 +289,21 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
         } else if (mobileVerification.evidenceTamperingDetected) {
           errorMessage +=
               "Evidence appears to be a screenshot or screen recording. Please use original photos/videos taken at the scene.";
-        } else if (!mobileVerification.locationConsistencyCheck) {
-          errorMessage +=
-              "Evidence location does not match report location. Please ensure evidence was taken at the reported location.";
         } else {
-          errorMessage += "Mobile verification did not pass. Please review evidence and try again.";
+          errorMessage += "Evidence failed verification. Please use original photos/videos taken at the scene.";
         }
         setState(() {
           _error = errorMessage;
           _submitting = false;
         });
         return;
+      }
+
+      // Show a non-blocking warning for 'warning' status (e.g. gallery items).
+      if (mobileVerification.status == 'warning' && mounted) {
+        setState(() {
+          _error = "⚠️ Evidence quality warning: original live captures are preferred. Your report will be submitted with a lower trust score.";
+        });
       }
 
       MotionSample motion;

@@ -27,6 +27,11 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Build only for arm64-v8a (all Android phones since ~2015).
+        // Overrides Flutter's default multi-ABI set and cuts APK size by ~60-70%.
+        ndk {
+            abiFilters += setOf("arm64-v8a")
+        }
     }
 
     buildTypes {
@@ -46,17 +51,6 @@ android {
         }
     }
 
-    // Build only for arm64-v8a (all Android phones since ~2015).
-    // This alone cuts the APK from ~160 MB to ~40-55 MB by eliminating
-    // the x86, x86_64, and armeabi-v7a copies of the Flutter engine.
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a")
-            isUniversalApk = false
-        }
-    }
 }
 
 dependencies {

@@ -66,7 +66,7 @@ class MobileVerificationService {
     }
 
     // 3. Evidence tampering detection
-    final tamperingResult = await _detectEvidenceTampering(evidenceFiles);
+    final tamperingResult = await _detectEvidenceTampering(evidenceFiles, evidenceMetadata);
     details['evidence_tampering'] = tamperingResult;
     if (tamperingResult['detected']) {
       allChecksPassed = false;
@@ -251,7 +251,10 @@ class MobileVerificationService {
   }
 
   /// Detect evidence tampering (screenshots, screen recordings)
-  Future<Map<String, dynamic>> _detectEvidenceTampering(List<File> evidenceFiles) async {
+  Future<Map<String, dynamic>> _detectEvidenceTampering(
+    List<File> evidenceFiles,
+    List<Map<String, dynamic>> evidenceMetadata,
+  ) async {
     final result = <String, dynamic>{
       'detected': false,
       'files': [],
@@ -259,6 +262,9 @@ class MobileVerificationService {
 
     for (int i = 0; i < evidenceFiles.length; i++) {
       final file = evidenceFiles[i];
+      final meta = i < evidenceMetadata.length ? evidenceMetadata[i] : <String, dynamic>{};
+      final isLive = meta['isLiveCapture'] == true;
+
       final fileResult = <String, dynamic>{
         'file_index': i,
         'file_name': file.path.split('/').last,
@@ -270,11 +276,17 @@ class MobileVerificationService {
       try {
         String fileName = file.path.toLowerCase();
 
+        // Live captures from the camera are trusted — skip tampering checks.
+        if (isLive) {
+          result['files'].add(fileResult);
+          continue;
+        }
+
         // Check for screenshots
         if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png')) {
           final isScreenshot = await _detectScreenshot(file);
           fileResult['is_screenshot'] = isScreenshot;
-          
+
           if (isScreenshot) {
             result['detected'] = true;
           }
@@ -282,7 +294,7 @@ class MobileVerificationService {
 
         // Check for screen recordings (common indicators)
         if (fileName.endsWith('.mp4') || fileName.endsWith('.mov') || fileName.endsWith('.avi')) {
-          final isScreenRecording = await _detectScreenRecording(file);
+          final isScreenRecording = await _detectScreenRecording(file, isLiveCapture: isLive);
           fileResult['is_screen_recording'] = isScreenRecording;
           
           if (isScreenRecording) {
@@ -355,34 +367,28 @@ class MobileVerificationService {
   }
 
   /// Detect if a video is a screen recording
-  Future<bool> _detectScreenRecording(File videoFile) async {
+  Future<bool> _detectScreenRecording(File videoFile, {bool isLiveCapture = false}) async {
+    // Live captures from the camera are never screen recordings.
+    if (isLiveCapture) return false;
+
     try {
-      // This is a simplified detection - in production, you'd want to use
-      // a proper video analysis library
-      String fileName = videoFile.path.toLowerCase();
-      
-      // Check filename for screen recording indicators
+      final fileName = videoFile.path.toLowerCase();
+
+      // Only flag files whose names explicitly reference screen capture tools.
       final screenRecordingIndicators = [
-        'screen', 'record', 'capture', 'mirror', 'cast',
-        'zoom', 'teams', 'meet', 'recorded'
+        'screenrecord', 'screen_record', 'scrcpy', 'mirror', 'cast',
       ];
-      
+
       for (final indicator in screenRecordingIndicators) {
-        if (fileName.contains(indicator)) {
-          return true;
-        }
+        if (fileName.contains(indicator)) return true;
       }
 
-      // Check file size - screen recordings often have specific patterns
-      int fileSize = await videoFile.length();
-      
-      // Very small video files might be suspicious
-      if (fileSize < 100 * 1024) { // Less than 100KB
-        return true;
-      }
-
-    } catch (e) {
-      // If we can't analyze, assume it's not a screen recording
+      // Flag only truly empty/corrupt files (< 10 KB).
+      // Real phone videos — even 1-second clips — are well above 100 KB.
+      final fileSize = await videoFile.length();
+      if (fileSize < 10 * 1024) return true;
+    } catch (_) {
+      // Cannot analyse — don't block.
     }
 
     return false;
