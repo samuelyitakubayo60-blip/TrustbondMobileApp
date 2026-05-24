@@ -162,19 +162,32 @@ class NotificationService {
     final token = _fcmToken?.trim();
     if (token == null || token.isEmpty) return;
 
+    // Leader FCM — retry up to 3 times with back-off so a transient network
+    // error at startup doesn't permanently silence leader notifications.
     try {
       final leaderTok = await LeaderService().getToken();
       if (leaderTok != null && leaderTok.trim().isNotEmpty) {
-        try {
-          await LeaderService().registerFcmToken(fcmToken: token);
-        } catch (e) {
-          debugPrint('Leader FCM register failed: $e');
+        bool registered = false;
+        for (int attempt = 1; attempt <= 3 && !registered; attempt++) {
+          try {
+            await LeaderService().registerFcmToken(fcmToken: token);
+            registered = true;
+          } catch (e) {
+            debugPrint('Leader FCM register attempt $attempt failed: $e');
+            if (attempt < 3) {
+              await Future.delayed(Duration(seconds: attempt * 2));
+            }
+          }
+        }
+        if (!registered) {
+          debugPrint('Leader FCM registration failed after 3 attempts');
         }
       }
     } catch (e) {
       debugPrint('Leader FCM check failed: $e');
     }
 
+    // Citizen device FCM — single attempt (token refresh will retry later).
     try {
       final deviceId = await DeviceService().ensureDeviceId();
       if (deviceId != null && deviceId.isNotEmpty) {

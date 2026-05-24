@@ -220,19 +220,28 @@ class OfflineReportQueueService {
     return removed;
   }
 
+  // Completer used as a mutex so concurrent callers wait instead of racing.
+  Completer<void>? _syncCompleter;
+
   Future<void> scheduleSync({String reason = 'manual'}) async {
     if (_isSyncing) return;
     unawaited(syncNow(reason: reason));
   }
 
   Future<void> syncNow({String reason = 'manual'}) async {
-    if (_isSyncing) return;
+    // If a sync is already running, wait for it and then return — don't start
+    // a second concurrent sync.
+    if (_syncCompleter != null) {
+      await _syncCompleter!.future;
+      return;
+    }
     if (!await _hasInternet()) return;
     if (_lastSyncAt != null &&
         DateTime.now().difference(_lastSyncAt!) < const Duration(seconds: 2)) {
       return;
     }
 
+    _syncCompleter = Completer<void>();
     _isSyncing = true;
     _lastSyncAt = DateTime.now();
     try {
@@ -245,6 +254,8 @@ class OfflineReportQueueService {
       }
     } finally {
       _isSyncing = false;
+      _syncCompleter?.complete();
+      _syncCompleter = null;
       AppRefreshBus.notify('offline_queue_sync_complete_$reason');
     }
   }

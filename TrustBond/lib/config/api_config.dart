@@ -1,15 +1,8 @@
-/// API base URL. Change via --dart-define when running, or edit the default below.
-///
-/// **Production:** Uses Render-hosted backend (auto-deployed from GitHub).
-/// **Override:** flutter run --dart-define=API_BASE_URL=https://YOUR_URL/api/v1
+/// API base URL — always points to the hosted backend.
+/// Mobile app is not allowed to connect to a local backend.
 class ApiConfig {
-  /// Backend URL — deployed on Render.com (auto-deploys on git push).
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    // defaultValue: 'http://localhost:8000/api/v1',
-    // defaultValue: 'https://trustbondmobileapp.onrender.com/api/v1',
-    defaultValue: 'https://samuelyitakubayo-trustbond-backend.hf.space/api/v1',
-  );
+  static const String baseUrl =
+      'https://samuelyitakubayo-trustbond-backend.hf.space/api/v1';
 
   static String get devicesUrl => _url('$baseUrl/devices');
   static String get reportsUrl => _url('$baseUrl/reports');

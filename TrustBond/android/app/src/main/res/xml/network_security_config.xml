@@ -9,13 +9,6 @@
         </trust-anchors>
     </domain-config>
 
-    <!-- Local dev only: emulator (10.0.2.2) and localhost -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">localhost</domain>
-        <domain includeSubdomains="false">127.0.0.1</domain>
-        <domain includeSubdomains="false">10.0.2.2</domain>
-    </domain-config>
-
     <!-- Block cleartext for everything else -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
