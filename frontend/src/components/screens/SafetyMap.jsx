@@ -300,6 +300,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     trust_min: 50,
   });
   const [mapZoom, setMapZoom] = useState(MUSANZE_ZOOM);
+  const [selectedCluster, setSelectedCluster] = useState(null); // hotspot object for detail panel
   const [assignmentUnits, setAssignmentUnits] = useState([]);
   const { user: me } = useAuth();
   const canDeployHotspot = canDeployHotspotUnits(me?.role);
@@ -434,23 +435,14 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   }, []);
 
   const filteredHotspots = useMemo(() => {
-    const byType = typeFilter === "all"
-      ? historicalHotspots
-      : historicalHotspots.filter(
-          (h) =>
-            (h.incident_type_name || "").toLowerCase() ===
-            typeFilter.toLowerCase(),
-        );
-    // Apply DBSCAN param sliders as a client-side preview so the map and
-    // cluster list reflect the configured thresholds without a server round-trip.
-    const minInc = Number(dbscanParams.min_incidents || 1);
-    const trustMin = Number(dbscanParams.trust_min || 0);
-    return byType.filter(
+    // Only filter by incident type — slider values (min_incidents, trust_min)
+    // are recompute parameters, NOT display filters. All stored clusters are shown.
+    if (typeFilter === "all") return historicalHotspots;
+    return historicalHotspots.filter(
       (h) =>
-        (h.incident_count || 0) >= minInc &&
-        (h.avg_trust_score || 0) >= trustMin,
+        (h.incident_type_name || "").toLowerCase() === typeFilter.toLowerCase(),
     );
-  }, [historicalHotspots, typeFilter, dbscanParams.min_incidents, dbscanParams.trust_min]);
+  }, [historicalHotspots, typeFilter]);
 
   const plottedHotspots = useMemo(
     () =>
@@ -962,75 +954,104 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                     isWithinSelectedFilter(p.reported_at, selectedFilterHours),
                   );
                 const alpha = clusterInFilter ? 1 : 0.35;
-                const hull = Array.isArray(h.boundary_points) && h.boundary_points.length >= 3
-                  ? h.boundary_points
-                  : convexHull(pts.map((p) => ({ lat: p.latitude, lng: p.longitude })));
+                // Prefer hull from actual incident points (exact, no expansion).
+                // boundary_points from the API is pre-expanded 12% outward which causes
+                // adjacent clusters to visually overlap — avoid it.
+                const hullFromPts = convexHull(
+                  pts
+                    .map((p) => ({ lat: Number(p.latitude), lng: Number(p.longitude) }))
+                    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)),
+                );
+                const hull = hullFromPts.length >= 3
+                  ? hullFromPts
+                  : (Array.isArray(h.boundary_points) && h.boundary_points.length >= 3
+                      ? h.boundary_points
+                      : []);
                 const types = [...new Set(pts.map((p) => p.incident_type_name).filter(Boolean))];
 
                 return (
                   <React.Fragment key={`hs-${h.hotspot_id}`}>
                     {hull.length >= 3 ? (
-                      /* Convex hull polygon — real lat/lng coords, Leaflet projects to real-world */
                       <Polygon
                         positions={hull}
+                        eventHandlers={{ click: () => setSelectedCluster(h) }}
                         pathOptions={{
                           color: zoneColor,
-                          weight: 2.5,
+                          weight: selectedCluster?.hotspot_id === h.hotspot_id ? 3 : 2,
                           opacity: alpha * 0.95,
                           fillColor: zoneColor,
-                          fillOpacity: alpha * 0.18,
+                          fillOpacity: selectedCluster?.hotspot_id === h.hotspot_id ? alpha * 0.28 : alpha * 0.12,
                           dashArray: "8 5",
                         }}
                       />
                     ) : (
-                      /* Fallback: Leaflet Circle radius is in real meters (not pixels) */
                       <Circle
                         center={[h.lat, h.lng]}
                         radius={Number(h.radius_meters) || 500}
+                        eventHandlers={{ click: () => setSelectedCluster(h) }}
                         pathOptions={{
                           color: zoneColor,
                           weight: 2,
                           opacity: alpha * 0.85,
                           fillColor: zoneColor,
-                          fillOpacity: alpha * 0.15,
+                          fillOpacity: alpha * 0.12,
                           dashArray: "6 4",
                         }}
                       />
                     )}
 
-                    {/* Individual incident points within the cluster */}
+                    {/* Individual incident dots — color = incident type, white ring = cluster color */}
                     {pts.map((p, pIdx) => {
                       const lat = Number(p.latitude);
                       const lng = Number(p.longitude);
                       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
                       const ptColor = getIncidentTypeColor(p.incident_type_name);
                       const ptRadius = mapZoom >= 14 ? 7 : mapZoom >= 12 ? 5 : 4;
+                      const loc = [p.village_name, p.cell_name, p.sector_name].filter(Boolean).join(", ");
                       return (
                         <CircleMarker
                           key={`pt-${h.hotspot_id}-${pIdx}`}
                           center={[lat, lng]}
                           radius={ptRadius}
+                          eventHandlers={{ click: () => setSelectedCluster(h) }}
                           pathOptions={{
-                            color: "#fff",
+                            color: zoneColor,
                             weight: 1.5,
                             opacity: alpha,
                             fillColor: ptColor,
-                            fillOpacity: alpha * 0.9,
+                            fillOpacity: alpha * 0.92,
                           }}
                         >
-                          <Tooltip direction="top" offset={[0, -6]} opacity={0.95} interactive={false}>
-                            <div style={{ fontSize: "11px", lineHeight: 1.5 }}>
-                              <strong>{p.incident_type_name || "Incident"}</strong>
+                          <Tooltip direction="top" offset={[0, -6]} opacity={0.97} interactive={false}>
+                            <div style={{ fontSize: "12px", lineHeight: 1.6, minWidth: 160 }}>
+                              <div style={{ fontWeight: 700, marginBottom: 2 }}>
+                                {p.incident_type_name || "Incident"}
+                              </div>
+                              <div style={{ color: "#94a3b8", fontSize: 11 }}>
+                                Report #{String(p.report_id || "").slice(-6)}
+                              </div>
                               {p.reported_at && (
-                                <><br />{new Date(p.reported_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</>
+                                <div style={{ fontSize: 11 }}>
+                                  {new Date(p.reported_at).toLocaleString(undefined, {
+                                    month: "short", day: "numeric",
+                                    hour: "2-digit", minute: "2-digit",
+                                  })}
+                                </div>
                               )}
-                              {p.sector_name && <><br />Sector: {p.sector_name}</>}
+                              {loc && <div style={{ fontSize: 11, color: "#94a3b8" }}>{loc}</div>}
+                              {p.trust_score != null && (
+                                <div style={{ fontSize: 11, marginTop: 2 }}>
+                                  Trust: <strong>{Math.round(Number(p.trust_score))}%</strong>
+                                  {" · "}Cluster: <strong>{h.incident_count} incidents</strong>
+                                </div>
+                              )}
                             </div>
                           </Tooltip>
                         </CircleMarker>
                       );
                     })}
 
+                    {/* Cluster count badge — click to open detail panel */}
                     <Marker
                       position={[h.lat, h.lng]}
                       icon={createClusterIcon(
@@ -1040,14 +1061,16 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                         alpha,
                       )}
                       zIndexOffset={900}
+                      eventHandlers={{ click: () => setSelectedCluster(h) }}
                     >
-                      <Tooltip direction="top" offset={[0, -18]} opacity={0.97} interactive={false}>
+                      <Tooltip direction="top" offset={[0, -14]} opacity={0.97} interactive={false}>
                         <div style={{ fontSize: "11px", lineHeight: 1.6 }}>
-                          <strong>Cluster {hIdx + 1}</strong>
+                          <strong>{h.area_label || `Cluster #${h.hotspot_id}`}</strong>
                           <br />
-                          {pts.length || h.incident_count} incidents · {getReportRiskLabel(zoneColor)}
+                          {pts.length || h.incident_count} confirmed incidents · {getReportRiskLabel(zoneColor)}
                           <br />
                           {types.slice(0, 3).join(", ")}
+                          {types.length > 3 ? ` +${types.length - 3} more` : ""}
                         </div>
                       </Tooltip>
                     </Marker>
@@ -1056,6 +1079,106 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
               })}
 
             </MapContainer>
+
+            {/* ── Cluster detail panel — appears when a cluster/incident is clicked ── */}
+            {selectedCluster && (() => {
+              const sc = selectedCluster;
+              const scPts = Array.isArray(sc.incident_points) ? sc.incident_points : [];
+              const scColor = getRiskZoneColor(sc.risk_level);
+              const incidentMix = sc.incident_mix || {};
+              return (
+                <div style={{
+                  position: "absolute", top: 10, right: 10, zIndex: 600,
+                  background: "rgba(15,23,42,0.97)", border: `1.5px solid ${scColor}`,
+                  borderRadius: 12, padding: "14px 16px", width: 280,
+                  backdropFilter: "blur(6px)", boxShadow: "0 4px 20px rgba(0,0,0,0.6)",
+                  maxHeight: "calc(100% - 20px)", overflowY: "auto",
+                }}>
+                  {/* Header */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>
+                        {sc.area_label || `Cluster #${sc.hotspot_id}`}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                        {sc.incident_count} confirmed incidents · {(sc.risk_level || "").toUpperCase()}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSelectedCluster(null)}
+                      style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0, marginLeft: 8 }}
+                    >&#x2715;</button>
+                  </div>
+
+                  {/* Incident type breakdown */}
+                  {Object.keys(incidentMix).length > 0 && (
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>
+                        Incident Types
+                      </div>
+                      {Object.entries(incidentMix)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([name, count]) => (
+                          <div key={name} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: getIncidentTypeColor(name), flexShrink: 0 }} />
+                            <div style={{ flex: 1, fontSize: 11, color: "#e2e8f0" }}>{name}</div>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "#f1f5f9" }}>{count}</span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+
+                  {/* Individual incident list */}
+                  {scPts.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>
+                        Incidents in this cluster
+                      </div>
+                      {scPts.map((p, i) => {
+                        const ptColor = getIncidentTypeColor(p.incident_type_name);
+                        const loc = [p.village_name, p.cell_name].filter(Boolean).join(", ");
+                        return (
+                          <div key={i} style={{
+                            display: "flex", gap: 8, alignItems: "flex-start",
+                            padding: "6px 0", borderBottom: i < scPts.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none",
+                          }}>
+                            <div style={{ width: 9, height: 9, borderRadius: "50%", background: ptColor, flexShrink: 0, marginTop: 3 }} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "#f1f5f9" }}>
+                                {p.incident_type_name || "Incident"}
+                              </div>
+                              <div style={{ fontSize: 10, color: "#94a3b8" }}>
+                                #{String(p.report_id || "").slice(-6)}
+                                {p.reported_at ? " · " + new Date(p.reported_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}
+                              </div>
+                              {loc && <div style={{ fontSize: 10, color: "#64748b" }}>{loc}</div>}
+                            </div>
+                            {p.trust_score != null && (
+                              <div style={{ fontSize: 10, color: "#94a3b8", flexShrink: 0 }}>
+                                {Math.round(Number(p.trust_score))}%
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {scPts.length === 0 && (
+                    <div style={{ fontSize: 11, color: "#64748b", textAlign: "center", padding: "8px 0" }}>
+                      {sc.incident_count} incidents · run DBSCAN to load point details
+                    </div>
+                  )}
+
+                  {/* Footer stats */}
+                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", gap: 12, fontSize: 11, color: "#94a3b8" }}>
+                    <span>Score: <strong style={{ color: "#f1f5f9" }}>{sc.hotspot_score != null ? Math.round(sc.hotspot_score) : "—"}</strong></span>
+                    <span>Trust: <strong style={{ color: "#f1f5f9" }}>{sc.avg_trust_score != null ? Math.round(Number(sc.avg_trust_score)) + "%" : "—"}</strong></span>
+                    {sc.area_label && <span style={{ color: "#64748b" }}>{sc.area_label}</span>}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── Incident type legend — collapsed pill, expands on hover ── */}
             <div

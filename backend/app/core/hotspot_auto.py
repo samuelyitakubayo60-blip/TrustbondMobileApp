@@ -242,6 +242,10 @@ def create_hotspots_from_reports(
             Report.village_location_id.isnot(None),
             Location.location_type == "village",
             Location.is_active == True,
+            # Only confirmed/verified reports — rejected ones must never appear on the map
+            Report.status != "rejected",
+            Report.verification_status != "rejected",
+            Report.rule_status != "rejected",
         )
         .options(
             selectinload(Report.ml_predictions),
