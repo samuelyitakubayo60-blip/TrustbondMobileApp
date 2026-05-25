@@ -154,7 +154,7 @@ const RelocatorControl = ({ maxBounds }) => {
           "
           title="Reset to Musanze view"
         >
-          🏠
+          &#8634;
         </button>
       `;
 
@@ -817,27 +817,28 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
 
   return (
     <>
-      <div className="page-header smx-page-header">
-        <h2>Community Safety Map</h2>
-        <p>
-          Musanze District safety map. <strong>DBSCAN hotspot clusters</strong> are shown as
-          coloured circles — <strong style={{ color: "#ef4444" }}>red</strong> (high-risk),{" "}
-          <strong style={{ color: "#ca8a04" }}>yellow</strong> (medium-risk),{" "}
-          <strong style={{ color: "#16a34a" }}>green</strong> (low-risk). Use the Time Period
-          panel to highlight a window; clusters outside the window appear faded.
-        </p>
-      </div>
-
-      <div className="alert alert-info">
-        <span className="alert-icon">i</span>
-        <div>
-          Musanze District safety map shows persisted <strong>DBSCAN hotspot clusters</strong> only
-          (coloured circles with incident counts). Individual incident pins are hidden so the map
-          stays focused on cluster risk zones.
-          <span style={{ display: "block", marginTop: "0.65rem" }}>
-            Use the <strong>Time Period</strong> panel to highlight a window; clusters outside that
-            window appear faded (35% opacity).
-          </span>
+      {/* ── Page header ── */}
+      <div className="card" style={{ marginBottom: 16, padding: '16px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+          <div>
+            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Community Safety Map</h2>
+            <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
+              Musanze District hotspot clusters — circles show risk zones. Use the time period controls to filter.
+            </p>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+          {[
+            { label: 'Total Clusters',    value: hotspotStats.total_clusters,        cls: 'sb-blue'  },
+            { label: 'Reports in Zones',  value: hotspotStats.reports_in_clusters,   cls: 'sb-blue'  },
+            { label: 'High Risk',         value: hotspotStats.risk_counts.critical,  cls: 'sb-red'   },
+            { label: 'Medium Risk',       value: hotspotStats.risk_counts.warning,   cls: 'sb-orange'},
+          ].map((s) => (
+            <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
+              <div className="stat-btn-label">{s.label}</div>
+              <div className="stat-btn-value">{loading ? '...' : s.value}</div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -1089,31 +1090,43 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
         <div className="map-side">
           <div className="card smx-side-card">
             <div className="card-header">
-              <div className="card-title">DBSCAN Results</div>
+              <div className="card-title">Hotspot Summary</div>
             </div>
             <div className="status-row">
-              <span>Total clusters</span>
+              <span>Clusters</span>
               <strong>{hotspotStats.total_clusters}</strong>
             </div>
             <div className="status-row">
-              <span>View mode</span>
-              <strong>DBSCAN clusters only</strong>
+              <span>Time window</span>
+              <strong>{formatFilterPeriodLabel(timePeriod, customHours)}</strong>
             </div>
             <div className="status-row">
-              <span>Time period</span>
-              <strong>
-                {formatFilterPeriodLabel(timePeriod, customHours)}
-              </strong>
-            </div>
-            <div className="status-row">
-              <span>Reports in clusters</span>
+              <span>Reports in zones</span>
               <strong>{hotspotStats.reports_in_clusters}</strong>
             </div>
             <div className="status-row">
-              <span>Avg cluster trust</span>
+              <span>High risk</span>
+              <strong style={{ color: "var(--danger)" }}>
+                {hotspotStats.risk_counts.critical}
+              </strong>
+            </div>
+            <div className="status-row">
+              <span>Medium risk</span>
+              <strong style={{ color: "var(--warning)" }}>
+                {hotspotStats.risk_counts.warning}
+              </strong>
+            </div>
+            <div className="status-row">
+              <span>Low risk</span>
               <strong style={{ color: "var(--success)" }}>
-                {hotspotStats.avg_cluster_trust !== null 
-                  ? `${hotspotStats.avg_cluster_trust} / 100` 
+                {hotspotStats.risk_counts.normal}
+              </strong>
+            </div>
+            <div className="status-row">
+              <span>Avg trust score</span>
+              <strong style={{ color: "var(--success)" }}>
+                {hotspotStats.avg_cluster_trust !== null
+                  ? `${hotspotStats.avg_cluster_trust} / 100`
                   : "-"}
               </strong>
             </div>
@@ -1125,7 +1138,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
               </strong>
             </div>
             <div className="status-row">
-              <span>Last DBSCAN run</span>
+              <span>Last run</span>
               <strong>{hotspotStats.latest_cluster_run}</strong>
             </div>
             <button
