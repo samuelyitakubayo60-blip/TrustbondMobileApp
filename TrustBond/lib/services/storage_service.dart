@@ -1,10 +1,16 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:local_auth/local_auth.dart';
 
-/// Mock storage service for cross-platform compatibility
+import 'platform_service.dart';
+
+/// Secure storage and biometric helpers (mobile only for biometrics).
 class StorageService {
   static final StorageService _instance = StorageService._internal();
   factory StorageService() => _instance;
   StorageService._internal();
+
+  final LocalAuthentication _localAuth = LocalAuthentication();
 
   void _log(String message) {
     if (kDebugMode) {
@@ -22,16 +28,50 @@ class StorageService {
     _log('Storage: Encryption disabled (mock implementation)');
   }
 
-  /// Check if biometric authentication is available
+  /// Check if biometric authentication is available on this device.
   Future<bool> isBiometricAvailable() async {
-    // Mock implementation - always return false on desktop
-    return false;
+    if (!PlatformService.isMobile) {
+      return false;
+    }
+    try {
+      final supported = await _localAuth.isDeviceSupported();
+      if (!supported) return false;
+      final types = await _localAuth.getAvailableBiometrics();
+      return types.isNotEmpty;
+    } on PlatformException catch (e) {
+      _log('Storage: biometric availability check failed: $e');
+      return false;
+    } catch (e) {
+      _log('Storage: biometric availability check failed: $e');
+      return false;
+    }
   }
 
-  /// Authenticate with biometrics
-  Future<bool> authenticateWithBiometrics() async {
-    _log('Storage: Biometric authentication attempted (mock implementation)');
-    return false;
+  /// Prompt fingerprint / face ID. Returns true when the user authenticates.
+  Future<bool> authenticateWithBiometrics({
+    String reason = 'Unlock TrustBond',
+  }) async {
+    if (!PlatformService.isMobile) {
+      return false;
+    }
+    try {
+      final available = await isBiometricAvailable();
+      if (!available) return false;
+
+      return await _localAuth.authenticate(
+        localizedReason: reason,
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+          stickyAuth: true,
+        ),
+      );
+    } on PlatformException catch (e) {
+      _log('Storage: biometric authentication failed: $e');
+      return false;
+    } catch (e) {
+      _log('Storage: biometric authentication failed: $e');
+      return false;
+    }
   }
 
   /// Enable secure storage

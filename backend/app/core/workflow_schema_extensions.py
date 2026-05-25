@@ -18,6 +18,9 @@ DDL_STATEMENTS: tuple[str, ...] = (
       ON reports (submitted_by_local_leader_id);
     """,
     """
+    ALTER TABLE police_users ADD COLUMN IF NOT EXISTS rank VARCHAR(80) NOT NULL DEFAULT 'Police Constable';
+    """,
+    """
     ALTER TABLE cases ADD COLUMN IF NOT EXISTS station_id INTEGER REFERENCES stations(station_id);
     """,
     """
@@ -34,6 +37,30 @@ DDL_STATEMENTS: tuple[str, ...] = (
     """,
     """
     ALTER TABLE cases ADD COLUMN IF NOT EXISTS rib_handover_prerequisites_acknowledged BOOLEAN NOT NULL DEFAULT FALSE;
+    """,
+    # Hotspots before heavy local_leaders ALTER so map/alerts work even if leader DDL times out
+    """
+    ALTER TABLE hotspots ADD COLUMN IF NOT EXISTS assigned_unit_code VARCHAR(80);
+    """,
+    """
+    ALTER TABLE hotspots ADD COLUMN IF NOT EXISTS controlled_by_user_id INTEGER REFERENCES police_users(police_user_id);
+    """,
+    """
+    ALTER TABLE hotspots ADD COLUMN IF NOT EXISTS deployed_at TIMESTAMPTZ;
+    """,
+    """
+    ALTER TABLE hotspots ADD COLUMN IF NOT EXISTS deployment_note VARCHAR(500);
+    """,
+    """
+    ALTER TABLE hotspots
+      ADD COLUMN IF NOT EXISTS lifecycle_state VARCHAR(30),
+      ADD COLUMN IF NOT EXISTS composition TEXT,
+      ADD COLUMN IF NOT EXISTS temporal_intensity NUMERIC(10,4),
+      ADD COLUMN IF NOT EXISTS severity_score NUMERIC(6,4),
+      ADD COLUMN IF NOT EXISTS trend_direction VARCHAR(20),
+      ADD COLUMN IF NOT EXISTS cluster_confidence NUMERIC(5,4),
+      ADD COLUMN IF NOT EXISTS polygon_points TEXT,
+      ADD COLUMN IF NOT EXISTS crime_group VARCHAR(30);
     """,
     """
     ALTER TABLE local_leaders ADD COLUMN IF NOT EXISTS role VARCHAR(32) NOT NULL DEFAULT 'executive_of_cell';
@@ -63,18 +90,6 @@ DDL_STATEMENTS: tuple[str, ...] = (
     """
     ALTER TABLE special_assignment_units
       ADD COLUMN IF NOT EXISTS commander_user_id INTEGER REFERENCES police_users(police_user_id);
-    """,
-    """
-    ALTER TABLE hotspots ADD COLUMN IF NOT EXISTS assigned_unit_code VARCHAR(80);
-    """,
-    """
-    ALTER TABLE hotspots ADD COLUMN IF NOT EXISTS controlled_by_user_id INTEGER REFERENCES police_users(police_user_id);
-    """,
-    """
-    ALTER TABLE hotspots ADD COLUMN IF NOT EXISTS deployed_at TIMESTAMPTZ;
-    """,
-    """
-    ALTER TABLE hotspots ADD COLUMN IF NOT EXISTS deployment_note VARCHAR(500);
     """,
     """
     CREATE TABLE IF NOT EXISTS station_coverage_cells (
@@ -108,12 +123,69 @@ WHERE verification_status = 'verified'
 
 
 def apply_workflow_schema_ddl(engine: Engine) -> None:
-    for stmt in DDL_STATEMENTS:
+    """Run idempotent DDL on startup. Uses per-statement transactions and longer timeouts for heavy ALTERs."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SET lock_timeout = '120s'"))
+            conn.execute(text("SET statement_timeout = '120s'"))
+            conn.commit()
+    except Exception as exc:
+        _log.warning("Could not set session timeouts for DDL: %s", exc)
+
+    for i, stmt in enumerate(DDL_STATEMENTS):
+        stmt = stmt.strip()
+        if not stmt:
+            continue
         try:
             with engine.begin() as conn:
                 conn.execute(text(stmt))
+            _log.info("Workflow DDL statement %s/%s applied.", i + 1, len(DDL_STATEMENTS))
         except Exception as exc:
-            _log.warning("Workflow DDL statement failed: %s", exc)
+            _log.warning("Workflow DDL statement %s/%s failed: %s", i + 1, len(DDL_STATEMENTS), exc)
+
+
+def ensure_hotspot_cluster_columns(engine: Engine) -> list[str]:
+    """Verify hotspot clustering columns exist; return names still missing (for logs)."""
+    required = (
+        "lifecycle_state",
+        "composition",
+        "temporal_intensity",
+        "severity_score",
+        "trend_direction",
+        "cluster_confidence",
+        "polygon_points",
+        "crime_group",
+        "assigned_unit_code",
+        "controlled_by_user_id",
+        "deployed_at",
+        "deployment_note",
+    )
+    missing: list[str] = []
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'hotspots'
+                    """
+                )
+            ).fetchall()
+            present = {r[0] for r in rows}
+            missing = [c for c in required if c not in present]
+    except Exception as exc:
+        _log.warning("Could not verify hotspot columns: %s", exc)
+        return required
+    if missing:
+        _log.error(
+            "Hotspots table is missing columns after DDL: %s. "
+            "Re-run apply_workflow_schema_ddl or execute alembic upgrade head.",
+            ", ".join(missing),
+        )
+    else:
+        _log.info("Hotspots table has all expected workflow/cluster columns.")
+    return missing
 
 
 def apply_leader_verified_backfill(engine: Engine) -> None:

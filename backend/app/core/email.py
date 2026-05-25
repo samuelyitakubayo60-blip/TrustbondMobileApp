@@ -176,6 +176,7 @@ def send_new_user_credentials(
     temporary_password: str,
     role: str,
     badge_number: str | None = None,
+    rank: str | None = None,
 ) -> tuple[bool, str | None]:
     """Send new police user their login credentials. Returns (True, None) if sent, (False, error_message) otherwise."""
     subject = "Welcome to TrustBond Police Dashboard"
@@ -191,6 +192,7 @@ def send_new_user_credentials(
     login_url_html = escape(login_url)
     logo_src_html = escape(logo_src)
 
+    rank_line = f"Rank: {rank}\n" if rank else ""
     badge_line = f"Badge number: {badge_number}\n" if badge_number else ""
     badge_line_html = (
         f"""
@@ -207,7 +209,7 @@ def send_new_user_credentials(
 Your TrustBond Police Dashboard account has been created. You can now sign in with the details below.
 
 Email: {login_email}
-{badge_line}Temporary password: {temporary_password}
+{rank_line}{badge_line}Temporary password: {temporary_password}
 Role: {role}
 
 Login: {login_url}

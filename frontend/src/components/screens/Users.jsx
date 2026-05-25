@@ -114,7 +114,8 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
       const name = `${u.first_name || ''} ${u.last_name || ''}`.toLowerCase();
       const email = (u.email || '').toLowerCase();
       const badge = (u.badge_number || '').toLowerCase();
-      if (!name.includes(q) && !email.includes(q) && !badge.includes(q)) {
+      const rank = (u.rank || '').toLowerCase();
+      if (!name.includes(q) && !email.includes(q) && !badge.includes(q) && !rank.includes(q)) {
         return false;
       }
     }
@@ -175,7 +176,7 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
         <div className="filter-row">
           <input
             className="input"
-            placeholder="Search by name, email, or badge..."
+            placeholder="Search by name, email, badge, or rank..."
             style={{ flex: 2 }}
             value={searchText}
             onChange={(e) => {
@@ -245,6 +246,7 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
                 <th>#</th>
                 <th>Badge</th>
                 <th>Name</th>
+                <th>Rank</th>
                 <th>Email</th>
                 <th>Role</th>
                 <th>Station</th>
@@ -261,6 +263,7 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
                   </td>
                   <td><span className={`badge ${u.role === 'admin' ? 'b-purple' : 'b-blue'}`}>{u.badge_number || `ID-${u.police_user_id}`}</span></td>
                   <td><strong>{u.first_name} {u.last_name}</strong></td>
+                  <td style={{ fontSize: '11px' }}>{u.rank || '—'}</td>
                   <td style={{ fontSize: '10px' }}>{u.email}</td>
                   <td><span className={`badge ${u.role === 'admin' ? 'b-red' : 'b-blue'}`}>{staffRoleLabel(u.role)}</span></td>
                   <td style={{ color: 'var(--muted)' }}>
@@ -305,14 +308,14 @@ const Users = ({ openModal, onEditUser, refreshKey = 0, wsRefreshKey, isMobile }
               ))}
               {!filteredUsers.length && !loading && (
                 <tr>
-                  <td colSpan={10} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
+                  <td colSpan={11} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
                     No users found.
                   </td>
                 </tr>
               )}
               {loading && (
                 <tr>
-                  <td colSpan={10} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
+                  <td colSpan={11} style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>
                     Loading...
                   </td>
                 </tr>

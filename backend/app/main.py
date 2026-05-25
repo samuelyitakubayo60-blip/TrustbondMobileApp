@@ -70,13 +70,23 @@ async def lifespan(app: FastAPI):
         from alembic.config import Config as AlembicConfig
         from alembic import command as alembic_command
 
-        _ini = pathlib.Path(__file__).parent.parent.parent / "alembic.ini"
-        if _ini.exists():
+        _repo_root = pathlib.Path(__file__).resolve().parent.parent.parent
+        _ini = _repo_root / "alembic.ini"
+        _scripts = _repo_root / "backend" / "alembic"
+        if _ini.exists() and _scripts.is_dir():
             _alembic_cfg = AlembicConfig(str(_ini))
+            _alembic_cfg.set_main_option("script_location", str(_scripts))
             alembic_command.upgrade(_alembic_cfg, "head")
             _log.info("Alembic migrations applied (upgrade head).")
         else:
-            _log.warning("alembic.ini not found at %s — skipping auto-migration.", _ini)
+            _log.warning(
+                "Alembic skipped (ini=%s exists=%s, scripts=%s exists=%s). "
+                "Relying on workflow_schema_extensions DDL.",
+                _ini,
+                _ini.exists(),
+                _scripts,
+                _scripts.is_dir(),
+            )
     except Exception as _mig_exc:
         _log.warning("Alembic auto-migration failed (DB may not be ready yet): %s", _mig_exc)
 
@@ -85,9 +95,12 @@ async def lifespan(app: FastAPI):
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
         conn.commit()
 
-    # Align DB with ORM (ADD COLUMN IF NOT EXISTS) so deploys don't 500 before manual migrations.
+    # Align DB with ORM (ADD COLUMN IF NOT EXISTS). Required when Alembic is not in the image (HF Spaces).
     try:
         apply_workflow_schema_ddl(engine)
+        from app.core.workflow_schema_extensions import ensure_hotspot_cluster_columns
+
+        ensure_hotspot_cluster_columns(engine)
     except Exception as exc:
         _log.warning("Workflow schema DDL ensure failed (check DB permissions): %s", exc)
 

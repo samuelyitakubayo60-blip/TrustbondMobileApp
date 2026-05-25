@@ -7,6 +7,7 @@ const AddUserModal = ({ isOpen, onClose, onSaved }) => {
     last_name: "",
     email: "",
     phone_number: "",
+    rank: "",
     role: "officer",
     station_id: "",
     is_active: true,
@@ -50,6 +51,11 @@ const AddUserModal = ({ isOpen, onClose, onSaved }) => {
       return;
     }
 
+    if (!form.rank.trim()) {
+      setError('Rank is required for every police user.');
+      return;
+    }
+
     if (form.role === 'officer' && !form.station_id) {
       setError('Officers must be assigned to a police station.');
       return;
@@ -61,6 +67,7 @@ const AddUserModal = ({ isOpen, onClose, onSaved }) => {
       last_name: form.last_name.trim(),
       email,
       phone_number: form.phone_number.trim() || null,
+      rank: form.rank.trim(),
       role: form.role,
       station_id: form.station_id ? Number(form.station_id) : null,
       assigned_location_id: null,
@@ -135,14 +142,26 @@ const AddUserModal = ({ isOpen, onClose, onSaved }) => {
               onChange={handleChange("email")}
             />
           </div>
-          <div className="input-group">
-            <div className="input-label">Phone</div>
-            <input
-              className="input"
-              placeholder="+250 781 234 567"
-              value={form.phone_number}
-              onChange={handleChange("phone_number")}
-            />
+          <div className="form-grid">
+            <div className="input-group">
+              <div className="input-label">Phone</div>
+              <input
+                className="input"
+                placeholder="+250 781 234 567"
+                value={form.phone_number}
+                onChange={handleChange("phone_number")}
+              />
+            </div>
+            <div className="input-group">
+              <div className="input-label">Rank *</div>
+              <input
+                className="input"
+                placeholder="e.g. Inspector, Sergeant"
+                maxLength={80}
+                value={form.rank}
+                onChange={handleChange("rank")}
+              />
+            </div>
           </div>
         </div>
 

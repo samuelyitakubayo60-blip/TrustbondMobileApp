@@ -15,6 +15,7 @@ class PoliceUser(Base):
     phone_number = Column(String(20))
     password_hash = Column(String(255), nullable=False)
     badge_number = Column(String(50))
+    rank = Column(String(80), nullable=False, server_default="Police Constable")
     role = Column(String(20), nullable=False)  # admin, supervisor, officer
     assigned_location_id = Column(Integer, ForeignKey("locations.location_id"))
     station_id = Column(Integer, ForeignKey("stations.station_id"), nullable=True)

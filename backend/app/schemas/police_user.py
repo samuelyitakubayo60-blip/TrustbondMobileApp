@@ -12,6 +12,7 @@ class PoliceUserBase(BaseModel):
     email: EmailStr
     phone_number: Optional[str] = None
     badge_number: Optional[str] = None
+    rank: str = Field(..., min_length=1, max_length=80)
     role: str = Field(..., pattern="^(admin|supervisor|officer)$")
     assigned_location_id: Optional[int] = None
     station_id: Optional[int] = None
@@ -25,6 +26,7 @@ class PoliceUserCreate(BaseModel):
     last_name: str
     email: EmailStr
     phone_number: Optional[str] = None
+    rank: str = Field(..., min_length=1, max_length=80)
     role: str = Field(..., pattern="^(admin|supervisor|officer)$")
     assigned_location_id: Optional[int] = None
     station_id: Optional[int] = None
@@ -37,6 +39,7 @@ class PoliceUserUpdate(BaseModel):
     last_name: Optional[str] = None
     phone_number: Optional[str] = None
     badge_number: Optional[str] = None
+    rank: Optional[str] = Field(default=None, min_length=1, max_length=80)
     role: Optional[str] = Field(default=None, pattern="^(admin|supervisor|officer)$")
     assigned_location_id: Optional[int] = None
     station_id: Optional[int] = None
@@ -52,6 +55,7 @@ class PoliceUserResponse(BaseModel):
     email: EmailStr
     phone_number: Optional[str]
     badge_number: Optional[str]
+    rank: str
     role: str
     assigned_location_id: Optional[int]
     station_id: Optional[int]

@@ -393,7 +393,10 @@ const Sidebar = ({
             <div className="user-name">
               {user ? `${user.first_name} ${user.last_name}` : "User"}
             </div>
-            <div className="user-role">{staffRoleLabel(role)}</div>
+            <div className="user-role">
+              {user?.rank ? `${user.rank} · ` : ""}
+              {staffRoleLabel(role)}
+            </div>
           </div>
         </div>
         <button type="button" className="sidebar-signout" onClick={onLogout}>

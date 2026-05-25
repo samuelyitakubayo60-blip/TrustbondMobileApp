@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { canCreateUsers, canDeleteUsers } from '../../utils/roleMapping';
-
 const EditUserModal = ({ isOpen, onClose, user, onSaved }) => {
   const { user: me } = useAuth();
   const role = me?.role || 'officer';
@@ -15,6 +14,7 @@ const EditUserModal = ({ isOpen, onClose, user, onSaved }) => {
       last_name: '',
       phone_number: '',
       badge_number: '',
+      rank: '',
       role: 'officer',
       station_id: '',
       is_active: true,
@@ -46,6 +46,7 @@ const EditUserModal = ({ isOpen, onClose, user, onSaved }) => {
       last_name: user.last_name || '',
       phone_number: user.phone_number || '',
       badge_number: user.badge_number || '',
+      rank: user.rank || '',
       role: user.role || 'officer',
       station_id: user.station_id || '',
       is_active: user.is_active ?? true,
@@ -78,10 +79,16 @@ const EditUserModal = ({ isOpen, onClose, user, onSaved }) => {
   const submit = async () => {
     setError('');
 
+    if (!form.rank.trim()) {
+      setError('Rank is required for every police user.');
+      return;
+    }
+
     const base = {
       first_name: form.first_name.trim() || undefined,
       last_name: form.last_name.trim() || undefined,
       phone_number: form.phone_number.trim() || undefined,
+      rank: form.rank.trim(),
       is_active: !!form.is_active,
     };
 
@@ -216,6 +223,16 @@ const EditUserModal = ({ isOpen, onClose, user, onSaved }) => {
         </div>
         
         <div className="form-grid" style={{ marginBottom: '12px' }}>
+          <div className="input-group">
+            <div className="input-label">Rank *</div>
+            <input
+              className="input"
+              placeholder="e.g. Inspector, Sergeant"
+              maxLength={80}
+              value={form.rank}
+              onChange={handleChange('rank')}
+            />
+          </div>
           <div className="input-group">
             <div className="input-label">Badge</div>
             <input

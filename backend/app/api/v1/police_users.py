@@ -292,6 +292,7 @@ def create_police_user(
         phone_number=payload.phone_number,
         password_hash=get_password_hash(raw_password),
         badge_number=badge_number,
+        rank=payload.rank.strip(),
         role=payload.role,
         assigned_location_id=resolved_location_id,
         station_id=resolved_station_id,
@@ -316,6 +317,7 @@ def create_police_user(
             temporary_password=raw_password,
             role=payload.role,
             badge_number=user.badge_number,
+            rank=user.rank,
         )
         if not sent:
             db.rollback()
@@ -376,6 +378,8 @@ def update_police_user(
             user.last_name = payload.last_name
         if payload.phone_number is not None:
             user.phone_number = payload.phone_number
+        if payload.rank is not None:
+            user.rank = payload.rank.strip()
         if payload.is_active is not None:
             user.is_active = payload.is_active
 
@@ -407,6 +411,8 @@ def update_police_user(
         user.phone_number = payload.phone_number
     if payload.badge_number is not None:
         user.badge_number = payload.badge_number
+    if payload.rank is not None:
+        user.rank = payload.rank.strip()
     if payload.role is not None:
         user.role = payload.role
     if payload.assigned_location_id is not None:
@@ -554,6 +560,7 @@ def admin_reset_password(
         temporary_password=raw_password,
         role=user.role,
         badge_number=user.badge_number or "",
+        rank=user.rank,
     )
     if not sent:
         db.rollback()

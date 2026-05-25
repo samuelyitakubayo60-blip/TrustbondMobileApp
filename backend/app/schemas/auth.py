@@ -25,6 +25,7 @@ class MeResponse(BaseModel):
     first_name: str
     last_name: str
     email: EmailStr
+    rank: str
     role: str
     is_active: bool
     last_login_at: Optional[datetime]
