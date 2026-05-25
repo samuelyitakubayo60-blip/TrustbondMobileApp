@@ -2,11 +2,24 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client';
 import { formatLocalDate, formatLocalDateTime, parseApiDate } from '../../utils/dateTime';
 import {
-  formatTechnicalStatus,
   formatCommunityConfirmation,
   communityBadgeClass,
 } from '../../utils/reportOperationalLabels';
 import { caseDisplayName, caseDisplayRef } from '../../utils/caseDisplay';
+
+// AI-only status — excludes police/officer verification
+const formatAIStatus = (report) => {
+  const rs = (report?.rule_status || '').trim().toLowerCase();
+  const vs = (report?.verification_status || '').trim().toLowerCase();
+  const parts = [];
+  if      (rs === 'passed')   parts.push('AI: passed');
+  else if (rs === 'flagged')  parts.push('AI: needs review');
+  else if (rs === 'rejected') parts.push('AI: rejected');
+  else if (rs === 'pending')  parts.push('AI: pending');
+  if      (vs === 'verified') parts.push('Auto-verified');
+  else if (vs === 'rejected') parts.push('Rejected');
+  return parts.join(' · ') || '—';
+};
 
 const PRIORITY_BADGE = { urgent: 'b-red', high: 'b-orange', medium: 'b-yellow', low: 'b-blue' };
 const STATUS_BADGE   = { open: 'b-green', closed: 'b-gray', archived: 'b-gray' };
@@ -273,14 +286,14 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
               </div>
             )}
             {!loading && !error && (
-              <div className="tbl-wrap" style={{ maxHeight: 280 }}>
+              <div className="tbl-wrap">
                 <table>
                   <thead>
                     <tr>
                       <th>Report</th>
                       <th>Type</th>
                       <th>Village</th>
-                      <th>AI + Police</th>
+                      <th>AI Verification</th>
                       <th>Community</th>
                       <th>Date</th>
                       <th></th>
@@ -295,7 +308,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                         <td style={{ fontSize: 12 }}>{r.incident_type_name || '—'}</td>
                         <td style={{ fontSize: 12 }}>{r.village_name || '—'}</td>
                         <td style={{ fontSize: 11, maxWidth: 180 }}>
-                          <span title={formatTechnicalStatus(r)}>{formatTechnicalStatus(r)}</span>
+                          <span title={formatAIStatus(r)}>{formatAIStatus(r)}</span>
                         </td>
                         <td style={{ fontSize: 11 }}>
                           <span className={`badge ${communityBadgeClass(r)}`} style={{ fontSize: 10 }}>

@@ -208,7 +208,7 @@ const Stations = ({ openModal, wsRefreshKey }) => {
                     </span>
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                       <button
                         className="btn btn-primary btn-sm"
                         onClick={() => openModal('viewStation', s)}
@@ -220,7 +220,7 @@ const Stations = ({ openModal, wsRefreshKey }) => {
                           <button className="btn btn-outline btn-sm" onClick={() => openModal('editStation', s)}>
                             Edit
                           </button>
-                          <button className="btn btn-outline btn-sm" onClick={() => handleToggleActive(s)}>
+                          <button className="btn btn-warn btn-sm" onClick={() => handleToggleActive(s)}>
                             {s.is_active ? 'Deactivate' : 'Activate'}
                           </button>
                           <button className="btn btn-danger btn-sm" onClick={() => handleDelete(s)}>

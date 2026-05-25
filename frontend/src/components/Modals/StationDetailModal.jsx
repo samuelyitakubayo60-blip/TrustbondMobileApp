@@ -16,10 +16,12 @@ const TYPE_LABEL = {
 };
 
 const StationDetailModal = ({ isOpen, onClose, station }) => {
-  const [officers, setOfficers] = useState([]);
-  const [stats, setStats]       = useState(null);
-  const [loading, setLoading]   = useState(false);
-  const [tab, setTab]           = useState('info');
+  const [officers, setOfficers]       = useState([]);
+  const [stats, setStats]             = useState(null);
+  const [caseGroups, setCaseGroups]   = useState(null); // from /stations/{id}/cases
+  const [recentCounts, setRecentCounts] = useState({}); // incident_type_name -> last-30-day count
+  const [loading, setLoading]         = useState(false);
+  const [tab, setTab]                 = useState('info');
 
   useEffect(() => {
     if (!isOpen || !station) return;
@@ -27,20 +29,46 @@ const StationDetailModal = ({ isOpen, onClose, station }) => {
     setLoading(true);
     const fetchData = async () => {
       try {
+        // Officers
         const officersRes = await api.get(`/api/v1/police-users/?station_id=${station.station_id}`);
         setOfficers(Array.isArray(officersRes) ? officersRes : (officersRes?.items || []));
 
-        let statsRes;
+        // Station summary stats (optional, may 404)
         try {
-          statsRes = await api.get(`/api/v1/stats/station/${station.station_id}`);
-        } catch (err) {
-          if (err.response?.status === 404 || err.status === 404) {
-            statsRes = await api.get('/api/v1/stats/dashboard');
-          } else {
-            throw err;
-          }
-        }
-        setStats(statsRes);
+          const statsRes = await api.get(`/api/v1/stats/station/${station.station_id}`);
+          setStats(statsRes);
+        } catch { setStats(null); }
+
+        // Incident breakdown from station cases
+        try {
+          const casesRes = await api.get(`/api/v1/stations/${station.station_id}/cases`);
+          setCaseGroups(casesRes);
+
+          // Trend: fetch recent 30-day reports to compare recent vs total counts
+          const now = new Date();
+          const from30 = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+          const from60 = new Date(now - 60 * 24 * 60 * 60 * 1000).toISOString();
+          const to30   = now.toISOString();
+
+          const [recentRes, prevRes] = await Promise.allSettled([
+            api.get(`/api/v1/reports/?limit=500&from_date=${from30}&to_date=${to30}`),
+            api.get(`/api/v1/reports/?limit=500&from_date=${from60}&to_date=${from30}`),
+          ]);
+
+          const toCounts = (res) => {
+            const items = res.status === 'fulfilled'
+              ? (Array.isArray(res.value) ? res.value : res.value?.items || [])
+              : [];
+            const map = {};
+            items.forEach((r) => {
+              const k = r.incident_type_name || 'Unknown';
+              map[k] = (map[k] || 0) + 1;
+            });
+            return map;
+          };
+          setRecentCounts({ recent: toCounts(recentRes), prev: toCounts(prevRes) });
+        } catch { setCaseGroups(null); }
+
       } catch (err) {
         console.error('Failed to fetch station details:', err);
       } finally {
@@ -212,55 +240,104 @@ const StationDetailModal = ({ isOpen, onClose, station }) => {
             )}
 
             {/* STATS tab */}
-            {tab === 'stats' && (
-              <div style={{ display: 'grid', gap: 20 }}>
-                {!stats ? (
-                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)', fontSize: 13 }}>
-                    Statistics not available.
-                  </div>
-                ) : (
-                  <>
-                    {/* Overview row */}
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Overview</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }}>
-                        {[
-                          { label: 'Total Reports',  value: stats.total_reports  || 0, color: 'var(--primary)'  },
-                          { label: 'Verified',        value: stats.verified_reports || 0, color: 'var(--success)'  },
-                          { label: 'Pending',         value: stats.pending_reports  || 0, color: 'var(--warning)'  },
-                          { label: 'Rejected',        value: stats.rejected_reports || 0, color: 'var(--danger)'   },
-                          { label: 'Active Cases',    value: stats.active_cases     || 0, color: 'var(--info)'     },
-                        ].map((s) => (
-                          <div key={s.label} style={{ textAlign: 'center', padding: '12px 8px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)' }}>
-                            <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
-                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{s.label}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+            {tab === 'stats' && (() => {
+              const groups = caseGroups?.groups || [];
+              const totalIncidents = caseGroups?.total_incident_count ?? 0;
+              const totalCases     = caseGroups?.active_case_count ?? 0;
 
-                    {/* Verification details */}
+              // Build enriched rows sorted by incident count desc
+              const rows = [...groups].sort((a, b) => (b.incident_count || 0) - (a.incident_count || 0));
+              const maxCount = rows[0]?.incident_count || 1;
+
+              // Trend helpers using last-30 vs prev-30 report counts
+              const recent = recentCounts.recent || {};
+              const prev   = recentCounts.prev   || {};
+              const getTrend = (name) => {
+                const r = recent[name] || 0;
+                const p = prev[name]   || 0;
+                if (p === 0 && r === 0) return 'stable';
+                if (p === 0) return 'rising';
+                const pct = ((r - p) / p) * 100;
+                if (pct > 20) return 'rising';
+                if (pct < -20) return 'falling';
+                return 'stable';
+              };
+
+              const TREND_ICON  = { rising: '▲', falling: '▼', stable: '●' };
+              const TREND_COLOR = { rising: '#EF4444', falling: '#10B981', stable: '#94A3B8' };
+              const TREND_LABEL = { rising: 'Increasing', falling: 'Decreasing', stable: 'Stable' };
+
+              return (
+                <div style={{ display: 'grid', gap: 20 }}>
+                  {/* Summary tiles */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
+                    {[
+                      { label: 'Active Cases',    value: totalCases,    color: 'var(--primary)' },
+                      { label: 'Total Incidents', value: totalIncidents, color: '#F97316'        },
+                      { label: 'Incident Types',  value: groups.length,  color: '#3B82F6'        },
+                    ].map((t) => (
+                      <div key={t.label} style={{ textAlign: 'center', padding: '12px 8px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)' }}>
+                        <div style={{ fontSize: 26, fontWeight: 700, color: t.color }}>{t.value}</div>
+                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{t.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Per-incident-type breakdown */}
+                  {rows.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)', fontSize: 13 }}>
+                      No incident data available for this station.
+                    </div>
+                  ) : (
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Verification Breakdown</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }}>
-                        {[
-                          { label: 'Flagged',           value: stats.flagged_reports           || 0, color: '#F97316' },
-                          { label: 'Auto-Confirmed',    value: stats.auto_confirmed_reports    || 0, color: '#10B981' },
-                          { label: 'Officer Confirmed', value: stats.officer_confirmed_reports || 0, color: '#3B82F6' },
-                          { label: 'Auto Rejected',     value: stats.auto_rejected_reports     || 0, color: '#EF4444' },
-                          { label: 'Manually Rejected', value: stats.manually_rejected_reports || 0, color: '#8B5CF6' },
-                        ].map((s) => (
-                          <div key={s.label} style={{ textAlign: 'center', padding: '12px 8px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)' }}>
-                            <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
-                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{s.label}</div>
-                          </div>
-                        ))}
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                        Incidents by Type
+                      </div>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {rows.map((g, idx) => {
+                          const trend = getTrend(g.incident_type_name);
+                          const barPct = Math.round((g.incident_count / maxCount) * 100);
+                          const isTop = idx === 0;
+                          return (
+                            <div key={g.incident_type_id ?? g.incident_type_name}
+                              style={{ padding: '12px 14px', border: `1px solid ${isTop ? '#FCA5A5' : 'var(--border)'}`, borderRadius: 6, background: isTop ? 'rgba(239,68,68,0.04)' : 'var(--bg)' }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  {isTop && <span className="badge b-red" style={{ fontSize: 9 }}>Highest</span>}
+                                  <span style={{ fontWeight: 600, fontSize: 13 }}>{g.incident_type_name}</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
+                                  <span style={{ color: 'var(--muted)' }}>
+                                    {g.case_count} case{g.case_count !== 1 ? 's' : ''}
+                                  </span>
+                                  <span style={{ fontWeight: 700, fontSize: 15 }}>{g.incident_count} incidents</span>
+                                  <span style={{ color: TREND_COLOR[trend], fontSize: 11, fontWeight: 600 }}>
+                                    {TREND_ICON[trend]} {TREND_LABEL[trend]}
+                                  </span>
+                                </div>
+                              </div>
+                              {/* Proportional bar */}
+                              <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                                <div style={{
+                                  height: '100%', borderRadius: 3, width: `${barPct}%`,
+                                  background: trend === 'rising' ? '#EF4444' : trend === 'falling' ? '#10B981' : '#3B82F6',
+                                  transition: 'width 0.4s ease',
+                                }} />
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 10, color: 'var(--muted)' }}>
+                                <span>Last 30 days: {recent[g.incident_type_name] || 0} new</span>
+                                <span>Prev 30 days: {prev[g.incident_type_name] || 0}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                  </>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
