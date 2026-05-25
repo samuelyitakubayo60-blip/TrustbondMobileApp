@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Numeric, SmallInteger, String, DateTime, ForeignKey, Table
+from sqlalchemy import Boolean, Column, Integer, Numeric, SmallInteger, String, DateTime, ForeignKey, Table, Text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
@@ -9,6 +9,7 @@ hotspot_reports_table = Table(
     Base.metadata,
     Column("hotspot_id", Integer, ForeignKey("hotspots.hotspot_id"), primary_key=True),
     Column("report_id", UUID(as_uuid=True), ForeignKey("reports.report_id"), primary_key=True),
+    Column("is_core", Boolean, nullable=False, server_default="false"),
 )
 
 
@@ -28,6 +29,16 @@ class Hotspot(Base):
     controlled_by_user_id = Column(Integer, ForeignKey("police_users.police_user_id"), nullable=True)
     deployed_at = Column(DateTime(timezone=True), nullable=True)
     deployment_note = Column(String(500), nullable=True)
+
+    # Clustering enhancement columns
+    lifecycle_state = Column(String(30), nullable=True)          # emerging/active/escalating/stable/declining
+    composition = Column(Text, nullable=True)                     # JSON: {"Theft": 3, "Assault": 1}
+    temporal_intensity = Column(Numeric(10, 4), nullable=True)   # incidents per hour within cluster time span
+    severity_score = Column(Numeric(6, 4), nullable=True)        # weighted average severity 1–10
+    trend_direction = Column(String(20), nullable=True)           # rising/stable/falling
+    cluster_confidence = Column(Numeric(5, 4), nullable=True)    # 0.0–1.0
+    polygon_points = Column(Text, nullable=True)                  # JSON [[lat,lon], ...] convex hull
+    crime_group = Column(String(30), nullable=True)               # violent/property/drug/fraud/other
 
     controlled_by = relationship("PoliceUser", foreign_keys=[controlled_by_user_id])
     reports = relationship(

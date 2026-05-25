@@ -44,6 +44,12 @@ class HotspotResponse(BaseModel):
     deployment_note: Optional[str] = None
     controlled_by_user_id: Optional[int] = None
     controlled_by_name: Optional[str] = None
+    composition: Optional[Dict[str, int]] = None
+    temporal_intensity: Optional[float] = None
+    severity_score: Optional[float] = None
+    trend_direction: Optional[str] = None
+    cluster_confidence: Optional[float] = None
+    crime_group: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -64,6 +64,22 @@ async def lifespan(app: FastAPI):
 
     _log = logging.getLogger(__name__)
 
+    # ── Run Alembic migrations automatically on every startup ────────────────
+    try:
+        import pathlib
+        from alembic.config import Config as AlembicConfig
+        from alembic import command as alembic_command
+
+        _ini = pathlib.Path(__file__).parent.parent.parent / "alembic.ini"
+        if _ini.exists():
+            _alembic_cfg = AlembicConfig(str(_ini))
+            alembic_command.upgrade(_alembic_cfg, "head")
+            _log.info("Alembic migrations applied (upgrade head).")
+        else:
+            _log.warning("alembic.ini not found at %s — skipping auto-migration.", _ini)
+    except Exception as _mig_exc:
+        _log.warning("Alembic auto-migration failed (DB may not be ready yet): %s", _mig_exc)
+
     # Create PostGIS extension first (required for geometry type)
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))

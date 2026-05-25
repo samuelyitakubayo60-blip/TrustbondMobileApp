@@ -481,6 +481,7 @@ def _build_prompt(
     concentrate_window: Optional[str],
     citizen_advisory: str,
     registry: Dict[str, Dict[str, str]],
+    cluster_evolution: Optional[Dict[str, Any]] = None,
 ) -> str:
     area = area_label or "the area"
     mix_lines = ""
@@ -499,10 +500,42 @@ def _build_prompt(
         else "Distribute patrol evenly across the operation period."
     )
 
-    return f"""You are a police intelligence analyst for Rwanda National Police (Musanze District).
-Write a UNIQUE briefing for this specific hotspot — do not reuse generic wording from other clusters.
+    # Build cluster evolution section
+    evo = cluster_evolution or {}
+    lifecycle   = evo.get("lifecycle_state") or "unknown"
+    trend       = evo.get("trend_direction") or "stable"
+    crime_grp   = evo.get("crime_group") or "general"
+    confidence  = evo.get("cluster_confidence")
+    severity    = evo.get("severity_score")
+    t_intensity = evo.get("temporal_intensity")
+    nearby      = evo.get("nearby_clusters", 0)
+    composition = evo.get("composition") or {}
 
-Hotspot data:
+    conf_pct    = f"{round(float(confidence) * 100)}%" if confidence is not None else "unknown"
+    sev_str     = f"{round(float(severity), 1)}/10" if severity is not None else "unknown"
+    intensity_str = f"{round(float(t_intensity), 2)} incidents/hr" if t_intensity is not None else "unknown"
+
+    trend_note = {
+        "rising":  "⚠ Incident rate is RISING — escalation likely if unaddressed.",
+        "falling": "✓ Incident rate is declining — current measures may be working.",
+        "stable":  "→ Incident rate is stable — sustained presence needed.",
+    }.get(trend, "→ Trend unknown.")
+
+    nearby_note = (
+        f"{nearby} other active cluster(s) within ~2 km — coordinated area response may be needed."
+        if nearby > 0
+        else "No other active clusters nearby — localized response is sufficient."
+    )
+
+    comp_lines = ""
+    if composition:
+        comp_sorted = sorted(composition.items(), key=lambda x: x[1], reverse=True)
+        comp_lines = ", ".join(f"{k}({v})" for k, v in comp_sorted)
+
+    return f"""You are a police intelligence analyst for Rwanda National Police (Musanze District).
+Write a UNIQUE operational briefing for this specific cluster — do not reuse generic wording.
+
+── HOTSPOT DATA ──────────────────────────────────────────────────
 - Classification       : {classification}
 - Cluster type         : {cluster_kind}
 - Location             : {area}
@@ -511,28 +544,41 @@ Hotspot data:
 - Incident mix         :
 {mix_lines if mix_lines else "  - " + (dominant_crime or "unknown")}
 - Peak activity        : {peak_time or "unknown"}
+
+── CLUSTER EVOLUTION ─────────────────────────────────────────────
+- Lifecycle state      : {lifecycle}   (emerging → active → escalating → stable → declining)
+- Trend direction      : {trend}   {trend_note}
+- Crime group          : {crime_grp}
+- Severity score       : {sev_str}
+- Temporal intensity   : {intensity_str}
+- Cluster confidence   : {conf_pct}
+- Full composition     : {comp_lines or dominant_crime or "unknown"}
+- Area pressure        : {nearby_note}
+
+── RESPONSE PLAN ─────────────────────────────────────────────────
 - Deploy units         : {units_line}
 - Primary tactic       : {tactic}
 - Operation duration   : {operation_hours} hours
 - Concentration window : {conc_note}
 - Citizen message hint : {citizen_advisory}
 
-Allowed deployment units (pick from this list only; do NOT use RIB/CID/LIB investigation units):
+Allowed deployment units (pick from this list only; do NOT use RIB/CID/LIB):
   {allowed_units}
 
 Return JSON only:
 {{
-  "recommendation": "<20-40 words: name primary unit, tactic, duration, concentration window, specific to THIS crime mix>",
-  "narrative": "<50-80 words: situation in {area}, counts, peak time, risk, why these units>",
+  "recommendation": "<20-40 words: name primary unit, tactic, duration, concentration window — reference the trend and lifecycle state>",
+  "narrative": "<60-90 words: describe the cluster evolution in {area}, reference the trend direction, severity, nearby clusters if any, and why the chosen units fit this specific crime mix>",
   "status": "<escalation_likely | monitor_growth | emerging_trend | security_alert>",
-  "citizen_advisory": "<2-3 sentences plain Kinyaranda-friendly English for citizens; calm, no police codes>"
+  "citizen_advisory": "<2-3 sentences plain English for citizens; reference the area and crime type; calm tone, no codes>"
 }}
 
 Rules:
-- recommendation MUST name "{primary}" (and "{support}" if support) — not "multi-unit" without names.
-- Vary wording using the incident mix ({_mix_summary(incident_mix, dominant_crime)}).
-- citizen_advisory: community-facing only; do not mention unit codes or classified tactics.
-- Use real numbers and place names only. No markdown.
+- recommendation MUST name "{primary}" (and "{support}" if support).
+- If trend is "rising" or lifecycle is "escalating", reflect urgency in the recommendation.
+- If nearby_clusters > 1, suggest coordinated multi-location response.
+- citizen_advisory: community-facing only; no unit codes or classified tactics.
+- Use real numbers and place names. No markdown.
 """
 
 
@@ -898,6 +944,7 @@ def generate_recommendation(
     verified_report_count: int = 0,
     deployment_units: Optional[Dict[str, Dict[str, str]]] = None,
     cluster_case_context: Optional[Dict[str, Any]] = None,
+    cluster_evolution: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Hotspot briefing: rule-picked units + Groq/Gemini JSON text when API keys are set.
@@ -955,6 +1002,7 @@ def generate_recommendation(
         concentrate_window=concentrate_window,
         citizen_advisory=citizen_advisory_hint,
         registry=registry,
+        cluster_evolution=cluster_evolution,
     )
 
     result = _call_hotspot_llm(prompt)

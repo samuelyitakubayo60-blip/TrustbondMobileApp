@@ -1,3 +1,4 @@
+import json
 from typing import Annotated, List, Optional, Dict, Any
 import logging
 
@@ -370,6 +371,17 @@ def list_hotspots(
         if not reports_in_cluster:
             continue
 
+        # Load is_core flag per report from the junction table
+        core_report_ids: set = set()
+        try:
+            rows = db.execute(
+                text("SELECT report_id FROM hotspot_reports WHERE hotspot_id = :hid AND is_core = true"),
+                {"hid": h.hotspot_id},
+            ).fetchall()
+            core_report_ids = {str(row[0]) for row in rows}
+        except Exception:
+            pass
+
         incident_count = len(reports_in_cluster)
 
         # Collect per-report trust scores from ML predictions first;
@@ -452,6 +464,7 @@ def list_hotspots(
             incident_points.append(
                 {
                     "report_id": str(r.report_id),
+                    "is_core": str(r.report_id) in core_report_ids,
                     "incident_type_name": incident_name,
                     "description": r.description,
                     "latitude": float(r.latitude),
@@ -481,7 +494,15 @@ def list_hotspots(
             if ml_scores
             else round(avg_pre_trust, 2)
         )
-        boundary_points = _expand_hull(_convex_hull(cluster_points)) if cluster_points else []
+        # Prefer stored polygon (pre-computed, avoids per-request hull computation)
+        stored_poly = getattr(h, "polygon_points", None)
+        if stored_poly:
+            try:
+                boundary_points = json.loads(stored_poly)
+            except Exception:
+                boundary_points = _expand_hull(_convex_hull(cluster_points)) if cluster_points else []
+        else:
+            boundary_points = _expand_hull(_convex_hull(cluster_points)) if cluster_points else []
 
         dominant_crime = h.incident_type.type_name if h.incident_type else None
         area_label = None
@@ -520,6 +541,32 @@ def list_hotspots(
         report_ids = [r.report_id for r in reports_in_cluster]
         cluster_case_context = gather_cluster_case_context(db, report_ids)
 
+        # Build cluster evolution context for cluster-aware recommendations
+        cluster_evolution = {
+            "lifecycle_state": getattr(h, "lifecycle_state", None),
+            "trend_direction": getattr(h, "trend_direction", None),
+            "crime_group": getattr(h, "crime_group", None),
+            "cluster_confidence": float(h.cluster_confidence) if getattr(h, "cluster_confidence", None) else None,
+            "severity_score": float(h.severity_score) if getattr(h, "severity_score", None) else None,
+            "temporal_intensity": float(h.temporal_intensity) if getattr(h, "temporal_intensity", None) else None,
+            "composition": json.loads(h.composition) if getattr(h, "composition", None) else None,
+        }
+        # Count nearby clusters (within ~2km) to gauge area-wide security pressure
+        try:
+            nearby_clusters = db.query(Hotspot).filter(
+                Hotspot.hotspot_id != h.hotspot_id,
+                Hotspot.center_lat.between(
+                    float(h.center_lat) - 0.018, float(h.center_lat) + 0.018
+                ),
+                Hotspot.center_long.between(
+                    float(h.center_long) - 0.018, float(h.center_long) + 0.018
+                ),
+                Hotspot.incident_count >= 2,
+            ).count()
+        except Exception:
+            nearby_clusters = 0
+        cluster_evolution["nearby_clusters"] = nearby_clusters
+
         llm = generate_recommendation(
             classification=classification,
             incident_count=incident_count,
@@ -532,6 +579,7 @@ def list_hotspots(
             recommended_unit=incident_unit_hint,
             deployment_units=deployment_units,
             cluster_case_context=cluster_case_context,
+            cluster_evolution=cluster_evolution,
         )
 
         prediction = _prediction_for_hotspot(
@@ -590,6 +638,12 @@ def list_hotspots(
             prediction=prediction,
             boundary_points=boundary_points,
             incident_points=incident_points,
+            composition=json.loads(h.composition) if getattr(h, "composition", None) else None,
+            temporal_intensity=float(h.temporal_intensity) if getattr(h, "temporal_intensity", None) else None,
+            severity_score=float(h.severity_score) if getattr(h, "severity_score", None) else None,
+            trend_direction=getattr(h, "trend_direction", None),
+            cluster_confidence=float(h.cluster_confidence) if getattr(h, "cluster_confidence", None) else None,
+            crime_group=getattr(h, "crime_group", None),
         ))
         
     return responses

@@ -27,34 +27,40 @@ const HOTSPOT_PERIOD_OPTIONS = [
   { label: "1 year", hours: 8760 },
 ];
 
-const DEFAULT_TIME_PERIOD = "week";
+const DEFAULT_TIME_PERIOD = "month"; // matches DEFAULT_TIME_WINDOW_HOURS=720
 
 /** Derive sidebar stats from persisted hotspot rows (same source as map polygons). */
+/** Compute effective risk count applying the time-decay multiplier. */
+const effectiveRiskCount = (h) => {
+  const count = Number(h.incident_count || 1);
+  const detectedAt = h.detected_at ? new Date(h.detected_at) : new Date();
+  const ageDays = (Date.now() - detectedAt.getTime()) / (1000 * 60 * 60 * 24);
+  if (ageDays > 30) {
+    return count * ((ageDays / 30) * 1.5);
+  }
+  return count;
+};
+
 const buildStatsFromHotspots = (hotspots) => {
   const list = Array.isArray(hotspots) ? hotspots : [];
-  let reportsIn = 0;
-  let crit = 0;
-  let warn = 0;
-  let normal = 0;
-  let emerging = 0;
-  let active = 0;
-  let intense = 0;
+  let reportsIn = 0;     // total incidents on map
+  let clusters = 0;      // hotspots with 2+ incidents (actual clusters)
+  let high = 0;          // effective count >= 5  → red
+  let medium = 0;        // effective count 2–4  → yellow
+  let low = 0;           // single incidents      → green
   const trusts = [];
   let latestMs = 0;
 
   for (const h of list) {
     const count = Number(h.incident_count) || 0;
-    // DBSCAN clusters never overlap — each incident belongs to exactly one cluster.
-    // Sum is accurate; if it exceeds system total, hotspots are stale (run DBSCAN to refresh).
     reportsIn += count;
-    const risk = String(h.risk_level || "").toLowerCase();
-    if (risk === "critical" || risk === "high") crit += 1;
-    else if (risk === "medium" || risk === "active") warn += 1;
-    else normal += 1;
 
-    if (risk === "critical" || count >= 8) intense += 1;
-    else if (risk === "high" || count >= 4) active += 1;
-    else emerging += 1;
+    const eff = effectiveRiskCount(h);
+    if (eff >= 5)       high++;
+    else if (eff >= 2)  medium++;
+    else                low++;
+
+    if (count >= 2) clusters++;
 
     if (h.avg_trust_score != null && Number.isFinite(Number(h.avg_trust_score))) {
       trusts.push(Number(h.avg_trust_score));
@@ -66,10 +72,11 @@ const buildStatsFromHotspots = (hotspots) => {
   }
 
   return {
-    total_clusters: list.length,
+    total_clusters: clusters,
+    total_incidents: reportsIn,
     reports_in_clusters: reportsIn,
-    risk_counts: { critical: crit, warning: warn, normal: normal },
-    stage_counts: { emerging, active, intense },
+    risk_counts: { critical: high, warning: medium, normal: low },
+    stage_counts: { emerging: low, active: medium, intense: high },
     avg_cluster_trust:
       trusts.length > 0
         ? Math.round(trusts.reduce((a, b) => a + b, 0) / trusts.length)
@@ -276,7 +283,7 @@ const ZoomTracker = ({ onZoom }) => {
 const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState("all"); // 'all' | incident_type_name
-  const [timePeriod, setTimePeriod] = useState(DEFAULT_TIME_PERIOD); // '', 'day', 'week', 'month', 'quarter', 'year'
+  const [timePeriod, setTimePeriod] = useState(DEFAULT_TIME_PERIOD); // '', 'day', 'week', 'month', 'quarter', 'year' — default 30 days
   const [customHours, setCustomHours] = useState(""); // Custom hours input
   const [historicalHotspots, setHistoricalHotspots] = useState([]);
   const [hotspotStats, setHotspotStats] = useState({
@@ -294,9 +301,9 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   const [recomputing, setRecomputing] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   const [dbscanParams, setDbscanParams] = useState({
-    radius_meters: 500,
-    min_incidents: 1,
-    time_window_hours: 24,
+    radius_meters: 300,
+    min_incidents: 3,
+    time_window_hours: 720,
     trust_min: 50,
   });
   const [mapZoom, setMapZoom] = useState(MUSANZE_ZOOM);
@@ -577,6 +584,21 @@ const avgClusterTrust = useMemo(() => {
 
   const getCircleColor = (risk) => getRiskZoneColor(risk);
 
+  /** Cluster dot color by incident count × time-decay multiplier */
+  const getHotspotDotColor = (hotspot) => {
+    const count = Number(hotspot.incident_count || 1);
+    const detectedAt = hotspot.detected_at ? new Date(hotspot.detected_at) : new Date();
+    const ageDays = (Date.now() - detectedAt.getTime()) / (1000 * 60 * 60 * 24);
+    let effectiveCount = count;
+    if (ageDays > 30) {
+      const months = ageDays / 30;
+      effectiveCount = count * (months * 1.5);
+    }
+    if (effectiveCount >= 5) return "#ef4444";   // red
+    if (effectiveCount >= 2) return "#eab308";   // yellow
+    return "#22c55e";                             // green (single incident)
+  };
+
   const getReportRiskBorder = (fillColor) => {
     const borders = {
       "#ef4444": "#991b1b",
@@ -781,10 +803,10 @@ const avgClusterTrust = useMemo(() => {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
           {[
-            { label: 'Total Clusters',    value: hotspotStats.total_clusters,        cls: 'sb-blue'  },
-            { label: 'Reports in Zones',  value: hotspotStats.reports_in_clusters,   cls: 'sb-blue'  },
+            { label: 'Active Clusters',   value: hotspotStats.total_clusters,        cls: 'sb-blue'  },
+            { label: 'Incidents on Map',  value: hotspotStats.total_incidents,       cls: 'sb-blue'  },
             { label: 'High Risk',         value: hotspotStats.risk_counts.critical,  cls: 'sb-red'   },
-            { label: 'Medium Risk',       value: hotspotStats.risk_counts.warning,   cls: 'sb-orange'},
+            { label: 'Emerging',          value: hotspotStats.risk_counts.warning,   cls: 'sb-orange'},
           ].map((s) => (
             <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
               <div className="stat-btn-label">{s.label}</div>
@@ -899,73 +921,70 @@ const avgClusterTrust = useMemo(() => {
 
               {/* ── Backend DBSCAN clusters ─────────────────────────────── */}
               {plottedHotspots.map((h, hIdx) => {
-                const zoneColor = getRiskZoneColor(h.risk_level);
+                const clusterColor = getHotspotDotColor(h);
                 const pts = Array.isArray(h.incident_points) ? h.incident_points : [];
+                const isSelected = selectedCluster?.hotspot_id === h.hotspot_id;
                 const clusterInFilter =
                   selectedFilterHours == null ||
                   isWithinSelectedFilter(h.detected_at, selectedFilterHours) ||
-                  pts.some((p) =>
-                    isWithinSelectedFilter(p.reported_at, selectedFilterHours),
-                  );
+                  pts.some((p) => isWithinSelectedFilter(p.reported_at, selectedFilterHours));
                 const alpha = clusterInFilter ? 1 : 0.35;
-                // Cluster boundary is computed entirely by the backend DBSCAN pipeline.
-                // The frontend only renders what the backend returns — no recomputation here.
                 const hull = Array.isArray(h.boundary_points) && h.boundary_points.length >= 3
                   ? h.boundary_points
                   : [];
-                const types = [...new Set(pts.map((p) => p.incident_type_name).filter(Boolean))];
 
                 return (
                   <React.Fragment key={`hs-${h.hotspot_id}`}>
-                    {hull.length >= 3 ? (
+                    {/* Boundary — only for the selected cluster */}
+                    {isSelected && hull.length >= 3 && (
                       <Polygon
                         positions={hull}
-                        eventHandlers={{ click: () => setSelectedCluster(h) }}
                         pathOptions={{
-                          color: zoneColor,
-                          weight: selectedCluster?.hotspot_id === h.hotspot_id ? 3 : 2,
-                          opacity: alpha * 0.95,
-                          fillColor: zoneColor,
-                          fillOpacity: selectedCluster?.hotspot_id === h.hotspot_id ? alpha * 0.28 : alpha * 0.12,
+                          color: clusterColor,
+                          weight: 2.5,
+                          opacity: 0.9,
+                          fillColor: clusterColor,
+                          fillOpacity: 0.12,
                           dashArray: "8 5",
                         }}
                       />
-                    ) : (
+                    )}
+                    {isSelected && hull.length < 3 && (
                       <Circle
                         center={[h.lat, h.lng]}
-                        radius={Number(h.radius_meters) || 500}
-                        eventHandlers={{ click: () => setSelectedCluster(h) }}
+                        radius={Number(h.radius_meters) || 300}
                         pathOptions={{
-                          color: zoneColor,
+                          color: clusterColor,
                           weight: 2,
-                          opacity: alpha * 0.85,
-                          fillColor: zoneColor,
-                          fillOpacity: alpha * 0.12,
+                          opacity: 0.8,
+                          fillColor: clusterColor,
+                          fillOpacity: 0.1,
                           dashArray: "6 4",
                         }}
                       />
                     )}
 
-                    {/* Individual incident dots — color = incident type, white ring = cluster color */}
-                    {pts.map((p, pIdx) => {
+                    {/* Each incident as its own dot at its exact coordinate */}
+                    {pts.length > 0 ? pts.map((p, pIdx) => {
                       const lat = Number(p.latitude);
                       const lng = Number(p.longitude);
                       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-                      const ptColor = getIncidentTypeColor(p.incident_type_name);
-                      const ptRadius = mapZoom >= 14 ? 7 : mapZoom >= 12 ? 5 : 4;
+                      const dotRadius = isSelected
+                        ? (mapZoom >= 14 ? 8 : mapZoom >= 12 ? 6 : 5)
+                        : (mapZoom >= 14 ? 6 : mapZoom >= 12 ? 5 : 4);
                       const loc = [p.village_name, p.cell_name, p.sector_name].filter(Boolean).join(", ");
                       return (
                         <CircleMarker
                           key={`pt-${h.hotspot_id}-${pIdx}`}
                           center={[lat, lng]}
-                          radius={ptRadius}
-                          eventHandlers={{ click: () => setSelectedCluster(h) }}
+                          radius={dotRadius}
+                          eventHandlers={{ click: () => setSelectedCluster(isSelected ? null : h) }}
                           pathOptions={{
-                            color: zoneColor,
+                            color: clusterColor,
                             weight: 1.5,
                             opacity: alpha,
-                            fillColor: ptColor,
-                            fillOpacity: alpha * 0.92,
+                            fillColor: clusterColor,
+                            fillOpacity: alpha * 0.85,
                           }}
                         >
                           <Tooltip direction="top" offset={[0, -6]} opacity={0.97} interactive={false}>
@@ -985,41 +1004,38 @@ const avgClusterTrust = useMemo(() => {
                                 </div>
                               )}
                               {loc && <div style={{ fontSize: 11, color: "#94a3b8" }}>{loc}</div>}
-                              {p.trust_score != null && (
-                                <div style={{ fontSize: 11, marginTop: 2 }}>
-                                  Trust: <strong>{Math.round(Number(p.trust_score))}%</strong>
-                                  {" · "}Cluster: <strong>{h.incident_count} incidents</strong>
-                                </div>
-                              )}
+                              <div style={{ fontSize: 11, marginTop: 2 }}>
+                                Cluster: <strong>{h.incident_count} incident{h.incident_count !== 1 ? "s" : ""}</strong>
+                                {h.crime_group && <span> · {h.crime_group}</span>}
+                              </div>
                             </div>
                           </Tooltip>
                         </CircleMarker>
                       );
-                    })}
-
-                    {/* Cluster count badge — click to open detail panel */}
-                    <Marker
-                      position={[h.lat, h.lng]}
-                      icon={createClusterIcon(
-                        pts.length || h.incident_count || 1,
-                        zoneColor,
-                        getReportRiskBorder(zoneColor),
-                        alpha,
-                      )}
-                      zIndexOffset={900}
-                      eventHandlers={{ click: () => setSelectedCluster(h) }}
-                    >
-                      <Tooltip direction="top" offset={[0, -14]} opacity={0.97} interactive={false}>
-                        <div style={{ fontSize: "11px", lineHeight: 1.6 }}>
-                          <strong>{h.area_label || `Cluster #${h.hotspot_id}`}</strong>
-                          <br />
-                          {pts.length || h.incident_count} confirmed incidents · {getReportRiskLabel(zoneColor)}
-                          <br />
-                          {types.slice(0, 3).join(", ")}
-                          {types.length > 3 ? ` +${types.length - 3} more` : ""}
-                        </div>
-                      </Tooltip>
-                    </Marker>
+                    }) : (
+                      /* Fallback: no incident_points — show a dot at centroid */
+                      <CircleMarker
+                        key={`hs-center-${h.hotspot_id}`}
+                        center={[h.lat, h.lng]}
+                        radius={mapZoom >= 14 ? 6 : mapZoom >= 12 ? 5 : 4}
+                        eventHandlers={{ click: () => setSelectedCluster(isSelected ? null : h) }}
+                        pathOptions={{
+                          color: clusterColor,
+                          weight: 1.5,
+                          opacity: alpha,
+                          fillColor: clusterColor,
+                          fillOpacity: alpha * 0.85,
+                        }}
+                      >
+                        <Tooltip direction="top" offset={[0, -6]} opacity={0.97} interactive={false}>
+                          <div style={{ fontSize: "12px", lineHeight: 1.6 }}>
+                            <strong>{h.area_label || `Cluster #${h.hotspot_id}`}</strong>
+                            <br />
+                            {h.incident_count} incident{h.incident_count !== 1 ? "s" : ""} · {h.crime_group || "unknown"}
+                          </div>
+                        </Tooltip>
+                      </CircleMarker>
+                    )}
                   </React.Fragment>
                 );
               })}
@@ -1049,6 +1065,33 @@ const avgClusterTrust = useMemo(() => {
                       <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
                         {sc.incident_count} confirmed incidents · {(sc.risk_level || "").toUpperCase()}
                       </div>
+                      {(sc.lifecycle_state || sc.crime_group || sc.trend_direction) && (
+                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>
+                          {sc.lifecycle_state && (
+                            <span style={{
+                              fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 99,
+                              background: sc.lifecycle_state === "escalating" ? "#ef444433" : sc.lifecycle_state === "emerging" ? "#3b82f633" : "#22c55e33",
+                              color: sc.lifecycle_state === "escalating" ? "#ef4444" : sc.lifecycle_state === "emerging" ? "#3b82f6" : "#22c55e",
+                              textTransform: "uppercase", letterSpacing: "0.05em",
+                            }}>
+                              {sc.lifecycle_state}
+                            </span>
+                          )}
+                          {sc.crime_group && (
+                            <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 99, background: "rgba(255,255,255,0.08)", color: "#94a3b8", textTransform: "uppercase" }}>
+                              {sc.crime_group}
+                            </span>
+                          )}
+                          {sc.trend_direction && sc.trend_direction !== "stable" && (
+                            <span style={{
+                              fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 99,
+                              color: sc.trend_direction === "rising" ? "#ef4444" : "#22c55e",
+                            }}>
+                              {sc.trend_direction === "rising" ? "↑ Rising" : "↓ Falling"}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <button
                       onClick={() => setSelectedCluster(null)}
@@ -1117,9 +1160,15 @@ const avgClusterTrust = useMemo(() => {
                   )}
 
                   {/* Footer stats */}
-                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", gap: 12, fontSize: 11, color: "#94a3b8" }}>
+                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", gap: 12, fontSize: 11, color: "#94a3b8", flexWrap: "wrap" }}>
                     <span>Score: <strong style={{ color: "#f1f5f9" }}>{sc.hotspot_score != null ? Math.round(sc.hotspot_score) : "—"}</strong></span>
                     <span>Trust: <strong style={{ color: "#f1f5f9" }}>{sc.avg_trust_score != null ? Math.round(Number(sc.avg_trust_score)) + "%" : "—"}</strong></span>
+                    {sc.severity_score != null && (
+                      <span>Severity: <strong style={{ color: "#f1f5f9" }}>{Number(sc.severity_score).toFixed(1)}/10</strong></span>
+                    )}
+                    {sc.temporal_intensity != null && (
+                      <span>Rate: <strong style={{ color: "#f1f5f9" }}>{Number(sc.temporal_intensity).toFixed(1)}/h</strong></span>
+                    )}
                     {sc.area_label && <span style={{ color: "#64748b" }}>{sc.area_label}</span>}
                   </div>
                 </div>
@@ -1171,9 +1220,9 @@ const avgClusterTrust = useMemo(() => {
                     Risk zones (Musanze)
                   </div>
                   {[
-                    { color: "#ef4444", label: "High-risk cluster" },
-                    { color: "#eab308", label: "Medium-risk cluster" },
-                    { color: "#22c55e", label: "Low-risk cluster" },
+                    { color: "#ef4444", label: "High risk (5+ incidents or time-escalated)" },
+                    { color: "#eab308", label: "Emerging cluster (2–4 incidents)" },
+                    { color: "#22c55e", label: "Single incident" },
                   ].map((row) => (
                     <div key={row.label} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
                       <div style={{
@@ -1486,8 +1535,8 @@ const avgClusterTrust = useMemo(() => {
             <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
               Epsilon Radius: <strong>{Math.round(dbscanParams.radius_meters || 0)}m</strong>
             </div>
-            <input type="range" min="100" max="1000" step="50"
-              value={Number(dbscanParams.radius_meters || 500)}
+            <input type="range" min="100" max="800" step="50"
+              value={Number(dbscanParams.radius_meters || 300)}
               onChange={(e) => setDbscanParams((p) => ({ ...p, radius_meters: Number(e.target.value) }))}
               style={{ width: '100%' }}
             />
