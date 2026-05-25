@@ -2681,7 +2681,7 @@ def run_hotspot_auto():
                 db,
                 title="New Hotspots Detected",
                 message=f"{created} new safety hotspots have been automatically detected based on recent reports.",
-                notif_type="system",
+                notif_type="hotspot",
                 related_entity_type="hotspot",
                 related_entity_id=str(latest_hotspot.hotspot_id) if created == 1 and latest_hotspot else None,
                 target_roles=["admin", "supervisor"],

@@ -1,4 +1,5 @@
 import os
+import warnings
 
 # Before any ultralytics import: writable config dir (Docker sets YOLO_CONFIG_DIR=/app/.ultralytics)
 if not os.environ.get("YOLO_CONFIG_DIR"):
@@ -17,6 +18,15 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import engine, Base
+from app.middleware.request_logging import RequestLogMiddleware, configure_app_logging
+
+configure_app_logging()
+warnings.filterwarnings(
+    "ignore",
+    message="remove second argument of ws_handler",
+    category=DeprecationWarning,
+    module=r"websockets\.legacy\.server",
+)
 from app.core.workflow_schema_extensions import apply_workflow_schema_ddl
 from app.models import (
     Device,
@@ -122,34 +132,25 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     
-    # Download and cache ML models on startup
-    try:
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        logger.info("Downloading and caching ML models on startup...")
-        
-        # Ensure YOLO model is available (will be downloaded by ultralytics on first use)
-        from app.core.model_manager import ensure_yolo_model
-        yolo_model = ensure_yolo_model("yolov8n.pt")
-        logger.info("YOLO model ready for use")
-        
-        logger.info("ML models successfully downloaded and cached")
-        
-    except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"Failed to preload some ML models: {e}")
-        logger.info("Models will be downloaded on first use")
+    # Download and cache ML models on startup (optional — set PRELOAD_ML_ON_STARTUP=false on Render)
+    if getattr(settings, "preload_ml_on_startup", True):
+        try:
+            _log.info("Preloading ML models on startup...")
+            from app.core.model_manager import ensure_yolo_model
+
+            ensure_yolo_model("yolov8n.pt")
+            _log.info("YOLO model ready")
+        except Exception as e:
+            _log.warning("ML preload skipped or failed: %s", e)
+    else:
+        _log.info("ML preload disabled (PRELOAD_ML_ON_STARTUP=false); models load on first use")
 
     import asyncio
-    import logging
-    from app.config import settings
     from app.database import SessionLocal
     from app.models.report import Report
     from sqlalchemy import or_
 
-    logger = logging.getLogger(__name__)
+    logger = _log
 
     async def process_existing_reports():
         """Backlog: run unified verification orchestrator on stale pending rows."""
@@ -197,7 +198,13 @@ async def lifespan(app: FastAPI):
             logger.error("Verification backlog error: %s", e)
 
     asyncio.create_task(process_existing_reports())
-    
+
+    _log.info(
+        "TrustBond API ready (access_log=%s, preload_ml=%s)",
+        getattr(settings, "request_access_log", True),
+        getattr(settings, "preload_ml_on_startup", True),
+    )
+
     yield
     # shutdown if needed
 
@@ -206,6 +213,9 @@ app = FastAPI(
     title=settings.app_name,
     lifespan=lifespan,
 )
+
+# Per-request access lines on stdout (complements uvicorn --access-log)
+app.add_middleware(RequestLogMiddleware)
 
 _cors_origins = settings.get_cors_origins_list()
 # When no specific origins are configured, allow all via regex so that

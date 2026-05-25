@@ -14,6 +14,10 @@ _ENV_FILE = _BACKEND_DIR / ".env"
 class Settings(BaseSettings):
     app_name: str = "TrustBond API"
     debug: bool = False
+    # Log each HTTP request to stdout (method, path, status, ms). Set false to disable.
+    request_access_log: bool = True
+    # Download YOLO / warm ML on startup (slow first deploy). Set false to load on first use.
+    preload_ml_on_startup: bool = True
     database_url: str = "postgresql://postgres:postgres@localhost:5432/trustbond"
     secret_key: str = "change-me-in-production"
 

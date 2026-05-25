@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import api from '../../api/client';
+import api, { cacheBust } from '../../api/client';
 import { formatRelativeTime } from '../../utils/dateTime';
+import { isHotspotNotification, notificationCategory } from '../../utils/notificationHelpers';
+
+const LIST_LIMIT = 50;
 
 const friendlyFlagReason = (text) => {
   if (!text) return '';
@@ -23,21 +26,48 @@ const friendlyFlagReason = (text) => {
 
 const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
   const [items, setItems] = useState([]);
+  const [summary, setSummary] = useState({
+    unread_count: 0,
+    total_count: 0,
+    reports: 0,
+    hotspots: 0,
+    assignments: 0,
+    system: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('all');
   const [searchText, setSearchText] = useState('');
 
+  const loadNotifications = async () => {
+    setLoading(true);
+    cacheBust('/api/v1/notifications');
+    try {
+      const [list, sum] = await Promise.all([
+        api.get(`/api/v1/notifications/?limit=${LIST_LIMIT}`),
+        api.get('/api/v1/notifications/summary'),
+      ]);
+      setItems(Array.isArray(list) ? list : []);
+      setSummary({
+        unread_count: sum?.unread_count ?? 0,
+        total_count: sum?.total_count ?? 0,
+        reports: sum?.reports ?? 0,
+        hotspots: sum?.hotspots ?? 0,
+        assignments: sum?.assignments ?? 0,
+        system: sum?.system ?? 0,
+      });
+    } catch {
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    let mounted = true;
-    api.get('/api/v1/notifications/?limit=50')
-      .then((res) => { if (mounted) { setItems(res || []); setLoading(false); } })
-      .catch(() => { if (mounted) setLoading(false); });
-    return () => { mounted = false; };
+    loadNotifications();
   }, [wsRefreshKey]);
 
-  const unread = items.filter(n => !n.is_read).length;
   const filtered = items.filter((n) => {
-    if (filterType !== 'all' && n.type !== filterType) return false;
+    if (filterType !== 'all' && notificationCategory(n) !== filterType) return false;
     if (searchText.trim()) {
       const q = searchText.trim().toLowerCase();
       const blob = [
@@ -56,14 +86,8 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
 
   const markAllRead = async () => {
     try {
-      const unreadItems = items.filter((n) => !n.is_read);
-      await Promise.all(
-        unreadItems.map((n) =>
-          api.patch(`/api/v1/notifications/${n.notification_id}/read`)
-        )
-      );
-      const refreshed = await api.get('/api/v1/notifications/?limit=50');
-      setItems(refreshed || []);
+      await api.post('/api/v1/notifications/mark-all-read');
+      await loadNotifications();
     } catch {
       // ignore
     }
@@ -120,13 +144,13 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
         // If hotspot data fetch fails, fall back to hotspot details
         console.log('Could not fetch hotspot location data, navigating to details');
       }
-      goToScreen?.('hotspots', 4);
+      goToScreen?.('safety-map', 4);
       return;
     }
     
     // If no specific entity, navigate based on notification type
-    if (n.type === 'hotspot') {
-      goToScreen?.('hotspots', 4);
+    if (isHotspotNotification(n)) {
+      goToScreen?.('safety-map', 4);
       return;
     }
     if (n.type === 'assignment') {
@@ -142,11 +166,12 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
     goToScreen?.('reports', 1);
   };
 
-  const typeColor = (type) => {
-    if (type === 'report')     return 'sb-blue';
-    if (type === 'hotspot')    return 'sb-orange';
-    if (type === 'assignment') return 'sb-green';
-    if (type === 'system')     return 'sb-purple';
+  const typeColor = (n) => {
+    const cat = notificationCategory(n);
+    if (cat === 'report')     return 'sb-blue';
+    if (cat === 'hotspot')    return 'sb-orange';
+    if (cat === 'assignment') return 'sb-green';
+    if (cat === 'system')     return 'sb-purple';
     return 'sb-blue';
   };
 
@@ -169,10 +194,10 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
         {/* Summary stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
           {[
-            { label: 'Unread',      value: unread,                                    cls: 'sb-red'    },
-            { label: 'Total',       value: items.length,                              cls: 'sb-blue'   },
-            { label: 'Reports',     value: items.filter(n => n.type === 'report').length,     cls: 'sb-blue'   },
-            { label: 'Hotspots',    value: items.filter(n => n.type === 'hotspot').length,    cls: 'sb-orange' },
+            { label: 'Unread',      value: summary.unread_count,  cls: 'sb-red'    },
+            { label: 'Total',       value: summary.total_count,   cls: 'sb-blue'   },
+            { label: 'Reports',     value: summary.reports,       cls: 'sb-blue'   },
+            { label: 'Hotspots',    value: summary.hotspots,      cls: 'sb-orange' },
           ].map((s) => (
             <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
               <div className="stat-btn-label">{s.label}</div>
@@ -184,6 +209,15 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
 
       {/* ── Notifications list ── */}
       <div className="card">
+        {summary.total_count > items.length && (
+          <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>
+            Showing latest {items.length} of {summary.total_count} notifications.
+            {summary.unread_count > items.filter((n) => !n.is_read).length
+              ? ` ${summary.unread_count} unread in your inbox (sidebar badge matches this).`
+              : ''}
+          </div>
+        )}
+
         {/* Filters */}
         <div className="filter-row" style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)' }}>
           <input
@@ -218,7 +252,7 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
               className="notif-icon"
               style={{ background: 'var(--c-accent-dim)', color: 'var(--accent)', fontWeight: 700 }}
             >
-              {n.type?.toUpperCase().slice(0, 4) || 'INFO'}
+              {(isHotspotNotification(n) ? 'HSP' : n.type?.toUpperCase().slice(0, 4)) || 'INFO'}
             </div>
             <div className="notif-body">
               <div className="notif-title">{n.title}</div>
@@ -230,7 +264,7 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
             </div>
             <div style={{ flexShrink: 0 }}>
               <span className={`badge ${n.is_read ? 'b-gray' : 'b-blue'}`}>
-                {n.type || 'info'}
+                {notificationCategory(n)}
               </span>
             </div>
           </div>

@@ -1,8 +1,13 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from app.core.websocket import manager
-from app.core.security import decode_access_token
-from typing import Dict, Any
 import json
+import logging
+from typing import Any, Dict
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from app.core.security import decode_access_token
+from app.core.websocket import manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["websockets"])
 
@@ -100,7 +105,7 @@ async def websocket_notifications_endpoint(websocket: WebSocket):
         if user_id:
             notification_manager.disconnect_user(user_id)
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        logger.warning("WebSocket notifications error: %s", e)
         if user_id:
             notification_manager.disconnect_user(user_id)
 

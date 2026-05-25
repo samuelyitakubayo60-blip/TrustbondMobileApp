@@ -2,6 +2,7 @@ from uuid import uuid4
 from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 from app.core.websocket import manager
 from app.api.v1.ws import notification_manager
@@ -14,6 +15,18 @@ from app.models.police_user import PoliceUser
 from app.schemas.notification import NotificationResponse
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+
+def _hotspot_notification_clause():
+    """Hotspot alerts are often type=system with related_entity_type=hotspot."""
+    return or_(
+        Notification.type == "hotspot",
+        func.lower(Notification.related_entity_type) == "hotspot",
+    )
+
+
+def _user_notifications_query(db: Session, police_user_id: int):
+    return db.query(Notification).filter(Notification.police_user_id == police_user_id)
 
 
 def _run_async_now_or_schedule(coro) -> None:
@@ -149,11 +162,42 @@ def list_notifications(
     limit: int = 50,
     unread_only: bool = False,
 ):
-    """List notifications for the current user (unread first)."""
-    query = db.query(Notification).filter(Notification.police_user_id == current_user.police_user_id)
+    """List notifications for the current user (newest first)."""
+    query = _user_notifications_query(db, current_user.police_user_id)
     if unread_only:
         query = query.filter(Notification.is_read == False)
     return query.order_by(Notification.created_at.desc()).limit(limit).all()
+
+
+@router.get("/summary")
+def notification_summary(
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    """Aggregate counts for dashboard cards (full inbox, not just the list page limit)."""
+    base = _user_notifications_query(db, current_user.police_user_id)
+    unread = (
+        base.filter(Notification.is_read == False).count()
+    )
+    total = base.count()
+    reports = base.filter(Notification.type == "report").count()
+    assignments = base.filter(Notification.type == "assignment").count()
+    hotspots = base.filter(_hotspot_notification_clause()).count()
+    system_only = base.filter(
+        Notification.type == "system",
+        or_(
+            Notification.related_entity_type.is_(None),
+            func.lower(Notification.related_entity_type) != "hotspot",
+        ),
+    ).count()
+    return {
+        "unread_count": unread,
+        "total_count": total,
+        "reports": reports,
+        "hotspots": hotspots,
+        "assignments": assignments,
+        "system": system_only,
+    }
 
 
 @router.get("/unread-count")
@@ -162,17 +206,43 @@ def unread_count(
     db: Session = Depends(get_db),
 ):
     """Return count of unread notifications (for badge)."""
-    from sqlalchemy import func
     count = (
-        db.query(func.count(Notification.notification_id))
-        .filter(
-            Notification.police_user_id == current_user.police_user_id,
-            Notification.is_read == False,
-        )
-        .scalar()
-        or 0
+        _user_notifications_query(db, current_user.police_user_id)
+        .filter(Notification.is_read == False)
+        .count()
     )
     return {"unread_count": count}
+
+
+@router.post("/mark-all-read")
+def mark_all_read(
+    background_tasks: BackgroundTasks,
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    """Mark every unread notification for the current user as read."""
+    updated = (
+        _user_notifications_query(db, current_user.police_user_id)
+        .filter(Notification.is_read == False)
+        .update({Notification.is_read: True}, synchronize_session=False)
+    )
+    db.commit()
+
+    if updated:
+        def notify():
+            _run_async_now_or_schedule(
+                manager.broadcast({"type": "refresh_data", "entity": "notification"})
+            )
+            _run_async_now_or_schedule(
+                notification_manager.send_to_user(
+                    str(current_user.police_user_id),
+                    {"type": "notification_count_updated"},
+                )
+            )
+
+        background_tasks.add_task(notify)
+
+    return {"marked": int(updated or 0)}
 
 
 @router.patch("/{notification_id}/read", response_model=NotificationResponse)

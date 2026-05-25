@@ -36,4 +36,4 @@ EXPOSE 7860
 
 # Run the real backend API app (not the standalone fallback)
 # PORT env var is set automatically by Render; HF Spaces doesn't set it so 7860 is used.
-CMD sh -c "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-7860}"
+CMD sh -c "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-7860} --log-level info --access-log"
