@@ -2,7 +2,7 @@ from uuid import uuid4, UUID
 from typing import Annotated, Optional, List, Any
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import and_, or_, func
 
@@ -15,6 +15,7 @@ from app.models.location import Location
 from app.models.ml_prediction import MLPrediction
 from app.models.police_user import PoliceUser
 from app.api.v1.auth import get_current_admin_or_supervisor, get_current_user
+from app.core.audit import log_action
 from app.schemas.case import CaseCreate, CaseUpdate, CaseResponse, CaseListResponse, CaseAddReports
 from app.schemas.report import ReportResponse
 
@@ -764,6 +765,7 @@ def get_case_reports(
 def update_case(
     case_id: str,
     payload: CaseUpdate,
+    request: Request,
     current_user: Annotated[PoliceUser, Depends(get_current_user)],
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -835,6 +837,24 @@ def update_case(
             payload.rib_handover_prerequisites_acknowledged
         )
     db.add(case)
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    log_action(
+        db,
+        "case_updated",
+        actor_type="police_user",
+        actor_id=current_user.police_user_id,
+        entity_type="case",
+        entity_id=str(case.case_id),
+        action_details={
+            "status": case.status,
+            "priority": case.priority,
+            "assigned_to_id": case.assigned_to_id,
+        },
+        ip_address=client_ip,
+        user_agent=user_agent,
+        success=True,
+    )
     db.commit()
     db.refresh(case)
     

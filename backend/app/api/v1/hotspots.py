@@ -2,13 +2,14 @@ import json
 from typing import Annotated, List, Optional, Dict, Any
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException, status, Request
 from sqlalchemy.orm import Session, joinedload, selectinload
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
+from app.core.audit import log_action
 from app.core.cluster_classifier import predict_cluster_classification
 from app.database import get_db
 from app.models.hotspot import Hotspot, hotspot_reports_table
@@ -31,6 +32,7 @@ from app.core.village_lookup import get_village_location_info
 from app.core.websocket import manager
 from app.core.llm_recommendations import (
     generate_recommendation,
+    generate_citizen_advisory,
     clear_recommendation_cache,
     load_hotspot_deployment_units,
     gather_cluster_case_context,
@@ -294,12 +296,17 @@ def list_hotspots(
         le=8760,
         description="Only return clusters generated for this DBSCAN time window.",
     ),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=500),
+    for_map: bool = Query(
+        False,
+        description="Fast Safety Map payload: skip per-cluster LLM (map/table only).",
+    ),
 ):
     """List hotspots.
 
     - Admin / IO (supervisor): all hotspots district-wide.
     - Officer: hotspots with at least one report in their station cell coverage.
+    - for_map=true: returns incident_points and boundaries quickly without LLM calls.
     """
     try:
         ensure_hotspots_materialized(db)
@@ -315,7 +322,8 @@ def list_hotspots(
         selectinload(Hotspot.reports).selectinload(Report.evidence_files),
     )
 
-    # Apply time-based filtering
+    # Map time period → report window (filter incidents by reported_at, not only cluster run time).
+    report_window_hours: Optional[int] = None
     if time_period or hours_back:
         time_filter_hours = None
         if hours_back:
@@ -334,10 +342,15 @@ def list_hotspots(
                     status_code=400, 
                     detail=f"Invalid time_period. Use: {', '.join(time_mapping.keys())}"
                 )
-        
         if time_filter_hours:
-            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=time_filter_hours)
+            report_window_hours = int(time_filter_hours)
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=report_window_hours)
             query = query.filter(Hotspot.detected_at >= cutoff_time)
+    report_window_cutoff = (
+        datetime.now(timezone.utc) - timedelta(hours=report_window_hours)
+        if report_window_hours
+        else None
+    )
 
     query = _apply_officer_hotspot_scope(query, db, current_user)
     query = query.order_by(Hotspot.detected_at.desc())
@@ -368,6 +381,13 @@ def list_hotspots(
         # Include all clustered reports; some legacy rows may miss village linkage
         # but still have valid coordinates required for map/hotspot analytics.
         reports_in_cluster = list(getattr(h, "reports", None) or [])
+        if report_window_cutoff is not None:
+            reports_in_cluster = [
+                r
+                for r in reports_in_cluster
+                if _as_utc(r.reported_at) is not None
+                and _as_utc(r.reported_at) >= report_window_cutoff
+            ]
         if not reports_in_cluster:
             continue
 
@@ -538,67 +558,91 @@ def list_hotspots(
                 h.incident_type, "default_special_assignment_unit", None
             )
 
-        report_ids = [r.report_id for r in reports_in_cluster]
-        cluster_case_context = gather_cluster_case_context(db, report_ids)
-
-        # Build cluster evolution context for cluster-aware recommendations
-        cluster_evolution = {
-            "lifecycle_state": getattr(h, "lifecycle_state", None),
-            "trend_direction": getattr(h, "trend_direction", None),
-            "crime_group": getattr(h, "crime_group", None),
-            "cluster_confidence": float(h.cluster_confidence) if getattr(h, "cluster_confidence", None) else None,
-            "severity_score": float(h.severity_score) if getattr(h, "severity_score", None) else None,
-            "temporal_intensity": float(h.temporal_intensity) if getattr(h, "temporal_intensity", None) else None,
-            "composition": json.loads(h.composition) if getattr(h, "composition", None) else None,
-        }
-        # Count nearby clusters (within ~2km) to gauge area-wide security pressure
-        try:
-            nearby_clusters = db.query(Hotspot).filter(
-                Hotspot.hotspot_id != h.hotspot_id,
-                Hotspot.center_lat.between(
-                    float(h.center_lat) - 0.018, float(h.center_lat) + 0.018
-                ),
-                Hotspot.center_long.between(
-                    float(h.center_long) - 0.018, float(h.center_long) + 0.018
-                ),
-                Hotspot.incident_count >= 2,
-            ).count()
-        except Exception:
-            nearby_clusters = 0
-        cluster_evolution["nearby_clusters"] = nearby_clusters
-
-        llm = generate_recommendation(
-            classification=classification,
-            incident_count=incident_count,
-            dominant_crime=dominant_crime,
-            cluster_kind=cluster_kind,
-            area_label=area_label,
-            incident_mix=incident_mix,
-            peak_time=peak_time,
-            verified_report_count=verified_count,
-            recommended_unit=incident_unit_hint,
-            deployment_units=deployment_units,
-            cluster_case_context=cluster_case_context,
-            cluster_evolution=cluster_evolution,
-        )
-
         prediction = _prediction_for_hotspot(
             classification,
             incident_count,
             cluster_kind,
             report_times=report_times,
         )
-        # All text/operation fields come from the LLM (Groq → Gemini → template fallback)
-        prediction["recommendation"]    = llm["recommendation"]
-        prediction["narrative"]          = llm["narrative"]
-        prediction["status"]             = llm["status"]
-        prediction["recommended_unit"]       = llm.get("recommended_unit")
-        prediction["recommended_unit_name"]  = llm.get("recommended_unit_name")
-        prediction["recommended_units"]      = llm.get("recommended_units")
-        prediction["citizen_advisory"]       = llm.get("citizen_advisory")
-        prediction["operation_hours"]          = llm.get("operation_hours")
-        prediction["concentrate_window"]       = llm.get("concentrate_window")
-            
+        evidence_payload: List[Dict[str, Any]] = []
+
+        if for_map:
+            prediction["citizen_advisory"] = generate_citizen_advisory(
+                classification=classification,
+                incident_count=incident_count,
+                dominant_crime=dominant_crime,
+                area_label=area_label,
+                incident_mix=incident_mix,
+            )
+        else:
+            report_ids = [r.report_id for r in reports_in_cluster]
+            cluster_case_context = gather_cluster_case_context(db, report_ids)
+            cluster_evolution = {
+                "lifecycle_state": getattr(h, "lifecycle_state", None),
+                "trend_direction": getattr(h, "trend_direction", None),
+                "crime_group": getattr(h, "crime_group", None),
+                "cluster_confidence": float(h.cluster_confidence)
+                if getattr(h, "cluster_confidence", None)
+                else None,
+                "severity_score": float(h.severity_score)
+                if getattr(h, "severity_score", None)
+                else None,
+                "temporal_intensity": float(h.temporal_intensity)
+                if getattr(h, "temporal_intensity", None)
+                else None,
+                "composition": json.loads(h.composition)
+                if getattr(h, "composition", None)
+                else None,
+            }
+            try:
+                nearby_clusters = db.query(Hotspot).filter(
+                    Hotspot.hotspot_id != h.hotspot_id,
+                    Hotspot.center_lat.between(
+                        float(h.center_lat) - 0.018, float(h.center_lat) + 0.018
+                    ),
+                    Hotspot.center_long.between(
+                        float(h.center_long) - 0.018, float(h.center_long) + 0.018
+                    ),
+                    Hotspot.incident_count >= 2,
+                ).count()
+            except Exception:
+                nearby_clusters = 0
+            cluster_evolution["nearby_clusters"] = nearby_clusters
+
+            llm = generate_recommendation(
+                classification=classification,
+                incident_count=incident_count,
+                dominant_crime=dominant_crime,
+                cluster_kind=cluster_kind,
+                area_label=area_label,
+                incident_mix=incident_mix,
+                peak_time=peak_time,
+                verified_report_count=verified_count,
+                recommended_unit=incident_unit_hint,
+                deployment_units=deployment_units,
+                cluster_case_context=cluster_case_context,
+                cluster_evolution=cluster_evolution,
+            )
+            prediction["recommendation"] = llm["recommendation"]
+            prediction["narrative"] = llm["narrative"]
+            prediction["status"] = llm["status"]
+            prediction["recommended_unit"] = llm.get("recommended_unit")
+            prediction["recommended_unit_name"] = llm.get("recommended_unit_name")
+            prediction["recommended_units"] = llm.get("recommended_units")
+            prediction["citizen_advisory"] = llm.get("citizen_advisory")
+            prediction["operation_hours"] = llm.get("operation_hours")
+            prediction["concentrate_window"] = llm.get("concentrate_window")
+            evidence_payload = [
+                {
+                    "evidence_id": str(e.evidence_id),
+                    "file_type": e.file_type,
+                    "file_url": e.file_url,
+                    "uploaded_at": e.uploaded_at.isoformat() if e.uploaded_at else None,
+                }
+                for r in h.reports
+                for e in (r.evidence_files or [])
+            ]
+
         responses.append(HotspotResponse(
             hotspot_id=h.hotspot_id,
             center_lat=h.center_lat,
@@ -611,16 +655,7 @@ def list_hotspots(
             incident_type_id=h.incident_type_id,
             incident_type_name=h.incident_type.type_name if h.incident_type else None,
             **_deployment_fields_for_hotspot(db, h),
-            evidence_files=[
-                {
-                    "evidence_id": str(e.evidence_id),
-                    "file_type": e.file_type,
-                    "file_url": e.file_url,
-                    "uploaded_at": e.uploaded_at.isoformat() if e.uploaded_at else None,
-                }
-                for r in h.reports
-                for e in (r.evidence_files or [])
-            ],
+            evidence_files=evidence_payload,
             lifecycle_state=lifecycle_state,
             hotspot_score=hotspot_score,
             classification=classification,
@@ -788,6 +823,7 @@ def get_hotspot_params(db: Session = Depends(get_db)):
 
 @router.post("/recompute")
 def recompute_hotspots(
+    request: Request,
     current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)],
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -867,12 +903,34 @@ def recompute_hotspots(
         start_time=window_start,
         end_time=window_end,
     )
-    db.commit()
 
     # New clusters → stale recommendations no longer apply; clear cache so the
     # next Safety Map load generates fresh LLM analysis for each new cluster.
     cleared = clear_recommendation_cache()
     logger.info("Recompute: cleared %d cached recommendations.", cleared)
+
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    log_action(
+        db,
+        "hotspots_recomputed",
+        actor_type="police_user",
+        actor_id=current_user.police_user_id,
+        entity_type="hotspot",
+        entity_id="bulk",
+        action_details={
+            "created": created,
+            "time_window_hours": eff_tw,
+            "min_incidents": eff_min,
+            "radius_meters": eff_rad,
+            "trust_min": eff_trust,
+            "recommendations_cleared": cleared,
+        },
+        ip_address=client_ip,
+        user_agent=user_agent,
+        success=True,
+    )
+    db.commit()
 
     # Broadcast hotspot update to all connected clients for real-time Safety Map updates
     background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "hotspot", "action": "recomputed"})
@@ -1136,6 +1194,7 @@ def take_control_hotspot(
 def deploy_unit_to_hotspot(
     hotspot_id: int,
     payload: HotspotDeployRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)] = None,
 ):
@@ -1155,6 +1214,27 @@ def deploy_unit_to_hotspot(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    log_action(
+        db,
+        "hotspot_deployed",
+        actor_type="police_user",
+        actor_id=current_user.police_user_id,
+        entity_type="hotspot",
+        entity_id=str(hotspot_id),
+        action_details={
+            "unit_code": unit.unit_code,
+            "unit_name": unit.unit_name,
+            "note": payload.note,
+            "email_sent": meta.get("email_sent", False),
+        },
+        ip_address=client_ip,
+        user_agent=user_agent,
+        success=True,
+    )
+    db.commit()
 
     msg = f"Unit {unit.unit_name} ({unit.unit_code}) deployed to hotspot #{hotspot_id}."
     if meta.get("email_sent"):

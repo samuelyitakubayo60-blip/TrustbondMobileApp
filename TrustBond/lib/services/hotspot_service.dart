@@ -14,6 +14,7 @@ class Hotspot {
   final String? incidentTypeName;
   final DateTime detectedAt;
   final String? citizenAdvisory;
+  final double? distanceMeters;
 
   Hotspot({
     required this.hotspotId,
@@ -26,6 +27,7 @@ class Hotspot {
     this.incidentTypeName,
     required this.detectedAt,
     this.citizenAdvisory,
+    this.distanceMeters,
   });
 
   factory Hotspot.fromJson(Map<String, dynamic> json) {
@@ -41,6 +43,9 @@ class Hotspot {
       incidentTypeName: json['incident_type_name'] as String?,
       detectedAt: DateTime.parse(json['detected_at']),
       citizenAdvisory: prediction?['citizen_advisory'] as String?,
+      distanceMeters: json['distance_meters'] == null
+          ? null
+          : double.tryParse(json['distance_meters'].toString()),
     );
   }
 
@@ -136,7 +141,7 @@ class HotspotService {
   Future<List<Hotspot>> getNearbyHotspots({
     required double lat,
     required double lon,
-    int radiusMeters = 3000,
+    int radiusMeters = 1500,
     int? timeWindowHours,
   }) {
     return getAllHotspots(

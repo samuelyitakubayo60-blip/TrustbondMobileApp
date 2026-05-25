@@ -20,6 +20,7 @@ from app.core.security import (
 )
 from app.database import get_db
 from app.models.password_reset_code import PasswordResetCode
+from app.core.audit import log_action
 from app.models.police_user import PoliceUser
 from app.models.user_session import UserSession
 from app.schemas.auth import ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, MeResponse, ResetPasswordRequest, Token
@@ -160,6 +161,18 @@ def login(data: LoginRequest, background_tasks: BackgroundTasks, request: Reques
         user_agent=user_agent_str,
         ip_address=client_ip,
         expires_at=expires_at,
+    )
+    log_action(
+        db,
+        "user_login",
+        actor_type="police_user",
+        actor_id=user.police_user_id,
+        entity_type="police_user",
+        entity_id=str(user.police_user_id),
+        action_details={"email": user.email, "role": user.role},
+        ip_address=client_ip,
+        user_agent=user_agent_str,
+        success=True,
     )
     db.add_all([user, session_row])
     db.commit()

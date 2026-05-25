@@ -50,6 +50,7 @@ class HotspotResponse(BaseModel):
     trend_direction: Optional[str] = None
     cluster_confidence: Optional[float] = None
     crime_group: Optional[str] = None
+    distance_meters: Optional[float] = None
 
     class Config:
         from_attributes = True

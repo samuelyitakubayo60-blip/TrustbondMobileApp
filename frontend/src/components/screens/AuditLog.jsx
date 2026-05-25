@@ -109,8 +109,16 @@ const AuditLog = ({ wsRefreshKey }) => {
           <div>
             <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Audit Log</h2>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
-              Tamper-evident record of all system actions for accountability and compliance.
+              Tamper-evident record of system actions. New logins, case updates, hotspot recompute, and user changes are recorded after deploy.
             </p>
+            {logs.length > 0 && logs.every((a) => {
+              const t = a.created_at ? new Date(a.created_at).getTime() : 0;
+              return t < Date.now() - 7 * 24 * 60 * 60 * 1000;
+            }) && (
+              <p style={{ margin: '8px 0 0', color: 'var(--warning)', fontSize: 12 }}>
+                Latest entry is older than 7 days — if you use the portal daily, redeploy the backend so audit logging is active.
+              </p>
+            )}
           </div>
           <button className="btn btn-outline btn-sm" style={{ alignSelf: 'center' }} onClick={exportCsv}>
             Export CSV

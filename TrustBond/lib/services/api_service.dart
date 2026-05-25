@@ -283,7 +283,7 @@ class ApiService {
   Future<List<dynamic>> getPublicAlerts({
     required double latitude,
     required double longitude,
-    double radiusKm = 10.0,
+    double radiusKm = 2.0,
     int limit = 20,
   }) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/public/alerts').replace(

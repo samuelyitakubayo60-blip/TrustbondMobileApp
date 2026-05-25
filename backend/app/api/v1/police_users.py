@@ -3,7 +3,7 @@ from typing import Annotated, List, Optional
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -14,6 +14,7 @@ import asyncio
 
 from app.api.v1.auth import get_current_admin, get_current_admin_or_supervisor, get_current_user
 from app.core.security import get_password_hash
+from app.core.audit import log_action
 from app.core.email import is_smtp_configured, send_new_user_credentials
 from app.database import get_db
 from app.models.police_user import PoliceUser
@@ -247,7 +248,7 @@ def create_police_user(
     payload: PoliceUserCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    _: Annotated[PoliceUser, Depends(get_current_admin)] = None,
+    current_user: Annotated[PoliceUser, Depends(get_current_admin)] = None,
 ):
 
     existing = db.query(PoliceUser).filter(PoliceUser.email == payload.email).first()
@@ -335,6 +336,21 @@ def create_police_user(
         )
         print(f"[create_police_user] WARNING: {email_warning}")
 
+    log_action(
+        db,
+        "police_user_created",
+        actor_type="police_user",
+        actor_id=current_user.police_user_id,
+        entity_type="police_user",
+        entity_id=str(user.police_user_id),
+        action_details={
+            "email": user.email,
+            "role": user.role,
+            "rank": user.rank,
+            "station_id": user.station_id,
+        },
+        success=True,
+    )
     db.commit()
     db.refresh(user)
 
@@ -353,6 +369,7 @@ def create_police_user(
 def update_police_user(
     user_id: int,
     payload: PoliceUserUpdate,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
@@ -384,6 +401,18 @@ def update_police_user(
             user.is_active = payload.is_active
 
         db.add(user)
+        log_action(
+            db,
+            "police_user_updated",
+            actor_type="police_user",
+            actor_id=current_user.police_user_id,
+            entity_type="police_user",
+            entity_id=str(user.police_user_id),
+            action_details={"fields": ["name", "phone", "rank", "active"]},
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            success=True,
+        )
         db.commit()
         db.refresh(user)
 
@@ -455,6 +484,23 @@ def update_police_user(
         user.password_hash = get_password_hash(payload.password)
 
     db.add(user)
+    log_action(
+        db,
+        "police_user_updated",
+        actor_type="police_user",
+        actor_id=current_user.police_user_id,
+        entity_type="police_user",
+        entity_id=str(user.police_user_id),
+        action_details={
+            "role": user.role,
+            "rank": user.rank,
+            "station_id": user.station_id,
+            "is_active": user.is_active,
+        },
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        success=True,
+    )
     db.commit()
     db.refresh(user)
 

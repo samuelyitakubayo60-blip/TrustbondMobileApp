@@ -57,8 +57,8 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   bool _loadingAlerts = false;
   /// Default list/stats filter (1 week). Map always shows all clusters.
   int _hotspotTimeWindowHours = 168;
-  static const int _mapClusterWindowHours = 8760;
-  int _nearbyHotspotRadiusMeters = 3000;
+  int _nearbyHotspotRadiusMeters = 1500;
+  static const _distanceCalc = Distance();
 
   Timer? _hotspotRefreshTimer;
 
@@ -86,8 +86,6 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     _loadMap();
     _loadSectorsFromBackend();
     _getUserLocation();
-    _loadHotspots();
-    _loadPublicAlerts();
 
     // Keep hotspots fresh (mobile app has no websocket push).
     _hotspotRefreshTimer = Timer.periodic(const Duration(seconds: 45), (_) {
@@ -192,7 +190,24 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
           ? '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}'
           : null;
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _centerOnUser();
+    });
   }
+
+  double _distanceToHotspotMeters(Hotspot hotspot) {
+    if (_userLat == null || _userLng == null) {
+      return hotspot.distanceMeters ?? double.infinity;
+    }
+    return _distanceCalc(
+      LatLng(_userLat!, _userLng!),
+      LatLng(hotspot.centerLat, hotspot.centerLong),
+    );
+  }
+
+  double get _alertsRadiusKm =>
+      (_nearbyHotspotRadiusMeters / 1000.0).clamp(0.5, 3.0);
 
   Future<void> _getUserLocation() async {
     setState(() => _locatingUser = true);
@@ -237,6 +252,8 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
       });
         if (_userLat != null && _userLng != null) {
           _applyUserLocationFromGps(_userLat!, _userLng!);
+          _loadHotspots();
+          _loadPublicAlerts();
         }
         debugPrint('Map data loaded and state updated');
       }
@@ -253,32 +270,47 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
 
   Future<void> _loadHotspots() async {
     if (_loadingHotspots) return;
+    if (_userLat == null || _userLng == null) {
+      if (mounted) {
+        setState(() {
+          _hotspots = [];
+          _loadingHotspots = false;
+        });
+      }
+      return;
+    }
     setState(() => _loadingHotspots = true);
     try {
       debugPrint(
-        'Loading map clusters (all incidents window: $_mapClusterWindowHours h)',
+        'Loading nearby clusters (${_nearbyHotspotRadiusMeters}m, '
+        '${_hotspotTimeWindowHours}h)',
       );
-      final hotspots = (_userLat != null && _userLng != null)
-          ? await _hotspotService.getNearbyHotspots(
-              lat: _userLat!,
-              lon: _userLng!,
-              radiusMeters: _nearbyHotspotRadiusMeters,
-              timeWindowHours: _mapClusterWindowHours,
-            )
-          : await _hotspotService.getAllHotspots(
-              timeWindowHours: _mapClusterWindowHours,
-            );
+      final hotspots = await _hotspotService.getNearbyHotspots(
+        lat: _userLat!,
+        lon: _userLng!,
+        radiusMeters: _nearbyHotspotRadiusMeters,
+        timeWindowHours: _hotspotTimeWindowHours,
+      );
       debugPrint('Received ${hotspots.length} hotspots from service');
-      
+
       final mapData = _mapData;
-      final filtered = mapData == null
+      final radius = _nearbyHotspotRadiusMeters.toDouble();
+      var filtered = mapData == null
           ? hotspots
           : hotspots.where((h) {
               final village = mapData.findVillage(h.centerLat, h.centerLong);
               return village != null;
             }).toList();
-      
-      debugPrint('Filtered to ${filtered.length} hotspots within map bounds');
+
+      filtered = filtered
+          .where((h) => _distanceToHotspotMeters(h) <= radius)
+          .toList()
+        ..sort(
+          (a, b) =>
+              _distanceToHotspotMeters(a).compareTo(_distanceToHotspotMeters(b)),
+        );
+
+      debugPrint('Filtered to ${filtered.length} hotspots near you');
       
       if (!mounted) return;
       setState(() {
@@ -308,7 +340,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
       final alerts = await _api.getPublicAlerts(
         latitude: _userLat!,
         longitude: _userLng!,
-        radiusKm: 10.0,
+        radiusKm: _alertsRadiusKm,
         limit: 10,
       );
       if (!mounted) return;
@@ -597,6 +629,10 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
               ),
               const SizedBox(height: 8),
             ],
+            if (_userLat != null && _userLng != null)
+              Text(
+                'Distance: ${(_distanceToHotspotMeters(hotspot) / 1000).toStringAsFixed(2)} km from you',
+              ),
             Text('Incidents: ${hotspot.incidentCount}', 
                  style: TextStyle(fontWeight: isSecurityCluster ? FontWeight.bold : FontWeight.normal)),
             if (hotspot.incidentTypeName != null) 
@@ -738,7 +774,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                   _loadingHotspots
                       ? 'Loading hotspots...'
                       : _mapData != null
-                      ? '${_mapData!.features.length} villages · ${_hotspots.length} clusters on map · filter ${_formatHotspotWindow(_hotspotTimeWindowHours)} · ${_userLat != null && _userLng != null ? 'near ${(_nearbyHotspotRadiusMeters / 1000).toStringAsFixed(0)}km' : 'district'}'
+                      ? '${_mapData!.features.length} villages · ${_hotspots.length} clusters · ${_formatHotspotWindow(_hotspotTimeWindowHours)} · ${_userLat != null && _userLng != null ? 'within ${(_nearbyHotspotRadiusMeters / 1000).toStringAsFixed(1)} km' : 'enable GPS'}'
                           : 'Loading...',
                   style: const TextStyle(
                       fontSize: 10,
@@ -855,7 +891,10 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
               if (selected) return;
               debugPrint('Filter tapped: ${_formatHotspotWindow(hours)} ($hours hours)');
               setState(() => _hotspotTimeWindowHours = hours);
-              _loadHotspots();
+              if (_userLat != null && _userLng != null) {
+                _loadHotspots();
+                _loadPublicAlerts();
+              }
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
@@ -885,7 +924,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   }
 
   Widget _buildNearbyRadiusFilters() {
-    const radii = <int>[1000, 3000, 5000];
+    const radii = <int>[500, 1500, 3000];
     final hasLocation = _userLat != null && _userLng != null;
     return Container(
       height: 34,
@@ -904,6 +943,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                     if (selected) return;
                     setState(() => _nearbyHotspotRadiusMeters = meters);
                     _loadHotspots();
+                    _loadPublicAlerts();
                   },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
@@ -919,7 +959,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
               ),
               child: Text(
                 hasLocation
-                    ? 'Nearby ${(meters / 1000).toStringAsFixed(0)}km'
+                    ? 'Within ${meters < 1000 ? '${meters}m' : '${(meters / 1000).toStringAsFixed(1)} km'}'
                     : 'Enable GPS',
                 style: TextStyle(
                   fontSize: 12,
@@ -1287,9 +1327,9 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Nearby AI Safety Alerts (10 km)',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        Text(
+          'Nearby AI Safety Alerts (${_alertsRadiusKm.toStringAsFixed(1)} km)',
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
         Expanded(

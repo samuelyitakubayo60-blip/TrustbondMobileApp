@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from math import atan2, cos, radians, sin, sqrt
 from typing import List, Dict, Any, Optional
 
@@ -93,18 +93,23 @@ def _prediction_narrative(classification: str, incident_name: str, distance_km: 
 def list_public_alerts(
     latitude: float = Query(..., description="User latitude for proximity filtering."),
     longitude: float = Query(..., description="User longitude for proximity filtering."),
-    radius_km: float = Query(10.0, ge=0.5, le=50.0, description="Max alert distance from user."),
+    radius_km: float = Query(
+        2.0, ge=0.2, le=10.0, description="Max alert distance from user (km)."
+    ),
     db: Session = Depends(get_db),
     limit: int = Query(20, ge=1, le=100),
 ):
-    """AI-derived public alerts within radius of user location (default 10km)."""
+    """AI-derived public alerts within radius of user location (default 2 km)."""
+    recent_cutoff = datetime.now(timezone.utc) - timedelta(hours=168)
     hotspots = (
         db.query(Hotspot)
         .options(
             joinedload(Hotspot.incident_type),
             selectinload(Hotspot.reports).selectinload(Report.ml_predictions),
         )
+        .filter(Hotspot.detected_at >= recent_cutoff)
         .order_by(Hotspot.detected_at.desc())
+        .limit(200)
         .all()
     )
 
@@ -161,7 +166,5 @@ def list_public_alerts(
             }
         )
 
-        if len(alerts) >= limit:
-            break
-
-    return alerts
+    alerts.sort(key=lambda a: float(a.get("distance_km") or 9999.0))
+    return alerts[:limit]

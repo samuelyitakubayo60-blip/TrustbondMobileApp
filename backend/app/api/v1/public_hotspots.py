@@ -47,7 +47,7 @@ def list_public_hotspots(
         None, ge=-180, le=180, description="User longitude for nearby filtering."
     ),
     radius_meters: int = Query(
-        3000, ge=200, le=20000, description="Nearby filter radius in meters."
+        1500, ge=200, le=10000, description="Nearby filter radius in meters (from user GPS)."
     ),
     time_window_hours: Optional[int] = Query(
         None,
@@ -112,8 +112,10 @@ def list_public_hotspots(
                 nearby.append((h, d))
         nearby.sort(key=lambda item: (item[1], -int(item[0].incident_count or 0)))
         hotspots = [h for h, _ in nearby[:limit]]
+        distance_by_id = {h.hotspot_id: d for h, d in nearby[:limit]}
     else:
         hotspots = hotspots[:limit]
+        distance_by_id = {}
     responses = []
     for h in hotspots:
         classification = (
@@ -142,6 +144,9 @@ def list_public_hotspots(
                 incident_type_name=incident_type_name,
                 classification=classification,
                 prediction={"citizen_advisory": advisory},
+                distance_meters=round(distance_by_id.get(h.hotspot_id, 0.0), 1)
+                if h.hotspot_id in distance_by_id
+                else None,
             )
         )
     return responses
