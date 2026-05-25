@@ -30,17 +30,6 @@ const HOTSPOT_PERIOD_OPTIONS = [
 const DEFAULT_TIME_PERIOD = "week"; // 7-day view; run DBSCAN with same window to rebuild clusters
 
 /** Derive sidebar stats from persisted hotspot rows (same source as map polygons). */
-/** Compute effective risk count applying the time-decay multiplier. */
-const effectiveRiskCount = (h) => {
-  const count = Number(h.incident_count || 1);
-  const detectedAt = h.detected_at ? new Date(h.detected_at) : new Date();
-  const ageDays = (Date.now() - detectedAt.getTime()) / (1000 * 60 * 60 * 24);
-  if (ageDays > 30) {
-    return count * ((ageDays / 30) * 1.5);
-  }
-  return count;
-};
-
 /**
  * Client-side report-date filter — only when the API was loaded without time_period.
  * If the backend already filtered by week/month, do not re-filter (that was splitting
@@ -88,9 +77,9 @@ const buildStatsFromHotspots = (hotspots) => {
       if (p?.report_id) uniqueReportIds.add(String(p.report_id));
     });
 
-    const eff = effectiveRiskCount({ ...h, incident_count: count });
-    if (eff >= 5) high++;
-    else if (eff >= 2) medium++;
+    const rl = String(h.risk_level || "").toLowerCase();
+    if (rl === "high" || rl === "critical") high++;
+    else if (rl === "medium" || rl === "active" || rl === "emerging") medium++;
     else low++;
 
     if (count >= 2) clusters++;
@@ -594,29 +583,40 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
     return incidentTone[String(name).toLowerCase()] || "neutral";
   };
 
-  /** Musanze safety map cluster zone colours (red / yellow / green). */
-  const getRiskZoneColor = (risk) => {
-    const rl = String(risk || "").toLowerCase();
-    if (rl === "high" || rl === "critical") return "#ef4444";
-    if (rl === "medium" || rl === "active" || rl === "emerging") return "#eab308";
-    if (rl === "low" || rl === "low_activity") return "#22c55e";
-    return "#22c55e";
+  /** Musanze safety map colours — green / yellow / red by backend risk_level. */
+  const RISK_ZONE_COLORS = {
+    high: "#ef4444",
+    critical: "#ef4444",
+    medium: "#eab308",
+    active: "#eab308",
+    emerging: "#eab308",
+    low: "#22c55e",
+    low_activity: "#22c55e",
   };
 
-  /** Cluster dot color by incident count × time-decay multiplier */
-  const getHotspotDotColor = (hotspot) => {
-    const count = Number(hotspot.incident_count || 1);
-    const detectedAt = hotspot.detected_at ? new Date(hotspot.detected_at) : new Date();
-    const ageDays = (Date.now() - detectedAt.getTime()) / (1000 * 60 * 60 * 24);
-    let effectiveCount = count;
-    if (ageDays > 30) {
-      const months = ageDays / 30;
-      effectiveCount = count * (months * 1.5);
-    }
-    if (effectiveCount >= 5) return "#ef4444";   // red
-    if (effectiveCount >= 2) return "#eab308";   // yellow
-    return "#22c55e";                             // green (single incident)
+  const getRiskZoneColor = (risk) => {
+    const rl = String(risk || "").toLowerCase();
+    return RISK_ZONE_COLORS[rl] || "#22c55e";
   };
+
+  const getReportRiskBorder = (fillColor) => {
+    const borders = {
+      "#ef4444": "#991b1b",
+      "#eab308": "#854d0e",
+      "#22c55e": "#15803d",
+    };
+    return borders[fillColor] || "#15803d";
+  };
+
+  const getReportRiskLabel = (fillColor) => {
+    if (fillColor === "#ef4444") return "High-risk area";
+    if (fillColor === "#eab308") return "Medium-risk area";
+    if (fillColor === "#22c55e") return "Low-risk area";
+    return "Cluster";
+  };
+
+  /** Map dots and zones — same palette as before (risk_level, not incident type). */
+  const getHotspotDotColor = (hotspot) => getRiskZoneColor(hotspot?.risk_level);
 
   /**
    * Well-known types get hand-picked colours for immediate recognition.
@@ -677,28 +677,22 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
     return expandBoundsByKm(computed, MUSANZE_BUFFER_KM);
   }, [polygons]);
 
-  const countIcon = (count, tone = "neutral") => {
-    const bg =
-      tone === "danger"
-        ? "#f87171"
-        : tone === "warning"
-          ? "#fb923c"
-          : tone === "success"
-            ? "#34d399"
-            : "#60a5fa";
-    const size = count >= 10 ? 34 : 30;
+  /** Cluster count badge — filled circle in Musanze green / yellow / red. */
+  const countIcon = (count, fillColor, borderColor) => {
+    const size = Math.min(48, 28 + Math.floor(Math.log2(Math.max(1, count))) * 5);
+    const half = size / 2;
     return L.divIcon({
       className: "hotspot-count-icon",
       html: `<div style="
-          width:${size}px;height:${size}px;border-radius:${size}px;
-          background:${bg};color:white;font-weight:800;
+          width:${size}px;height:${size}px;border-radius:50%;
+          background:${fillColor};color:#fff;font-weight:800;
           display:flex;align-items:center;justify-content:center;
-          border:2px solid rgba(255,255,255,0.95);
-          box-shadow:0 2px 8px rgba(0,0,0,0.28);
+          border:3px solid ${borderColor};
+          box-shadow:0 2px 8px rgba(0,0,0,0.35);
           font-size:${count >= 10 ? 12 : 13}px;
         ">${count}</div>`,
       iconSize: [size, size],
-      iconAnchor: [size / 2, size / 2],
+      iconAnchor: [half, half],
     });
   };
 
@@ -865,7 +859,8 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
 
               {/* ── Backend DBSCAN clusters ─────────────────────────────── */}
               {mapRenderableHotspots.map((h) => {
-                const clusterColor = getHotspotDotColor(h);
+                const zoneColor = getHotspotDotColor(h);
+                const zoneBorder = getReportRiskBorder(zoneColor);
                 const pts = Array.isArray(h.incident_points) ? h.incident_points : [];
                 const reportCount = Math.max(
                   Number(h.incident_count) || 0,
@@ -877,12 +872,6 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                 const hull = Array.isArray(h.boundary_points) && h.boundary_points.length >= 3
                   ? h.boundary_points
                   : [];
-                const countTone =
-                  h.risk_level === "high" || h.risk_level === "critical"
-                    ? "danger"
-                    : h.risk_level === "medium"
-                      ? "warning"
-                      : "neutral";
 
                 return (
                   <React.Fragment key={`hs-${h.hotspot_id}`}>
@@ -891,10 +880,10 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                       <Polygon
                         positions={hull}
                         pathOptions={{
-                          color: clusterColor,
+                          color: zoneColor,
                           weight: isSelected ? 2.5 : 1.5,
                           opacity: isSelected ? 0.9 : 0.55,
-                          fillColor: clusterColor,
+                          fillColor: zoneColor,
                           fillOpacity: isSelected ? 0.14 : 0.08,
                           dashArray: isSelected ? "8 5" : "4 6",
                         }}
@@ -905,10 +894,10 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                         center={[h.lat, h.lng]}
                         radius={Number(h.radius_meters) || 300}
                         pathOptions={{
-                          color: clusterColor,
+                          color: zoneColor,
                           weight: isSelected ? 2 : 1.5,
                           opacity: isSelected ? 0.85 : 0.5,
-                          fillColor: clusterColor,
+                          fillColor: zoneColor,
                           fillOpacity: isSelected ? 0.12 : 0.07,
                           dashArray: "6 4",
                         }}
@@ -918,7 +907,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                     {isMultiCluster && (
                       <Marker
                         position={[h.lat, h.lng]}
-                        icon={countIcon(reportCount, countTone)}
+                        icon={countIcon(reportCount, zoneColor, zoneBorder)}
                         zIndexOffset={isSelected ? 1000 : 400}
                         eventHandlers={{
                           click: () => focusClusterOnMap(isSelected ? null : h),
@@ -942,17 +931,20 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                           radius={dotRadius}
                           eventHandlers={{ click: () => focusClusterOnMap(h) }}
                           pathOptions={{
-                            color: clusterColor,
-                            weight: 1.5,
+                            color: zoneBorder,
+                            weight: 2,
                             opacity: alpha,
-                            fillColor: clusterColor,
-                            fillOpacity: alpha * 0.85,
+                            fillColor: zoneColor,
+                            fillOpacity: alpha * 0.92,
                           }}
                         >
                           <Tooltip direction="top" offset={[0, -6]} opacity={0.97} interactive={false}>
                             <div style={{ fontSize: "12px", lineHeight: 1.6, minWidth: 160 }}>
                               <div style={{ fontWeight: 700, marginBottom: 2 }}>
                                 {p.incident_type_name || "Incident"}
+                              </div>
+                              <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                                {getReportRiskLabel(zoneColor)}
                               </div>
                               <div style={{ color: "#94a3b8", fontSize: 11 }}>
                                 Report #{String(p.report_id || "").slice(-6)}
@@ -982,18 +974,20 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                         radius={mapZoom >= 14 ? 6 : mapZoom >= 12 ? 5 : 4}
                         eventHandlers={{ click: () => focusClusterOnMap(isSelected ? null : h) }}
                         pathOptions={{
-                          color: clusterColor,
-                          weight: 1.5,
+                          color: zoneBorder,
+                          weight: 2,
                           opacity: alpha,
-                          fillColor: clusterColor,
-                          fillOpacity: alpha * 0.85,
+                          fillColor: zoneColor,
+                          fillOpacity: alpha * 0.92,
                         }}
                       >
                         <Tooltip direction="top" offset={[0, -6]} opacity={0.97} interactive={false}>
                           <div style={{ fontSize: "12px", lineHeight: 1.6 }}>
                             <strong>{h.area_label || `Cluster #${h.hotspot_id}`}</strong>
                             <br />
-                            {reportCount} incident · {h.incident_type_name || h.crime_group || "unknown"}
+                            {reportCount} incident · {getReportRiskLabel(zoneColor)}
+                            <br />
+                            {h.incident_type_name || h.crime_group || "unknown"}
                           </div>
                         </Tooltip>
                       </CircleMarker>
@@ -1185,9 +1179,9 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                     Risk zones (Musanze)
                   </div>
                   {[
-                    { color: "#ef4444", label: "High risk (5+ incidents or time-escalated)" },
-                    { color: "#eab308", label: "Emerging cluster (2–4 incidents)" },
-                    { color: "#22c55e", label: "Single incident" },
+                    { color: "#ef4444", label: "High risk (critical / high)" },
+                    { color: "#eab308", label: "Medium / emerging / active" },
+                    { color: "#22c55e", label: "Low activity" },
                   ].map((row) => (
                     <div key={row.label} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
                       <div style={{
@@ -1202,7 +1196,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                     </div>
                   ))}
                   <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", marginTop: 6, paddingTop: 6, fontSize: 10, color: "#94a3b8" }}>
-                    Shaded zones = clusters with 2+ reports (number = count). Dots = each report. Incident-type and time filters apply together.
+                    Dot colour = cluster risk level (green / yellow / red). Shaded zones = 2+ reports. Time and type filters apply together.
                   </div>
                 </div>
               )}
