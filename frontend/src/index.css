@@ -2249,11 +2249,11 @@ textarea:focus {
 ───────────────────────────────────────────────────────────── */
 .map-container {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 1fr 280px;
   gap: 14px;
-  height: calc(100vh - 200px);
-  min-height: 500px;
-  max-height: 700px;
+  height: calc(100vh - 160px);
+  min-height: 600px;
+  max-height: 900px;
 }
 
 .smx-controls {

@@ -44,6 +44,8 @@ const buildStatsFromHotspots = (hotspots) => {
 
   for (const h of list) {
     const count = Number(h.incident_count) || 0;
+    // DBSCAN clusters never overlap — each incident belongs to exactly one cluster.
+    // Sum is accurate; if it exceeds system total, hotspots are stale (run DBSCAN to refresh).
     reportsIn += count;
     const risk = String(h.risk_level || "").toLowerCase();
     if (risk === "critical" || risk === "high") crit += 1;
@@ -321,7 +323,14 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     api
       .get(`/api/v1/hotspots/?${params.toString()}`)
       .then((res) => {
-        const rows = res || [];
+        const raw = res || [];
+        // Deduplicate by hotspot_id so the table and map always agree
+        const seen = new Set();
+        const rows = raw.filter((h) => {
+          if (seen.has(h.hotspot_id)) return false;
+          seen.add(h.hotspot_id);
+          return true;
+        });
         setHistoricalHotspots(rows);
         setHotspotStats(buildStatsFromHotspots(rows));
         setLoading(false);
@@ -458,8 +467,8 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     [filteredHotspots, dbscanParams.radius_meters],
   );
 
-  // filteredHistoricalHotspots = same as filteredHotspots (type + param filters already applied)
-  const filteredHistoricalHotspots = filteredHotspots;
+  // filteredHistoricalHotspots = plottedHotspots so table count always matches map circles
+  const filteredHistoricalHotspots = plottedHotspots;
 
   const selectedHotspot = useMemo(
     () =>
@@ -604,27 +613,24 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     return "Cluster";
   };
 
-  /** Circular cluster badge showing incident count — larger badge for larger groups. */
+  /** Small count pill at cluster centroid. */
   const createClusterIcon = (count, fillColor, borderColor, opacity) => {
-    const size = Math.min(48, 28 + Math.floor(Math.log2(Math.max(1, count))) * 5);
-    const half = size / 2;
     return L.divIcon({
       className: "",
       html: `<div style="
-        width:${size}px;height:${size}px;
+        padding:2px 6px;
         background:${fillColor};
-        border:3px solid ${borderColor};
-        border-radius:50%;
-        display:flex;align-items:center;justify-content:center;
-        color:#fff;font-weight:800;font-size:${size < 36 ? 11 : 13}px;
+        border:1.5px solid ${borderColor};
+        border-radius:10px;
+        color:#fff;font-weight:700;font-size:11px;
         font-family:sans-serif;
         opacity:${opacity};
-        box-shadow:0 0 0 3px rgba(0,0,0,0.45),0 3px 10px rgba(0,0,0,0.65);
-        line-height:1;
+        box-shadow:0 1px 4px rgba(0,0,0,0.5);
+        white-space:nowrap;line-height:1.4;
       ">${count}</div>`,
-      iconSize: [size, size],
-      iconAnchor: [half, half],
-      tooltipAnchor: [0, -half - 4],
+      iconSize: null,
+      iconAnchor: [16, 10],
+      tooltipAnchor: [0, -14],
     });
   };
 
@@ -823,7 +829,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
           <div>
             <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Community Safety Map</h2>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
-              Musanze District hotspot clusters — circles show risk zones. Use the time period controls to filter.
+              Musanze District hotspot clusters — polygons show cluster boundaries, colored dots show individual incidents.
             </p>
           </div>
         </div>
@@ -963,33 +969,67 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
 
                 return (
                   <React.Fragment key={`hs-${h.hotspot_id}`}>
-                    {h.radius_meters > 0 && (
-                      <Circle
-                        center={[h.lat, h.lng]}
-                        radius={h.radius_meters}
-                        pathOptions={{
-                          color: zoneColor,
-                          weight: 2.5,
-                          opacity: alpha * 0.9,
-                          fillColor: zoneColor,
-                          fillOpacity: alpha * 0.12,
-                        }}
-                      />
-                    )}
-
-                    {hull.length >= 3 && (
+                    {hull.length >= 3 ? (
+                      /* Convex hull polygon — real lat/lng coords, Leaflet projects to real-world */
                       <Polygon
                         positions={hull}
                         pathOptions={{
                           color: zoneColor,
-                          weight: 3,
+                          weight: 2.5,
                           opacity: alpha * 0.95,
                           fillColor: zoneColor,
-                          fillOpacity: alpha * 0.2,
+                          fillOpacity: alpha * 0.18,
                           dashArray: "8 5",
                         }}
                       />
+                    ) : (
+                      /* Fallback: Leaflet Circle radius is in real meters (not pixels) */
+                      <Circle
+                        center={[h.lat, h.lng]}
+                        radius={Number(h.radius_meters) || 500}
+                        pathOptions={{
+                          color: zoneColor,
+                          weight: 2,
+                          opacity: alpha * 0.85,
+                          fillColor: zoneColor,
+                          fillOpacity: alpha * 0.15,
+                          dashArray: "6 4",
+                        }}
+                      />
                     )}
+
+                    {/* Individual incident points within the cluster */}
+                    {pts.map((p, pIdx) => {
+                      const lat = Number(p.latitude);
+                      const lng = Number(p.longitude);
+                      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+                      const ptColor = getIncidentTypeColor(p.incident_type_name);
+                      const ptRadius = mapZoom >= 14 ? 7 : mapZoom >= 12 ? 5 : 4;
+                      return (
+                        <CircleMarker
+                          key={`pt-${h.hotspot_id}-${pIdx}`}
+                          center={[lat, lng]}
+                          radius={ptRadius}
+                          pathOptions={{
+                            color: "#fff",
+                            weight: 1.5,
+                            opacity: alpha,
+                            fillColor: ptColor,
+                            fillOpacity: alpha * 0.9,
+                          }}
+                        >
+                          <Tooltip direction="top" offset={[0, -6]} opacity={0.95} interactive={false}>
+                            <div style={{ fontSize: "11px", lineHeight: 1.5 }}>
+                              <strong>{p.incident_type_name || "Incident"}</strong>
+                              {p.reported_at && (
+                                <><br />{new Date(p.reported_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</>
+                              )}
+                              {p.sector_name && <><br />Sector: {p.sector_name}</>}
+                            </div>
+                          </Tooltip>
+                        </CircleMarker>
+                      );
+                    })}
 
                     <Marker
                       position={[h.lat, h.lng]}
@@ -1079,7 +1119,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                     </div>
                   ))}
                   <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", marginTop: 6, paddingTop: 6, fontSize: 10, color: "#94a3b8" }}>
-                    Numbers show incidents per hotspot cluster. Outside the selected time period, clusters appear faded.
+                    Colored dots = individual incidents (color by type). Numbers on badge = total incidents in cluster. Faded = outside selected time period.
                   </div>
                 </div>
               )}
@@ -1340,441 +1380,92 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
             </button>
           </div>
 
-          {/* Simple Status Summary */}
-          <div
-            style={{
-              padding: "12px 14px",
-              marginBottom: "14px",
-              backgroundColor: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "8px",
+        </div>
+      </div>
+
+      {/* ── DBSCAN Parameters ── */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-header">
+          <div className="card-title">DBSCAN Parameters</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+            Adjust clustering settings, then run to recompute hotspots
+          </div>
+        </div>
+        <div style={{ padding: '14px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr) auto', gap: 20, alignItems: 'end' }}>
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
+              Time Period: <strong>Last {formatTimeWindow(dbscanParams.time_window_hours)}</strong>
+            </div>
+            <select
+              className="select"
+              value={Number(dbscanParams.time_window_hours || 24)}
+              onChange={(e) => {
+                const hours = Number(e.target.value);
+                setDbscanParams((p) => ({ ...p, time_window_hours: hours }));
+                const periodMap = { 24: "day", 168: "week", 720: "month", 2160: "quarter", 8760: "year" };
+                setTimePeriod(periodMap[hours] || "week");
+                setCustomHours("");
+                loadHistoricalHotspots();
+              }}
+            >
+              {HOTSPOT_PERIOD_OPTIONS.map((o) => (
+                <option key={o.hours} value={o.hours}>Last {o.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
+              Epsilon Radius: <strong>{Math.round(dbscanParams.radius_meters || 0)}m</strong>
+            </div>
+            <input type="range" min="100" max="1000" step="50"
+              value={Number(dbscanParams.radius_meters || 500)}
+              onChange={(e) => setDbscanParams((p) => ({ ...p, radius_meters: Number(e.target.value) }))}
+              style={{ width: '100%' }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
+              Min Points: <strong>{dbscanParams.min_incidents}</strong>
+            </div>
+            <input type="range" min="2" max="10" step="1"
+              value={Number(dbscanParams.min_incidents || 2)}
+              onChange={(e) => setDbscanParams((p) => ({ ...p, min_incidents: Number(e.target.value) }))}
+              style={{ width: '100%' }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
+              Trust &gt;=: <strong>{dbscanParams.trust_min}</strong>
+            </div>
+            <input type="range" min="0" max="100" step="5"
+              value={Number(dbscanParams.trust_min || 0)}
+              onChange={(e) => setDbscanParams((p) => ({ ...p, trust_min: Number(e.target.value) }))}
+              style={{ width: '100%' }}
+            />
+          </div>
+          <button
+            className="btn btn-primary"
+            disabled={recomputing}
+            onClick={async () => {
+              setRecomputing(true);
+              try {
+                await api.post("/api/v1/hotspots/recompute", {
+                  time_window_hours: Number(dbscanParams.time_window_hours || 168),
+                  radius_meters: Number(dbscanParams.radius_meters || 500),
+                  min_incidents: Number(dbscanParams.min_incidents || 2),
+                  trust_min: Number(dbscanParams.trust_min || 0),
+                });
+                loadHistoricalHotspots();
+              } catch {
+                // non-fatal
+              } finally {
+                setRecomputing(false);
+              }
             }}
+            style={{ whiteSpace: 'nowrap' }}
           >
-            <div
-              style={{
-                fontSize: "12px",
-                fontWeight: "600",
-                marginBottom: "8px",
-                color: "var(--text)",
-              }}
-            >
-              Risk Summary
-            </div>
-            <div style={{ display: "flex", gap: "12px", fontSize: "11px" }}>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: "#dc3545",
-                  }}
-                ></div>
-                <span>
-                  Critical: <strong>{hotspotStats.risk_counts.critical}</strong>
-                </span>
-              </div>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: "#fd7e14",
-                  }}
-                ></div>
-                <span>
-                  Warning: <strong>{hotspotStats.risk_counts.warning}</strong>
-                </span>
-              </div>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: "#28a745",
-                  }}
-                ></div>
-                <span>
-                  Normal: <strong>{hotspotStats.risk_counts.normal}</strong>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Cluster Formation Status */}
-          <div
-            style={{
-              padding: "12px 14px",
-              marginBottom: "14px",
-              backgroundColor: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "8px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "12px",
-                fontWeight: "600",
-                marginBottom: "8px",
-                color: "var(--text)",
-              }}
-            >
-              Formation Stages
-            </div>
-            <div style={{ display: "flex", gap: "12px", fontSize: "11px" }}>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: "#34d399",
-                  }}
-                ></div>
-                <span>
-                  Emerging: <strong>{hotspotStats.stage_counts.emerging}</strong>
-                </span>
-              </div>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: "#fb923c",
-                  }}
-                ></div>
-                <span>
-                  Active: <strong>{hotspotStats.stage_counts.active}</strong>
-                </span>
-              </div>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: "#dc3545",
-                  }}
-                ></div>
-                <span>
-                  Intense: <strong>{hotspotStats.stage_counts.intense}</strong>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="card smx-side-card">
-            <div className="card-header">
-              <div className="card-title">Security Advisories</div>
-            </div>
-            {advisories.map((h) => (
-              <div
-                className="hs-item smx-hotspot-item"
-                key={`adv-${h.hotspot_id}`}
-              >
-                <div className="hs-info">
-                  <div className="hs-name">
-                    {h.risk_level === "high" || h.risk_level === "critical"
-                      ? "Deploy Patrol"
-                      : "Monitor"}{" "}
-                    - Cluster #{h.hotspot_id}
-                  </div>
-                  <div className="hs-meta">
-                    {h.incident_count} reports, radius{" "}
-                    {Math.round(Number(h.radius_meters || 0))}m
-                  </div>
-                </div>
-                <span
-                  className={`risk-pill ${
-                    h.risk_level === "high" || h.risk_level === "critical"
-                      ? "r-critical"
-                      : "r-warning"
-                  }`}
-                >
-                  {h.risk_level === "high" || h.risk_level === "critical"
-                    ? "Urgent"
-                    : "Watch"}
-                </span>
-              </div>
-            ))}
-            {!advisories.length && !loading && (
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "var(--muted)",
-                  padding: "10px 14px",
-                }}
-              >
-                No active advisories.
-              </div>
-            )}
-
-            {/* Emergency Detection */}
-            <div
-              style={{
-                borderTop: "1px solid var(--border)",
-                paddingTop: "12px",
-                marginTop: "12px",
-              }}
-            >
-              <div style={{ marginBottom: "12px" }}>
-                <div
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: "600",
-                    marginBottom: "8px",
-                    color: "var(--text)",
-                  }}
-                >
-                  Emergency Detection
-                </div>
-                <button
-                  className="btn btn-outline btn-sm"
-                  style={{ width: "100%", marginBottom: "8px" }}
-                  onClick={() => {
-                    // Load emergency hotspots for last 24 hours
-                    api
-                      .get(
-                        "/api/v1/hotspots/emergencies?days_back=1&min_incidents=3",
-                      )
-                      .then((res) => {
-                        if (res && res.length > 0) {
-                          alert(
-                            `🚨 ${res.length} emergency hotspot(s) detected!\n\nCheck the map for critical incidents requiring immediate attention.`,
-                          );
-                        } else {
-                          alert(
-                            "✅ No emergency hotspots detected in the last 24 hours.",
-                          );
-                        }
-                      })
-                      .catch(() => {
-                        alert("Failed to load emergency data.");
-                      });
-                  }}
-                >
-                  🚨 Check 24h Emergencies
-                </button>
-                <button
-                  className="btn btn-outline btn-sm"
-                  style={{ width: "100%", marginBottom: "4px" }}
-                  onClick={() => {
-                    // Load emergency hotspots for last 7 days
-                    api
-                      .get(
-                        "/api/v1/hotspots/emergencies?days_back=7&min_incidents=5",
-                      )
-                      .then((res) => {
-                        if (res && res.length > 0) {
-                          alert(
-                            `⚠️ ${res.length} high-priority hotspot(s) detected in the last week!\n\nThese areas may require increased patrol presence.`,
-                          );
-                        } else {
-                          alert(
-                            "✅ No high-priority hotspots detected in the last week.",
-                          );
-                        }
-                      })
-                      .catch(() => {
-                        alert("Failed to load emergency data.");
-                      });
-                  }}
-                >
-                  📊 Check Week Trends
-                </button>
-                <div
-                  style={{
-                    fontSize: "10px",
-                    color: "var(--muted)",
-                    marginTop: "4px",
-                  }}
-                >
-                  Emergency detection finds critical clusters with multiple
-                  incidents requiring immediate attention.
-                </div>
-              </div>
-            </div>
-
-            {/* DBSCAN Controls */}
-            <div
-              style={{
-                borderTop: "1px solid var(--border)",
-                paddingTop: "12px",
-                marginTop: "12px",
-              }}
-            >
-              <div style={{ marginBottom: "12px" }}>
-                <div
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: "600",
-                    marginBottom: "8px",
-                    color: "var(--text)",
-                  }}
-                >
-                  DBSCAN Parameters
-                </div>
-
-                <div style={{ marginBottom: "8px" }}>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--muted)",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    Time Period:{" "}
-                    <strong>
-                      Last {formatTimeWindow(dbscanParams.time_window_hours)}
-                    </strong>
-                  </div>
-                  <select
-                    className="select"
-                    value={Number(dbscanParams.time_window_hours || 24)}
-                    onChange={(e) => {
-                      const nextParams = {
-                        ...dbscanParams,
-                        time_window_hours: Number(e.target.value),
-                      };
-                      setDbscanParams(nextParams);
-                      loadHistoricalHotspots();
-                    }}
-                    style={{ width: "100%", fontSize: "12px" }}
-                  >
-                    {HOTSPOT_PERIOD_OPTIONS.map((option) => (
-                      <option key={option.hours} value={option.hours}>
-                        Last {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ marginBottom: "8px" }}>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--muted)",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    Epsilon Radius:{" "}
-                    <strong>
-                      {Math.round(dbscanParams.radius_meters || 0)}m
-                    </strong>
-                  </div>
-                  <input
-                    type="range"
-                    min="100"
-                    max="1000"
-                    step="50"
-                    value={Number(dbscanParams.radius_meters || 500)}
-                    onChange={(e) =>
-                      setDbscanParams((p) => ({
-                        ...p,
-                        radius_meters: Number(e.target.value),
-                      }))
-                    }
-                    style={{ width: "100%" }}
-                  />
-                </div>
-
-                <div style={{ marginBottom: "8px" }}>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--muted)",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    Min Points: <strong>{dbscanParams.min_incidents}</strong>
-                  </div>
-                  <input
-                    type="range"
-                    min="2"
-                    max="10"
-                    step="1"
-                    value={Number(dbscanParams.min_incidents || 2)}
-                    onChange={(e) =>
-                      setDbscanParams((p) => ({
-                        ...p,
-                        min_incidents: Number(e.target.value),
-                      }))
-                    }
-                    style={{ width: "100%" }}
-                  />
-                </div>
-
-                <div style={{ marginBottom: "12px" }}>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--muted)",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    Trust &gt;=: <strong>{dbscanParams.trust_min}</strong>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={Number(dbscanParams.trust_min || 0)}
-                    onChange={(e) =>
-                      setDbscanParams((p) => ({
-                        ...p,
-                        trust_min: Number(e.target.value),
-                      }))
-                    }
-                    style={{ width: "100%" }}
-                  />
-                </div>
-              </div>
-
-              <button
-                className="btn btn-primary"
-                disabled={recomputing}
-                onClick={async () => {
-                  setRecomputing(true);
-                  try {
-                    await api.post("/api/v1/hotspots/recompute", {
-                      time_window_hours: Number(dbscanParams.time_window_hours || 168),
-                      radius_meters: Number(dbscanParams.radius_meters || 500),
-                      min_incidents: Number(dbscanParams.min_incidents || 2),
-                      trust_min: Number(dbscanParams.trust_min || 0),
-                    });
-                    loadHistoricalHotspots();
-                  } catch {
-                    // non-fatal
-                  } finally {
-                    setRecomputing(false);
-                  }
-                }}
-                style={{ width: "100%", fontSize: "12px", padding: "8px" }}
-              >
-                {recomputing
-                  ? "Recomputing..."
-                  : `Run DBSCAN for last ${formatTimeWindow(
-                      dbscanParams.time_window_hours,
-                    )}`}
-              </button>
-            </div>
-          </div>
+            {recomputing ? "Recomputing..." : `Run DBSCAN`}
+          </button>
         </div>
       </div>
 
@@ -1831,60 +1522,28 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                 marginBottom: "8px",
               }}
             >
-              <button
-                className={`btn btn-xs ${timePeriod === "" ? "btn-primary" : "btn-outline"}`}
-                onClick={() => {
-                  setTimePeriod("");
-                  setCustomHours("");
-                }}
-              >
-                All Time
-              </button>
-              <button
-                className={`btn btn-xs ${timePeriod === "day" ? "btn-primary" : "btn-outline"}`}
-                onClick={() => {
-                  setTimePeriod("day");
-                  setCustomHours("");
-                }}
-              >
-                Last 24h
-              </button>
-              <button
-                className={`btn btn-xs ${timePeriod === "week" ? "btn-primary" : "btn-outline"}`}
-                onClick={() => {
-                  setTimePeriod("week");
-                  setCustomHours("");
-                }}
-              >
-                Last Week
-              </button>
-              <button
-                className={`btn btn-xs ${timePeriod === "month" ? "btn-primary" : "btn-outline"}`}
-                onClick={() => {
-                  setTimePeriod("month");
-                  setCustomHours("");
-                }}
-              >
-                Last Month
-              </button>
-              <button
-                className={`btn btn-xs ${timePeriod === "quarter" ? "btn-primary" : "btn-outline"}`}
-                onClick={() => {
-                  setTimePeriod("quarter");
-                  setCustomHours("");
-                }}
-              >
-                Last Quarter
-              </button>
-              <button
-                className={`btn btn-xs ${timePeriod === "year" ? "btn-primary" : "btn-outline"}`}
-                onClick={() => {
-                  setTimePeriod("year");
-                  setCustomHours("");
-                }}
-              >
-                Last Year
-              </button>
+              {[
+                { label: "All Time",      value: "",        hours: null  },
+                { label: "Last 24h",      value: "day",     hours: 24   },
+                { label: "Last Week",     value: "week",    hours: 168  },
+                { label: "Last Month",    value: "month",   hours: 720  },
+                { label: "Last Quarter",  value: "quarter", hours: 2160 },
+                { label: "Last Year",     value: "year",    hours: 8760 },
+              ].map(({ label, value, hours }) => (
+                <button
+                  key={label}
+                  className={`btn btn-xs ${timePeriod === value ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => {
+                    setTimePeriod(value);
+                    setCustomHours("");
+                    if (hours !== null) {
+                      setDbscanParams((p) => ({ ...p, time_window_hours: hours }));
+                    }
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               <span style={{ fontSize: "11px", color: "var(--muted)" }}>
@@ -2054,7 +1713,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
         {/* Security Recommendations Card */}
         <div className="card" style={{ marginTop: "16px" }}>
           <div className="card-header">
-            <div className="card-title">🛡️ Security Recommendations</div>
+            <div className="card-title">Security Recommendations</div>
           </div>
           <div style={{ padding: "16px" }}>
             {loading ? (
