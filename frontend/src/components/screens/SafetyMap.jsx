@@ -484,18 +484,7 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
     }
   }, [plottedHotspots, selectedHotspotId]);
 
-  const formationPath = useMemo(
-    () =>
-      [...plottedHotspots]
-        .sort(
-          (a, b) =>
-            new Date(a.detected_at || 0).getTime() -
-            new Date(b.detected_at || 0).getTime(),
-        )
-        .map((h) => [h.lat, h.lng]),
-    [plottedHotspots],
-  );
-  const avgClusterTrust = useMemo(() => {
+const avgClusterTrust = useMemo(() => {
     const withTrust = historicalHotspots
       .map((h) =>
         Number(
@@ -704,41 +693,6 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
   const STAR_COLOR = "#E91E63";
 
   const getClusterColor = (idx) => CLUSTER_PALETTE[idx % CLUSTER_PALETTE.length];
-
-  /**
-   * Convex hull — Graham scan.
-   * Returns [[lat, lng], ...] ordered counter-clockwise for react-leaflet <Polygon>.
-   */
-  const convexHull = (pts) => {
-    if (pts.length <= 2) return pts.map((p) => [p.lat, p.lng]);
-    const s = pts.slice().sort((a, b) =>
-      a.lng !== b.lng ? a.lng - b.lng : a.lat - b.lat,
-    );
-    const cross = (O, A, B) =>
-      (A.lng - O.lng) * (B.lat - O.lat) - (A.lat - O.lat) * (B.lng - O.lng);
-    const lower = [];
-    for (const p of s) {
-      while (
-        lower.length >= 2 &&
-        cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0
-      )
-        lower.pop();
-      lower.push(p);
-    }
-    const upper = [];
-    for (let i = s.length - 1; i >= 0; i--) {
-      const p = s[i];
-      while (
-        upper.length >= 2 &&
-        cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0
-      )
-        upper.pop();
-      upper.push(p);
-    }
-    upper.pop();
-    lower.pop();
-    return [...lower, ...upper].map((p) => [p.lat, p.lng]);
-  };
 
   /** 5-point star DivIcon at cluster centroid — always hot-pink per spec. */
   const createStarIcon = () => {
@@ -954,19 +908,11 @@ const SafetyMap = ({ goToScreen, openModal, wsRefreshKey }) => {
                     isWithinSelectedFilter(p.reported_at, selectedFilterHours),
                   );
                 const alpha = clusterInFilter ? 1 : 0.35;
-                // Prefer hull from actual incident points (exact, no expansion).
-                // boundary_points from the API is pre-expanded 12% outward which causes
-                // adjacent clusters to visually overlap — avoid it.
-                const hullFromPts = convexHull(
-                  pts
-                    .map((p) => ({ lat: Number(p.latitude), lng: Number(p.longitude) }))
-                    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)),
-                );
-                const hull = hullFromPts.length >= 3
-                  ? hullFromPts
-                  : (Array.isArray(h.boundary_points) && h.boundary_points.length >= 3
-                      ? h.boundary_points
-                      : []);
+                // Cluster boundary is computed entirely by the backend DBSCAN pipeline.
+                // The frontend only renders what the backend returns — no recomputation here.
+                const hull = Array.isArray(h.boundary_points) && h.boundary_points.length >= 3
+                  ? h.boundary_points
+                  : [];
                 const types = [...new Set(pts.map((p) => p.incident_type_name).filter(Boolean))];
 
                 return (
