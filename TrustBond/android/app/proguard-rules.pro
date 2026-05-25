@@ -19,6 +19,10 @@
 -keep class com.google.android.gms.** { *; }
 -dontwarn com.google.android.gms.**
 
+# Google Play Core (split install / deferred components) — not used, suppress R8 missing-class errors
+-dontwarn com.google.android.play.core.**
+-keep class com.google.android.play.core.** { *; }
+
 # Suppress common harmless warnings
 -dontwarn sun.misc.**
 -dontwarn java.awt.**

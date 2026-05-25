@@ -1377,6 +1377,10 @@ tbody tr:hover td {
 .tbl-wrap tbody tr:hover td {
   background: var(--surface2);
 }
+.tbl-wrap tbody tr.clickable-row:hover td {
+  background: var(--surface2);
+  cursor: pointer;
+}
 .tbl-wrap th {
   background: var(--surface2);
   color: var(--text-dim);

@@ -98,25 +98,31 @@ const StationSecurityDetail = ({ goToScreen, stationId, stationName, wsRefreshKe
                 </thead>
                 <tbody>
                   {(group.cases || []).map((c) => (
-                    <tr key={c.case_id}>
+                    <tr
+                      key={c.case_id}
+                      style={{ cursor: "pointer" }}
+                      className="clickable-row"
+                      onClick={() => { setViewCase(c); setViewOpen(true); }}
+                    >
                       <td>
                         <strong>{c.title || c.case_number}</strong>
                         <div style={{ fontSize: 11, color: "var(--muted)" }}>{c.case_number}</div>
                       </td>
                       <td>
-                        <span className="badge b-blue">{c.status}</span>
+                        <span className={`badge ${c.status === "open" ? "b-green" : "b-gray"}`}>{c.status}</span>
                       </td>
-                      <td>{c.priority}</td>
+                      <td>
+                        <span className={`badge ${c.priority === "urgent" ? "b-red" : c.priority === "high" ? "b-orange" : c.priority === "low" ? "b-blue" : "b-gray"}`}>
+                          {c.priority}
+                        </span>
+                      </td>
                       <td>{c.report_count}</td>
                       <td style={{ fontSize: 12 }}>{c.assigned_to_name || "—"}</td>
-                      <td>
+                      <td onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
-                          className="btn btn-outline btn-sm"
-                          onClick={() => {
-                            setViewCase(c);
-                            setViewOpen(true);
-                          }}
+                          className="btn btn-primary btn-sm"
+                          onClick={() => { setViewCase(c); setViewOpen(true); }}
                         >
                           Open
                         </button>

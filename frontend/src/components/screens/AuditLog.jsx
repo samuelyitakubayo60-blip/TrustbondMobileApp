@@ -20,8 +20,10 @@ const AuditLog = ({ wsRefreshKey }) => {
     setLoading(true);
     
     const params = new URLSearchParams();
-    params.set("limit", String(150));
-    
+    params.set("limit", String(500));
+    params.set("sort_by", "created_at");
+    params.set("sort_order", "desc");
+
     if (entityFilter.trim()) {
       params.set("entity_type", entityFilter.trim());
     }

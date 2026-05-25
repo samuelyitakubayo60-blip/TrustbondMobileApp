@@ -1,349 +1,271 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client';
 
+const TYPE_BADGE = {
+  headquarters: 'b-purple',
+  police_station: 'b-blue',
+  post: 'b-green',
+  outpost: 'b-orange',
+};
+
+const TYPE_LABEL = {
+  headquarters: 'Headquarters',
+  police_station: 'Police Station',
+  post: 'Police Post',
+  outpost: 'Outpost',
+};
+
 const StationDetailModal = ({ isOpen, onClose, station }) => {
   const [officers, setOfficers] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState(null);
+  const [stats, setStats]       = useState(null);
+  const [loading, setLoading]   = useState(false);
+  const [tab, setTab]           = useState('info');
 
   useEffect(() => {
     if (!isOpen || !station) return;
-    
+    setTab('info');
     setLoading(true);
     const fetchData = async () => {
       try {
-        // Fetch officers assigned to this station
-        console.log(`Fetching officers for station ${station.station_id}`);
         const officersRes = await api.get(`/api/v1/police-users/?station_id=${station.station_id}`);
-        console.log('Officers API response:', officersRes);
-        
-        // Handle both direct array response and paginated response with items
-        const officersList = Array.isArray(officersRes) ? officersRes : (officersRes?.items || []);
-        console.log('Officers count:', officersList.length);
-        setOfficers(officersList);
+        setOfficers(Array.isArray(officersRes) ? officersRes : (officersRes?.items || []));
 
-        // Fetch station-specific statistics (fallback to dashboard if station endpoint not available)
         let statsRes;
         try {
           statsRes = await api.get(`/api/v1/stats/station/${station.station_id}`);
-        } catch (error) {
-          if (error.response?.status === 404) {
-            // Fallback to dashboard stats if station endpoint not deployed yet
-            console.log('Station stats endpoint not available, using dashboard stats as fallback');
-            statsRes = await api.get(`/api/v1/stats/dashboard`);
+        } catch (err) {
+          if (err.response?.status === 404 || err.status === 404) {
+            statsRes = await api.get('/api/v1/stats/dashboard');
           } else {
-            throw error;
+            throw err;
           }
         }
         setStats(statsRes);
-      } catch (error) {
-        console.error('Failed to fetch station details:', error);
+      } catch (err) {
+        console.error('Failed to fetch station details:', err);
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [isOpen, station]);
 
   if (!isOpen || !station) return null;
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '—';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  const fmt = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+  const fmtCoords = (lat, lng) => (lat && lng) ? `${parseFloat(lat).toFixed(5)}, ${parseFloat(lng).toFixed(5)}` : '—';
 
-  const formatCoordinates = (lat, long) => {
-    if (!lat || !long) return '—';
-    return `${parseFloat(lat).toFixed(6)}, ${parseFloat(long).toFixed(6)}`;
-  };
+  const TABS = [
+    { id: 'info',      label: 'Info'                           },
+    { id: 'officers',  label: `Officers (${officers.length})`  },
+    { id: 'stats',     label: 'Statistics'                     },
+  ];
 
   return (
     <div className="modal-overlay open" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: '700px', width: '90%' }}>
+      <div className="modal" style={{ maxWidth: 720, width: '92%' }}>
+
+        {/* ── Modal header ── */}
         <div className="modal-header">
-          <div className="modal-title">Station Details - {station.station_name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span className="badge b-blue" style={{ fontFamily: 'monospace', fontSize: 11, letterSpacing: '0.05em' }}>
+              {station.station_code}
+            </span>
+            <span style={{ fontWeight: 700, fontSize: 16 }}>{station.station_name}</span>
+            <span className={`badge ${TYPE_BADGE[station.station_type] || 'b-gray'}`} style={{ fontSize: 10 }}>
+              {TYPE_LABEL[station.station_type] || station.station_type}
+            </span>
+            <span className={`badge ${station.is_active ? 'b-green' : 'b-red'}`} style={{ fontSize: 10 }}>
+              {station.is_active ? 'Active' : 'Inactive'}
+            </span>
+          </div>
           <div className="modal-close" onClick={onClose}>✕</div>
         </div>
 
+        {/* ── Tabs ── */}
+        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', paddingLeft: 20 }}>
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                background: 'none',
+                border: 'none',
+                borderBottom: tab === t.id ? '2px solid var(--primary)' : '2px solid transparent',
+                color: tab === t.id ? 'var(--primary)' : 'var(--muted)',
+                fontWeight: tab === t.id ? 600 : 400,
+                fontSize: 13,
+                padding: '10px 16px',
+                cursor: 'pointer',
+                marginBottom: -1,
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Content ── */}
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--muted)' }}>
-            Loading station details...
+          <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)', fontSize: 13 }}>
+            Loading station details…
           </div>
         ) : (
-          <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-            {/* Station Information */}
-            <div className="card" style={{ marginBottom: '16px' }}>
-              <div className="card-header">
-                <div className="card-title">Station Information</div>
-              </div>
-              <div style={{ padding: '16px' }}>
-                <div className="form-grid">
-                  <div className="input-group">
-                    <div className="input-label">Station Code</div>
-                    <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
-                      {station.station_code || '—'}
+          <div style={{ maxHeight: '65vh', overflowY: 'auto', padding: '20px 20px 4px' }}>
+
+            {/* INFO tab */}
+            {tab === 'info' && (
+              <div style={{ display: 'grid', gap: 20 }}>
+                {/* Key details row */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+                  {[
+                    { label: 'Station Code', value: <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{station.station_code}</span> },
+                    { label: 'Type',         value: <span className={`badge ${TYPE_BADGE[station.station_type] || 'b-gray'}`} style={{ fontSize: 11 }}>{TYPE_LABEL[station.station_type] || station.station_type || '—'}</span> },
+                    { label: 'Coordinates',  value: fmtCoords(station.latitude, station.longitude) },
+                    { label: 'Created',      value: fmt(station.created_at) },
+                  ].map((f) => (
+                    <div key={f.label} style={{ background: 'var(--bg)', borderRadius: 6, padding: '10px 14px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{f.label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{f.value}</div>
                     </div>
-                  </div>
-                  <div className="input-group">
-                    <div className="input-label">Station Type</div>
-                    <div style={{ fontSize: '14px' }}>
-                      <span className={`badge ${
-                        station.station_type === 'headquarters' ? 'b-blue' :
-                        station.station_type === 'station' ? 'b-green' :
-                        'b-orange'
-                      }`}>
-                        {station.station_type || '—'}
-                      </span>
-                    </div>
-                  </div>
+                  ))}
                 </div>
 
-                <div style={{ marginTop: '16px' }}>
-                  <div className="input-label">Geographic Coverage</div>
-                  <div style={{ fontSize: '14px', marginTop: '4px' }}>
-                    {(station.covered_cell_names && station.covered_cell_names.length > 0) ? (
-                      <>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                          <strong>Covered cells:</strong>
-                          <span className="badge b-blue" style={{ fontSize: '10px' }}>
-                            {station.covered_cell_names.length}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--muted)', lineHeight: 1.5 }}>
-                          {station.covered_cell_names.join(', ')}
-                        </div>
-                      </>
-                    ) : (
-                      <div style={{ fontSize: '12px', color: 'var(--muted)', fontStyle: 'italic' }}>
-                        No cell coverage configured yet.
+                {/* Contact */}
+                <div style={{ background: 'var(--bg)', borderRadius: 6, padding: '14px 16px', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Contact Information</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>Phone</div>
+                      <div style={{ fontSize: 13 }}>{station.phone_number || '—'}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>Email</div>
+                      <div style={{ fontSize: 13 }}>{station.email || '—'}</div>
+                    </div>
+                    {station.address_text && (
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>Address</div>
+                        <div style={{ fontSize: 13 }}>{station.address_text}</div>
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="form-grid" style={{ marginTop: '16px' }}>
-                  <div className="input-group">
-                    <div className="input-label">Coordinates</div>
-                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                      {formatCoordinates(station.latitude, station.longitude)}
-                    </div>
+                {/* Coverage */}
+                <div style={{ background: 'var(--bg)', borderRadius: 6, padding: '14px 16px', border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Geographic Coverage</div>
+                    <span className="badge b-blue" style={{ fontSize: 10 }}>
+                      {station.covered_cell_names?.length || 0} cell{station.covered_cell_names?.length !== 1 ? 's' : ''}
+                    </span>
                   </div>
-                  <div className="input-group">
-                    <div className="input-label">Status</div>
-                    <div>
-                      <span className={`badge ${station.is_active ? 'b-green' : 'b-red'}`}>
-                        {station.is_active ? 'Active' : 'Inactive'}
-                      </span>
+                  {station.covered_cell_names?.length > 0 ? (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {station.covered_cell_names.map((cell) => (
+                        <span key={cell} className="badge b-gray" style={{ fontSize: 11 }}>{cell}</span>
+                      ))}
                     </div>
-                  </div>
-                </div>
-
-                {station.address_text && (
-                  <div style={{ marginTop: '16px' }}>
-                    <div className="input-label">Address</div>
-                    <div style={{ fontSize: '14px' }}>
-                      {station.address_text}
-                    </div>
-                  </div>
-                )}
-
-                <div className="form-grid" style={{ marginTop: '16px' }}>
-                  <div className="input-group">
-                    <div className="input-label">Phone</div>
-                    <div style={{ fontSize: '14px' }}>
-                      {station.phone_number || '—'}
-                    </div>
-                  </div>
-                  <div className="input-group">
-                    <div className="input-label">Email</div>
-                    <div style={{ fontSize: '14px' }}>
-                      {station.email || '—'}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="form-grid" style={{ marginTop: '16px' }}>
-                  <div className="input-group">
-                    <div className="input-label">Created</div>
-                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                      {formatDate(station.created_at)}
-                    </div>
-                  </div>
-                  <div className="input-group">
-                    <div className="input-label">Last Updated</div>
-                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                      {formatDate(station.updated_at)}
-                    </div>
-                  </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: 'var(--muted)', fontStyle: 'italic' }}>No cell coverage configured.</div>
+                  )}
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Assigned Officers */}
-            <div className="card" style={{ marginBottom: '16px' }}>
-              <div className="card-header">
-                <div className="card-title">Assigned Officers ({officers.length})</div>
-              </div>
-              <div style={{ padding: '16px' }}>
+            {/* OFFICERS tab */}
+            {tab === 'officers' && (
+              <div>
                 {officers.length === 0 ? (
-                  <div style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center', padding: '20px' }}>
-                    No officers assigned to this station
+                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)', fontSize: 13 }}>
+                    No officers assigned to this station.
                   </div>
                 ) : (
-                  <div style={{ display: 'grid', gap: '8px' }}>
-                    {officers.map((officer) => (
-                      <div
-                        key={officer.police_user_id}
-                        style={{
-                          padding: '8px 12px',
-                          border: '1px solid var(--border)',
-                          borderRadius: '4px',
-                          fontSize: '13px'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {officers.map((o) => (
+                      <div key={o.police_user_id} style={{ padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                           <div>
-                            <strong>{officer.first_name} {officer.last_name}</strong>
-                            {officer.badge_number && (
-                              <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--muted)' }}>
-                                Badge: {officer.badge_number}
-                              </span>
+                            <span style={{ fontWeight: 600, fontSize: 13 }}>{o.first_name} {o.last_name}</span>
+                            {o.badge_number && (
+                              <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--muted)', fontFamily: 'monospace' }}>#{o.badge_number}</span>
                             )}
                           </div>
-                          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                            <span className={`badge ${
-                              officer.role === 'admin' ? 'b-purple' :
-                              officer.role === 'supervisor' ? 'b-blue' :
-                              'b-green'
-                            }`} style={{ fontSize: '10px' }}>
-                              {officer.role}
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <span className={`badge ${o.role === 'admin' ? 'b-purple' : o.role === 'supervisor' ? 'b-blue' : 'b-green'}`} style={{ fontSize: 10 }}>
+                              {o.role}
                             </span>
-                            <span className={`badge ${officer.is_active ? 'b-green' : 'b-red'}`} style={{ fontSize: '10px' }}>
-                              {officer.is_active ? 'Active' : 'Inactive'}
+                            <span className={`badge ${o.is_active ? 'b-green' : 'b-red'}`} style={{ fontSize: 10 }}>
+                              {o.is_active ? 'Active' : 'Inactive'}
                             </span>
                           </div>
                         </div>
-                        {officer.email && (
-                          <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-                            {officer.email}
-                          </div>
-                        )}
-                        {officer.phone_number && (
-                          <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                            {officer.phone_number}
-                          </div>
-                        )}
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          {o.email && <span>{o.email}</span>}
+                          {o.phone_number && <span>{o.phone_number}</span>}
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-            </div>
+            )}
 
-            {/* Report Statistics */}
-            {stats && (
-              <div className="card">
-                <div className="card-header">
-                  <div className="card-title">Report Statistics</div>
-                </div>
-                <div style={{ padding: '16px' }}>
-                  {/* Overview Stats */}
-                  <div style={{ marginBottom: '20px' }}>
-                    <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: 'var(--muted)' }}>OVERVIEW</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-                      <div style={{ textAlign: 'center', padding: '8px', border: '1px solid var(--border)', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--primary)' }}>
-                          {stats.total_reports || 0}
-                        </div>
-                        <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Total Reports</div>
-                      </div>
-                      <div style={{ textAlign: 'center', padding: '8px', border: '1px solid var(--border)', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--success)' }}>
-                          {stats.verified_reports || 0}
-                        </div>
-                        <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Verified</div>
-                      </div>
-                      <div style={{ textAlign: 'center', padding: '8px', border: '1px solid var(--border)', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--warning)' }}>
-                          {stats.pending_reports || 0}
-                        </div>
-                        <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Pending</div>
-                      </div>
-                      <div style={{ textAlign: 'center', padding: '8px', border: '1px solid var(--border)', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--danger)' }}>
-                          {stats.rejected_reports || 0}
-                        </div>
-                        <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Rejected</div>
-                      </div>
-                      <div style={{ textAlign: 'center', padding: '8px', border: '1px solid var(--border)', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--info)' }}>
-                          {stats.active_cases || 0}
-                        </div>
-                        <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Active Cases</div>
+            {/* STATS tab */}
+            {tab === 'stats' && (
+              <div style={{ display: 'grid', gap: 20 }}>
+                {!stats ? (
+                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)', fontSize: 13 }}>
+                    Statistics not available.
+                  </div>
+                ) : (
+                  <>
+                    {/* Overview row */}
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Overview</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }}>
+                        {[
+                          { label: 'Total Reports',  value: stats.total_reports  || 0, color: 'var(--primary)'  },
+                          { label: 'Verified',        value: stats.verified_reports || 0, color: 'var(--success)'  },
+                          { label: 'Pending',         value: stats.pending_reports  || 0, color: 'var(--warning)'  },
+                          { label: 'Rejected',        value: stats.rejected_reports || 0, color: 'var(--danger)'   },
+                          { label: 'Active Cases',    value: stats.active_cases     || 0, color: 'var(--info)'     },
+                        ].map((s) => (
+                          <div key={s.label} style={{ textAlign: 'center', padding: '12px 8px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)' }}>
+                            <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
+                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{s.label}</div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
 
-                  {/* Verification Details */}
-                  <div style={{ marginBottom: '20px' }}>
-                    <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: 'var(--muted)' }}>VERIFICATION DETAILS</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-                      <div style={{ textAlign: 'center', padding: '8px', border: '1px solid var(--border)', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ff6b35' }}>
-                          {stats.flagged_reports || 0}
-                        </div>
-                        <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Flagged</div>
-                      </div>
-                      <div style={{ textAlign: 'center', padding: '8px', border: '1px solid var(--border)', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#28a745' }}>
-                          {stats.auto_confirmed_reports || 0}
-                        </div>
-                        <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Auto-Confirmed</div>
-                      </div>
-                      <div style={{ textAlign: 'center', padding: '8px', border: '1px solid var(--border)', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#007bff' }}>
-                          {stats.officer_confirmed_reports || 0}
-                        </div>
-                        <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Officer Confirmed</div>
+                    {/* Verification details */}
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Verification Breakdown</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }}>
+                        {[
+                          { label: 'Flagged',           value: stats.flagged_reports           || 0, color: '#F97316' },
+                          { label: 'Auto-Confirmed',    value: stats.auto_confirmed_reports    || 0, color: '#10B981' },
+                          { label: 'Officer Confirmed', value: stats.officer_confirmed_reports || 0, color: '#3B82F6' },
+                          { label: 'Auto Rejected',     value: stats.auto_rejected_reports     || 0, color: '#EF4444' },
+                          { label: 'Manually Rejected', value: stats.manually_rejected_reports || 0, color: '#8B5CF6' },
+                        ].map((s) => (
+                          <div key={s.label} style={{ textAlign: 'center', padding: '12px 8px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)' }}>
+                            <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
+                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{s.label}</div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
-
-                  {/* Rejection Details */}
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: 'var(--muted)' }}>REJECTION DETAILS</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-                      <div style={{ textAlign: 'center', padding: '8px', border: '1px solid var(--border)', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#dc3545' }}>
-                          {stats.auto_rejected_reports || 0}
-                        </div>
-                        <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Auto Rejected</div>
-                      </div>
-                      <div style={{ textAlign: 'center', padding: '8px', border: '1px solid var(--border)', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#6f42c1' }}>
-                          {stats.manually_rejected_reports || 0}
-                        </div>
-                        <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Manually Rejected</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                  </>
+                )}
               </div>
             )}
           </div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
-          <button className="btn btn-primary" onClick={onClose}>
-            Close
-          </button>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '16px 20px 20px' }}>
+          <button className="btn btn-outline" onClick={onClose}>Close</button>
         </div>
       </div>
     </div>

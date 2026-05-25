@@ -568,7 +568,7 @@ function App() {
             goToScreen={goToScreen}
             wsRefreshKey={wsRefreshKey}
             openModal={(name, payload) => {
-              if (name === "editStation") {
+              if (name === "editStation" || name === "viewStation") {
                 setSelectedStation(payload || null);
               }
               openModal(name);

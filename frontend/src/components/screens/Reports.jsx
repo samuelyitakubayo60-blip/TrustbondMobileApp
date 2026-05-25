@@ -235,6 +235,7 @@ const Reports = ({
   const toItem = Math.min(offset + (data.items?.length || 0), total);
 
   // Use Dashboard API stats for accurate counts, fall back to Reports API data
+  const allReports = dashboardStats?.total_reports ?? total;
   const pending =
     dashboardStats?.pending ??
     items.filter(
@@ -242,12 +243,9 @@ const Reports = ({
     ).length;
   const verified =
     dashboardStats?.verified ??
-    items.filter((r) => r.status === "verified").length;
-  const flagged =
-    dashboardStats?.flagged ??
-    items.filter((r) => r.status === "flagged" || r.status === "rejected")
-      .length;
-  const allReports = dashboardStats?.total_reports ?? total;
+    items.filter((r) => r.status === "verified" || r.status === "passed").length;
+  // Derive flagged as remainder to stay consistent with total (backend fields can overlap)
+  const flagged = Math.max(0, allReports - verified - pending);
 
   return (
     <>

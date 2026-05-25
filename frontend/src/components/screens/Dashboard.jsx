@@ -130,7 +130,9 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
   const recent7 = stats?.reports_last_7_days ?? 0;
   const pending = stats?.pending ?? stats?.by_status?.pending ?? 0;
   const verified = stats?.verified ?? stats?.by_status?.passed ?? 0;
-  const flagged = stats?.flagged ?? 0;
+  // Derive flagged as remainder so pending+verified+flagged always equals total_reports.
+  // The backend may count flagged/rejected by a different field than verified, causing overlap.
+  const flagged = Math.max(0, total - verified - pending);
   const openCases = stats?.open_cases ?? 0;
   const recentReports = stats?.recent_reports ?? [];
   const topHotspots = stats?.top_hotspots ?? [];
