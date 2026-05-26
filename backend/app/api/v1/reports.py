@@ -3321,6 +3321,10 @@ def create_report(
                 ai_ts = kwargs["ai_trust_score"]
                 ai_lbl = kwargs["ai_label"]
                 ev = kwargs["evidence_validations"]
+                # Use the real uploaded evidence file count when available (not just validation rows),
+                # so AI narratives and dashboard evidence summaries never say "no evidence" when files exist.
+                evidence_files_all = list(getattr(r, "evidence_files", []) or [])
+                ec_final = len(evidence_files_all) if evidence_files_all else len(ev or [])
                 sem = (
                     r.feature_vector.get("semantic_alignment")
                     if isinstance(r.feature_vector, dict)
@@ -3361,7 +3365,7 @@ def create_report(
                     unified_validation=uv,
                     scorecard=sc,
                     evidence_validations=ev,
-                    evidence_file_count=len(ev),
+                    evidence_file_count=ec_final,
                     latitude=getattr(r, "latitude", None),
                     longitude=getattr(r, "longitude", None),
                     gps_accuracy=getattr(r, "gps_accuracy", None),
