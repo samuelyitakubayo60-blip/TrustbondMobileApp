@@ -952,7 +952,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                 </Polygon>
               ))}
 
-              {/* ── Backend DBSCAN clusters ─────────────────────────────── */}
+              {/* ── Backend hotspots: one dot per cluster (size by report count) ── */}
               {mapRenderableHotspots.map((h) => {
                 const zoneColor = getHotspotDotColor(h);
                 const zoneBorder = getReportRiskBorder(zoneColor);
@@ -963,41 +963,9 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                 );
                 const isMultiCluster = reportCount >= 2;
                 const isSelected = selectedCluster?.hotspot_id === h.hotspot_id;
-                const hull = Array.isArray(h.boundary_points) && h.boundary_points.length >= 3
-                  ? h.boundary_points
-                  : [];
 
                 return (
                   <React.Fragment key={`hs-${h.hotspot_id}`}>
-                    {/* Cluster zone — always visible for 2+ reports (matches table) */}
-                    {isMultiCluster && hull.length >= 3 && (
-                      <Polygon
-                        positions={hull}
-                        pathOptions={{
-                          color: zoneBorder,
-                          weight: isSelected ? 3 : 2,
-                          opacity: isSelected ? 0.95 : 0.75,
-                          fillColor: zoneColor,
-                          fillOpacity: isSelected ? 0.28 : 0.2,
-                          dashArray: isSelected ? "8 5" : "5 5",
-                        }}
-                      />
-                    )}
-                    {isMultiCluster && hull.length < 3 && (
-                      <Circle
-                        center={[h.lat, h.lng]}
-                        radius={Number(h.radius_meters) || 300}
-                        pathOptions={{
-                          color: zoneBorder,
-                          weight: isSelected ? 3 : 2,
-                          opacity: isSelected ? 0.9 : 0.7,
-                          fillColor: zoneColor,
-                          fillOpacity: isSelected ? 0.26 : 0.18,
-                          dashArray: "6 4",
-                        }}
-                      />
-                    )}
-
                     {/* Multi-report cluster: one grouped marker; singles show per report */}
                     {isMultiCluster ? (
                       <CircleMarker
@@ -1299,7 +1267,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                     </div>
                   ))}
                   <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", marginTop: 6, paddingTop: 6, fontSize: 10, color: "#94a3b8" }}>
-                    Dot colour = cluster risk level (green / yellow / red). Shaded zones = 2+ reports. Time and type filters apply together.
+                    Dot colour = cluster risk level (green / yellow / red). Time and type filters apply together.
                   </div>
                 </div>
               )}
