@@ -3,10 +3,13 @@ Enhanced audit service with role-based access and data masking
 """
 import json
 import re
+import logging
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 from app.models.audit_log import AuditLog
 from app.models.police_user import PoliceUser
+
+logger = logging.getLogger(__name__)
 
 
 class AuditService:
@@ -27,6 +30,8 @@ class AuditService:
         sensitivity_level: str = "low"
     ):
         """Log an action with automatic role detection and data masking"""
+        if actor_type == "police_user" and not actor_id:
+            actor_type = "system"
         
         # Get actor role if police_user
         actor_role = None
@@ -54,6 +59,15 @@ class AuditService:
         
         db.add(audit_log)
         db.commit()
+        logger.info(
+            "AUDIT write committed: action=%s actor=%s:%s entity=%s:%s success=%s",
+            action_type,
+            actor_type,
+            actor_id,
+            entity_type,
+            entity_id,
+            success,
+        )
     
     @staticmethod
     def _mask_sensitive_data(data: Dict[str, Any], sensitivity_level: str, viewer_role: Optional[str]) -> Dict[str, Any]:
@@ -160,6 +174,7 @@ class AuditService:
         skip: int = 0,
         limit: int = 100,
         entity_type: Optional[str] = None,
+        entity_id: Optional[str] = None,
         action_type: Optional[str] = None
     ) -> list:
         """Get audit logs with role-based filtering"""
@@ -169,6 +184,8 @@ class AuditService:
         # Apply filters
         if entity_type:
             query = query.filter(AuditLog.entity_type == entity_type)
+        if entity_id:
+            query = query.filter(AuditLog.entity_id == entity_id)
         if action_type:
             query = query.filter(AuditLog.action_type == action_type)
         

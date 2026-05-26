@@ -9,6 +9,9 @@ from app.api.v1.auth import get_current_user
 from app.models.police_user import PoliceUser
 from app.schemas.audit import AuditLogResponse
 from app.services.audit_service import AuditService
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/audit-logs", tags=["audit-logs"])
 
@@ -24,15 +27,30 @@ def list_audit_logs(
     limit: int = Query(100, ge=1, le=500),
 ):
     """List audit log entries with role-based access control."""
-    # Use enhanced audit service with role-based access and data masking
-    logs = AuditService.get_audit_logs(
-        db=db,
-        current_user=current_user,
-        skip=skip,
-        limit=limit,
-        entity_type=entity_type,
-        action_type=action_type
+    logger.info(
+        "AUDIT list: user=%s role=%s entity_type=%s entity_id=%s action_type=%s skip=%s limit=%s",
+        getattr(current_user, "police_user_id", None),
+        getattr(current_user, "role", None),
+        entity_type,
+        entity_id,
+        action_type,
+        skip,
+        limit,
     )
+    try:
+        # Use enhanced audit service with role-based access and data masking
+        logs = AuditService.get_audit_logs(
+            db=db,
+            current_user=current_user,
+            skip=skip,
+            limit=limit,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            action_type=action_type,
+        )
+    except Exception as exc:
+        logger.exception("AUDIT list failed: %s", exc)
+        raise
 
     # Preload badge/name map for police users referenced in logs
     actor_ids = {int(l["actor_id"]) for l in logs if l["actor_type"] == "police_user" and l["actor_id"]}

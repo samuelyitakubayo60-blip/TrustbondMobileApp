@@ -44,6 +44,8 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         path = request.url.path
+        query = str(request.url.query or "")
+        full_path = f"{path}?{query}" if query else path
         method = request.method
         quiet = path in _QUIET_PATHS and method in ("GET", "HEAD", "OPTIONS")
         start = time.perf_counter()
@@ -56,7 +58,7 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
                 access_logger.exception(
                     "%s %s -> ERROR (%.0fms)",
                     method,
-                    path,
+                    full_path,
                     elapsed_ms,
                 )
             raise
@@ -67,7 +69,7 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
             access_logger.info(
                 '%s %s -> %s (%.0fms) client=%s',
                 method,
-                path,
+                full_path,
                 response.status_code,
                 elapsed_ms,
                 client,
