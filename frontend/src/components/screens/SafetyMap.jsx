@@ -18,15 +18,7 @@ import { canDeployHotspotUnits } from "../../utils/roleMapping";
 const MUSANZE_CENTER = [-1.5042, 29.638]; // Musanze district center
 const MUSANZE_ZOOM = 12;
 const MUSANZE_BUFFER_KM = 0.5;
-const HOTSPOT_PERIOD_OPTIONS = [
-  { label: "1 day", hours: 24 },
-  { label: "7 days", hours: 168 },
-  { label: "1 month", hours: 720 },
-  { label: "3 months", hours: 2160 },
-  { label: "1 year", hours: 8760 },
-];
-
-const DEFAULT_TIME_PERIOD = "week"; // 7-day view; run DBSCAN with same window to rebuild clusters
+const DEFAULT_TIME_PERIOD = "week"; // 7-day view (clustering window is set in System Configuration)
 
 /** Derive sidebar stats from persisted hotspot rows (same source as map polygons). */
 /**
@@ -76,9 +68,9 @@ const buildStatsFromHotspots = (hotspots) => {
       if (p?.report_id) uniqueReportIds.add(String(p.report_id));
     });
 
-    const rl = String(h.risk_level || "").toLowerCase();
-    if (rl === "high" || rl === "critical") high++;
-    else if (rl === "medium" || rl === "active" || rl === "emerging") medium++;
+    const tier = resolveHotspotRiskTier(h);
+    if (tier === "critical" || tier === "high") high++;
+    else if (tier === "medium") medium++;
     else low++;
 
     if (count >= 2) clusters++;
@@ -128,6 +120,55 @@ const formatFilterPeriodLabel = (timePeriod, customHours) => {
   const hours = getSelectedFilterHours(timePeriod, customHours);
   if (hours == null) return "All time";
   return formatTimeWindow(hours);
+};
+
+/** Green / yellow / red tiers — prefer live API classification over stale DB risk_level. */
+const MAP_RISK_COLORS = {
+  critical: "#dc2626",
+  high: "#dc2626",
+  medium: "#eab308",
+  low: "#22c55e",
+};
+
+const resolveHotspotRiskTier = (hotspot) => {
+  const classification = String(hotspot?.classification || "").toLowerCase().trim();
+  if (classification === "critical") return "critical";
+  if (classification === "active") return "high";
+  if (classification === "emerging") return "medium";
+  if (classification === "low_activity") return "low";
+
+  const rl = String(hotspot?.risk_level || "").toLowerCase().trim();
+  if (rl === "critical") return "critical";
+  if (rl === "high" || rl === "active") return "high";
+  if (rl === "medium" || rl === "emerging") return "medium";
+  if (rl === "low" || rl === "low_activity") return "low";
+
+  const score = Number(hotspot?.hotspot_score);
+  if (Number.isFinite(score)) {
+    if (score >= 80) return "critical";
+    if (score >= 60) return "high";
+    if (score >= 40) return "medium";
+  }
+  return "low";
+};
+
+const getMapRiskColor = (hotspot) =>
+  MAP_RISK_COLORS[resolveHotspotRiskTier(hotspot)] || MAP_RISK_COLORS.low;
+
+const getReportRiskBorder = (fillColor) => {
+  const borders = {
+    "#dc2626": "#7f1d1d",
+    "#eab308": "#854d0e",
+    "#22c55e": "#15803d",
+  };
+  return borders[fillColor] || "#1e293b";
+};
+
+const getReportRiskLabel = (fillColor) => {
+  if (fillColor === "#dc2626") return "High-risk area";
+  if (fillColor === "#eab308") return "Medium-risk area";
+  if (fillColor === "#22c55e") return "Low-risk area";
+  return "Cluster";
 };
 
 const incidentTone = {
@@ -326,13 +367,11 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
   const [mapFocusId, setMapFocusId] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [showSinglesOnMap, setShowSinglesOnMap] = useState(true);
-  const [recomputing, setRecomputing] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
-  const [dbscanParams, setDbscanParams] = useState({
-    radius_meters: 300,
-    min_incidents: 3,
+  /** Read-only defaults from system config (DBSCAN lives under System Configuration). */
+  const [clusterDefaults, setClusterDefaults] = useState({
+    radius_meters: 500,
     time_window_hours: 168,
-    trust_min: 50,
   });
   const [mapZoom, setMapZoom] = useState(MUSANZE_ZOOM);
   const [selectedCluster, setSelectedCluster] = useState(null); // hotspot object for detail panel
@@ -421,8 +460,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
       .get("/api/v1/hotspots/params")
       .then((res) => {
         if (!res) return;
-        const nextParams = { ...dbscanParams, ...res };
-        setDbscanParams(nextParams);
+        setClusterDefaults((p) => ({ ...p, ...res }));
         loadHistoricalHotspots();
       })
       .catch(() => {});
@@ -523,11 +561,11 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
           ...h,
           lat: Number(h.center_lat),
           lng: Number(h.center_long),
-          radius_meters: Number(h.radius_meters || dbscanParams.radius_meters || 500),
+          radius_meters: Number(h.radius_meters || clusterDefaults.radius_meters || 500),
           stage: getFormationStage(h),
         }))
         .filter((h) => Number.isFinite(h.lat) && Number.isFinite(h.lng)),
-    [filteredHotspots, dbscanParams.radius_meters],
+    [filteredHotspots, clusterDefaults.radius_meters],
   );
 
   const singleClusterCount = useMemo(
@@ -582,40 +620,13 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
     return incidentTone[String(name).toLowerCase()] || "neutral";
   };
 
-  /** Musanze safety map colours — green / yellow / red by backend risk_level. */
-  const RISK_ZONE_COLORS = {
-    high: "#ef4444",
-    critical: "#ef4444",
-    medium: "#eab308",
-    active: "#eab308",
-    emerging: "#eab308",
-    low: "#22c55e",
-    low_activity: "#22c55e",
-  };
+  const aiTimeWindowHours = useMemo(() => {
+    const fromFilter = getSelectedFilterHours(timePeriod, customHours);
+    return fromFilter ?? clusterDefaults.time_window_hours ?? 168;
+  }, [timePeriod, customHours, clusterDefaults.time_window_hours]);
 
-  const getRiskZoneColor = (risk) => {
-    const rl = String(risk || "").toLowerCase();
-    return RISK_ZONE_COLORS[rl] || "#22c55e";
-  };
-
-  const getReportRiskBorder = (fillColor) => {
-    const borders = {
-      "#ef4444": "#991b1b",
-      "#eab308": "#854d0e",
-      "#22c55e": "#15803d",
-    };
-    return borders[fillColor] || "#15803d";
-  };
-
-  const getReportRiskLabel = (fillColor) => {
-    if (fillColor === "#ef4444") return "High-risk area";
-    if (fillColor === "#eab308") return "Medium-risk area";
-    if (fillColor === "#22c55e") return "Low-risk area";
-    return "Cluster";
-  };
-
-  /** Map dots and zones — same palette as before (risk_level, not incident type). */
-  const getHotspotDotColor = (hotspot) => getRiskZoneColor(hotspot?.risk_level);
+  /** Map dots and zones — green / yellow / red from classification + score. */
+  const getHotspotDotColor = (hotspot) => getMapRiskColor(hotspot);
 
   /**
    * Well-known types get hand-picked colours for immediate recognition.
@@ -703,6 +714,92 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
         </div>
       </div>
 
+      <div className="card smx-hotspot-summary">
+        <div className="card-header" style={{ flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <div className="card-title">Hotspot Summary</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+              {formatFilterPeriodLabel(timePeriod, customHours)} · clustering parameters are managed in System Configuration
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => {
+              const mapElement = document.querySelector(".leaflet-container");
+              if (!mapElement) {
+                alert("Map not found. Please try again.");
+                return;
+              }
+              const printWindow = window.open("", "_blank");
+              if (!printWindow) {
+                alert("Please allow popups for this website to export the map.");
+                return;
+              }
+              const exportScript = document.createElement("script");
+              exportScript.src =
+                "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+              document.head.appendChild(exportScript);
+              exportScript.onload = () => {
+                if (typeof window.html2canvas !== "function") {
+                  alert("Export library failed to load.");
+                  return;
+                }
+                window.html2canvas(mapElement, {
+                  useCORS: true,
+                  allowTaint: true,
+                  backgroundColor: "#ffffff",
+                  scale: 2,
+                  logging: false,
+                }).then((captureCanvas) => {
+                  const imageData = captureCanvas.toDataURL("image/png");
+                  printWindow.document.write(`
+                    <!DOCTYPE html><html><head><title>Safety Map Export</title></head>
+                    <body style="margin:0;padding:20px;font-family:Arial,sans-serif">
+                    <h1>Trustbond Safety Map</h1>
+                    <p>${new Date().toLocaleString()} · ${formatFilterPeriodLabel(timePeriod, customHours)}</p>
+                    <img src="${imageData}" style="width:100%;max-width:1200px;border:1px solid #ccc" />
+                    <script>window.onload=function(){setTimeout(function(){window.print();},800);};</script>
+                    </body></html>`);
+                  printWindow.document.close();
+                }).catch(() => alert("Could not capture map image."));
+              };
+            }}
+          >
+            Export Map PDF
+          </button>
+        </div>
+        <div className="smx-summary-grid">
+          {[
+            { label: "Clusters", value: hotspotStats.total_clusters },
+            { label: "Unique reports", value: hotspotStats.unique_reports ?? hotspotStats.reports_in_clusters },
+            { label: "Map dots", value: hotspotStats.reports_in_clusters },
+            { label: "High risk", value: hotspotStats.risk_counts.critical, color: "var(--danger)" },
+            { label: "Medium risk", value: hotspotStats.risk_counts.warning, color: "var(--warning)" },
+            { label: "Low risk", value: hotspotStats.risk_counts.normal, color: "var(--success)" },
+            {
+              label: "Avg trust",
+              value:
+                hotspotStats.avg_cluster_trust != null
+                  ? `${hotspotStats.avg_cluster_trust} / 100`
+                  : "—",
+            },
+            {
+              label: "Emerging / Active / Intense",
+              value: `${hotspotStats.stage_counts.emerging} / ${hotspotStats.stage_counts.active} / ${hotspotStats.stage_counts.intense}`,
+            },
+            { label: "Last run", value: hotspotStats.latest_cluster_run },
+          ].map((item) => (
+            <div key={item.label} className="smx-summary-item">
+              <span>{item.label}</span>
+              <strong style={item.color ? { color: item.color } : undefined}>
+                {loading ? "…" : item.value}
+              </strong>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="smx-filter-row">
         <span className="smx-label">Filter:</span>
         <button
@@ -763,7 +860,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
         </div>
       )}
 
-      <div className="map-container">
+      <div className="map-container map-container--full">
         <div className="map-box">
           <div
             style={{
@@ -802,8 +899,8 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                 />
               )}
               <TileLayer
-                attribution="&copy; OpenStreetMap contributors"
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
               />
               <ZoomControl position="topright" />
               <RelocatorControl maxBounds={musanzeBounds} />
@@ -813,11 +910,11 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                   key={p.id}
                   positions={p.positions}
                   pathOptions={{
-                    color: "#94a3b8",
-                    weight: 1,
-                    opacity: 0.55,
-                    fillColor: "#1e293b",
-                    fillOpacity: 0.04,
+                    color: "#64748b",
+                    weight: 1.25,
+                    opacity: 0.65,
+                    fillColor: "#e2e8f0",
+                    fillOpacity: 0.12,
                   }}
                 >
                   <Tooltip
@@ -848,7 +945,6 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                 );
                 const isMultiCluster = reportCount >= 2;
                 const isSelected = selectedCluster?.hotspot_id === h.hotspot_id;
-                const alpha = 1;
                 const hull = Array.isArray(h.boundary_points) && h.boundary_points.length >= 3
                   ? h.boundary_points
                   : [];
@@ -860,12 +956,12 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                       <Polygon
                         positions={hull}
                         pathOptions={{
-                          color: zoneColor,
-                          weight: isSelected ? 2.5 : 1.5,
-                          opacity: isSelected ? 0.9 : 0.55,
+                          color: zoneBorder,
+                          weight: isSelected ? 3 : 2,
+                          opacity: isSelected ? 0.95 : 0.75,
                           fillColor: zoneColor,
-                          fillOpacity: isSelected ? 0.14 : 0.08,
-                          dashArray: isSelected ? "8 5" : "4 6",
+                          fillOpacity: isSelected ? 0.28 : 0.2,
+                          dashArray: isSelected ? "8 5" : "5 5",
                         }}
                       />
                     )}
@@ -874,11 +970,11 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                         center={[h.lat, h.lng]}
                         radius={Number(h.radius_meters) || 300}
                         pathOptions={{
-                          color: zoneColor,
-                          weight: isSelected ? 2 : 1.5,
-                          opacity: isSelected ? 0.85 : 0.5,
+                          color: zoneBorder,
+                          weight: isSelected ? 3 : 2,
+                          opacity: isSelected ? 0.9 : 0.7,
                           fillColor: zoneColor,
-                          fillOpacity: isSelected ? 0.12 : 0.07,
+                          fillOpacity: isSelected ? 0.26 : 0.18,
                           dashArray: "6 4",
                         }}
                       />
@@ -900,11 +996,11 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                           radius={dotRadius}
                           eventHandlers={{ click: () => focusClusterOnMap(h) }}
                           pathOptions={{
-                            color: zoneBorder,
-                            weight: 2,
-                            opacity: alpha,
+                            color: "#ffffff",
+                            weight: 2.5,
+                            opacity: 1,
                             fillColor: zoneColor,
-                            fillOpacity: alpha * 0.92,
+                            fillOpacity: 0.95,
                           }}
                         >
                           <Tooltip direction="top" offset={[0, -6]} opacity={0.97} interactive={false}>
@@ -943,11 +1039,11 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                         radius={mapZoom >= 14 ? 6 : mapZoom >= 12 ? 5 : 4}
                         eventHandlers={{ click: () => focusClusterOnMap(isSelected ? null : h) }}
                         pathOptions={{
-                          color: zoneBorder,
-                          weight: 2,
-                          opacity: alpha,
+                          color: "#ffffff",
+                          weight: 2.5,
+                          opacity: 1,
                           fillColor: zoneColor,
-                          fillOpacity: alpha * 0.92,
+                          fillOpacity: 0.95,
                         }}
                       >
                         <Tooltip direction="top" offset={[0, -6]} opacity={0.97} interactive={false}>
@@ -974,7 +1070,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
             {selectedCluster && (() => {
               const sc = selectedCluster;
               const scPts = Array.isArray(sc.incident_points) ? sc.incident_points : [];
-              const scColor = getRiskZoneColor(sc.risk_level);
+              const scColor = getMapRiskColor(sc);
               const incidentMix = sc.incident_mix || {};
               return (
                 <div style={{
@@ -1083,7 +1179,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
 
                   {scPts.length === 0 && (
                     <div style={{ fontSize: 11, color: "#64748b", textAlign: "center", padding: "8px 0" }}>
-                      {sc.incident_count} incidents · run DBSCAN to load point details
+                      {sc.incident_count} incidents · click map row for details
                     </div>
                   )}
 
@@ -1148,9 +1244,9 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                     Risk zones (Musanze)
                   </div>
                   {[
-                    { color: "#ef4444", label: "High risk (critical / high)" },
-                    { color: "#eab308", label: "Medium / emerging / active" },
-                    { color: "#22c55e", label: "Low activity" },
+                    { color: MAP_RISK_COLORS.critical, label: "High risk (critical / active)" },
+                    { color: MAP_RISK_COLORS.medium, label: "Medium (emerging)" },
+                    { color: MAP_RISK_COLORS.low, label: "Low activity" },
                   ].map((row) => (
                     <div key={row.label} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
                       <div style={{
@@ -1172,355 +1268,8 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
             </div>
           </div>
         </div>
-
-        <div className="map-side">
-          <div className="card smx-side-card">
-            <div className="card-header">
-              <div className="card-title">Hotspot Summary</div>
-            </div>
-            <div className="status-row">
-              <span>Clusters</span>
-              <strong>{hotspotStats.total_clusters}</strong>
-            </div>
-            <div className="status-row">
-              <span>Time window</span>
-              <strong>{formatFilterPeriodLabel(timePeriod, customHours)}</strong>
-            </div>
-            <div className="status-row">
-              <span>Unique reports</span>
-              <strong>{hotspotStats.unique_reports ?? hotspotStats.reports_in_clusters}</strong>
-            </div>
-            <div className="status-row" style={{ fontSize: 11, color: "var(--muted)" }}>
-              <span>Map dots</span>
-              <strong>{hotspotStats.reports_in_clusters}</strong>
-            </div>
-            <div className="status-row">
-              <span>High risk</span>
-              <strong style={{ color: "var(--danger)" }}>
-                {hotspotStats.risk_counts.critical}
-              </strong>
-            </div>
-            <div className="status-row">
-              <span>Medium risk</span>
-              <strong style={{ color: "var(--warning)" }}>
-                {hotspotStats.risk_counts.warning}
-              </strong>
-            </div>
-            <div className="status-row">
-              <span>Low risk</span>
-              <strong style={{ color: "var(--success)" }}>
-                {hotspotStats.risk_counts.normal}
-              </strong>
-            </div>
-            <div className="status-row">
-              <span>Avg trust score</span>
-              <strong style={{ color: "var(--success)" }}>
-                {hotspotStats.avg_cluster_trust !== null
-                  ? `${hotspotStats.avg_cluster_trust} / 100`
-                  : "-"}
-              </strong>
-            </div>
-            <div className="status-row">
-              <span>Emerging / Active / Intense</span>
-              <strong>
-                {hotspotStats.stage_counts.emerging} / {hotspotStats.stage_counts.active} /{" "}
-                {hotspotStats.stage_counts.intense}
-              </strong>
-            </div>
-            <div className="status-row">
-              <span>Last run</span>
-              <strong>{hotspotStats.latest_cluster_run}</strong>
-            </div>
-            <button
-              className="btn btn-outline btn-full"
-              style={{ marginTop: "10px" }}
-              onClick={() => {
-                // Enhanced PDF export that captures the actual rendered map
-                const mapElement = document.querySelector(".leaflet-container");
-                if (!mapElement) {
-                  alert('Map not found. Please try again.');
-                  return;
-                }
-
-                // Create a new window for printing
-                const printWindow = window.open('', '_blank');
-                if (!printWindow) {
-                  alert('Please allow popups for this website to export the map.');
-                  return;
-                }
-
-                const exportScript = document.createElement('script');
-                exportScript.src =
-                  'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-                document.head.appendChild(exportScript);
-
-                exportScript.onload = () => {
-                  if (typeof window.html2canvas !== 'function') {
-                    alert('Export library failed to load.');
-                    return;
-                  }
-                  window.html2canvas(mapElement, {
-                    useCORS: true,
-                    allowTaint: true,
-                    backgroundColor: '#ffffff',
-                    scale: 2, // Higher resolution
-                    logging: false,
-                    removeContainer: false,
-                    foreignObjectRendering: false, // Better for complex maps
-                    imageTimeout: 15000,
-                    onclone: (clonedDoc) => {
-                      // Ensure all styles are preserved in the clone
-                      const clonedElement = clonedDoc.querySelector('.leaflet-container');
-                      if (clonedElement) {
-                        // Force all styles to be computed and applied
-                        const computedStyle = window.getComputedStyle(mapElement);
-                        for (let i = 0; i < computedStyle.length; i++) {
-                          const property = computedStyle[i];
-                          clonedElement.style[property] = computedStyle.getPropertyValue(property);
-                        }
-                      }
-                    }
-                  }).then((captureCanvas) => {
-                    const imageData = captureCanvas.toDataURL('image/png');
-                    
-                    // Create a proper HTML page with the captured map
-                    printWindow.document.write(`
-                      <!DOCTYPE html>
-                      <html>
-                      <head>
-                        <title>Safety Map Export</title>
-                        <style>
-                          body { margin: 0; padding: 20px; font-family: Arial, sans-serif; }
-                          .header { text-align: center; margin-bottom: 20px; }
-                          .map-image { width: 100%; max-width: 1200px; height: auto; border: 2px solid #333; }
-                          .stats { display: flex; justify-content: space-around; margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px; }
-                          .stat-item { text-align: center; }
-                          .stat-value { font-size: 24px; font-weight: bold; color: #333; }
-                          .stat-label { font-size: 12px; color: #666; }
-                          .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
-                          @media print { body { margin: 0; } .map-image { page-break-inside: avoid; } }
-                        </style>
-                      </head>
-                      <body>
-                        <div class="header">
-                          <h1>Trustbond Safety Map - Hotspot Analysis</h1>
-                          <p>Generated on ${new Date().toLocaleString()}</p>
-                          <p>Time Period: ${timePeriod || 'month'}</p>
-                        </div>
-                        
-                        <div class="stats">
-                          <div class="stat-item">
-                            <div class="stat-value">${hotspotStats.total_clusters}</div>
-                            <div class="stat-label">Total Clusters</div>
-                          </div>
-                          <div class="stat-item">
-                            <div class="stat-value">${hotspotStats.reports_in_clusters}</div>
-                            <div class="stat-label">Reports in Clusters</div>
-                          </div>
-                          <div class="stat-item">
-                            <div class="stat-value">${hotspotStats.risk_counts.critical}</div>
-                            <div class="stat-label">Critical Risk</div>
-                          </div>
-                          <div class="stat-item">
-                            <div class="stat-value">${hotspotStats.avg_cluster_trust || 75}%</div>
-                            <div class="stat-label">Avg Trust</div>
-                          </div>
-                        </div>
-                        
-                        <div style="text-align: center;">
-                          <img src="${imageData}" alt="Safety Map" class="map-image" />
-                        </div>
-                        
-                        <div class="footer">
-                          <p>Trustbond Safety Map - Confidential | Generated ${new Date().toLocaleDateString()}</p>
-                        </div>
-                        
-                        <script>
-                          window.onload = function() {
-                            setTimeout(() => {
-                              window.print();
-                              window.onafterprint = function() {
-                                window.close();
-                              };
-                            }, 1000);
-                          };
-                        </script>
-                      </body>
-                      </html>
-                    `);
-                    printWindow.document.close();
-                  }).catch(() => {
-                    // Fallback to direct map HTML with preserved styles
-                    const mapContainer = document.querySelector('.map-container');
-                    const mapHTML = mapContainer ? mapContainer.outerHTML : '';
-                    
-                    printWindow.document.write(`
-                      <!DOCTYPE html>
-                      <html>
-                      <head>
-                        <title>Safety Map Export</title>
-                        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-                        <style>
-                          body { margin: 0; padding: 20px; font-family: Arial, sans-serif; }
-                          .header { text-align: center; margin-bottom: 20px; }
-                          .map-container { width: 100%; height: 600px; border: 2px solid #333; margin-bottom: 20px; }
-                          .stats { display: flex; justify-content: space-around; margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px; }
-                          .stat-item { text-align: center; }
-                          .stat-value { font-size: 24px; font-weight: bold; color: #333; }
-                          .stat-label { font-size: 12px; color: #666; }
-                          .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
-                          @media print { body { margin: 0; } .map-container { page-break-inside: avoid; } }
-                        </style>
-                      </head>
-                      <body>
-                        <div class="header">
-                          <h1>Trustbond Safety Map - Hotspot Analysis</h1>
-                          <p>Generated on ${new Date().toLocaleString()}</p>
-                          <p>Time Period: ${timePeriod || 'month'}</p>
-                        </div>
-                        
-                        <div class="stats">
-                          <div class="stat-item">
-                            <div class="stat-value">${hotspotStats.total_clusters}</div>
-                            <div class="stat-label">Total Clusters</div>
-                          </div>
-                          <div class="stat-item">
-                            <div class="stat-value">${hotspotStats.reports_in_clusters}</div>
-                            <div class="stat-label">Reports in Clusters</div>
-                          </div>
-                          <div class="stat-item">
-                            <div class="stat-value">${hotspotStats.risk_counts.critical}</div>
-                            <div class="stat-label">Critical Risk</div>
-                          </div>
-                          <div class="stat-item">
-                            <div class="stat-value">${hotspotStats.avg_cluster_trust || 75}%</div>
-                            <div class="stat-label">Avg Trust</div>
-                          </div>
-                        </div>
-                        
-                        ${mapHTML}
-                        
-                        <div class="footer">
-                          <p>Trustbond Safety Map - Confidential | Generated ${new Date().toLocaleDateString()}</p>
-                        </div>
-                        
-                        <script>
-                          window.onload = function() {
-                            setTimeout(() => {
-                              window.print();
-                              window.onafterprint = function() {
-                                window.close();
-                              };
-                            }, 2000); // Give map time to render
-                          };
-                        </script>
-                      </body>
-                      </html>
-                    `);
-                    printWindow.document.close();
-                  });
-                };
-              }}
-            >
-              Export Map PDF
-            </button>
-          </div>
-
-        </div>
       </div>
 
-      {/* ── DBSCAN Parameters ── */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-header">
-          <div className="card-title">DBSCAN Parameters</div>
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-            Adjust clustering settings, then run to recompute hotspots
-          </div>
-        </div>
-        <div style={{ padding: '14px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr) auto', gap: 20, alignItems: 'end' }}>
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
-              Time Period: <strong>Last {formatTimeWindow(dbscanParams.time_window_hours)}</strong>
-            </div>
-            <select
-              className="select"
-              value={Number(dbscanParams.time_window_hours || 24)}
-              onChange={(e) => {
-                const hours = Number(e.target.value);
-                setDbscanParams((p) => ({ ...p, time_window_hours: hours }));
-                const periodMap = { 24: "day", 168: "week", 720: "month", 2160: "quarter", 8760: "year" };
-                setTimePeriod(periodMap[hours] || "week");
-                setCustomHours("");
-                loadHistoricalHotspots();
-              }}
-            >
-              {HOTSPOT_PERIOD_OPTIONS.map((o) => (
-                <option key={o.hours} value={o.hours}>Last {o.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
-              Epsilon Radius: <strong>{Math.round(dbscanParams.radius_meters || 0)}m</strong>
-            </div>
-            <input type="range" min="100" max="800" step="50"
-              value={Number(dbscanParams.radius_meters || 300)}
-              onChange={(e) => setDbscanParams((p) => ({ ...p, radius_meters: Number(e.target.value) }))}
-              style={{ width: '100%' }}
-            />
-          </div>
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
-              Min Points: <strong>{dbscanParams.min_incidents}</strong>
-            </div>
-            <input type="range" min="2" max="10" step="1"
-              value={Number(dbscanParams.min_incidents || 2)}
-              onChange={(e) => setDbscanParams((p) => ({ ...p, min_incidents: Number(e.target.value) }))}
-              style={{ width: '100%' }}
-            />
-          </div>
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
-              Trust &gt;=: <strong>{dbscanParams.trust_min}</strong>
-            </div>
-            <input type="range" min="0" max="100" step="5"
-              value={Number(dbscanParams.trust_min || 0)}
-              onChange={(e) => setDbscanParams((p) => ({ ...p, trust_min: Number(e.target.value) }))}
-              style={{ width: '100%' }}
-            />
-          </div>
-          <button
-            className="btn btn-primary"
-            disabled={recomputing}
-            onClick={async () => {
-              setRecomputing(true);
-              try {
-                const hours = Number(dbscanParams.time_window_hours || 168);
-                await api.post("/api/v1/hotspots/recompute", {
-                  time_window_hours: hours,
-                  radius_meters: Number(dbscanParams.radius_meters || 500),
-                  min_incidents: Number(dbscanParams.min_incidents || 2),
-                  trust_min: Number(dbscanParams.trust_min || 0),
-                });
-                const periodMap = { 24: "day", 168: "week", 720: "month", 2160: "quarter", 8760: "year" };
-                if (periodMap[hours]) {
-                  setTimePeriod(periodMap[hours]);
-                  setCustomHours("");
-                }
-                cacheBust("/api/v1/hotspots");
-                loadHistoricalHotspots();
-              } catch (err) {
-                setLoadError(err?.message || "DBSCAN recompute failed");
-              } finally {
-                setRecomputing(false);
-              }
-            }}
-            style={{ whiteSpace: 'nowrap' }}
-          >
-            {recomputing ? "Recomputing..." : `Run DBSCAN`}
-          </button>
-        </div>
-      </div>
 
       <div className="g31 smx-cluster-layout">
         <div className="card">
@@ -1568,7 +1317,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
               Time Period (report dates on map):
             </div>
             <p style={{ fontSize: 11, color: "var(--muted)", margin: "0 0 8px" }}>
-              Pick a window, then click <strong>Run DBSCAN</strong> to rebuild clusters for that period only.
+              Filters which reports appear on the map. To change how clusters are built, use System Configuration and recompute hotspots there.
             </p>
             <div
               style={{
@@ -1579,22 +1328,19 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
               }}
             >
               {[
-                { label: "All Time",      value: "",        hours: null  },
-                { label: "Last 24h",      value: "day",     hours: 24   },
-                { label: "Last Week",     value: "week",    hours: 168  },
-                { label: "Last Month",    value: "month",   hours: 720  },
-                { label: "Last Quarter",  value: "quarter", hours: 2160 },
-                { label: "Last Year",     value: "year",    hours: 8760 },
-              ].map(({ label, value, hours }) => (
+                { label: "All Time", value: "" },
+                { label: "Last 24h", value: "day" },
+                { label: "Last Week", value: "week" },
+                { label: "Last Month", value: "month" },
+                { label: "Last Quarter", value: "quarter" },
+                { label: "Last Year", value: "year" },
+              ].map(({ label, value }) => (
                 <button
                   key={label}
                   className={`btn btn-xs ${timePeriod === value ? "btn-primary" : "btn-outline"}`}
                   onClick={() => {
                     setTimePeriod(value);
                     setCustomHours("");
-                    if (hours !== null) {
-                      setDbscanParams((p) => ({ ...p, time_window_hours: hours }));
-                    }
                   }}
                 >
                   {label}
@@ -1713,17 +1459,26 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                       </span>
                     </td>
                     <td className="smx-cell-center">
-                      <span
-                        className={`risk-pill ${
-                          h.risk_level === "high" || h.risk_level === "critical"
+                      {(() => {
+                        const tier = resolveHotspotRiskTier(h);
+                        const pillCls =
+                          tier === "critical" || tier === "high"
                             ? "r-critical"
-                            : h.risk_level === "medium"
+                            : tier === "medium"
                               ? "r-warning"
-                              : "r-normal"
-                        }`}
-                      >
-                        {(h.risk_level || "ok").toUpperCase().slice(0, 4)}
-                      </span>
+                              : "r-normal";
+                        const label =
+                          tier === "critical"
+                            ? "CRIT"
+                            : tier === "high"
+                              ? "HIGH"
+                              : tier === "medium"
+                                ? "MED"
+                                : "LOW";
+                        return (
+                          <span className={`risk-pill ${pillCls}`}>{label}</span>
+                        );
+                      })()}
                     </td>
                     <td className="smx-cell-muted smx-cell-compact">
                       {formatClusterTimestamp(h.detected_at)}
@@ -1798,7 +1553,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                 onReload={loadHistoricalHotspots}
                 timePeriod={timePeriod}
                 customHours={customHours}
-                timeWindowHours={dbscanParams.time_window_hours}
+                timeWindowHours={aiTimeWindowHours}
               />
             )}
           </div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import api from '../../api/client';
+import api, { cacheBust } from '../../api/client';
 
 // Group config keys by prefix for visual sections
 const GROUP_META = {
@@ -33,6 +33,9 @@ const SystemConfig = ({ wsRefreshKey }) => {
   const [savedKeys, setSavedKeys]           = useState({}); // original saved values for dirty check
   const [effectiveFormula, setEffectiveFormula] = useState(null);
   const [saveSuccess, setSaveSuccess]       = useState('');
+  const [recomputingHotspots, setRecomputingHotspots] = useState(false);
+  const [recomputeHours, setRecomputeHours] = useState(168);
+  const [recomputeMessage, setRecomputeMessage] = useState('');
 
   const loadEffectiveFormula = async () => {
     try {
@@ -113,6 +116,29 @@ const SystemConfig = ({ wsRefreshKey }) => {
 
   const isDirty = (key) => drafts[key] !== savedKeys[key];
 
+  const handleRecomputeHotspots = async () => {
+    setRecomputeMessage('');
+    setError('');
+    setRecomputingHotspots(true);
+    try {
+      const params = await api.get('/api/v1/hotspots/params');
+      await api.post('/api/v1/hotspots/recompute', {
+        time_window_hours: Number(recomputeHours || params?.time_window_hours || 168),
+        radius_meters: Number(params?.radius_meters || 500),
+        min_incidents: Number(params?.min_incidents || 2),
+        trust_min: Number(params?.trust_min || 0),
+      });
+      cacheBust('/api/v1/hotspots');
+      setRecomputeMessage(
+        `Hotspot recompute started for the last ${recomputeHours}h using saved DBSCAN settings.`,
+      );
+    } catch (e) {
+      setError(e?.message || 'Hotspot recompute failed.');
+    } finally {
+      setRecomputingHotspots(false);
+    }
+  };
+
   const groups = groupItems(items);
 
   return (
@@ -162,6 +188,55 @@ const SystemConfig = ({ wsRefreshKey }) => {
                 {rows.length} key{rows.length !== 1 ? 's' : ''}
               </span>
             </div>
+
+            {prefix === 'dbscan' && (
+              <div
+                style={{
+                  padding: '14px 20px',
+                  borderTop: '1px solid var(--border)',
+                  background: 'color-mix(in srgb, var(--accent) 4%, transparent)',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'flex-end',
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                    Recompute hotspots
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6, maxWidth: 420 }}>
+                    Save epsilon / min_samples / trust_min above, then rebuild clusters from reports.
+                    Map filters on the Safety Map only change what is displayed.
+                  </div>
+                  <select
+                    className="select"
+                    style={{ minWidth: 180 }}
+                    value={recomputeHours}
+                    onChange={(e) => setRecomputeHours(Number(e.target.value))}
+                  >
+                    <option value={24}>Last 24 hours</option>
+                    <option value={168}>Last 7 days</option>
+                    <option value={720}>Last 30 days</option>
+                    <option value={2160}>Last 90 days</option>
+                    <option value={8760}>Last year</option>
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={recomputingHotspots}
+                  onClick={handleRecomputeHotspots}
+                >
+                  {recomputingHotspots ? 'Recomputing…' : 'Run DBSCAN recompute'}
+                </button>
+                {recomputeMessage && (
+                  <div style={{ fontSize: 11, color: 'var(--success)', flex: '1 1 100%' }}>
+                    {recomputeMessage}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               {rows.map((row, i) => {
