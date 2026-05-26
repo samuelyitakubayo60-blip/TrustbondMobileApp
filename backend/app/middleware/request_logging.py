@@ -3,6 +3,7 @@
 import logging
 import sys
 import time
+from datetime import datetime, timezone
 from typing import Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -55,23 +56,25 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
         except Exception:
             elapsed_ms = (time.perf_counter() - start) * 1000
             if not quiet:
-                access_logger.exception(
-                    "%s %s -> ERROR (%.0fms)",
-                    method,
-                    full_path,
-                    elapsed_ms,
+                msg = "%s %s -> ERROR (%.0fms)" % (method, full_path, elapsed_ms)
+                access_logger.exception("%s", msg)
+                print(
+                    "%s %s" % (datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), msg),
+                    flush=True,
                 )
             raise
 
         elapsed_ms = (time.perf_counter() - start) * 1000
         if not quiet:
             client = request.client.host if request.client else "-"
-            access_logger.info(
-                '%s %s -> %s (%.0fms) client=%s',
+            msg = "%s %s -> %s (%.0fms) client=%s" % (
                 method,
                 full_path,
                 response.status_code,
                 elapsed_ms,
                 client,
             )
+            access_logger.info("%s", msg)
+            # Also print to stdout to avoid missing logs on platforms that buffer/filter `logging`.
+            print("%s %s" % (datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), msg), flush=True)
         return response

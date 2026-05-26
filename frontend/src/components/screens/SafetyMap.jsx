@@ -4,7 +4,6 @@ import {
   TileLayer,
   CircleMarker,
   Circle,
-  Marker,
   Tooltip,
   ZoomControl,
   Polygon,
@@ -677,25 +676,6 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
     return expandBoundsByKm(computed, MUSANZE_BUFFER_KM);
   }, [polygons]);
 
-  /** Cluster count badge — filled circle in Musanze green / yellow / red. */
-  const countIcon = (count, fillColor, borderColor) => {
-    const size = Math.min(48, 28 + Math.floor(Math.log2(Math.max(1, count))) * 5);
-    const half = size / 2;
-    return L.divIcon({
-      className: "hotspot-count-icon",
-      html: `<div style="
-          width:${size}px;height:${size}px;border-radius:50%;
-          background:${fillColor};color:#fff;font-weight:800;
-          display:flex;align-items:center;justify-content:center;
-          border:3px solid ${borderColor};
-          box-shadow:0 2px 8px rgba(0,0,0,0.35);
-          font-size:${count >= 10 ? 12 : 13}px;
-        ">${count}</div>`,
-      iconSize: [size, size],
-      iconAnchor: [half, half],
-    });
-  };
-
   return (
     <>
       {/* ── Page header ── */}
@@ -904,17 +884,6 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                       />
                     )}
 
-                    {isMultiCluster && (
-                      <Marker
-                        position={[h.lat, h.lng]}
-                        icon={countIcon(reportCount, zoneColor, zoneBorder)}
-                        zIndexOffset={isSelected ? 1000 : 400}
-                        eventHandlers={{
-                          click: () => focusClusterOnMap(isSelected ? null : h),
-                        }}
-                      />
-                    )}
-
                     {/* Each incident at its coordinate (all reports in cluster) */}
                     {pts.length > 0 ? pts.map((p, pIdx) => {
                       const lat = Number(p.latitude);
@@ -992,7 +961,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                         </Tooltip>
                       </CircleMarker>
                     ) : (
-                      /* Multi-report but no point geometry — count badge + circle already drawn */
+                      /* Multi-report but no point geometry — zone is already drawn */
                       null
                     )}
                   </React.Fragment>
@@ -1827,6 +1796,9 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                 assignmentUnits={assignmentUnits}
                 canDeploy={canDeployHotspot}
                 onReload={loadHistoricalHotspots}
+                timePeriod={timePeriod}
+                customHours={customHours}
+                timeWindowHours={dbscanParams.time_window_hours}
               />
             )}
           </div>
@@ -1940,12 +1912,22 @@ function buildAction(h, unit) {
 }
 
 // Security Recommendations Component
-const SecurityRecommendations = ({ hotspots, assignmentUnits = [], canDeploy = false, onReload }) => {
+const SecurityRecommendations = ({
+  hotspots,
+  assignmentUnits = [],
+  canDeploy = false,
+  onReload,
+  timePeriod,
+  customHours,
+  timeWindowHours,
+}) => {
   const [deployingId, setDeployingId] = useState(null);
   const [takingId, setTakingId] = useState(null);
   const [deployUnit, setDeployUnit] = useState({});
   const [deployNote, setDeployNote] = useState({});
   const [actionError, setActionError] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiById, setAiById] = useState({});
 
   const handleTakeControl = async (hotspotId) => {
     setTakingId(hotspotId);
@@ -1989,6 +1971,59 @@ const SecurityRecommendations = ({ hotspots, assignmentUnits = [], canDeploy = f
       .sort((a, b) => b._alarm - a._alarm);
   }, [hotspots]);
 
+  const topAiIds = useMemo(() => {
+    const MAX_AI_CARDS = 6;
+    return sorted
+      .slice(0, MAX_AI_CARDS)
+      .map((h) => h.hotspot_id)
+      .filter((id) => id != null);
+  }, [sorted]);
+
+  const topAiIdsKey = topAiIds.join(",");
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!topAiIds.length) {
+        setAiById({});
+        return;
+      }
+
+      try {
+        setAiLoading(true);
+        const params = new URLSearchParams();
+        params.set("for_map", "false");
+        params.set("limit", String(topAiIds.length));
+        params.set("hotspot_ids", topAiIds.join(","));
+        if (timePeriod && timePeriod !== "") {
+          params.set("time_period", timePeriod);
+        } else if (customHours && customHours !== "" && Number(customHours) > 0) {
+          params.set("hours_back", customHours);
+        }
+        if (timeWindowHours) {
+          params.set("time_window_hours", String(timeWindowHours));
+        }
+
+        const res = await api.get(`/api/v1/hotspots/?${params.toString()}`);
+        const items = Array.isArray(res) ? res : [];
+        const map = {};
+        for (const h of items) {
+          if (h && h.hotspot_id != null) map[h.hotspot_id] = h;
+        }
+        if (!cancelled) setAiById(map);
+      } catch {
+        if (!cancelled) setAiById({});
+      } finally {
+        if (!cancelled) setAiLoading(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [topAiIds, topAiIdsKey, timePeriod, customHours, timeWindowHours]);
+
   if (sorted.length === 0) {
     return (
       <div style={{
@@ -2017,6 +2052,12 @@ const SecurityRecommendations = ({ hotspots, assignmentUnits = [], canDeploy = f
         <div className="alert alert-danger" style={{ marginBottom: 4 }}>
           <span className="alert-icon">!</span>
           <div>{actionError}</div>
+        </div>
+      )}
+      {aiLoading && (
+        <div className="alert alert-info" style={{ marginBottom: 4 }}>
+          <span className="alert-icon">i</span>
+          <div>Analyzing security recommendations (AI) for top hotspots…</div>
         </div>
       )}
       {/* District situation overview bar */}
@@ -2061,14 +2102,15 @@ const SecurityRecommendations = ({ hotspots, assignmentUnits = [], canDeploy = f
       {sorted.map((h, idx) => {
         const alarm = h._alarm;
         const color = alarmToColor(alarm);
-        const unit = hotspotUnitLabel(h);
-        const unitChips = Array.isArray(h.prediction?.recommended_units)
-          ? h.prediction.recommended_units
+        const hFull = aiById[h.hotspot_id] || h;
+        const unit = hotspotUnitLabel(hFull);
+        const unitChips = Array.isArray(hFull.prediction?.recommended_units)
+          ? hFull.prediction.recommended_units
           : [];
-        const citizenNote = (h.prediction?.citizen_advisory || "").trim();
+        const citizenNote = (hFull.prediction?.citizen_advisory || "").trim();
         const dot = severityDot(alarm);
-        const narrative = buildNarrative(h);
-        const action = buildAction(h, unit);
+        const narrative = buildNarrative(hFull);
+        const action = buildAction(hFull, unit);
         const area = h.area_label || "Unknown area";
         const sectors = [...new Set(
           (h.incident_points || []).map((p) => p.sector_name).filter(Boolean)
@@ -2129,13 +2171,13 @@ const SecurityRecommendations = ({ hotspots, assignmentUnits = [], canDeploy = f
                         {h.classification}
                       </span>
                     )}
-                    {h.prediction?.status && (
+                    {hFull.prediction?.status && (
                       <span style={{
                         fontSize: "9px", fontWeight: 600, padding: "1px 6px",
                         borderRadius: "99px", backgroundColor: "var(--border)",
                         color: "var(--text)", letterSpacing: "0.04em",
                       }}>
-                        {String(h.prediction.status).replace(/_/g, " ")}
+                        {String(hFull.prediction.status).replace(/_/g, " ")}
                       </span>
                     )}
                     {h.cluster_kind && (
@@ -2257,7 +2299,7 @@ const SecurityRecommendations = ({ hotspots, assignmentUnits = [], canDeploy = f
                 )}
 
                 {/* Operation window — always show when available */}
-                {(h.prediction?.operation_hours || h.prediction?.concentrate_window) && (
+                {(hFull.prediction?.operation_hours || hFull.prediction?.concentrate_window) && (
                   <div style={{
                     display: "flex", gap: "10px", flexWrap: "wrap",
                     padding: "5px 10px", borderRadius: "6px",
@@ -2265,22 +2307,22 @@ const SecurityRecommendations = ({ hotspots, assignmentUnits = [], canDeploy = f
                     border: `1px solid ${color}33`,
                     fontSize: "10px", color: "var(--text)",
                   }}>
-                    {h.prediction?.operation_hours && (
+                    {hFull.prediction?.operation_hours && (
                       <span>
                         <span style={{ color: "var(--muted)" }}>Duration: </span>
-                        <strong>{h.prediction.operation_hours} h</strong>
+                        <strong>{hFull.prediction.operation_hours} h</strong>
                       </span>
                     )}
-                    {h.prediction?.concentrate_window && (
+                    {hFull.prediction?.concentrate_window && (
                       <span>
                         <span style={{ color: "var(--muted)" }}>Concentrate: </span>
-                        <strong>{h.prediction.concentrate_window}</strong>
+                        <strong>{hFull.prediction.concentrate_window}</strong>
                       </span>
                     )}
-                    {h.prediction?.peak_time && (
+                    {hFull.prediction?.peak_time && (
                       <span>
                         <span style={{ color: "var(--muted)" }}>Peak: </span>
-                        <strong>{h.prediction.peak_time}</strong>
+                        <strong>{hFull.prediction.peak_time}</strong>
                       </span>
                     )}
                   </div>

@@ -281,6 +281,10 @@ def _expand_hull(hull: List[List[float]], factor: float = 0.12) -> List[List[flo
 def list_hotspots(
     current_user: Annotated[PoliceUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
+    hotspot_ids: Optional[str] = Query(
+        None,
+        description="Comma-separated hotspot ids to include (e.g. '12,13,14'). If set, only these hotspots are returned.",
+    ),
     risk_level: Optional[str] = Query(
         None, description="Filter by risk_level (low, medium, high, critical)."
     ),
@@ -354,6 +358,14 @@ def list_hotspots(
 
     query = _apply_officer_hotspot_scope(query, db, current_user)
     query = query.order_by(Hotspot.detected_at.desc())
+    # Optional: narrow to a specific set of hotspots for fast LLM enrichment.
+    if hotspot_ids:
+        try:
+            ids = [int(x.strip()) for x in hotspot_ids.split(",") if x.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid hotspot_ids format")
+        if ids:
+            query = query.filter(Hotspot.hotspot_id.in_(ids))
     if risk_level:
         rl = risk_level.strip().lower()
         aliases = {
@@ -376,6 +388,20 @@ def list_hotspots(
     deployment_units = load_hotspot_deployment_units(db)
 
     responses = []
+    logger.info(
+        "HOTSPOTS list: user=%s role=%s for_map=%s hotspot_ids=%s limit=%s time_period=%s hours_back=%s time_window_hours=%s risk_level=%s count=%s",
+        getattr(current_user, "police_user_id", None),
+        getattr(current_user, "role", None),
+        for_map,
+        hotspot_ids,
+        limit,
+        time_period,
+        hours_back,
+        time_window_hours,
+        risk_level,
+        len(hotspots),
+    )
+    llm_skip_logged = False
 
     for h in hotspots:
         # Include all clustered reports; some legacy rows may miss village linkage
@@ -567,6 +593,12 @@ def list_hotspots(
         evidence_payload: List[Dict[str, Any]] = []
 
         if for_map:
+            if not llm_skip_logged:
+                logger.info(
+                    "HOTSPOTS list entering for_map=true: skipping per-hotspot LLM for this request (example_hotspot_id=%s)",
+                    getattr(h, "hotspot_id", None),
+                )
+                llm_skip_logged = True
             prediction["citizen_advisory"] = generate_citizen_advisory(
                 classification=classification,
                 incident_count=incident_count,
@@ -609,23 +641,33 @@ def list_hotspots(
                 nearby_clusters = 0
             cluster_evolution["nearby_clusters"] = nearby_clusters
 
-            llm = generate_recommendation(
-                classification=classification,
-                incident_count=incident_count,
-                dominant_crime=dominant_crime,
-                cluster_kind=cluster_kind,
-                area_label=area_label,
-                incident_mix=incident_mix,
-                peak_time=peak_time,
-                verified_report_count=verified_count,
-                recommended_unit=incident_unit_hint,
-                deployment_units=deployment_units,
-                cluster_case_context=cluster_case_context,
-                cluster_evolution=cluster_evolution,
-            )
-            prediction["recommendation"] = llm["recommendation"]
-            prediction["narrative"] = llm["narrative"]
-            prediction["status"] = llm["status"]
+            try:
+                llm = generate_recommendation(
+                    classification=classification,
+                    incident_count=incident_count,
+                    dominant_crime=dominant_crime,
+                    cluster_kind=cluster_kind,
+                    area_label=area_label,
+                    incident_mix=incident_mix,
+                    peak_time=peak_time,
+                    verified_report_count=verified_count,
+                    recommended_unit=incident_unit_hint,
+                    deployment_units=deployment_units,
+                    cluster_case_context=cluster_case_context,
+                    cluster_evolution=cluster_evolution,
+                )
+            except Exception:
+                logger.exception(
+                    "Hotspot LLM recommendation failed hotspot_id=%s cluster_kind=%s incident_count=%s",
+                    h.hotspot_id,
+                    cluster_kind,
+                    incident_count,
+                )
+                llm = {}
+
+            prediction["recommendation"] = llm.get("recommendation")
+            prediction["narrative"] = llm.get("narrative")
+            prediction["status"] = llm.get("status")
             prediction["recommended_unit"] = llm.get("recommended_unit")
             prediction["recommended_unit_name"] = llm.get("recommended_unit_name")
             prediction["recommended_units"] = llm.get("recommended_units")
