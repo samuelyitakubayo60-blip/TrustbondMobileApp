@@ -113,6 +113,17 @@ def _decision_headline(
 def _evidence_paragraph(snapshot: Dict[str, Any]) -> str:
     evid = (snapshot.get("model_signals") or {}).get("evidence_ai") or {}
     ec = int(evid.get("evidence_count") or 0)
+    # Be resilient: older snapshots may miss evidence_ai, but the report can still
+    # have evidence attached (e.g. evidence uploaded after initial screening).
+    try:
+        ec = max(
+            ec,
+            int(snapshot.get("evidence_count") or 0),
+            int(snapshot.get("evidence_file_count") or 0),
+            len(snapshot.get("evidence_files") or []),
+        )
+    except Exception:
+        pass
     if ec <= 0:
         return (
             "No photos, videos, or audio were uploaded. The decision used the written "

@@ -4517,7 +4517,8 @@ async def upload_evidence(
                     unified_validation=uv,
                     scorecard=sc,
                     evidence_validations=ev,
-                    evidence_file_count=len(ev),
+                    # Use the real uploaded evidence file count (not validation count).
+                    evidence_file_count=len(evidence_files_all or []),
                     latitude=getattr(r, "latitude", None),
                     longitude=getattr(r, "longitude", None),
                     gps_accuracy=getattr(r, "gps_accuracy", None),
