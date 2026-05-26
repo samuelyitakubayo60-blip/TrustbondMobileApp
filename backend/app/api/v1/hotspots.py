@@ -599,47 +599,71 @@ def list_hotspots(
                     getattr(h, "hotspot_id", None),
                 )
                 llm_skip_logged = True
-            prediction["citizen_advisory"] = generate_citizen_advisory(
-                classification=classification,
-                incident_count=incident_count,
-                dominant_crime=dominant_crime,
-                area_label=area_label,
-                incident_mix=incident_mix,
-            )
+            cached_narr = (getattr(h, "llm_narrative", None) or "").strip()
+            cached_rec = (getattr(h, "llm_recommendation", None) or "").strip()
+            if cached_narr or cached_rec:
+                prediction["narrative"] = cached_narr or None
+                prediction["recommendation"] = cached_rec or None
+                prediction["status"] = (getattr(h, "llm_status", None) or "").strip() or prediction.get("status")
+                prediction["citizen_advisory"] = (getattr(h, "llm_citizen_advisory", None) or "").strip() or None
+            else:
+                prediction["citizen_advisory"] = generate_citizen_advisory(
+                    classification=classification,
+                    incident_count=incident_count,
+                    dominant_crime=dominant_crime,
+                    area_label=area_label,
+                    incident_mix=incident_mix,
+                )
         else:
-            report_ids = [r.report_id for r in reports_in_cluster]
-            cluster_case_context = gather_cluster_case_context(db, report_ids)
-            cluster_evolution = {
-                "lifecycle_state": getattr(h, "lifecycle_state", None),
-                "trend_direction": getattr(h, "trend_direction", None),
-                "crime_group": getattr(h, "crime_group", None),
-                "cluster_confidence": float(h.cluster_confidence)
-                if getattr(h, "cluster_confidence", None)
-                else None,
-                "severity_score": float(h.severity_score)
-                if getattr(h, "severity_score", None)
-                else None,
-                "temporal_intensity": float(h.temporal_intensity)
-                if getattr(h, "temporal_intensity", None)
-                else None,
-                "composition": json.loads(h.composition)
-                if getattr(h, "composition", None)
-                else None,
-            }
-            try:
-                nearby_clusters = db.query(Hotspot).filter(
-                    Hotspot.hotspot_id != h.hotspot_id,
-                    Hotspot.center_lat.between(
-                        float(h.center_lat) - 0.018, float(h.center_lat) + 0.018
-                    ),
-                    Hotspot.center_long.between(
-                        float(h.center_long) - 0.018, float(h.center_long) + 0.018
-                    ),
-                    Hotspot.incident_count >= 2,
-                ).count()
-            except Exception:
-                nearby_clusters = 0
-            cluster_evolution["nearby_clusters"] = nearby_clusters
+            # Use persisted LLM briefing if already generated (avoid repeated API calls).
+            cached_narr = (getattr(h, "llm_narrative", None) or "").strip()
+            cached_rec = (getattr(h, "llm_recommendation", None) or "").strip()
+            cached_status = (getattr(h, "llm_status", None) or "").strip()
+            cached_adv = (getattr(h, "llm_citizen_advisory", None) or "").strip()
+
+            if cached_narr or cached_rec:
+                prediction["narrative"] = cached_narr or None
+                prediction["recommendation"] = cached_rec or None
+                prediction["status"] = cached_status or prediction.get("status")
+                prediction["citizen_advisory"] = cached_adv or None
+                prediction["recommended_unit"] = incident_unit_hint
+                prediction["recommended_unit_name"] = None
+                prediction["recommended_units"] = None
+                # Keep operation windows from computed prediction when present.
+            else:
+                report_ids = [r.report_id for r in reports_in_cluster]
+                cluster_case_context = gather_cluster_case_context(db, report_ids)
+                cluster_evolution = {
+                    "lifecycle_state": getattr(h, "lifecycle_state", None),
+                    "trend_direction": getattr(h, "trend_direction", None),
+                    "crime_group": getattr(h, "crime_group", None),
+                    "cluster_confidence": float(h.cluster_confidence)
+                    if getattr(h, "cluster_confidence", None)
+                    else None,
+                    "severity_score": float(h.severity_score)
+                    if getattr(h, "severity_score", None)
+                    else None,
+                    "temporal_intensity": float(h.temporal_intensity)
+                    if getattr(h, "temporal_intensity", None)
+                    else None,
+                    "composition": json.loads(h.composition)
+                    if getattr(h, "composition", None)
+                    else None,
+                }
+                try:
+                    nearby_clusters = db.query(Hotspot).filter(
+                        Hotspot.hotspot_id != h.hotspot_id,
+                        Hotspot.center_lat.between(
+                            float(h.center_lat) - 0.018, float(h.center_lat) + 0.018
+                        ),
+                        Hotspot.center_long.between(
+                            float(h.center_long) - 0.018, float(h.center_long) + 0.018
+                        ),
+                        Hotspot.incident_count >= 2,
+                    ).count()
+                except Exception:
+                    nearby_clusters = 0
+                cluster_evolution["nearby_clusters"] = nearby_clusters
 
             try:
                 llm = generate_recommendation(
@@ -674,6 +698,19 @@ def list_hotspots(
             prediction["citizen_advisory"] = llm.get("citizen_advisory")
             prediction["operation_hours"] = llm.get("operation_hours")
             prediction["concentrate_window"] = llm.get("concentrate_window")
+
+            # Persist for future requests (one-time generation).
+            try:
+                if llm.get("narrative") or llm.get("recommendation") or llm.get("citizen_advisory"):
+                    h.llm_narrative = llm.get("narrative")
+                    h.llm_recommendation = llm.get("recommendation")
+                    h.llm_status = llm.get("status")
+                    h.llm_citizen_advisory = llm.get("citizen_advisory")
+                    h.llm_provider = "llm"
+                    h.llm_generated_at = datetime.now(timezone.utc)
+                    db.add(h)
+            except Exception:
+                logger.exception("Failed to persist hotspot LLM briefing hotspot_id=%s", h.hotspot_id)
             evidence_payload = [
                 {
                     "evidence_id": str(e.evidence_id),
@@ -723,6 +760,13 @@ def list_hotspots(
             crime_group=getattr(h, "crime_group", None),
         ))
         
+    # Commit any persisted LLM briefings generated during this request.
+    try:
+        db.commit()
+    except Exception:
+        logger.exception("Hotspot LLM persistence commit failed")
+        db.rollback()
+
     return responses
 
 

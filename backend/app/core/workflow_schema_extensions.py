@@ -60,7 +60,13 @@ DDL_STATEMENTS: tuple[str, ...] = (
       ADD COLUMN IF NOT EXISTS trend_direction VARCHAR(20),
       ADD COLUMN IF NOT EXISTS cluster_confidence NUMERIC(5,4),
       ADD COLUMN IF NOT EXISTS polygon_points TEXT,
-      ADD COLUMN IF NOT EXISTS crime_group VARCHAR(30);
+      ADD COLUMN IF NOT EXISTS crime_group VARCHAR(30),
+      ADD COLUMN IF NOT EXISTS llm_narrative TEXT,
+      ADD COLUMN IF NOT EXISTS llm_recommendation TEXT,
+      ADD COLUMN IF NOT EXISTS llm_status VARCHAR(60),
+      ADD COLUMN IF NOT EXISTS llm_citizen_advisory TEXT,
+      ADD COLUMN IF NOT EXISTS llm_provider VARCHAR(40),
+      ADD COLUMN IF NOT EXISTS llm_generated_at TIMESTAMPTZ;
     """,
     """
     ALTER TABLE local_leaders ADD COLUMN IF NOT EXISTS role VARCHAR(32) NOT NULL DEFAULT 'executive_of_cell';
@@ -155,6 +161,12 @@ def ensure_hotspot_cluster_columns(engine: Engine) -> list[str]:
         "cluster_confidence",
         "polygon_points",
         "crime_group",
+        "llm_narrative",
+        "llm_recommendation",
+        "llm_status",
+        "llm_citizen_advisory",
+        "llm_provider",
+        "llm_generated_at",
         "assigned_unit_code",
         "controlled_by_user_id",
         "deployed_at",

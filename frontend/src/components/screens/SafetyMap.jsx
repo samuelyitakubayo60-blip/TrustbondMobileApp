@@ -1928,6 +1928,7 @@ const SecurityRecommendations = ({
   const [actionError, setActionError] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiById, setAiById] = useState({});
+  const [aiProgress, setAiProgress] = useState({ done: 0, total: 0 });
 
   const handleTakeControl = async (hotspotId) => {
     setTakingId(hotspotId);
@@ -1971,58 +1972,119 @@ const SecurityRecommendations = ({
       .sort((a, b) => b._alarm - a._alarm);
   }, [hotspots]);
 
-  const topAiIds = useMemo(() => {
-    const MAX_AI_CARDS = 6;
-    return sorted
-      .slice(0, MAX_AI_CARDS)
-      .map((h) => h.hotspot_id)
-      .filter((id) => id != null);
+  const allHotspotIds = useMemo(
+    () => sorted.map((h) => h.hotspot_id).filter((id) => id != null),
+    [sorted],
+  );
+
+  const allHotspotIdsKey = allHotspotIds.join(",");
+
+  const hotspotById = useMemo(() => {
+    const map = {};
+    for (const h of sorted) {
+      if (h.hotspot_id != null) map[h.hotspot_id] = h;
+    }
+    return map;
   }, [sorted]);
 
-  const topAiIdsKey = topAiIds.join(",");
+  const mergeHotspotWithAi = (h) => {
+    const enriched = aiById[h.hotspot_id];
+    if (!enriched?.prediction) return h;
+    return {
+      ...h,
+      prediction: { ...(h.prediction || {}), ...enriched.prediction },
+    };
+  };
+
+  const hasStoredBriefing = (pred) =>
+    Boolean((pred?.narrative || "").trim() && (pred?.recommendation || "").trim());
 
   useEffect(() => {
     let cancelled = false;
+    const AI_BATCH_SIZE = 25;
+
+    const buildAiParams = (ids) => {
+      const params = new URLSearchParams();
+      params.set("for_map", "false");
+      params.set("limit", String(Math.max(ids.length, 1)));
+      params.set("hotspot_ids", ids.join(","));
+      if (timePeriod && timePeriod !== "") {
+        params.set("time_period", timePeriod);
+      } else if (customHours && customHours !== "" && Number(customHours) > 0) {
+        params.set("hours_back", customHours);
+      }
+      if (timeWindowHours) {
+        params.set("time_window_hours", String(timeWindowHours));
+      }
+      return params;
+    };
+
     const run = async () => {
-      if (!topAiIds.length) {
+      if (!allHotspotIds.length) {
         setAiById({});
+        setAiProgress({ done: 0, total: 0 });
         return;
       }
 
-      try {
-        setAiLoading(true);
-        const params = new URLSearchParams();
-        params.set("for_map", "false");
-        params.set("limit", String(topAiIds.length));
-        params.set("hotspot_ids", topAiIds.join(","));
-        if (timePeriod && timePeriod !== "") {
-          params.set("time_period", timePeriod);
-        } else if (customHours && customHours !== "" && Number(customHours) > 0) {
-          params.set("hours_back", customHours);
+      const merged = {};
+      const needsFetch = [];
+      for (const id of allHotspotIds) {
+        const h = hotspotById[id];
+        if (!h) continue;
+        const pred = h.prediction || {};
+        if (hasStoredBriefing(pred)) {
+          merged[id] = h;
+        } else {
+          needsFetch.push(id);
         }
-        if (timeWindowHours) {
-          params.set("time_window_hours", String(timeWindowHours));
-        }
-
-        const res = await api.get(`/api/v1/hotspots/?${params.toString()}`);
-        const items = Array.isArray(res) ? res : [];
-        const map = {};
-        for (const h of items) {
-          if (h && h.hotspot_id != null) map[h.hotspot_id] = h;
-        }
-        if (!cancelled) setAiById(map);
-      } catch {
-        if (!cancelled) setAiById({});
-      } finally {
-        if (!cancelled) setAiLoading(false);
       }
+
+      if (!cancelled) {
+        setAiById(merged);
+        setAiProgress({ done: Object.keys(merged).length, total: allHotspotIds.length });
+      }
+
+      if (!needsFetch.length) {
+        setAiLoading(false);
+        return;
+      }
+
+      setAiLoading(true);
+      cacheBust("/api/v1/hotspots");
+
+      for (let i = 0; i < needsFetch.length; i += AI_BATCH_SIZE) {
+        if (cancelled) break;
+        const chunk = needsFetch.slice(i, i + AI_BATCH_SIZE);
+        try {
+          const res = await api.get(
+            `/api/v1/hotspots/?${buildAiParams(chunk).toString()}`,
+          );
+          const items = Array.isArray(res) ? res : [];
+          for (const h of items) {
+            if (h?.hotspot_id != null) merged[h.hotspot_id] = h;
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setActionError(err?.message || "Failed to load AI recommendations for some hotspots");
+          }
+        }
+        if (!cancelled) {
+          setAiById({ ...merged });
+          setAiProgress({
+            done: Object.values(merged).filter((x) => hasStoredBriefing(x.prediction)).length,
+            total: allHotspotIds.length,
+          });
+        }
+      }
+
+      if (!cancelled) setAiLoading(false);
     };
 
     run();
     return () => {
       cancelled = true;
     };
-  }, [topAiIds, topAiIdsKey, timePeriod, customHours, timeWindowHours]);
+  }, [allHotspotIdsKey, allHotspotIds, hotspotById, timePeriod, customHours, timeWindowHours]);
 
   if (sorted.length === 0) {
     return (
@@ -2057,7 +2119,10 @@ const SecurityRecommendations = ({
       {aiLoading && (
         <div className="alert alert-info" style={{ marginBottom: 4 }}>
           <span className="alert-icon">i</span>
-          <div>Analyzing security recommendations (AI) for top hotspots…</div>
+          <div>
+            Generating AI briefings for all hotspots… {aiProgress.done}/{aiProgress.total} ready
+            (saved in database after first run).
+          </div>
         </div>
       )}
       {/* District situation overview bar */}
@@ -2102,7 +2167,7 @@ const SecurityRecommendations = ({
       {sorted.map((h, idx) => {
         const alarm = h._alarm;
         const color = alarmToColor(alarm);
-        const hFull = aiById[h.hotspot_id] || h;
+        const hFull = mergeHotspotWithAi(h);
         const unit = hotspotUnitLabel(hFull);
         const unitChips = Array.isArray(hFull.prediction?.recommended_units)
           ? hFull.prediction.recommended_units

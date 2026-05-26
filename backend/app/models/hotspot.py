@@ -40,6 +40,14 @@ class Hotspot(Base):
     polygon_points = Column(Text, nullable=True)                  # JSON [[lat,lon], ...] convex hull
     crime_group = Column(String(30), nullable=True)               # violent/property/drug/fraud/other
 
+    # Persisted LLM briefing (generated once and reused)
+    llm_narrative = Column(Text, nullable=True)
+    llm_recommendation = Column(Text, nullable=True)
+    llm_status = Column(String(60), nullable=True)
+    llm_citizen_advisory = Column(Text, nullable=True)
+    llm_provider = Column(String(40), nullable=True)  # groq / gemini / template
+    llm_generated_at = Column(DateTime(timezone=True), nullable=True)
+
     controlled_by = relationship("PoliceUser", foreign_keys=[controlled_by_user_id])
     reports = relationship(
         "Report",
