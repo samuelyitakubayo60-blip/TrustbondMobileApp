@@ -4,6 +4,7 @@ from typing import Annotated, List
 
 from app.database import get_db
 from app.models.special_assignment_unit import SpecialAssignmentUnit
+from app.core.websocket import refresh_entity
 from app.models.deployment_decision import DeploymentDecision
 from app.models.case import Case
 from app.models.incident_type import IncidentType
@@ -143,6 +144,7 @@ def create_special_assignment_unit(
     db.add(unit)
     db.commit()
     db.refresh(unit)
+    refresh_entity("special_assignment_unit", action="created")
     unit = (
         db.query(SpecialAssignmentUnit)
         .options(joinedload(SpecialAssignmentUnit.commander))
@@ -207,6 +209,7 @@ def update_special_assignment_unit(
 
     db.commit()
     db.refresh(unit)
+    refresh_entity("special_assignment_unit", action="updated")
     unit = (
         db.query(SpecialAssignmentUnit)
         .options(joinedload(SpecialAssignmentUnit.commander))
@@ -252,4 +255,5 @@ def delete_special_assignment_unit(
 
     db.delete(unit)
     db.commit()
+    refresh_entity("special_assignment_unit", action="deleted")
     return None

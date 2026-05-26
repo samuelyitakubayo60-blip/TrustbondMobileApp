@@ -1,6 +1,12 @@
 from typing import List, Dict, Any
+import asyncio
 import json
+import logging
+
 from fastapi import WebSocket
+
+logger = logging.getLogger(__name__)
+
 
 class ConnectionManager:
     def __init__(self):
@@ -36,3 +42,30 @@ class ConnectionManager:
 
 # Global singleton instance to be imported across API endpoints
 manager = ConnectionManager()
+
+
+def schedule_broadcast(message: Dict[str, Any]) -> None:
+    """
+    Broadcast to all /api/v1/ws clients from sync or async route handlers.
+  """
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(manager.broadcast(message))
+    except RuntimeError:
+        try:
+            asyncio.run(manager.broadcast(message))
+        except Exception:
+            logger.exception("WebSocket broadcast failed: %s", message)
+    except Exception:
+        logger.exception("WebSocket broadcast schedule failed: %s", message)
+
+
+def refresh_entity(entity: str, action: str = "updated", **extra: Any) -> None:
+    """Convenience wrapper for dashboard refresh pushes."""
+    payload: Dict[str, Any] = {
+        "type": "refresh_data",
+        "entity": entity,
+        "action": action,
+    }
+    payload.update(extra)
+    schedule_broadcast(payload)

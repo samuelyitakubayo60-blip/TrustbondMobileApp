@@ -29,7 +29,7 @@ from app.core.hotspot_auto import (
     get_hotspot_trust_min_from_db,
 )
 from app.core.village_lookup import get_village_location_info
-from app.core.websocket import manager
+from app.core.websocket import manager, refresh_entity
 from app.core.llm_recommendations import (
     generate_recommendation,
     generate_citizen_advisory,
@@ -1267,6 +1267,7 @@ def take_control_hotspot(
 
     h = _load_hotspot_for_ops(db, hotspot_id)
     take_hotspot_control(db, h, current_user)
+    refresh_entity("hotspot", action="take_control", hotspot_id=hotspot_id)
     parts = [current_user.first_name or "", current_user.last_name or ""]
     name = " ".join(p for p in parts if p).strip() or current_user.email
     return {
@@ -1321,6 +1322,7 @@ def deploy_unit_to_hotspot(
         success=True,
     )
     db.commit()
+    refresh_entity("hotspot", action="deployed", hotspot_id=hotspot_id)
 
     msg = f"Unit {unit.unit_name} ({unit.unit_code}) deployed to hotspot #{hotspot_id}."
     if meta.get("email_sent"):

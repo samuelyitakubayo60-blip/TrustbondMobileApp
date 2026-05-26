@@ -367,6 +367,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
   const [mapFocusId, setMapFocusId] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [showSinglesOnMap, setShowSinglesOnMap] = useState(true);
+  const [showVillageBoundaries, setShowVillageBoundaries] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   /** Read-only defaults from system config (DBSCAN lives under System Configuration). */
   const [clusterDefaults, setClusterDefaults] = useState({
@@ -851,6 +852,23 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
           />
           Show 1-report hotspots ({singleClusterCount})
         </label>
+        <label
+          style={{
+            marginLeft: 12,
+            fontSize: 11,
+            color: "var(--muted)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={showVillageBoundaries}
+            onChange={(e) => setShowVillageBoundaries(e.target.checked)}
+          />
+          Village boundaries
+        </label>
       </div>
 
       {loadError && (
@@ -899,22 +917,22 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                 />
               )}
               <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+                attribution="&copy; OpenStreetMap contributors"
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
               <ZoomControl position="topright" />
               <RelocatorControl maxBounds={musanzeBounds} />
 
-              {polygons.map((p) => (
+              {showVillageBoundaries && polygons.map((p) => (
                 <Polygon
                   key={p.id}
                   positions={p.positions}
                   pathOptions={{
-                    color: "#64748b",
-                    weight: 1.25,
-                    opacity: 0.65,
-                    fillColor: "#e2e8f0",
-                    fillOpacity: 0.12,
+                    color: "#475569",
+                    weight: 1,
+                    opacity: 0.45,
+                    fillColor: "transparent",
+                    fillOpacity: 0,
                   }}
                 >
                   <Tooltip
@@ -980,8 +998,36 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                       />
                     )}
 
-                    {/* Each incident at its coordinate (all reports in cluster) */}
-                    {pts.length > 0 ? pts.map((p, pIdx) => {
+                    {/* Multi-report cluster: one grouped marker; singles show per report */}
+                    {isMultiCluster ? (
+                      <CircleMarker
+                        key={`cluster-${h.hotspot_id}`}
+                        center={[h.lat, h.lng]}
+                        radius={
+                          isSelected
+                            ? Math.min(18, 8 + reportCount * 1.5)
+                            : Math.min(14, 6 + reportCount * 1.2)
+                        }
+                        eventHandlers={{ click: () => focusClusterOnMap(h) }}
+                        pathOptions={{
+                          color: zoneBorder,
+                          weight: 3,
+                          opacity: 1,
+                          fillColor: zoneColor,
+                          fillOpacity: 0.92,
+                        }}
+                      >
+                        <Tooltip direction="top" offset={[0, -8]} opacity={0.97} interactive={false}>
+                          <div style={{ fontSize: "12px", lineHeight: 1.5, minWidth: 140 }}>
+                            <strong>{h.area_label || `Cluster #${h.hotspot_id}`}</strong>
+                            <br />
+                            <strong>{reportCount} reports</strong> · {getReportRiskLabel(zoneColor)}
+                            <br />
+                            {h.dominant_crime_type || h.incident_type_name || "Mixed types"}
+                          </div>
+                        </Tooltip>
+                      </CircleMarker>
+                    ) : pts.length > 0 ? pts.map((p, pIdx) => {
                       const lat = Number(p.latitude);
                       const lng = Number(p.longitude);
                       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
@@ -996,11 +1042,11 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                           radius={dotRadius}
                           eventHandlers={{ click: () => focusClusterOnMap(h) }}
                           pathOptions={{
-                            color: "#ffffff",
-                            weight: 2.5,
+                            color: zoneBorder,
+                            weight: 2,
                             opacity: 1,
                             fillColor: zoneColor,
-                            fillOpacity: 0.95,
+                            fillOpacity: 0.92,
                           }}
                         >
                           <Tooltip direction="top" offset={[0, -6]} opacity={0.97} interactive={false}>
@@ -1008,10 +1054,10 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                               <div style={{ fontWeight: 700, marginBottom: 2 }}>
                                 {p.incident_type_name || "Incident"}
                               </div>
-                              <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                                {getReportRiskLabel(zoneColor)}
+                              <div style={{ fontSize: 11, color: "#64748b" }}>
+                                {getReportRiskLabel(zoneColor)} · 1 report
                               </div>
-                              <div style={{ color: "#94a3b8", fontSize: 11 }}>
+                              <div style={{ color: "#64748b", fontSize: 11 }}>
                                 Report #{String(p.report_id || "").slice(-6)}
                               </div>
                               {p.reported_at && (
@@ -1022,43 +1068,35 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                                   })}
                                 </div>
                               )}
-                              {loc && <div style={{ fontSize: 11, color: "#94a3b8" }}>{loc}</div>}
-                              <div style={{ fontSize: 11, marginTop: 2 }}>
-                                Cluster: <strong>{h.incident_count} incident{h.incident_count !== 1 ? "s" : ""}</strong>
-                                {h.crime_group && <span> · {h.crime_group}</span>}
-                              </div>
+                              {loc && <div style={{ fontSize: 11, color: "#64748b" }}>{loc}</div>}
                             </div>
                           </Tooltip>
                         </CircleMarker>
                       );
-                    }) : !isMultiCluster ? (
-                      /* Single-report cluster — one dot at centroid */
+                    }) : (
                       <CircleMarker
                         key={`hs-center-${h.hotspot_id}`}
                         center={[h.lat, h.lng]}
                         radius={mapZoom >= 14 ? 6 : mapZoom >= 12 ? 5 : 4}
                         eventHandlers={{ click: () => focusClusterOnMap(isSelected ? null : h) }}
                         pathOptions={{
-                          color: "#ffffff",
-                          weight: 2.5,
+                          color: zoneBorder,
+                          weight: 2,
                           opacity: 1,
                           fillColor: zoneColor,
-                          fillOpacity: 0.95,
+                          fillOpacity: 0.92,
                         }}
                       >
                         <Tooltip direction="top" offset={[0, -6]} opacity={0.97} interactive={false}>
                           <div style={{ fontSize: "12px", lineHeight: 1.6 }}>
                             <strong>{h.area_label || `Cluster #${h.hotspot_id}`}</strong>
                             <br />
-                            {reportCount} incident · {getReportRiskLabel(zoneColor)}
+                            1 report · {getReportRiskLabel(zoneColor)}
                             <br />
                             {h.incident_type_name || h.crime_group || "unknown"}
                           </div>
                         </Tooltip>
                       </CircleMarker>
-                    ) : (
-                      /* Multi-report but no point geometry — zone is already drawn */
-                      null
                     )}
                   </React.Fragment>
                 );

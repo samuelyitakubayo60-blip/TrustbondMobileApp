@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.audit_log import AuditLog
 from app.models.police_user import PoliceUser
+from app.core.websocket import refresh_entity
 import logging
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,9 @@ def log_action(
             entity_id,
             success,
         )
+        refresh_entity("audit", action=action_type)
+        if entity_type:
+            refresh_entity(str(entity_type), action=action_type)
     except Exception as exc:
         logger.exception("AUDIT write failed (flush): %s", exc)
         # Keep behavior: caller decides whether to rollback/raise.

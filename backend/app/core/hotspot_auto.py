@@ -21,6 +21,7 @@ from app.models.report import Report
 from app.models.system_config import SystemConfig
 from app.config import settings
 from app.core.leader_workflow import report_ready_for_cases_and_hotspots
+from app.core.websocket import refresh_entity
 
 
 DEFAULT_TIME_WINDOW_HOURS = 720   # 30 days — wide enough to include sparse report data
@@ -706,7 +707,179 @@ def _create_village_based_hotspots(
             created += 1
             print(f"Created village-based hotspot {hotspot.hotspot_id} for village {village_id}, incident type {incident_type_id}")
     
+    merged = _merge_nearby_hotspots_by_distance(db, max(50.0, float(radius_meters)))
+    if merged:
+        print(f"Merged {merged} nearby hotspot group(s) into multi-report clusters")
+    if created or merged:
+        refresh_entity("hotspot", action="clustered", created=created, merged=merged)
     return created
+
+
+def _merge_nearby_hotspots_by_distance(db: Session, eps_meters: float) -> int:
+    """Fuse hotspot rows whose centers fall within eps_meters (same-area clusters)."""
+    rows = db.query(Hotspot).order_by(Hotspot.hotspot_id.asc()).all()
+    if len(rows) < 2:
+        return 0
+
+    consumed: set[int] = set()
+    merged_groups = 0
+    for i, primary in enumerate(rows):
+        if primary.hotspot_id in consumed:
+            continue
+        lat1 = float(primary.center_lat)
+        lon1 = float(primary.center_long)
+        group = [primary]
+        for other in rows[i + 1 :]:
+            if other.hotspot_id in consumed:
+                continue
+            if _haversine_meters(
+                lat1,
+                lon1,
+                float(other.center_lat),
+                float(other.center_long),
+            ) <= eps_meters:
+                group.append(other)
+        if len(group) < 2:
+            continue
+        _absorb_hotspot_group(db, group)
+        merged_groups += 1
+        for h in group:
+            consumed.add(h.hotspot_id)
+    return merged_groups
+
+
+def _absorb_hotspot_group(db: Session, hotspots: List[Hotspot]) -> None:
+    """Combine multiple hotspot rows into one multi-report cluster."""
+    primary = hotspots[0]
+    all_report_ids: List[str] = []
+    composition: Dict[str, int] = {}
+    lat_sum = 0.0
+    lon_sum = 0.0
+    weight_sum = 0.0
+
+    for h in hotspots:
+        try:
+            comp = json.loads(h.composition) if h.composition else {}
+            for k, v in comp.items():
+                composition[k] = composition.get(k, 0) + int(v)
+        except Exception:
+            pass
+        w = max(1, int(h.incident_count or 1))
+        lat_sum += float(h.center_lat) * w
+        lon_sum += float(h.center_long) * w
+        weight_sum += w
+        links = db.execute(
+            text("SELECT report_id FROM hotspot_reports WHERE hotspot_id = :hid"),
+            {"hid": h.hotspot_id},
+        ).fetchall()
+        for (rid,) in links:
+            all_report_ids.append(str(rid))
+
+    all_report_ids = list(dict.fromkeys(all_report_ids))
+    incident_count = len(all_report_ids) if all_report_ids else sum(
+        int(h.incident_count or 0) for h in hotspots
+    )
+    center_lat = lat_sum / weight_sum if weight_sum else float(primary.center_lat)
+    center_long = lon_sum / weight_sum if weight_sum else float(primary.center_long)
+    tw = int(primary.time_window_hours or DEFAULT_TIME_WINDOW_HOURS)
+    radius_m = float(primary.radius_meters or DEFAULT_RADIUS_METERS)
+    area_sqkm = max(0.001, 3.14159 * (radius_m / 1000.0) ** 2)
+    avg_trust = 75.0
+    classification_result = predict_cluster_classification(
+        incident_count=incident_count,
+        avg_trust=avg_trust,
+        cluster_density=incident_count / area_sqkm,
+        time_window_hours=tw,
+    )
+    risk_level = classification_to_risk_level(classification_result["classification"])
+
+    primary.center_lat = Decimal(str(center_lat))
+    primary.center_long = Decimal(str(center_long))
+    primary.incident_count = incident_count
+    primary.risk_level = risk_level
+    primary.lifecycle_state = classification_result["classification"]
+    primary.composition = json.dumps(composition) if composition else primary.composition
+    primary.detected_at = datetime.now(timezone.utc)
+    primary.crime_group = primary.crime_group or "mixed"
+    db.flush()
+
+    db.execute(
+        text("DELETE FROM hotspot_reports WHERE hotspot_id = :hid"),
+        {"hid": primary.hotspot_id},
+    )
+    for rid in all_report_ids:
+        db.execute(
+            text(
+                "INSERT INTO hotspot_reports (hotspot_id, report_id, is_core) "
+                "VALUES (:hid, :rid, true) "
+                "ON CONFLICT (hotspot_id, report_id) DO UPDATE SET is_core = true"
+            ),
+            {"hid": primary.hotspot_id, "rid": rid},
+        )
+
+    for h in hotspots[1:]:
+        db.execute(
+            text("DELETE FROM hotspot_reports WHERE hotspot_id = :hid"),
+            {"hid": h.hotspot_id},
+        )
+        db.delete(h)
+    db.flush()
+
+
+def _try_append_report_to_nearby_hotspot(
+    db: Session,
+    p: Dict[str, Any],
+    eps_m: float,
+    group_name: str,
+) -> bool:
+    """Link a report to an existing hotspot when it falls within clustering radius."""
+    lat = float(p["lat"])
+    lon = float(p["lon"])
+    delta = max(0.001, float(eps_m) / 111000.0)
+    candidates = (
+        db.query(Hotspot)
+        .filter(
+            Hotspot.center_lat.between(lat - delta, lat + delta),
+            Hotspot.center_long.between(lon - delta, lon + delta),
+        )
+        .all()
+    )
+    report_id_str = str(p["report"].report_id)
+    for h in candidates:
+        if _haversine_meters(lat, lon, float(h.center_lat), float(h.center_long)) > eps_m:
+            continue
+        exists = db.execute(
+            text(
+                "SELECT 1 FROM hotspot_reports WHERE hotspot_id = :hid AND report_id = :rid"
+            ),
+            {"hid": h.hotspot_id, "rid": report_id_str},
+        ).fetchone()
+        if exists:
+            return True
+        i_name = p.get("incident_type_name") or "Unknown"
+        composition: Dict[str, int] = {}
+        try:
+            composition = json.loads(h.composition) if h.composition else {}
+        except Exception:
+            composition = {}
+        composition[i_name] = composition.get(i_name, 0) + 1
+        new_count = int(h.incident_count or 0) + 1
+        h.incident_count = new_count
+        h.composition = json.dumps(composition)
+        h.detected_at = datetime.now(timezone.utc)
+        if h.crime_group and h.crime_group != group_name:
+            h.crime_group = "mixed"
+        db.execute(
+            text(
+                "INSERT INTO hotspot_reports (hotspot_id, report_id, is_core) "
+                "VALUES (:hid, :rid, true) "
+                "ON CONFLICT (hotspot_id, report_id) DO NOTHING"
+            ),
+            {"hid": h.hotspot_id, "rid": report_id_str},
+        )
+        db.flush()
+        return True
+    return False
 
 
 def _create_geographic_hotspots(
@@ -728,10 +901,12 @@ def _create_geographic_hotspots(
     4. Persist clusters with full metadata.
     """
     eps_m   = max(50.0, float(radius_meters))
-    # Temporal epsilon: incidents must be within (window / 4) of each other.
-    # Minimum 6 h, maximum 72 h so very wide query windows don't disable ST.
-    raw_eps_t = float(time_window_hours) * 3600 / 4
-    eps_t     = max(6 * 3600, min(72 * 3600, raw_eps_t))
+    # For week+ windows, cluster by location (reports months apart can still merge).
+    if int(time_window_hours) >= 168:
+        eps_t = 0.0
+    else:
+        raw_eps_t = float(time_window_hours) * 3600 / 4
+        eps_t = max(6 * 3600, min(72 * 3600, raw_eps_t))
     dbscan_min_pts = max(2, int(min_incidents))
     # Severity override allows a single very high-severity point to be a core.
 
@@ -744,13 +919,10 @@ def _create_geographic_hotspots(
     created = 0
 
     def _create_solo_hotspot(db, group_name, p, radius_meters, time_window_hours):
-        """Create a single-incident hotspot for each DBSCAN noise / under-sized cluster point.
-
-        Each report gets its own hotspot row so that two reports at the same location
-        both appear on the map. Idempotency is achieved by checking whether a hotspot
-        already exists that links to *this specific report* (re-run safety).
-        """
+        """Single-report hotspot, or append to an existing cluster within epsilon."""
         nonlocal created
+        if _try_append_report_to_nearby_hotspot(db, p, eps_m, group_name):
+            return
         solo_lat  = p["lat"]
         solo_long = p["lon"]
         i_name    = p.get("incident_type_name", "Unknown")
@@ -959,9 +1131,90 @@ def _create_geographic_hotspots(
                     },
                 )
 
-        # ── Solo incidents (DBSCAN noise points) ─────────────────────────────
+        # ── Noise points: spatial-only re-cluster, then solo for leftovers ─────
         noise_indices = [i for i, lbl in enumerate(labels) if lbl < 0]
-        for idx in noise_indices:
-            _create_solo_hotspot(db, group_name, group_pts[idx], radius_meters, time_window_hours)
+        noise_pts = [group_pts[i] for i in noise_indices]
+        leftover_noise: List[Dict[str, Any]] = []
+        if len(noise_pts) >= 2:
+            n_labels, n_core = _st_dbscan(noise_pts, eps_m, 0.0, max(2, dbscan_min_pts))
+            n_clusters: Dict[int, List[Dict[str, Any]]] = {}
+            for ni, nlbl in enumerate(n_labels):
+                if nlbl < 0:
+                    leftover_noise.append(noise_pts[ni])
+                    continue
+                tagged = {**noise_pts[ni], "is_core": n_core[ni]}
+                n_clusters.setdefault(nlbl, []).append(tagged)
+            for cluster_pts in n_clusters.values():
+                if len(cluster_pts) < 2:
+                    leftover_noise.extend(cluster_pts)
+                    continue
+                incident_count = len(cluster_pts)
+                center_lat, center_long = _weighted_centroid(
+                    cluster_pts, time_window_hours=time_window_hours
+                )
+                avg_trust = sum(p.get("trust", 100.0) for p in cluster_pts) / incident_count
+                area_sqkm = max(0.001, 3.14159 * (float(radius_meters) / 1000.0) ** 2)
+                classification_result = predict_cluster_classification(
+                    incident_count=incident_count,
+                    avg_trust=avg_trust,
+                    cluster_density=incident_count / area_sqkm,
+                    time_window_hours=time_window_hours,
+                )
+                risk_level = classification_to_risk_level(
+                    classification_result["classification"]
+                )
+                composition: Dict[str, int] = {}
+                for pt in cluster_pts:
+                    t_name = pt.get("incident_type_name") or "Unknown"
+                    composition[t_name] = composition.get(t_name, 0) + 1
+                type_id_counts: Dict[int, int] = {}
+                for pt in cluster_pts:
+                    tid = int(pt.get("incident_type_id") or 0)
+                    if tid:
+                        type_id_counts[tid] = type_id_counts.get(tid, 0) + 1
+                dominant_type_id = (
+                    max(type_id_counts, key=type_id_counts.get) if type_id_counts else None
+                )
+                hull_pts_latlon = [(pt["lat"], pt["lon"]) for pt in cluster_pts]
+                hull = _convex_hull_points(hull_pts_latlon)
+                polygon_json = json.dumps(hull) if hull else None
+                hotspot = Hotspot(
+                    center_lat=Decimal(str(center_lat)),
+                    center_long=Decimal(str(center_long)),
+                    radius_meters=Decimal(str(radius_meters)),
+                    incident_count=incident_count,
+                    risk_level=risk_level,
+                    time_window_hours=time_window_hours,
+                    incident_type_id=dominant_type_id,
+                    detected_at=datetime.now(timezone.utc),
+                    lifecycle_state=classification_result["classification"],
+                    composition=json.dumps(composition),
+                    temporal_intensity=Decimal("0.0"),
+                    severity_score=Decimal("0.0"),
+                    trend_direction="stable",
+                    cluster_confidence=Decimal("1.0"),
+                    polygon_points=polygon_json,
+                    crime_group=group_name,
+                )
+                db.add(hotspot)
+                db.flush()
+                created += 1
+                for pt in cluster_pts:
+                    db.execute(
+                        text(
+                            "INSERT INTO hotspot_reports (hotspot_id, report_id, is_core) "
+                            "VALUES (:hid, :rid, true) "
+                            "ON CONFLICT (hotspot_id, report_id) DO UPDATE SET is_core = true"
+                        ),
+                        {
+                            "hid": hotspot.hotspot_id,
+                            "rid": str(pt["report"].report_id),
+                        },
+                    )
+        else:
+            leftover_noise = noise_pts
+
+        for p in leftover_noise:
+            _create_solo_hotspot(db, group_name, p, radius_meters, time_window_hours)
 
     return created

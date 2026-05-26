@@ -153,6 +153,7 @@ const Topbar = ({
         websocketService.off("notificationCount", handleNotificationCount);
         websocketService.off("newNotification", handleNewNotification);
         websocketService.off("countUpdateNeeded", handleCountUpdateNeeded);
+        websocketService.disconnect();
       };
     }
   }, []);

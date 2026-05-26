@@ -11,6 +11,7 @@ from app.api.v1.auth import get_current_admin
 from app.core.email import is_smtp_configured
 from app.core.security import get_password_hash
 from app.database import get_db
+from app.core.websocket import refresh_entity
 from app.models.location import Location
 from app.models.local_leader import LocalLeader
 from app.models.local_leader_coverage import LocalLeaderCoverageLocation
@@ -255,6 +256,7 @@ def create_local_leader(
     sent, send_err = notify_leader_account_ready(leader)
     resp.account_ready_email_sent = sent
     resp.account_ready_email_error = send_err
+    refresh_entity("local_leader", action="created")
     return resp
 
 
@@ -349,6 +351,7 @@ def update_local_leader(
 
     db.add(leader)
     db.commit()
+    refresh_entity("local_leader", action="updated")
     return _to_response(db, leader)
 
 
@@ -380,6 +383,7 @@ def delete_local_leader(
     )
     db.delete(leader)
     db.commit()
+    refresh_entity("local_leader", action="deleted")
     return None
 
 

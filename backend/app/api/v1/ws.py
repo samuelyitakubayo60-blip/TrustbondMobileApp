@@ -111,13 +111,31 @@ async def websocket_notifications_endpoint(websocket: WebSocket):
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    """Police portal live refresh channel (maps, reports, audit, hotspots, etc.)."""
     await manager.connect(websocket)
+    await websocket.send_text(
+        json.dumps({"type": "connected", "channel": "refresh_data"})
+    )
     try:
         while True:
-            # Client might ping us, we keep the connection alive
             data = await websocket.receive_text()
-            await websocket.send_text('{"type": "pong"}')
+            try:
+                message = json.loads(data)
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({"type": "pong"}))
+                continue
+            msg_type = message.get("type")
+            if msg_type == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+            elif msg_type == "auth":
+                # Optional token on /ws — refresh channel does not require auth today.
+                await websocket.send_text(json.dumps({"type": "auth_ok"}))
+            else:
+                await websocket.send_text(json.dumps({"type": "pong"}))
     except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception as e:
+        logger.warning("WebSocket refresh channel error: %s", e)
         manager.disconnect(websocket)
 
 # Export notification manager for use in other endpoints
