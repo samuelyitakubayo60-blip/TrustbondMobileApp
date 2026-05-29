@@ -8,8 +8,12 @@ plugins {
 
 android {
     namespace = "com.example.mobile"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+
+    // ── Pinned SDK versions ───────────────────────────────────────────────────
+    // Hardcoded so a Flutter SDK upgrade never silently increases APK size.
+    // Update only intentionally and re-verify release APK size stays ≤ 65 MB.
+    compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -23,20 +27,27 @@ android {
 
     defaultConfig {
         applicationId = "com.example.mobile"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        minSdk = 24          // Android 7.0 — all active phones from 2016+
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        // Build only for arm64-v8a (all Android phones since ~2015).
-        // Overrides Flutter's default multi-ABI set and cuts APK size by ~60-70%.
+
+        // Single ABI: arm64-v8a covers every Android phone from ~2015.
+        // Removing this line would add armeabi-v7a/x86_64 and grow APK by ~60 %.
         ndk {
             abiFilters += setOf("arm64-v8a")
         }
+
+        // Strip all locale resources except English.
+        // The app has no translated strings, so non-English res are dead weight.
+        resourceConfigurations += setOf("en")
     }
 
     buildTypes {
         release {
-            // R8 minification + resource shrinking — biggest APK size reduction
+            // R8 full-mode minification + resource shrinking + icon tree-shaking
+            // are the three biggest contributors to keeping release APK ≤ 65 MB.
+            // Do NOT disable these flags.
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -50,14 +61,14 @@ android {
             isShrinkResources = false
         }
     }
-
 }
 
 dependencies {
+    // Pinned: do not bump desugar_jdk_libs without re-checking release APK size.
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-messaging")
-    // firebase-analytics removed — reduces size; add back only if you use Analytics
+    // firebase-analytics intentionally excluded — adds ~2 MB; add back only if needed.
 }
 
 flutter {

@@ -18,8 +18,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   bool _acceptedTerms = false;
   bool _isContinuing = false;
-  bool _termsRead = false;
-  bool _privacyRead = false;
+  bool _docsRead = false;
 
   late final AnimationController _fadeController;
   late final Animation<double> _fadeAnimation;
@@ -53,10 +52,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
     setState(() {
       _acceptedTerms = accepted;
-      if (accepted) {
-        _termsRead = true;
-        _privacyRead = true;
-      }
+      if (accepted) _docsRead = true;
     });
   }
 
@@ -236,8 +232,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Widget _buildLegalConsentCard() {
-    final bothRead = _termsRead && _privacyRead;
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -265,39 +259,62 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
           const SizedBox(height: 6),
           const Text(
-            'Please review both documents below before accepting.',
+            'Review the Terms & Conditions and Privacy Policy before accepting.',
             style: TextStyle(fontSize: 11.5, color: AppColors.muted, height: 1.5),
           ),
           const SizedBox(height: 14),
-          _legalDocButton(
-            icon: Icons.gavel_rounded,
-            label: 'Terms & Conditions',
-            isRead: _termsRead,
-            onTap: () async {
-              final done = await _showLegalSheetRequireFullRead(
-                title: 'Terms and Conditions',
-                body: _termsAndConditionsText,
-              );
-              if (!mounted || !done) return;
-              setState(() => _termsRead = true);
-            },
-          ),
-          const SizedBox(height: 8),
-          _legalDocButton(
-            icon: Icons.privacy_tip_outlined,
-            label: 'Privacy Policy',
-            isRead: _privacyRead,
-            onTap: () async {
-              final done = await _showLegalSheetRequireFullRead(
-                title: 'Privacy Policy',
-                body: _privacyPolicyText,
-              );
-              if (!mounted || !done) return;
-              setState(() => _privacyRead = true);
-            },
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final done = await _showLegalSheetRequireFullRead();
+                if (!mounted || !done) return;
+                setState(() => _docsRead = true);
+              },
+              icon: Icon(
+                _docsRead ? Icons.check_circle_rounded : Icons.article_outlined,
+                size: 16,
+                color: _docsRead ? Colors.green : null,
+              ),
+              label: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Terms & Privacy Policy'),
+                  if (_docsRead)
+                    Text(
+                      'Read',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.green.shade600,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    )
+                  else
+                    const Text(
+                      'Tap to review',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.muted,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                ],
+              ),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                side: BorderSide(
+                  color: _docsRead
+                      ? Colors.green.withValues(alpha: 0.4)
+                      : AppColors.border,
+                ),
+                backgroundColor:
+                    _docsRead ? Colors.green.withValues(alpha: 0.04) : null,
+                alignment: Alignment.centerLeft,
+              ),
+            ),
           ),
           const SizedBox(height: 14),
-          if (!bothRead)
+          if (!_docsRead)
             const Padding(
               padding: EdgeInsets.only(bottom: 10),
               child: Row(
@@ -306,7 +323,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Scroll to the end of each document to enable acceptance.',
+                      'Scroll to the end to enable acceptance.',
                       style: TextStyle(fontSize: 11, color: AppColors.muted, height: 1.5),
                     ),
                   ),
@@ -314,9 +331,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
             ),
           GestureDetector(
-            onTap: bothRead ? () => setState(() => _acceptedTerms = !_acceptedTerms) : null,
+            onTap: _docsRead ? () => setState(() => _acceptedTerms = !_acceptedTerms) : null,
             child: AnimatedOpacity(
-              opacity: bothRead ? 1.0 : 0.45,
+              opacity: _docsRead ? 1.0 : 0.45,
               duration: const Duration(milliseconds: 250),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -338,7 +355,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       height: 22,
                       child: Checkbox(
                         value: _acceptedTerms,
-                        onChanged: bothRead ? (v) => setState(() => _acceptedTerms = v ?? false) : null,
+                        onChanged: _docsRead
+                            ? (v) => setState(() => _acceptedTerms = v ?? false)
+                            : null,
                         activeColor: AppColors.accent,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
@@ -361,61 +380,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  Widget _legalDocButton({
-    required IconData icon,
-    required String label,
-    required bool isRead,
-    required VoidCallback onTap,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: onTap,
-        icon: Icon(
-          isRead ? Icons.check_circle_rounded : icon,
-          size: 16,
-          color: isRead ? Colors.green : null,
-        ),
-        label: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label),
-            if (isRead)
-              Text(
-                'Read',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.green.shade600,
-                  fontWeight: FontWeight.w600,
-                ),
-              )
-            else
-              const Text(
-                'Tap to view',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.muted,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-          ],
-        ),
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          side: BorderSide(
-            color: isRead ? Colors.green.withValues(alpha: 0.4) : AppColors.border,
-          ),
-          backgroundColor: isRead ? Colors.green.withValues(alpha: 0.04) : null,
-          alignment: Alignment.centerLeft,
-        ),
-      ),
-    );
-  }
-
-  Future<bool> _showLegalSheetRequireFullRead({
-    required String title,
-    required String body,
-  }) async {
+  Future<bool> _showLegalSheetRequireFullRead() async {
     final controller = ScrollController();
     bool reachedBottom = false;
 
@@ -459,9 +424,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         ),
                       ),
                       const SizedBox(height: 14),
-                      Text(
-                        title,
-                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                      const Text(
+                        'Terms & Privacy Policy',
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 10),
                       const Divider(),
@@ -474,13 +439,29 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           },
                           child: SingleChildScrollView(
                             controller: controller,
-                            child: Text(
-                              body,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.muted,
-                                height: 1.8,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _termsAndConditionsText,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.muted,
+                                    height: 1.8,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Divider(),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _privacyPolicyText,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.muted,
+                                    height: 1.8,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -656,51 +637,60 @@ If you have questions regarding these terms, contact the TrustBond administratio
 const String _privacyPolicyText = '''
 TrustBond Privacy Policy
 Effective Date: 29 March 2026
+Coverage: Musanze District, Northern Province, Rwanda
 
-This Privacy Policy explains how TrustBond collects, uses, stores, and protects information when you use the app.
+This Privacy Policy explains what information TrustBond collects, how it is used, and how it is protected.
 
 1. Information we collect
-- Anonymous device identifier generated for platform operation and abuse prevention
-- Report content you provide (incident type, description, optional media attachments)
-- Location data submitted during reporting to determine relevant response area
-- Technical metadata required for diagnostics, service security, and reliability
 
-2. Information we generally do not require
-- Full legal name
-- Personal account password (TrustBond does not require standard account sign-up)
-- Personal phone number for core anonymous reporting workflows
+a) Anonymous device identifier
+When you first open TrustBond, the app generates a secure anonymous ID on your device. This ID is a mathematical hash that cannot be reversed to identify you. It is used to track your report history, calculate your trust score, and prevent abuse.
 
-3. Why we process information
-- Receive and process incident reports
-- Evaluate report credibility and priority
-- Forward relevant reports to authorized response institutions
-- Detect abuse, spam, fraud, and policy violations
-- Maintain and improve system reliability, safety, and performance
+b) Incident report content
+When you submit a report, TrustBond collects the incident type, your written description, any photos or videos you attach, and the GPS coordinates at the time of submission.
 
-4. Legal basis and consent
-By selecting "Accept" and using TrustBond, you consent to processing described in this policy where consent is required by applicable law.
+c) Location data (two uses)
+- Reporting: your location is attached to the report to route it to the correct local leader in your cell or village within Musanze District.
+- Safety alerts: while the app is open and running in the background, TrustBond monitors your GPS location to alert you when you come close to a known security hotspot. This location data is processed locally on your device and is not continuously uploaded to a server.
 
-5. Data sharing
-Information may be shared with authorized personnel, public safety partners, and service providers only as necessary to operate the platform, assess incidents, and support legitimate response actions.
+d) Technical metadata
+Standard technical information (device OS version, connection status) may be collected for system reliability and security purposes.
+
+2. Information we do not collect
+- Your full name
+- Your phone number
+- Your email address
+- Any government-issued identification
+
+3. How we use your information
+- To receive, screen, and process incident reports
+- To route verified reports to the assigned local leader in Musanze District
+- To send you real-time safety alerts based on your proximity to security hotspots
+- To evaluate report credibility through automated AI screening
+- To prevent abuse, spam, and false reporting
+- To maintain and improve system reliability
+
+4. Who sees your reports
+Reports that pass AI screening are forwarded to the local leader assigned to your cell or village. Leaders can see the incident details, attached evidence, and location. They cannot see who submitted the report. No personal identity data is ever attached to a report.
+
+5. Legal basis and consent
+By selecting "Accept" and continuing to use TrustBond, you consent to the data processing described in this policy.
 
 6. Data retention
-Information is retained only for as long as necessary for safety operations, legal obligations, dispute handling, auditing, and system integrity.
+Anonymous device IDs and report data are retained for as long as needed to support safety investigations, maintain trust scoring, and comply with applicable obligations. No personally identifiable data is collected, so there is nothing personally identifiable to delete.
 
 7. Data security
-TrustBond uses reasonable technical and organizational safeguards to protect information in transit and at rest. No method of transmission or storage is 100% secure.
+TrustBond uses HTTPS/TLS encryption for all data in transit between the app and server. Stored evidence and report data are accessible only to authorized personnel. No security system is 100% guaranteed, but reasonable safeguards are in place.
 
 8. Your choices
-You may stop using the app at any time. You can also manage app permissions in your device settings, but disabling permissions may limit essential features.
+You may stop using the app at any time. You can disable location permissions in your device settings, but this will prevent incident reporting and safety alerts from functioning correctly.
 
-9. Children and sensitive use
-TrustBond is intended for responsible community safety reporting. Users should avoid submitting unnecessary personal or sensitive data about themselves or others.
+9. Emergency limitation
+TrustBond is a community reporting tool, not a guaranteed emergency response service. In immediate danger, contact official emergency services directly.
 
-10. International and third-party processing
-Where needed, trusted service providers may process limited data on behalf of TrustBond under appropriate confidentiality and security controls.
+10. Policy updates
+This policy may be revised. Continued use after updates constitutes acceptance of the latest version.
 
-11. Policy updates
-This policy may be updated periodically. Continued use of the app after changes indicates acceptance of the updated policy.
-
-12. Contact
-Questions about privacy can be directed to the TrustBond administration team through official organizational channels.
+11. Contact
+Questions about this policy can be directed to the TrustBond administration team through official organizational channels.
 ''';

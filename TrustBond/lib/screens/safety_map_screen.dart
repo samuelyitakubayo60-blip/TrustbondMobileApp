@@ -11,6 +11,7 @@ import '../models/musanze_map_data.dart';
 import '../services/location_service.dart';
 import '../services/api_service.dart';
 import '../services/hotspot_service.dart';
+import '../services/proximity_alert_service.dart';
 import '../widgets/musanze_map_painter.dart' show sectorColor;
 
 class SafetyMapScreen extends StatefulWidget {
@@ -1076,6 +1077,9 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     final clamped = meters.clamp(100, 20000);
     if (clamped == _nearbyHotspotRadiusMeters) return;
     setState(() => _nearbyHotspotRadiusMeters = clamped);
+    // Keep the proximity alert service in sync with the map radius so alerts
+    // fire for the same distance the user has selected on the map.
+    unawaited(ProximityAlertService().updateRadius(clamped.toDouble()));
     if (_userLat != null && _userLng != null) {
       _loadHotspots();
       _loadPublicAlerts();

@@ -6,6 +6,11 @@
     <!-- Precise and approximate location for GPS-based incident location -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- Background location: required on Android 10+ for continuous GPS tracking -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <!-- Foreground service: keeps location stream alive when app is not in foreground -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
     <!-- Motion: accelerometer used for report context (e.g. was device moving). No extra permission needed at normal rate. -->
     <!-- Only if you need >200Hz sensor sampling, add: android.permission.HIGH_SAMPLING_RATE_SENSORS -->
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false"/>
@@ -41,6 +46,13 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Geolocator foreground service — keeps position stream alive in background -->
+        <service
+            android:name="com.baseflow.geolocator.GeolocatorLocationService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location"/>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

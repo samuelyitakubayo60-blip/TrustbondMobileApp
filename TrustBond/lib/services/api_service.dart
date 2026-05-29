@@ -85,7 +85,7 @@ class ApiService {
   /// List reports for the given device (my reports).
   Future<List<dynamic>> getMyReports(String deviceId) async {
     final uri = Uri.parse('${ApiConfig.reportsUrl}/').replace(
-      queryParameters: {'device_id': deviceId},
+      queryParameters: {'device_id': deviceId, 'limit': '500'},
     );
     final cacheKey = '$_myReportsCachePrefix$deviceId';
     try {

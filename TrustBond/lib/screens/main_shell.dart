@@ -128,6 +128,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       unawaited(_queueService.scheduleSync(reason: 'resume'));
       unawaited(_applyBiometricLockIfNeeded());
+      // Re-check proximity on resume so alerts fire immediately when user
+      // returns to the app rather than waiting for the next 60-second poll.
+      unawaited(ProximityAlertService().resume());
     }
   }
 

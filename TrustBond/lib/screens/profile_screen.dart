@@ -31,7 +31,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   int _totalReports = 0;
   int _verifiedReports = 0;
-  double _trustScore = 0;
   ReportListItem? _latestReport;
   bool _leaderSessionActive = false;
   String? _leaderName;
@@ -107,25 +106,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _totalReports = (profile['total_reports'] as num?)?.toInt() ?? 0;
         _verifiedReports = (profile['trusted_reports'] as num?)?.toInt() ?? 0;
-        _trustScore = (profile['device_trust_score'] as num?)?.toDouble() ?? 0;
         _latestReport = reports.isEmpty ? null : reports.first;
       });
     } catch (e) {
       debugPrint('Failed to load profile: $e');
     }
-  }
-
-  String _trustLevelLabel() {
-    if (_totalReports == 0) {
-      return 'New Reporter — submit your first report';
-    }
-    if (_trustScore <= 40) {
-      return 'Building Trust ⭐';
-    }
-    if (_trustScore <= 70) {
-      return 'Active Contributor ⭐⭐';
-    }
-    return 'Trusted Reporter ⭐⭐⭐';
   }
 
   String _latestStatus() {
@@ -162,8 +147,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildIdentityCard(),
               const SizedBox(height: 14),
               _buildStatsRow(),
-              const SizedBox(height: 14),
-              _buildTrustLevelCard(),
               const SizedBox(height: 14),
               _buildLatestReportStatus(),
               const SizedBox(height: 14),
@@ -220,17 +203,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [AppColors.accent, AppColors.accent2],
-              ),
-            ),
-            child: const Center(
-              child: Text('👤', style: TextStyle(fontSize: 26)),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Image.asset(
+              'assets/images/logo.jpeg',
+              width: 56,
+              height: 56,
+              fit: BoxFit.cover,
             ),
           ),
           const SizedBox(width: 14),
@@ -274,30 +253,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildTrustLevelCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Trust Level',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Text(
-            _trustLevelLabel(),
-            style: const TextStyle(fontSize: 13, color: AppColors.text),
-          ),
-        ],
-      ),
     );
   }
 
