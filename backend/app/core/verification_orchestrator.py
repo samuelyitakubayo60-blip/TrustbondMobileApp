@@ -314,6 +314,29 @@ def apply_evidence_semantic_checks(
             if not report.flag_reason:
                 report.flag_reason = "evidence_incident_mismatch"
 
+        # Cross-validate: check if Volo-detected objects are relevant to the incident.
+        # This runs even when Volo validation passed (score above threshold) but
+        # the detected content clearly doesn't match the incident type.
+        if validations and not failed:
+            irrelevant_count = 0
+            for ev in validations:
+                val = (ev or {}).get("validation") or {}
+                auth_meta = (val.get("analysis_summary") or {})
+                volo_meta = val  # check penalty stored in the merged validation
+                # Look for context_relevance_penalty in authenticity_analysis metadata
+                full_meta = fv.get("unified_validation", {})
+                # Simpler: check if all evidence has empty/no detected objects for this incident
+                detected = auth_meta.get("detected_objects") or []
+                incident_name = type_name.lower() if type_name else ""
+                if incident_name and not detected:
+                    irrelevant_count += 1
+            if irrelevant_count == len(validations) and irrelevant_count > 0:
+                report.rule_status = "flagged"
+                report.is_flagged = True
+                report.verification_status = "under_review"
+                if not report.flag_reason:
+                    report.flag_reason = "evidence_incident_mismatch"
+
         report.feature_vector = _json_safe(fv)
     except Exception as exc:
         logger.warning(
@@ -436,6 +459,7 @@ def apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
     Apply scorecard to verification_status.
 
     Policy:
+    - Local leader rejection is final — scorecard cannot override it
     - Hard gates / explicit rule reject → rejected
     - Flagged reports → under_review (never auto-rejected by score alone)
     - low_confidence without flag → rejected
@@ -443,6 +467,20 @@ def apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
     """
     if not isinstance(scorecard, dict):
         return
+
+    # Guard: local leader already rejected this report — never restore it to verified.
+    fv = getattr(report, "feature_vector", None) or {}
+    if isinstance(fv, dict):
+        leader_dec = (fv.get("leader_decision") or {})
+        if isinstance(leader_dec, dict) and leader_dec.get("decision") == "rejected":
+            # Enforce rejection state regardless of what the scorecard says
+            report.rule_status = "rejected"
+            report.verification_status = "rejected"
+            report.status = "rejected"
+            report.is_flagged = True
+            if not getattr(report, "flag_reason", None):
+                report.flag_reason = "rejected_by_local_leader"
+            return
 
     band = str(scorecard.get("threshold_band") or "").lower()
     hard_gates = [str(g) for g in (scorecard.get("hard_gates") or [])]
@@ -474,9 +512,29 @@ def apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
         return
 
     # confirmed_candidate = ML says this report is credible.
-    # Auto-verify immediately — soft flags do not block map display.
-    # Only hard_reject (out-of-boundary, clear fraud) is a blocker.
+    # EXCEPTION: content/evidence mismatch flags always require local leader review —
+    # these indicate the submitted evidence does not match the reported incident,
+    # which no ML score can override.
     if band == "confirmed_candidate":
+        flag_reason_val = (getattr(report, "flag_reason", None) or "").strip().lower()
+        content_mismatch = is_flagged and any(
+            p in flag_reason_val
+            for p in (
+                "mismatch",
+                "evidence_incident",
+                "description_evidence",
+                "incident_description",
+                "evidence_not_relevant",
+            )
+        )
+        if content_mismatch:
+            # Route to leader review — evidence content does not match incident
+            if report.rule_status != "rejected":
+                report.rule_status = "flagged"
+                report.verification_status = "under_review"
+                if report.status not in ("rejected",):
+                    report.status = "pending"
+            return
         if report.rule_status not in ("rejected",):
             report.rule_status = "passed"
             report.verification_status = "verified"
@@ -499,15 +557,31 @@ def apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
         report.is_flagged = True
         if not getattr(report, "flag_reason", None):
             fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
+            sc = fv.get("threshold_scorecard") if isinstance(fv.get("threshold_scorecard"), dict) else {}
             tov = fv.get("text_only_validation") if isinstance(fv.get("text_only_validation"), dict) else {}
             codes = {str(c).strip().upper() for c in (tov.get("reason_codes") or [])}
-            if "INCIDENT_TEXT_MISMATCH" in codes:
+            if sc.get("evidence_all_failed") or sc.get("evidence_mismatch_flag"):
+                report.flag_reason = "evidence_does_not_match_incident"
+            elif "INCIDENT_TEXT_MISMATCH" in codes:
                 report.flag_reason = "incident_description_mismatch"
             else:
                 report.flag_reason = "threshold_low_score"
         return
 
+    # under_review: check if scorecard says ALL evidence failed — that is
+    # strong enough evidence of a fabricated report to reject outright,
+    # not merely send for review.
     if band == "under_review":
+        fv_ur = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
+        sc_ur = fv_ur.get("threshold_scorecard") if isinstance(fv_ur.get("threshold_scorecard"), dict) else {}
+        if sc_ur.get("evidence_all_failed"):
+            report.rule_status = "rejected"
+            report.verification_status = "rejected"
+            report.status = "rejected"
+            report.is_flagged = True
+            if not getattr(report, "flag_reason", None):
+                report.flag_reason = "evidence_does_not_match_incident"
+            return
         if report.rule_status != "rejected":
             if report.rule_status not in {"flagged"}:
                 report.rule_status = "passed"
@@ -687,8 +761,10 @@ def rerun_scorecard_and_outcome(
         respect_human_final
         and ml_prediction is not None
         and getattr(ml_prediction, "is_final", False)
-        and getattr(ml_prediction, "model_type", None) == "human_override"
+        and getattr(ml_prediction, "model_type", None) in ("human_override", "leader_override")
     ):
+        # Decision is locked by local leader rejection or police override —
+        # return the stored scorecard without recomputing anything.
         return report.feature_vector.get("threshold_scorecard", {}) if isinstance(
             report.feature_vector, dict
         ) else {}

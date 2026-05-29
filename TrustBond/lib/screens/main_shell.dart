@@ -8,6 +8,7 @@ import '../config/theme.dart';
 import '../services/api_service.dart';
 import '../services/device_service.dart';
 import '../services/offline_report_queue_service.dart';
+import '../services/proximity_alert_service.dart';
 import '../services/storage_service.dart';
 import 'home_screen.dart';
 import 'safety_map_screen.dart';
@@ -49,6 +50,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _startConnectivityWatcher();
     unawaited(_warmOfflineCaches());
     unawaited(_queueService.scheduleSync(reason: 'startup'));
+    unawaited(ProximityAlertService().start());
   }
 
   Future<void> _warmOfflineCaches() async {

@@ -653,6 +653,44 @@ def _deterministic_ai_evidence_summary(snapshot: Dict[str, Any]) -> str:
     return "\n\n".join(paras)[:2000]
 
 
+def _extract_evidence_per_file_summary(
+    evidence_validations: Optional[List[Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
+    """Build a compact per-file record for narrative use: media_type, valid, score, objects."""
+    out: List[Dict[str, Any]] = []
+    for item in evidence_validations or []:
+        validation = (item or {}).get("validation") or {}
+        summary = validation.get("analysis_summary") or {}
+        raw_media = (
+            summary.get("media_type")
+            or (item or {}).get("file_type")
+            or (item or {}).get("media_type")
+            or "media"
+        )
+        # Normalise to a human label
+        mt = str(raw_media).strip().lower()
+        if mt.startswith("image") or mt == "photo":
+            media_label = "photo"
+        elif mt.startswith("video") or mt == "video":
+            media_label = "video"
+        elif mt.startswith("audio") or mt == "audio":
+            media_label = "audio"
+        else:
+            media_label = "file"
+
+        detected = [str(o).strip() for o in (summary.get("detected_objects") or []) if str(o).strip()]
+        volo_score = validation.get("volo_overall_score")
+        is_valid = validation.get("valid")
+        out.append({
+            "media_type": media_label,
+            "valid": is_valid,
+            "volo_score": round(float(volo_score), 1) if volo_score is not None else None,
+            "detected_objects": detected[:8],
+            "issues": (validation.get("issues") or [])[:4],
+        })
+    return out
+
+
 def _build_ai_analysis_snapshot(
     *,
     verification_status: Optional[str],
@@ -772,6 +810,8 @@ def _build_ai_analysis_snapshot(
                 "has_evidence": bool(evidence_count and evidence_count > 0),
                 "evidence_count": int(evidence_count or 0),
                 "breakdown": model_breakdown.get("volo", {}),
+                # Per-file details so narratives can mention media type and detection result
+                "per_file": _extract_evidence_per_file_summary(evidence_validations),
             },
             "base": model_breakdown.get("base", {}),
             "description_credibility": (
@@ -1665,7 +1705,8 @@ def _compute_threshold_scorecard(
         }
 
         total = round(min(100.0, max(0.0, aggregated_score + comm_points)), 2)
-        # For text-only submissions, aggressively dampen scores when language quality/context is weak.
+
+        # ── Text-only penalties ───────────────────────────────────────────────────────
         if not has_evidence:
             text_valid = bool(text_only.get("valid", True))
             quality_band = str(text_only.get("quality_band") or "").strip().lower()
@@ -1682,11 +1723,34 @@ def _compute_threshold_scorecard(
                 or "INCIDENT_TEXT_MISMATCH" in reason_codes
                 or "GIBBERISH" in reason_codes
             )
-
             if not text_valid or quality_band in {"reject_quality", "review_quality"}:
                 total = min(total, 55.0)
             if has_text_mismatch_flag:
                 total = min(total, 49.0)
+
+        # ── Evidence mismatch penalties ───────────────────────────────────────────────
+        # When evidence was uploaded but none of it matches the incident type,
+        # this is a stronger signal than text mismatch — cap and force rejection.
+        evidence_all_failed = False
+        evidence_mismatch_flag = False
+        if has_evidence and evidence_validations:
+            failed_count = sum(
+                1 for ev in evidence_validations
+                if isinstance((ev or {}).get("validation"), dict)
+                and (ev or {}).get("validation", {}).get("valid") is False
+            )
+            evidence_all_failed = (failed_count == len(evidence_validations))
+
+        flag_reason_upper = (flag_reason or "").upper()
+        evidence_mismatch_flag = any(
+            p in flag_reason_upper
+            for p in ("EVIDENCE_INCIDENT", "DESCRIPTION_EVIDENCE", "INCIDENT_MISMATCH",
+                      "EVIDENCE_NOT_RELEVANT")
+        )
+
+        if evidence_all_failed or evidence_mismatch_flag:
+            # All evidence is irrelevant/failed — hard cap, cannot be confirmed
+            total = min(total, 40.0)
 
         if hard_gates:
             band = "hard_reject"
@@ -1713,6 +1777,8 @@ def _compute_threshold_scorecard(
             "hard_gates": hard_gates,
             "factors": factors,
             "decision_source": "unified_validation",
+            "evidence_all_failed": evidence_all_failed,
+            "evidence_mismatch_flag": evidence_mismatch_flag,
         }
 
     if not has_evidence:

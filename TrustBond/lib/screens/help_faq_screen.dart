@@ -28,14 +28,14 @@ class HelpFaqScreen extends StatelessWidget {
           const SizedBox(height: 24),
           _buildFaqItem(
             'How do I earn a higher trust score?',
-            'Your trust score increases as your reports are verified by law enforcement. Submitting accurate evidence (photos/videos) significantly boosts your score.',
+            'Your trust score increases as your reports are confirmed by automated screening and local leader review. Submitting accurate evidence (photos/videos) significantly boosts your score.',
           ),
           _buildFaqItem(
             'What happens when I report an incident?',
-            'The report is securely transmitted to the nearest station in the Musanze district. Our AI system will quickly scan it for authenticity before assigning it to an officer.',
+            'The report is securely submitted to the TrustBond system. Our AI screening checks it for authenticity. Reports that need human review are sent to a local leader in the Musanze district.',
           ),
           _buildFaqItem(
-            'Can the police identify me?',
+            'Can anyone identify me from my report?',
             'No. The system only sees a mathematical representation of your device (a hash) to track reliability, not your name or phone number.',
           ),
           _buildFaqItem(

@@ -189,20 +189,46 @@ class VoloScorer:
         
         return analysis
     
+    # YOLOv8n is trained on COCO (80 classes, IDs 0-79).
+    # Each entry maps a COCO class ID to the label used everywhere in this project.
     _YOLO_RELEVANT_CLASSES = {
+        # ── People ──────────────────────────────────────────
         0: "person",
-        67: "cell phone",
-        24: "handbag",
-        28: "backpack",
-        39: "bottle",
-        42: "knife",
-        76: "scissors",
-        91: "baseball bat",
-        101: "knife",
-        62: "laptop",
-        84: "handbag",
-        3: "motorcycle",
+        # ── Vehicles ────────────────────────────────────────
         1: "bicycle",
+        2: "car",
+        3: "motorcycle",
+        5: "bus",
+        7: "truck",
+        9: "traffic light",
+        # ── Bags / containers ───────────────────────────────
+        24: "backpack",
+        26: "handbag",
+        28: "suitcase",
+        # ── Weapons / tools ─────────────────────────────────
+        34: "baseball bat",
+        43: "knife",
+        44: "spoon",       # drug paraphernalia context
+        76: "scissors",
+        # ── Bottles / drinks ────────────────────────────────
+        39: "bottle",
+        40: "wine glass",
+        41: "cup",
+        # ── Electronics ─────────────────────────────────────
+        63: "laptop",
+        67: "cell phone",
+        65: "remote",
+        # ── Indoor scene objects ─────────────────────────────
+        56: "couch",
+        57: "chair",
+        59: "bed",
+        62: "tv",
+        73: "book",
+        # ── Child-context indicator ───────────────────────────
+        77: "teddy bear",
+        # ── Miscellaneous ─────────────────────────────────────
+        25: "umbrella",
+        75: "vase",
     }
 
     def _detect_objects_list(self, image: np.ndarray) -> List[str]:
@@ -614,13 +640,16 @@ class VoloScorer:
             metadata["file_size_penalty"] = 10
             score -= 10
         
-        # Contextual relevance (basic check)
+        # Contextual relevance — penalty when evidence content is irrelevant to the incident
         detected_objects = image_analysis.get("detected_objects", [])
         if self._objects_relevant_to_incident(detected_objects, incident_type_name):
             score += 15
             metadata["context_relevance_bonus"] = 15
+            metadata["context_relevance_penalty"] = 0
         else:
+            score -= 30  # Strong penalty: evidence content does not match incident type
             metadata["context_relevance_bonus"] = 0
+            metadata["context_relevance_penalty"] = 30
         
         # Clamp to 0-100
         score = max(0.0, min(100.0, score))
@@ -733,26 +762,121 @@ class VoloScorer:
         
         return score, metadata
     
+    # Single source of truth for incident → expected YOLO objects.
+    # Keys are substrings matched case-insensitively against the incident type name.
+    # Values list every YOLO-detectable object that constitutes valid evidence.
+    # IMPORTANT: only list objects that _YOLO_RELEVANT_CLASSES can actually detect.
+    _INCIDENT_OBJECT_MAP: Dict[str, List[str]] = {
+        # ── Property crimes ───────────────────────────────────────────────────────────
+        "theft":       ["person", "cell phone", "handbag", "backpack", "laptop", "suitcase"],
+        "robbery":     ["person", "cell phone", "handbag", "backpack", "knife", "suitcase"],
+        "burglary":    ["person", "backpack", "handbag", "suitcase"],
+        "pickpocket":  ["person", "cell phone", "handbag"],
+        "stolen":      ["person", "cell phone", "handbag", "backpack", "laptop", "suitcase"],
+        "larceny":     ["person", "cell phone", "handbag", "backpack", "laptop", "suitcase"],
+        # ── Violent crimes ────────────────────────────────────────────────────────────
+        "assault":     ["person", "knife", "baseball bat", "scissors", "bottle"],
+        "attack":      ["person", "knife", "baseball bat", "scissors", "bottle"],
+        "fight":       ["person", "knife", "baseball bat", "scissors", "bottle"],
+        "brawl":       ["person", "knife", "baseball bat", "bottle"],
+        "stabbing":    ["person", "knife", "scissors"],
+        "beating":     ["person", "baseball bat", "bottle"],
+        "violence":    ["person", "knife", "baseball bat", "scissors", "bottle"],
+        "harassment":  ["person"],
+        "threat":      ["person", "knife"],
+        "kidnap":      ["person"],
+        "abduction":   ["person"],
+        "domestic":    ["person", "knife", "baseball bat", "bottle", "scissors"],
+        "murder":      ["person", "knife"],
+        "homicide":    ["person", "knife"],
+        # ── Sexual crimes (person MUST be visible; teddy bear = child context) ────────
+        "rape":        ["person", "bed", "couch", "teddy bear"],
+        "defilement":  ["person", "bed", "couch", "teddy bear"],   # rape of a minor
+        "sexual":      ["person", "bed", "couch", "teddy bear"],
+        "indecent":    ["person"],
+        "molest":      ["person", "teddy bear", "bed"],
+        # ── Public-order crimes ───────────────────────────────────────────────────────
+        "public disorder": ["person", "bottle"],
+        "disturbance": ["person", "bottle"],
+        "riot":        ["person", "bottle", "bicycle", "motorcycle", "car"],
+        "mob":         ["person"],
+        # ── Drug-related ─────────────────────────────────────────────────────────────
+        # YOLO cannot detect smoke, small packages, or pills directly.
+        # Bottle = drug containers / alcohol bottles; cup/wine glass = drinking evidence;
+        # spoon = drug paraphernalia; vase = improvised smoking vessel (e.g. bong-like).
+        "drug":        ["person", "bottle", "cup", "wine glass", "spoon", "vase", "backpack", "suitcase"],
+        "narcotic":    ["person", "bottle", "cup", "spoon", "vase"],
+        "cannabis":    ["person", "bottle", "cup", "vase"],          # smoking paraphernalia
+        "weed":        ["person", "bottle", "cup", "vase"],
+        "smoking":     ["person", "bottle", "cup", "vase"],
+        "substance":   ["person", "bottle", "cup", "wine glass", "spoon"],
+        "alcohol":     ["person", "bottle", "wine glass", "cup"],
+        "drinking":    ["person", "bottle", "wine glass", "cup"],
+        # ── Fraud / financial crimes ──────────────────────────────────────────────────
+        "fraud":       ["person", "cell phone", "laptop", "book", "remote"],
+        "scam":        ["person", "cell phone", "laptop"],
+        "forgery":     ["person", "laptop", "cell phone", "book"],
+        "extortion":   ["person", "cell phone"],
+        "bribery":     ["person", "cell phone", "laptop"],
+        "corruption":  ["person", "laptop", "cell phone"],
+        # ── Traffic / road ───────────────────────────────────────────────────────────
+        "traffic":     ["motorcycle", "bicycle", "person", "car", "truck", "bus", "traffic light"],
+        "road":        ["motorcycle", "bicycle", "person", "car", "truck", "bus"],
+        "accident":    ["person", "motorcycle", "bicycle", "car", "truck", "bus"],
+        "crash":       ["person", "motorcycle", "bicycle", "car", "truck"],
+        "collision":   ["person", "motorcycle", "bicycle", "car", "truck"],
+        "hit and run": ["person", "motorcycle", "bicycle", "car", "truck"],
+        "reckless driv": ["motorcycle", "bicycle", "person", "car"],
+        "speeding":    ["motorcycle", "bicycle", "car", "truck"],
+        "motorcycle":  ["motorcycle", "person"],
+        "bicycle":     ["bicycle", "person"],
+        # ── Environmental / disaster ──────────────────────────────────────────────────
+        "fire":        ["person"],
+        "arson":       ["person", "bottle"],
+        "flooding":    ["person"],
+        "flood":       ["person"],
+        "landslide":   ["person"],
+        "disaster":    ["person"],
+        "emergency":   ["person"],
+        # ── Suspicious / catch-all ────────────────────────────────────────────────────
+        "suspicious":  ["person", "backpack", "handbag", "suitcase"],
+        "loitering":   ["person", "backpack"],
+        "trespassing": ["person", "backpack"],
+        "vandalism":   ["person", "bottle", "scissors"],
+        "graffiti":    ["person"],
+        "damage":      ["person"],
+        "illegal":     ["person"],
+        "criminal":    ["person"],
+        "missing":     ["person"],
+    }
+
     def _objects_relevant_to_incident(self, objects: List[str], incident_type: str) -> bool:
-        """Check if detected objects are relevant to the incident type."""
+        """Return True when at least one detected object matches the expected list
+        for this incident type.  Returns False for unrecognised incident types so
+        a wall / landscape never passes as relevant evidence."""
         incident_type = incident_type.lower()
-        
-        relevance_map = {
-            "theft": ["person", "cell phone", "handbag", "backpack", "laptop"],
-            "assault": ["person", "knife", "baseball bat"],
-            "vandalism": ["person"],
-            "fraud/scam": ["cell phone", "laptop"],
-            "drug activity": ["person", "bottle"],
-            "traffic incident": ["motorcycle", "bicycle", "person"]
-        }
-        
-        for incident, relevant_objects in relevance_map.items():
-            if incident in incident_type:
-                return any(obj in objects for obj in relevant_objects)
-        
-        # Default: if objects detected, assume some relevance
-        return len(objects) > 0
-    
+        for key, expected in self._INCIDENT_OBJECT_MAP.items():
+            if key in incident_type:
+                return any(obj in objects for obj in expected)
+        return False
+
+    def get_expected_objects(self, incident_type_name: str) -> List[str]:
+        """Return the deduplicated expected-object list for this incident type.
+        Uses _INCIDENT_OBJECT_MAP so it is always in sync with relevance checks.
+        Returns [] for unrecognised types — no bonus is awarded in that case."""
+        incident_type = incident_type_name.lower()
+        for key, expected in self._INCIDENT_OBJECT_MAP.items():
+            if key in incident_type:
+                # deduplicate while preserving order
+                seen: set = set()
+                out: List[str] = []
+                for obj in expected:
+                    if obj not in seen:
+                        seen.add(obj)
+                        out.append(obj)
+                return out
+        return []
+
     def _calculate_confidence(
         self,
         authenticity_metadata: Dict[str, Any],

@@ -118,6 +118,46 @@ def get_email_logo_src() -> str:
     return f"cid:{EMAIL_LOGO_CID}"
 
 
+def _email_html(header_title: str, body_html: str, *, footer: str = "TrustBond — Confidential communication") -> str:
+    """Reusable branded HTML wrapper used by all system emails."""
+    logo = escape(get_email_logo_src())
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>TrustBond</title></head>
+<body style="margin:0;padding:0;background:#eef4fb;font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;">
+<div style="background:#eef4fb;padding:32px 16px;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:4px;overflow:hidden;border:1px solid #b5d4f4;">
+
+    <div style="background:#185fa5;padding:24px 28px;">
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border-collapse:collapse;">
+        <tr>
+          <td width="50" valign="middle" style="padding:0 14px 0 0;">
+            <img src="{logo}" width="42" height="42" alt="TrustBond logo"
+                 style="display:block;border-radius:8px;background:#fff;border:1px solid #85b7eb;">
+          </td>
+          <td valign="middle">
+            <p style="margin:0 0 2px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#85b7eb;">TrustBond</p>
+            <h2 style="margin:0;font-size:20px;font-weight:500;color:#ffffff;">{escape(header_title)}</h2>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="padding:28px 32px;">
+{body_html}
+      <p style="margin:20px 0 0;font-size:13px;color:#185fa5;font-weight:600;">— TrustBond</p>
+    </div>
+
+    <div style="background:#e6f1fb;padding:12px 28px;border-top:1px solid #b5d4f4;">
+      <p style="margin:0;font-size:11px;color:#378add;text-align:center;">{escape(footer)}</p>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>"""
+
+
 def deliver_email_message(
     msg: MIMEMultipart,
     from_addr: str,
@@ -424,7 +464,28 @@ Open the TrustBond Local Leader app to review and confirm or reject the incident
 
 TrustBond
 """
-    return send_email(to_email.strip(), subject, body_plain, None)
+    body_html = _email_html(
+        "New incident report",
+        f"""      <p style="margin:0 0 10px;font-size:15px;color:#0c447c;">Hello {escape(leader_name)},</p>
+      <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
+        A new incident report has been submitted in <strong>{escape(loc)}</strong> and requires your review.
+      </p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #b5d4f4;margin-bottom:20px;">
+        <tr style="background:#e6f1fb;">
+          <td style="padding:11px 16px;font-size:13px;color:#185fa5;font-weight:600;">Report</td>
+          <td style="padding:11px 16px;font-size:13px;color:#0c447c;font-family:monospace;">{escape(rn)}</td>
+        </tr>
+        <tr style="background:#ffffff;">
+          <td style="padding:11px 16px;font-size:13px;color:#185fa5;font-weight:600;">Location</td>
+          <td style="padding:11px 16px;font-size:13px;color:#0c447c;">{escape(loc)}</td>
+        </tr>
+      </table>
+      <p style="margin:0 0 16px;font-size:14px;color:#334155;line-height:1.6;">
+        Open the <strong>TrustBond</strong> mobile app to review the incident and confirm or reject it.
+      </p>""",
+        footer="TrustBond — Local Leader Notification",
+    )
+    return send_email(to_email.strip(), subject, body_plain, body_html)
 
 
 def send_leader_account_ready_email(
@@ -457,7 +518,41 @@ If you did not expect this message, contact your police administrator.
 
 TrustBond
 """
-    return send_email(to_email, subject, body_plain, None)
+    name_html = escape(leader_name) if leader_name else ""
+    role_row = (
+        f"""        <tr style="background:#ffffff;">
+          <td style="padding:11px 16px;font-size:13px;color:#185fa5;font-weight:600;">Role</td>
+          <td style="padding:11px 16px;font-size:13px;color:#0c447c;">{escape(role_label)}</td>
+        </tr>"""
+        if role_label else ""
+    )
+    body_html = _email_html(
+        "Your account is ready",
+        f"""      <p style="margin:0 0 10px;font-size:15px;color:#0c447c;">{escape(greeting)}</p>
+      <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
+        Your TrustBond local leader account has been registered by your administrator.
+        Follow the steps below to set your password and sign in.
+      </p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #b5d4f4;margin-bottom:20px;">
+        <tr style="background:#e6f1fb;">
+          <td style="padding:11px 16px;font-size:13px;color:#185fa5;font-weight:600;">Email</td>
+          <td style="padding:11px 16px;font-size:13px;color:#0c447c;font-family:monospace;">{escape(to_email)}</td>
+        </tr>
+{role_row}
+      </table>
+      <ol style="margin:0 0 20px;padding-left:20px;font-size:14px;color:#334155;line-height:1.9;">
+        <li>Open the <strong>TrustBond</strong> mobile app</li>
+        <li>Go to <strong>Local leader sign-in</strong></li>
+        <li>Choose <strong>First-time setup / Set password</strong></li>
+        <li>Enter your email and request a setup code</li>
+        <li>Enter the code from your email and choose your password</li>
+      </ol>
+      <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6;">
+        If you did not expect this message, please contact your administrator.
+      </p>""",
+        footer="TrustBond — Local Leader Account",
+    )
+    return send_email(to_email, subject, body_plain, body_html)
 
 
 def send_unit_commander_hotspot_deployment_email(
@@ -487,7 +582,42 @@ Please coordinate your team and acknowledge deployment in the TrustBond dashboar
 
 TrustBond Police Operations
 """
-    return send_email(to_email.strip(), subject, body_plain.strip(), None)
+    note_row = (
+        f"""        <tr style="background:#fff7ed;">
+          <td style="padding:11px 16px;font-size:13px;color:#92400e;font-weight:600;">Note</td>
+          <td style="padding:11px 16px;font-size:13px;color:#78350f;">{escape(note)}</td>
+        </tr>"""
+        if note else ""
+    )
+    body_html = _email_html(
+        "Deployment order",
+        f"""      <p style="margin:0 0 10px;font-size:15px;color:#0c447c;">Hello {escape(commander_name)},</p>
+      <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
+        <strong>{escape(deployed_by_name)}</strong> has deployed your unit to an active hotspot.
+        Please coordinate your team and acknowledge the deployment in the dashboard.
+      </p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #b5d4f4;margin-bottom:20px;">
+        <tr style="background:#e6f1fb;">
+          <td style="padding:11px 16px;font-size:13px;color:#185fa5;font-weight:600;">Unit</td>
+          <td style="padding:11px 16px;font-size:13px;color:#0c447c;">{escape(unit_name)} ({escape(unit_code)})</td>
+        </tr>
+        <tr style="background:#ffffff;">
+          <td style="padding:11px 16px;font-size:13px;color:#185fa5;font-weight:600;">Hotspot</td>
+          <td style="padding:11px 16px;font-size:13px;color:#0c447c;">#{hotspot_id} — {escape(area_label)}</td>
+        </tr>
+        <tr style="background:#e6f1fb;">
+          <td style="padding:11px 16px;font-size:13px;color:#185fa5;font-weight:600;">Incidents</td>
+          <td style="padding:11px 16px;font-size:13px;color:#0c447c;">{incident_count} verified</td>
+        </tr>
+        <tr style="background:#ffffff;">
+          <td style="padding:11px 16px;font-size:13px;color:#185fa5;font-weight:600;">Deployed by</td>
+          <td style="padding:11px 16px;font-size:13px;color:#0c447c;">{escape(deployed_by_name)}</td>
+        </tr>
+{note_row}
+      </table>""",
+        footer="TrustBond Police Operations",
+    )
+    return send_email(to_email.strip(), subject, body_plain.strip(), body_html)
 
 
 def send_leader_otp_email(
@@ -512,6 +642,8 @@ This code expires in 10 minutes. If you did not request it, ignore this email.
 
 TrustBond
 """
+        header_title = "Login verification code"
+        instruction = "Enter this code in the TrustBond mobile app to sign in to your leader account."
     else:
         subject = "TrustBond — Password setup code"
         body_plain = f"""{greeting}
@@ -524,4 +656,25 @@ If you did not request this code, ignore this email.
 
 TrustBond
 """
-    return send_email(to_email, subject, body_plain, None)
+        header_title = "Password setup code"
+        instruction = f"Open the TrustBond mobile app, go to leader first-time setup, and enter this code together with your email ({escape(to_email)})."
+
+    body_html = _email_html(
+        header_title,
+        f"""      <p style="margin:0 0 16px;font-size:15px;color:#0c447c;">{escape(greeting)}</p>
+      <p style="margin:0 0 22px;font-size:15px;color:#334155;line-height:1.6;">{instruction}</p>
+      <div style="margin:0 0 22px;padding:20px;background:#e6f1fb;border:1px solid #b5d4f4;text-align:center;">
+        <p style="margin:0 0 6px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#185fa5;font-weight:600;">
+          Verification code
+        </p>
+        <p style="margin:0;font-size:30px;letter-spacing:6px;color:#0c447c;font-family:Consolas,Menlo,monospace;font-weight:700;">
+          {escape(code)}
+        </p>
+      </div>
+      <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6;">
+        This code expires in <strong>10 minutes</strong>.
+        If you did not request it, you can safely ignore this email.
+      </p>""",
+        footer="TrustBond — Local Leader Access",
+    )
+    return send_email(to_email, subject, body_plain, body_html)

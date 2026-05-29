@@ -605,40 +605,38 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     }
     final autoActive = ruleValidationComplete && !automatedScreeningDone;
 
-    // Reporter API omits verified_by; use verified_at for “police review completed”.
-    final policeHumanComplete =
-        r.verifiedBy != null || r.verifiedAt != null;
-    // If verification is still under_review, keep police active even when status/rejected disagree.
-    final closureWithoutPolice = terminalRejected &&
-        !policeHumanComplete &&
-        vs != 'under_review';
+    // Determine leader review step
+    final leaderVerificationStatus =
+        (r.leaderVerificationStatus ?? '').toLowerCase();
+    final String leaderSub;
+    final bool leaderDone;
+    final bool leaderActive;
 
-    final String policeSub;
-    final bool policeDone;
-    final bool policeActive;
-
-    if (policeHumanComplete) {
-      policeSub = 'Police review completed';
-      policeDone = true;
-      policeActive = false;
-    } else if (closureWithoutPolice) {
-      policeSub = 'Not required';
-      policeDone = true;
-      policeActive = false;
+    if (leaderVerificationStatus == 'confirmed') {
+      leaderSub = 'Confirmed';
+      leaderDone = true;
+      leaderActive = false;
+    } else if (leaderVerificationStatus == 'rejected') {
+      leaderSub = 'Rejected';
+      leaderDone = true;
+      leaderActive = false;
     } else if (automatedScreeningDone && vs == 'under_review') {
-      policeSub = 'Pending review';
-      policeDone = false;
-      policeActive = true;
+      leaderSub = 'Pending review';
+      leaderDone = false;
+      leaderActive = true;
     } else if (automatedScreeningDone &&
         (vs == 'verified' || vs == 'rejected')) {
-      // Auto-resolved (e.g. score band) without an officer timestamp.
-      policeSub = vs == 'verified' ? 'Completed' : 'Closed';
-      policeDone = true;
-      policeActive = false;
+      leaderSub = vs == 'verified' ? 'Completed' : 'Closed';
+      leaderDone = true;
+      leaderActive = false;
+    } else if (terminalRejected) {
+      leaderSub = 'Not required';
+      leaderDone = true;
+      leaderActive = false;
     } else {
-      policeSub = 'Waiting';
-      policeDone = false;
-      policeActive = false;
+      leaderSub = 'Waiting';
+      leaderDone = false;
+      leaderActive = false;
     }
 
     final steps = [
@@ -650,7 +648,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         !ruleValidationComplete,
       ),
       _Step('Automated screening', autoSub, autoDone, autoActive),
-      _Step('Police review', policeSub, policeDone, policeActive),
+      _Step('Leader review', leaderSub, leaderDone, leaderActive),
     ];
 
     return _card([
@@ -782,7 +780,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       return 'This report has been verified and accepted.';
     }
     if (s == 'passed' || s == 'trusted') {
-      return 'This report passed automated checks and is awaiting police review.';
+      return 'This report passed automated checks and is awaiting local leader review.';
     }
     if (s == 'flagged') {
       return 'This report has been flagged for review.';

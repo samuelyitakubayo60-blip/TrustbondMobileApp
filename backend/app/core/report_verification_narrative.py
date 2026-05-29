@@ -68,6 +68,12 @@ def humanize_flag_reason(reason: Optional[str]) -> str:
         "rejected_by_reviewer": (
             "A police reviewer rejected this report."
         ),
+        "rejected_by_local_leader": (
+            "A local leader reviewed and rejected this report."
+        ),
+        "evidence_does_not_match_incident": (
+            "The uploaded media contained no objects or content matching the selected incident type."
+        ),
     }
     if key in mapping:
         return mapping[key]
@@ -113,8 +119,6 @@ def _decision_headline(
 def _evidence_paragraph(snapshot: Dict[str, Any]) -> str:
     evid = (snapshot.get("model_signals") or {}).get("evidence_ai") or {}
     ec = int(evid.get("evidence_count") or 0)
-    # Be resilient: older snapshots may miss evidence_ai, but the report can still
-    # have evidence attached (e.g. evidence uploaded after initial screening).
     try:
         ec = max(
             ec,
@@ -124,31 +128,82 @@ def _evidence_paragraph(snapshot: Dict[str, Any]) -> str:
         )
     except Exception:
         pass
+
     if ec <= 0:
         return (
             "No photos, videos, or audio were uploaded. The decision used the written "
             "description, location, and automated text checks only."
         )
 
-    volo = evid.get("breakdown") if isinstance(evid.get("breakdown"), dict) else {}
-    meta = volo.get("metadata") if isinstance(volo.get("metadata"), dict) else {}
-    det = meta.get("detection_analysis") if isinstance(meta.get("detection_analysis"), dict) else {}
-    objects = det.get("detected_objects") or []
-    obj_txt = ""
-    if isinstance(objects, list) and objects:
-        obj_txt = f" Screening noted: {', '.join(str(o) for o in objects[:8])}."
-
-    media_note = f"{ec} media file(s) were reviewed for basic scene content and quality."
     nl = (snapshot.get("model_signals") or {}).get("natural_language") or {}
-    if nl.get("mismatch") is True:
-        return (
-            f"{media_note}{obj_txt} What was described in writing, what was seen in the "
-            "media, and the selected incident type did not fully align."
+    mismatch = nl.get("mismatch") is True
+
+    # Per-file details (richer data stored by _extract_evidence_per_file_summary)
+    per_file: List[Dict[str, Any]] = evid.get("per_file") or []
+
+    # Build one sentence per file
+    file_lines: List[str] = []
+    any_failed = False
+    any_no_objects = False
+    for i, f in enumerate(per_file, 1):
+        mt = str(f.get("media_type") or "file").capitalize()
+        valid = f.get("valid")
+        score = f.get("volo_score")
+        objects = f.get("detected_objects") or []
+        issues = f.get("issues") or []
+
+        score_txt = f" (AI score: {score}/100)" if score is not None else ""
+        if objects:
+            obj_txt = f"detected content: {', '.join(objects[:6])}"
+        else:
+            obj_txt = "no relevant objects detected"
+            any_no_objects = True
+
+        if valid is False:
+            status_txt = "did not pass automated screening"
+            any_failed = True
+        elif valid is True:
+            status_txt = "passed automated screening"
+        else:
+            status_txt = "analysis inconclusive"
+
+        issue_txt = ""
+        if issues:
+            issue_txt = f" Issue: {issues[0]}."
+
+        file_lines.append(
+            f"File {i} ({mt}){score_txt}: {status_txt}. {obj_txt.capitalize()}.{issue_txt}"
         )
-    return (
-        f"{media_note}{obj_txt} Officers should still verify media on scene; automated "
-        "screening is advisory only."
-    )
+
+    # Fallback if per_file was not populated (older snapshot)
+    if not file_lines:
+        volo = evid.get("breakdown") if isinstance(evid.get("breakdown"), dict) else {}
+        meta = volo.get("metadata") if isinstance(volo.get("metadata"), dict) else {}
+        det = meta.get("detection_analysis") if isinstance(meta.get("detection_analysis"), dict) else {}
+        objects = det.get("detected_objects") or []
+        obj_txt = f" Screening noted: {', '.join(str(o) for o in objects[:8])}." if objects else " No relevant objects were detected in the media."
+        header = f"{ec} media file(s) were reviewed for basic scene content and quality.{obj_txt}"
+    else:
+        header = f"{ec} media file(s) were reviewed by automated screening:"
+
+    parts: List[str] = [header]
+    parts.extend(file_lines)
+
+    if any_failed or any_no_objects:
+        parts.append(
+            "The uploaded media did not contain clear visual evidence matching the selected incident type."
+        )
+    if mismatch:
+        parts.append(
+            "What was described in writing, what was seen in the media, and the selected "
+            "incident type did not fully align."
+        )
+    elif not any_failed:
+        parts.append(
+            "Officers should still verify media on scene; automated screening is advisory only."
+        )
+
+    return " ".join(parts)
 
 
 def _plain_concerns(

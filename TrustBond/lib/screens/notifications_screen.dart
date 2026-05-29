@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../services/device_service.dart';
 import '../services/location_service.dart';
 import '../services/hotspot_service.dart';
+import '../services/notification_service.dart';
 import '../models/report_model.dart';
 import 'report_detail_screen.dart';
 
@@ -23,6 +24,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   void initState() {
     super.initState();
+    NotificationService().markAllRead();
     _loadNotifications();
   }
 

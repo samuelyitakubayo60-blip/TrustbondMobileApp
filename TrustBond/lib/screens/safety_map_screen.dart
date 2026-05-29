@@ -58,6 +58,9 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   /// Default list/stats filter (1 week). Map always shows all clusters.
   int _hotspotTimeWindowHours = 168;
   int _nearbyHotspotRadiusMeters = 1500;
+  final TextEditingController _distanceController =
+      TextEditingController(text: '1.5');
+  bool _distanceInKm = true;
   static const _distanceCalc = Distance();
 
   Timer? _hotspotRefreshTimer;
@@ -358,6 +361,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
 
   @override
   void dispose() {
+    _distanceController.dispose();
     _hotspotRefreshTimer?.cancel();
     super.dispose();
   }
@@ -671,9 +675,8 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
         child: Column(
           children: [
             _buildHeader(),
-            _buildSectorFilters(),
             _buildHotspotPeriodFilters(),
-            _buildNearbyRadiusFilters(),
+            _buildDistanceInput(),
             _buildLocationStatusStrip(),
             Expanded(
               flex: 3,
@@ -974,6 +977,109 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
         },
       ),
     );
+  }
+
+  Widget _buildDistanceInput() {
+    final hasLocation = _userLat != null && _userLng != null;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: Row(
+        children: [
+          const Icon(Icons.radar, size: 14, color: AppColors.muted),
+          const SizedBox(width: 6),
+          const Text(
+            'Nearby radius:',
+            style: TextStyle(fontSize: 12, color: AppColors.muted),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 64,
+            height: 32,
+            child: TextField(
+              controller: _distanceController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              textAlign: TextAlign.center,
+              enabled: hasLocation,
+              style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.text),
+              decoration: InputDecoration(
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 6),
+                filled: true,
+                fillColor: AppColors.surface2,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide:
+                      const BorderSide(color: AppColors.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide:
+                      const BorderSide(color: AppColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide:
+                      const BorderSide(color: AppColors.accent),
+                ),
+              ),
+              onSubmitted: (_) => _applyDistanceInput(),
+              onEditingComplete: _applyDistanceInput,
+            ),
+          ),
+          const SizedBox(width: 6),
+          // km / m toggle
+          GestureDetector(
+            onTap: hasLocation
+                ? () {
+                    setState(() => _distanceInKm = !_distanceInKm);
+                    _applyDistanceInput();
+                  }
+                : null,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: AppColors.accent.withValues(alpha: 0.5)),
+              ),
+              child: Text(
+                _distanceInKm ? 'km' : 'm',
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.accent),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (!hasLocation)
+            const Text(
+              'Enable GPS',
+              style: TextStyle(fontSize: 11, color: AppColors.muted),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _applyDistanceInput() {
+    final raw = double.tryParse(_distanceController.text.trim());
+    if (raw == null || raw <= 0) return;
+    final meters = _distanceInKm ? (raw * 1000).round() : raw.round();
+    final clamped = meters.clamp(100, 20000);
+    if (clamped == _nearbyHotspotRadiusMeters) return;
+    setState(() => _nearbyHotspotRadiusMeters = clamped);
+    if (_userLat != null && _userLng != null) {
+      _loadHotspots();
+      _loadPublicAlerts();
+    }
   }
 
   Widget _buildMap() {

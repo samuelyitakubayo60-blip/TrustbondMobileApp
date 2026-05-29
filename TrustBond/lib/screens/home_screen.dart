@@ -10,6 +10,7 @@ import '../services/device_service.dart';
 import '../services/location_service.dart';
 import '../services/hotspot_service.dart';
 import '../services/app_refresh_bus.dart';
+import '../services/notification_service.dart';
 import '../models/report_model.dart';
 import '../utils/json_helpers.dart';
 import 'notifications_screen.dart';
@@ -119,6 +120,8 @@ class _HomeScreenState extends State<HomeScreen>
   final _locationService = LocationService();
   final _hotspotService = HotspotService();
   StreamSubscription<String>? _refreshSub;
+  StreamSubscription<int>? _unreadSub;
+  int _unreadCount = 0;
 
   // Data
   String? _deviceId;
@@ -158,12 +161,17 @@ class _HomeScreenState extends State<HomeScreen>
     _loadData();
     _loadCurrentLocation();
     _refreshSub = AppRefreshBus.stream.listen((_) => _loadData());
+    _unreadCount = NotificationService().unreadCount;
+    _unreadSub = NotificationService().unreadCountStream.listen((count) {
+      if (mounted) setState(() => _unreadCount = count);
+    });
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
     _refreshSub?.cancel();
+    _unreadSub?.cancel();
     super.dispose();
   }
 
@@ -380,23 +388,15 @@ class _HomeScreenState extends State<HomeScreen>
       ),
       child: Row(
         children: [
-          // Shield icon
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.accent.withValues(alpha: 0.22),
-                  AppColors.accent2.withValues(alpha: 0.12),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(
-                  color: AppColors.accent.withValues(alpha: 0.35)),
+          // TrustBond logo
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.asset(
+              'assets/images/logo.jpeg',
+              width: 38,
+              height: 38,
+              fit: BoxFit.cover,
             ),
-            child: const Icon(Icons.shield_rounded,
-                size: 18, color: AppColors.accent),
           ),
           const SizedBox(width: 11),
           Expanded(
@@ -438,19 +438,20 @@ class _HomeScreenState extends State<HomeScreen>
                   child: const Icon(Icons.notifications_outlined,
                       size: 20, color: AppColors.text),
                 ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: AppColors.danger,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.bg, width: 1.5),
+                if (_unreadCount > 0)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: AppColors.danger,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.bg, width: 1.5),
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

@@ -131,21 +131,29 @@ class UnifiedValidator:
                     continue
                 try:
                     incident_context = _incident_type_context(report)
+                    # Derive expected objects from the same relevance map used for
+                    # relevance checking so _analyze_object_detection can score
+                    # matches against the specific incident type.
+                    from .volo_scorer import volo_scorer as _volo_scorer_instance
+                    expected_objs = _volo_scorer_instance.get_expected_objects(incident_context)
 
                     if is_photo:
                         volo_result = analyze_evidence_content(
                             image_url=evidence_file.file_url,
                             incident_type_name=incident_context,
+                            expected_objects=expected_objs if expected_objs else None,
                         )
                     elif is_video:
                         volo_result = analyze_evidence_video_content(
                             video_url=evidence_file.file_url,
                             incident_type_name=incident_context,
+                            expected_objects=expected_objs if expected_objs else None,
                         )
                     else:
                         volo_result = analyze_evidence_audio_content(
                             audio_url=evidence_file.file_url,
                             incident_type_name=incident_context,
+                            expected_objects=expected_objs if expected_objs else None,
                         )
 
                     volo_results.append(volo_result)
@@ -167,7 +175,31 @@ class UnifiedValidator:
         volo_score = None
         if volo_results:
             volo_score = sum(r.overall_score for r in volo_results) / len(volo_results)
-        
+
+        # Cross-validate: check alignment between Volo detected content, NL description,
+        # and the incident type. If evidence was submitted but objects are irrelevant
+        # AND NL shows poor semantic similarity, this is a strong mismatch signal.
+        cross_validation_mismatch = False
+        if volo_results and natural_language_result is not None:
+            volo_has_relevant = any(
+                (r.metadata.get("authenticity_analysis") or {}).get("context_relevance_bonus", 0) > 0
+                for r in volo_results
+            )
+            nl_semantic_weak = (natural_language_result.semantic_similarity_score or 0.0) < 40.0
+            if not volo_has_relevant:
+                # Evidence content doesn't match incident type
+                cross_validation_mismatch = True
+                logger.info(
+                    "Cross-validation mismatch for report %s: "
+                    "Volo found no relevant objects for incident type, "
+                    "NL semantic score: %.2f",
+                    report.report_id,
+                    natural_language_result.semantic_similarity_score or 0.0,
+                )
+                # Apply a heavy penalty to volo_score when evidence is irrelevant
+                if volo_score is not None:
+                    volo_score = max(0.0, volo_score - 30.0)
+
         # 4. Aggregate all scores using central aggregator
         try:
             aggregated_trust = aggregate_trust_scores(
@@ -210,7 +242,8 @@ class UnifiedValidator:
                 "volo": len(volo_results) > 0
             },
             "evidence_analyzed": len(volo_results),
-            "validation_version": "unified_v1.0"
+            "validation_version": "unified_v1.0",
+            "cross_validation_mismatch": cross_validation_mismatch,
         }
         
         return ValidationResult(

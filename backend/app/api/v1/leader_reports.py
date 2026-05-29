@@ -49,6 +49,22 @@ class LeaderReportListResponse(BaseModel):
     total: int
 
 
+class EvidenceFileInfo(BaseModel):
+    evidence_id: str
+    file_url: str
+    file_type: Optional[str] = None
+    is_live_capture: bool = False
+    captured_at: Optional[datetime] = None
+    uploaded_at: Optional[datetime] = None
+
+
+class LeaderReportDetailResponse(LeaderReportResponse):
+    priority: Optional[str] = None
+    leader_note: Optional[str] = None
+    evidence_files: list[EvidenceFileInfo] = []
+    verification_summary: Optional[str] = None
+
+
 class LeaderVerifyRequest(BaseModel):
     decision: str  # confirmed | rejected
     note: Optional[str] = None
@@ -130,6 +146,113 @@ def list_leader_reports(
     return LeaderReportListResponse(items=items, total=total)
 
 
+@router.get("/reports/{report_id}", response_model=LeaderReportDetailResponse)
+def get_leader_report_detail(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_leader: Annotated[LocalLeader, Depends(get_current_local_leader)] = None,
+):
+    covered_villages = _leader_covered_village_ids(db, current_leader.local_leader_id)
+    if not covered_villages:
+        raise HTTPException(status_code=403, detail="Leader coverage is not configured")
+
+    try:
+        rid = UUID(report_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    r = (
+        db.query(Report)
+        .options(
+            joinedload(Report.incident_type),
+            joinedload(Report.evidence_files),
+            joinedload(Report.village_location)
+            .joinedload(Location.parent)
+            .joinedload(Location.parent),
+        )
+        .filter(Report.report_id == rid)
+        .first()
+    )
+    if not r:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    if r.village_location_id is None or int(r.village_location_id) not in covered_villages:
+        raise HTTPException(status_code=403, detail="Not allowed for this location")
+
+    vname = getattr(r.village_location, "location_name", None) if r.village_location else None
+    cell_name = None
+    sector_name = None
+    if r.village_location and r.village_location.parent:
+        cell_name = r.village_location.parent.location_name
+        if r.village_location.parent.parent:
+            sector_name = r.village_location.parent.parent.location_name
+
+    evidence_files_raw = getattr(r, "evidence_files", None) or []
+    evidence_count = len(evidence_files_raw)
+    trust_val = float(r.trust_score) if getattr(r, "trust_score", None) is not None else None
+
+    credibility_summary = build_credibility_summary(
+        report=r,
+        trust_score=trust_val,
+        flag_reason=r.flag_reason,
+        evidence_count=evidence_count,
+    )
+
+    # Derive priority from trust score and flags
+    is_flagged = bool(getattr(r, "is_flagged", False))
+    if trust_val is not None and trust_val < 30 and is_flagged:
+        priority = "urgent"
+    elif (trust_val is not None and trust_val < 50) or is_flagged:
+        priority = "high"
+    else:
+        priority = "medium"
+
+    # Build verification summary from feature_vector if available
+    fv = r.feature_vector if isinstance(getattr(r, "feature_vector", None), dict) else {}
+    leader_note = None
+    ld = fv.get("leader_decision") or {}
+    if isinstance(ld, dict):
+        leader_note = ld.get("note")
+
+    evidence_files = [
+        EvidenceFileInfo(
+            evidence_id=str(ef.evidence_id),
+            file_url=str(ef.cloudinary_url or ef.file_url or ""),
+            file_type=ef.file_type,
+            is_live_capture=bool(ef.is_live_capture),
+            captured_at=ef.captured_at,
+            uploaded_at=ef.uploaded_at,
+        )
+        for ef in evidence_files_raw
+    ]
+
+    return LeaderReportDetailResponse(
+        report_id=str(r.report_id),
+        incident_type_id=int(r.incident_type_id),
+        incident_type_name=getattr(r.incident_type, "type_name", None) if r.incident_type else None,
+        description=r.description,
+        latitude=float(r.latitude),
+        longitude=float(r.longitude),
+        reported_at=r.reported_at,
+        status=r.status,
+        verification_status=r.verification_status,
+        village_location_id=r.village_location_id,
+        village_name=vname,
+        cell_name=cell_name,
+        sector_name=sector_name,
+        leader_verification_status=getattr(r, "leader_verification_status", None),
+        leader_verified_at=getattr(r, "leader_verified_at", None),
+        trust_score=trust_val,
+        flag_reason=r.flag_reason,
+        evidence_count=evidence_count,
+        credibility_summary=credibility_summary,
+        priority=priority,
+        leader_note=leader_note,
+        evidence_files=evidence_files,
+        verification_summary=credibility_summary,
+    )
+
+
 @router.post("/reports/{report_id}/verify", status_code=200)
 def verify_report(
     report_id: str,
@@ -176,35 +299,48 @@ def verify_report(
         r.flag_reason = r.flag_reason or "rejected_by_local_leader"
 
     # ── Update ML trust score based on leader decision ──────────────────────
-    # Leader weight is moderate (community authority, not police authority).
-    # confirmed: score nudged up toward 75, device trust +1
-    # rejected:  score nudged down toward 15, device trust -2
+    # confirmed: raise score to at least 80, is_final=False (future evidence can still adjust)
+    # rejected:  hard-set score to 10, is_final=True (locks scorecard — prevents any rerun
+    #            from restoring the report to verified after leader rejection)
     existing_ml = (
         db.query(MLPrediction)
         .filter(MLPrediction.report_id == r.report_id)
         .order_by(MLPrediction.evaluated_at.desc())
         .first()
     )
+
+    # Always persist the leader decision in feature_vector so the scorecard
+    # is aware of it even if it reruns (e.g. from a community vote).
+    fv = r.feature_vector if isinstance(getattr(r, "feature_vector", None), dict) else {}
+    fv["leader_decision"] = {
+        "decision": decision,
+        "leader_id": int(current_leader.local_leader_id),
+        "decided_at": now.isoformat(),
+        "note": (payload.note or "").strip()[:500] if payload.note else None,
+    }
+    r.feature_vector = fv
+
     if decision == "confirmed":
         if existing_ml:
             current_score = float(existing_ml.trust_score or 50.0)
-            new_score = max(80.0, current_score)   # leader confirmation = at least 80
+            new_score = max(80.0, current_score)
             existing_ml.trust_score = Decimal(str(round(new_score, 2)))
             existing_ml.prediction_label = "likely_real"
-            existing_ml.confidence = Decimal("0.80")
-            existing_ml.is_final = False  # Police can still override
+            existing_ml.confidence = Decimal("0.85")
+            existing_ml.model_type = "leader_override"
+            existing_ml.is_final = False  # community votes can still adjust
         else:
             db.add(MLPrediction(
                 prediction_id=uuid4(),
                 report_id=r.report_id,
                 trust_score=Decimal("80.0"),
                 prediction_label="likely_real",
-                confidence=Decimal("0.80"),
+                confidence=Decimal("0.85"),
                 model_type="leader_override",
                 is_final=False,
                 evaluated_at=now,
             ))
-        # Bump device trust slightly
+        # Reward reporting device slightly
         if getattr(r, "device", None) and hasattr(r.device, "device_trust_score"):
             r.device.device_trust_score = Decimal(
                 str(min(100.0, float(r.device.device_trust_score or 50.0) + 1.0))
@@ -213,28 +349,29 @@ def verify_report(
             r.device.trusted_reports = (r.device.trusted_reports or 0) + 1
 
     elif decision == "rejected":
+        # Hard-lock: score drops to 10, is_final=True prevents any background
+        # rerun (community vote, backlog processor) from overwriting this decision.
         if existing_ml:
-            current_score = float(existing_ml.trust_score or 50.0)
-            new_score = max(15.0, min(current_score, current_score - 20.0))
-            existing_ml.trust_score = Decimal(str(round(new_score, 2)))
-            existing_ml.prediction_label = "suspicious"
-            existing_ml.confidence = Decimal("0.80")
-            existing_ml.is_final = False  # Police can still override
+            existing_ml.trust_score = Decimal("10.0")
+            existing_ml.prediction_label = "fake"
+            existing_ml.confidence = Decimal("0.90")
+            existing_ml.model_type = "leader_override"
+            existing_ml.is_final = True
         else:
             db.add(MLPrediction(
                 prediction_id=uuid4(),
                 report_id=r.report_id,
-                trust_score=Decimal("20.0"),
-                prediction_label="suspicious",
-                confidence=Decimal("0.80"),
+                trust_score=Decimal("10.0"),
+                prediction_label="fake",
+                confidence=Decimal("0.90"),
                 model_type="leader_override",
-                is_final=False,
+                is_final=True,
                 evaluated_at=now,
             ))
-        # Reduce device trust slightly
+        # Penalise reporting device
         if getattr(r, "device", None) and hasattr(r.device, "device_trust_score"):
             r.device.device_trust_score = Decimal(
-                str(max(0.0, float(r.device.device_trust_score or 50.0) - 2.0))
+                str(max(0.0, float(r.device.device_trust_score or 50.0) - 5.0))
             )
         if hasattr(r.device, "flagged_reports"):
             r.device.flagged_reports = (r.device.flagged_reports or 0) + 1

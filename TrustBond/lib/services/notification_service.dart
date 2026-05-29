@@ -42,7 +42,18 @@ class NotificationService {
   String? _pendingCitizenReportId;
 
   bool _isInitialized = false;
+  int _unreadCount = 0;
+  final StreamController<int> _unreadCountController =
+      StreamController<int>.broadcast();
   String? _fcmToken;
+
+  Stream<int> get unreadCountStream => _unreadCountController.stream;
+  int get unreadCount => _unreadCount;
+
+  void markAllRead() {
+    _unreadCount = 0;
+    if (!_unreadCountController.isClosed) _unreadCountController.add(0);
+  }
 
   /// Initialize Firebase Messaging and local notifications (mobile only).
   Future<void> initialize() async {
@@ -202,6 +213,10 @@ class NotificationService {
     debugPrint('Received foreground message: ${message.messageId}');
     _messageStreamController.add(message);
     _dispatchMobileDeepLink(message);
+    _unreadCount++;
+    if (!_unreadCountController.isClosed) {
+      _unreadCountController.add(_unreadCount);
+    }
     _showLocalNotification(message);
   }
 
@@ -329,6 +344,7 @@ class NotificationService {
   }
 
   void dispose() {
+    _unreadCountController.close();
     _messageStreamController.close();
     _leaderDeepLinkController.close();
     _citizenReportDeepLinkController.close();

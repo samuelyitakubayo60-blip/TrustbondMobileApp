@@ -169,7 +169,7 @@ class _ReportStep1ScreenState extends State<ReportStep1Screen> {
   }
 
   Widget _buildTypeCard(int id, String name, bool selected) {
-    final icon = iconForIncidentType(name);
+    final iconData = iconDataForIncidentType(name);
     final color = colorForIncidentType(name);
     return GestureDetector(
       onTap: () => setState(() {
@@ -178,7 +178,7 @@ class _ReportStep1ScreenState extends State<ReportStep1Screen> {
       }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         decoration: BoxDecoration(
           color: selected
               ? color.withValues(alpha: 0.12)
@@ -193,20 +193,16 @@ class _ReportStep1ScreenState extends State<ReportStep1Screen> {
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Fixed-size icon so all incident types look the same (no oversized emoji)
-            SizedBox(
-              height: 26,
-              width: 26,
-              child: Center(
-                child: Text(
-                  icon,
-                  style: const TextStyle(fontSize: 20),
-                  textScaler: TextScaler.linear(1.0),
-                  overflow: TextOverflow.clip,
-                ),
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: selected ? 0.18 : 0.10),
+                borderRadius: BorderRadius.circular(10),
               ),
+              child: Icon(iconData, size: 22, color: color),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               name,
               style: TextStyle(

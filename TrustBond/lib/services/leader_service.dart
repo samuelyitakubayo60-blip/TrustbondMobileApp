@@ -277,6 +277,23 @@ class LeaderService {
     return (decoded['items'] as List<dynamic>? ?? <dynamic>[]);
   }
 
+  Future<Map<String, dynamic>> getReport(String reportId) async {
+    final token = await getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('Not logged in');
+    }
+    final res = await _client
+        .get(
+          Uri.parse('${ApiConfig.leaderUrl}/reports/$reportId'),
+          headers: {'Authorization': 'Bearer $token'},
+        )
+        .timeout(_timeout);
+    if (res.statusCode != 200) {
+      throw Exception('Failed to load report (HTTP ${res.statusCode})');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   Future<void> verifyReport({
     required String reportId,
     required String decision,

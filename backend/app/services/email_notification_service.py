@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.police_user import PoliceUser
 from app.models.location import Location
 from app.database import SessionLocal
+from app.core.email import _email_html
 
 
 def get_location_hierarchy_from_coordinates(db: Session, latitude: float, longitude: float) -> str:
@@ -234,48 +235,25 @@ class EmailNotificationService:
             except (ValueError, IndexError):
                 pass
         
-        html_body = f"""
-        <html>
-        <body>
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <div style="background-color: #2563eb; color: white; padding: 20px; text-align: center;">
-                    <h1>TrustBond System</h1>
-                    <h2>New Case Assignment</h2>
-                </div>
-                
-                <div style="padding: 20px; background-color: #f8f9fa;">
-                    <p>Dear {f"{police_user.first_name} {police_user.last_name}".strip() or police_user.email},</p>
-                    
-                    <p>A new case has been assigned to you:</p>
-                    
-                    <div style="background-color: white; padding: 15px; border-left: 4px solid #2563eb; margin: 15px 0;">
-                        <h3>{case_number}</h3>
-                        <p><strong>Title:</strong> {case_title}</p>
-                        <p><strong>Incident Type:</strong> {incident_type}</p>
-                        <p><strong>Location:</strong> {location_display}</p>
-                        <p><strong>Reports:</strong> {report_count}</p>
-                    </div>
-                    
-                    <p>Please review the case details and take appropriate action.</p>
-                    
-                    <div style="text-align: center; margin: 20px 0;">
-                        <a href="{case_url}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">
-                            View Case Details
-                        </a>
-                        {f'<a href="{maps_links["navigation"]}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">🚗 Navigate to Case Area</a>' if maps_links else ''}
-                    </div>
-                    
-                    {f'<div style="background-color: #e3f2fd; padding: 10px; border-radius: 4px; margin: 15px 0;"><p style="margin: 0; font-size: 14px;"><strong>📍 Quick Navigation:</strong> <a href="{maps_links["view"]}" style="color: #1976d2; text-decoration: none;">View on Map</a> | <a href="{maps_links["navigation"]}" style="color: #1976d2; text-decoration: none;">Get Directions</a></p></div>' if maps_links else ''}
-                    
-                    <p style="font-size: 12px; color: #666; margin-top: 20px;">
-                        This is an automated notification from the TrustBond system. 
-                        If you have questions, please contact your supervisor.
-                    </p>
-                </div>
+        _body = f"""
+            <p>Dear {f"{police_user.first_name} {police_user.last_name}".strip() or police_user.email},</p>
+            <p>A new case has been assigned to you:</p>
+            <div style="background-color:#f0f6ff;padding:15px;border-left:4px solid #2563eb;border-radius:6px;margin:15px 0;">
+                <h3 style="margin:0 0 8px">{case_number}</h3>
+                <p style="margin:4px 0"><strong>Title:</strong> {case_title}</p>
+                <p style="margin:4px 0"><strong>Incident Type:</strong> {incident_type}</p>
+                <p style="margin:4px 0"><strong>Location:</strong> {location_display}</p>
+                <p style="margin:4px 0"><strong>Reports:</strong> {report_count}</p>
             </div>
-        </body>
-        </html>
+            <p>Please review the case details and take appropriate action.</p>
+            <div style="text-align:center;margin:20px 0;">
+                <a href="{case_url}" style="background-color:#2563eb;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;margin:5px;font-weight:600;">View Case Details</a>
+                {f'<a href="{maps_links["navigation"]}" style="background-color:#10b981;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;margin:5px;font-weight:600;">Navigate to Case Area</a>' if maps_links else ''}
+            </div>
+            {f'<div style="background-color:#e3f2fd;padding:10px;border-radius:6px;margin:15px 0;font-size:14px;"><strong>Quick Navigation:</strong> <a href="{maps_links["view"]}" style="color:#1976d2;text-decoration:none;">View on Map</a> | <a href="{maps_links["navigation"]}" style="color:#1976d2;text-decoration:none;">Get Directions</a></div>' if maps_links else ''}
+            <p style="font-size:12px;color:#888;margin-top:20px;">This is an automated notification from TrustBond. If you have questions, please contact your supervisor.</p>
         """
+        html_body = _email_html("New Case Assignment", _body)
         
         text_body = f"""
         New Case Assigned: {case_number}
@@ -357,49 +335,26 @@ class EmailNotificationService:
             except (ValueError, IndexError):
                 pass
         
-        html_body = f"""
-        <html>
-        <body>
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <div style="background-color: #dc2626; color: white; padding: 20px; text-align: center;">
-                    <h1>TrustBond System</h1>
-                    <h2>Auto-Generated Case Alert</h2>
-                </div>
-                
-                <div style="padding: 20px; background-color: #f8f9fa;">
-                    <p>Dear Team,</p>
-                    
-                    <p>A new case has been automatically generated from verified reports:</p>
-                    
-                    <div style="background-color: white; padding: 15px; border-left: 4px solid #dc2626; margin: 15px 0;">
-                        <h3>{case_number}</h3>
-                        <p><strong>Title:</strong> {case_title}</p>
-                        <p><strong>Incident Type:</strong> {incident_type}</p>
-                        <p><strong>Location:</strong> {location_display}</p>
-                        <p><strong>Reports:</strong> {report_count}</p>
-                        <p><strong>Status:</strong> Auto-generated from AI-verified reports</p>
-                    </div>
-                    
-                    <p>This case was automatically created when multiple verified reports were clustered together.</p>
-                    
-                    <div style="text-align: center; margin: 20px 0;">
-                        <a href="{case_url}" style="background-color: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">
-                            Review Case Details
-                        </a>
-                        {f'<a href="{maps_links["navigation"]}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">🚗 Navigate to Case Area</a>' if maps_links else ''}
-                    </div>
-                    
-                    {f'<div style="background-color: #fef2f2; padding: 10px; border-radius: 4px; margin: 15px 0;"><p style="margin: 0; font-size: 14px;"><strong>📍 Quick Navigation:</strong> <a href="{maps_links["view"]}" style="color: #dc2626; text-decoration: none;">View on Map</a> | <a href="{maps_links["navigation"]}" style="color: #dc2626; text-decoration: none;">Get Directions</a></p></div>' if maps_links else ''}
-                    
-                    <p style="font-size: 12px; color: #666; margin-top: 20px;">
-                        This is an automated notification from the TrustBond system. 
-                        The case was created using AI-powered verification and clustering.
-                    </p>
-                </div>
+        _body = f"""
+            <p>Dear Team,</p>
+            <p>A new case has been automatically generated from verified reports:</p>
+            <div style="background-color:#fff5f5;padding:15px;border-left:4px solid #dc2626;border-radius:6px;margin:15px 0;">
+                <h3 style="margin:0 0 8px">{case_number}</h3>
+                <p style="margin:4px 0"><strong>Title:</strong> {case_title}</p>
+                <p style="margin:4px 0"><strong>Incident Type:</strong> {incident_type}</p>
+                <p style="margin:4px 0"><strong>Location:</strong> {location_display}</p>
+                <p style="margin:4px 0"><strong>Reports:</strong> {report_count}</p>
+                <p style="margin:4px 0"><strong>Status:</strong> Auto-generated from AI-verified reports</p>
             </div>
-        </body>
-        </html>
+            <p>This case was automatically created when multiple verified reports were clustered together.</p>
+            <div style="text-align:center;margin:20px 0;">
+                <a href="{case_url}" style="background-color:#dc2626;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;margin:5px;font-weight:600;">Review Case Details</a>
+                {f'<a href="{maps_links["navigation"]}" style="background-color:#10b981;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;margin:5px;font-weight:600;">Navigate to Case Area</a>' if maps_links else ''}
+            </div>
+            {f'<div style="background-color:#fef2f2;padding:10px;border-radius:6px;margin:15px 0;font-size:14px;"><strong>Quick Navigation:</strong> <a href="{maps_links["view"]}" style="color:#dc2626;text-decoration:none;">View on Map</a> | <a href="{maps_links["navigation"]}" style="color:#dc2626;text-decoration:none;">Get Directions</a></div>' if maps_links else ''}
+            <p style="font-size:12px;color:#888;margin-top:20px;">This is an automated notification from TrustBond. The case was created using AI-powered verification and clustering.</p>
         """
+        html_body = _email_html("Auto-Generated Case Alert", _body)
         
         text_body = f"""
         Auto-Generated Case Alert: {case_number}
@@ -491,55 +446,29 @@ class EmailNotificationService:
             except (ValueError, IndexError):
                 pass
         
-        html_body = f"""
-        <html>
-        <body>
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <div style="background-color: {status_color}; color: white; padding: 20px; text-align: center;">
-                    <h1>TrustBond System</h1>
-                    <h2>{title}</h2>
-                </div>
-                
-                <div style="padding: 20px; background-color: #f8f9fa;">
-                    <p>Dear Team,</p>
-                    
-                    <p>A report has been {status_text.lower()}:</p>
-                    
-                    <div style="background-color: white; padding: 15px; border-left: 4px solid {status_color}; margin: 15px 0;">
-                        <p><strong>Report ID:</strong> {report_id}</p>
-                        <p><strong>Incident Type:</strong> {incident_type}</p>
-                        <p><strong>Location:</strong> {location_display}</p>
-                        <p><strong>Status:</strong> {status_text}</p>
-                        {f'<p><strong>Reason:</strong> {flag_reason}</p>' if flag_reason else ''}
-                    </div>
-                    
-                    {'<p><strong>Action Required:</strong> Please review this report and take appropriate action.</p>' if verification_status in ['under_review', 'flagged'] else ''}
-                    
-                    <div style="text-align: center; margin: 20px 0;">
-                        <a href="{report_url}" style="background-color: {status_color}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">
-                            View Report Details
-                        </a>
-                        <a href="{maps_links['navigation']}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">
-                            🚗 Navigate to Location
-                        </a>
-                    </div>
-                    
-                    <div style="background-color: #f0f9ff; padding: 10px; border-radius: 4px; margin: 15px 0;">
-                        <p style="margin: 0; font-size: 14px;">
-                            <strong>📍 Quick Navigation:</strong> 
-                            <a href="{maps_links['view']}" style="color: {status_color}; text-decoration: none;">View on Map</a> | 
-                            <a href="{maps_links['navigation']}" style="color: {status_color}; text-decoration: none;">Get Directions</a>
-                        </p>
-                    </div>
-                    
-                    <p style="font-size: 12px; color: #666; margin-top: 20px;">
-                        This is an automated notification from the TrustBond system.
-                    </p>
-                </div>
+        _body = f"""
+            <p>Dear Team,</p>
+            <p>A report has been {status_text.lower()}:</p>
+            <div style="background-color:#f8f9fa;padding:15px;border-left:4px solid {status_color};border-radius:6px;margin:15px 0;">
+                <p style="margin:4px 0"><strong>Report ID:</strong> {report_id}</p>
+                <p style="margin:4px 0"><strong>Incident Type:</strong> {incident_type}</p>
+                <p style="margin:4px 0"><strong>Location:</strong> {location_display}</p>
+                <p style="margin:4px 0"><strong>Status:</strong> {status_text}</p>
+                {f'<p style="margin:4px 0"><strong>Reason:</strong> {flag_reason}</p>' if flag_reason else ''}
             </div>
-        </body>
-        </html>
+            {'<p><strong>Action Required:</strong> Please review this report and take appropriate action.</p>' if verification_status in ['under_review', 'flagged'] else ''}
+            <div style="text-align:center;margin:20px 0;">
+                <a href="{report_url}" style="background-color:{status_color};color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;margin:5px;font-weight:600;">View Report Details</a>
+                <a href="{maps_links['navigation']}" style="background-color:#10b981;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;margin:5px;font-weight:600;">Navigate to Location</a>
+            </div>
+            <div style="background-color:#f0f9ff;padding:10px;border-radius:6px;margin:15px 0;font-size:14px;">
+                <strong>Quick Navigation:</strong>
+                <a href="{maps_links['view']}" style="color:{status_color};text-decoration:none;">View on Map</a> |
+                <a href="{maps_links['navigation']}" style="color:{status_color};text-decoration:none;">Get Directions</a>
+            </div>
+            <p style="font-size:12px;color:#888;margin-top:20px;">This is an automated notification from TrustBond.</p>
         """
+        html_body = _email_html(title, _body)
         
         text_body = f"""
         {title}: {report_id}
@@ -627,55 +556,28 @@ class EmailNotificationService:
             bg_color = "#fffbeb"
             link_color = "#f59e0b"
         
-        html_body = f"""
-        <html>
-        <body>
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <div style="background-color: {color}; color: white; padding: 20px; text-align: center;">
-                    <h1>TrustBond System</h1>
-                    <h2>{title}</h2>
-                </div>
-                
-                <div style="padding: 20px; background-color: #f8f9fa;">
-                    <p>Dear {f"{police_user.first_name} {police_user.last_name}".strip() or police_user.email},</p>
-                    
-                    <p>A {description} has been assigned to you for review:</p>
-                    
-                    <div style="background-color: white; padding: 15px; border-left: 4px solid {color}; margin: 15px 0;">
-                        <h3>{report_id[:8]}...</h3>
-                        <p><strong>Incident Type:</strong> {incident_type}</p>
-                        <p><strong>Location:</strong> {location_display}</p>
-                        <p><strong>Reason:</strong> {flag_reason}</p>
-                    </div>
-                    
-                    <p><strong>Action Required:</strong> Please review this report and take appropriate action.</p>
-                    
-                    <div style="text-align: center; margin: 20px 0;">
-                        <a href="{report_url}" style="background-color: {color}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">
-                            Review Report
-                        </a>
-                        <a href="{maps_links['navigation']}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">
-                            🚗 Navigate to Location
-                        </a>
-                    </div>
-                    
-                    <div style="background-color: {bg_color}; padding: 10px; border-radius: 4px; margin: 15px 0;">
-                        <p style="margin: 0; font-size: 14px;">
-                            <strong>📍 Quick Navigation:</strong> 
-                            <a href="{maps_links['view']}" style="color: {link_color}; text-decoration: none;">View on Map</a> | 
-                            <a href="{maps_links['navigation']}" style="color: {link_color}; text-decoration: none;">Get Directions</a>
-                        </p>
-                    </div>
-                    
-                    <p style="font-size: 12px; color: #666; margin-top: 20px;">
-                        This is an automated notification from the TrustBond system. 
-                        If you have questions, please contact your supervisor.
-                    </p>
-                </div>
+        _body = f"""
+            <p>Dear {f"{police_user.first_name} {police_user.last_name}".strip() or police_user.email},</p>
+            <p>A {description} has been assigned to you for review:</p>
+            <div style="background-color:{bg_color};padding:15px;border-left:4px solid {color};border-radius:6px;margin:15px 0;">
+                <h3 style="margin:0 0 8px">{report_id[:8]}...</h3>
+                <p style="margin:4px 0"><strong>Incident Type:</strong> {incident_type}</p>
+                <p style="margin:4px 0"><strong>Location:</strong> {location_display}</p>
+                <p style="margin:4px 0"><strong>Reason:</strong> {flag_reason}</p>
             </div>
-        </body>
-        </html>
+            <p><strong>Action Required:</strong> Please review this report and take appropriate action.</p>
+            <div style="text-align:center;margin:20px 0;">
+                <a href="{report_url}" style="background-color:{color};color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;margin:5px;font-weight:600;">Review Report</a>
+                <a href="{maps_links['navigation']}" style="background-color:#10b981;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;margin:5px;font-weight:600;">Navigate to Location</a>
+            </div>
+            <div style="background-color:{bg_color};padding:10px;border-radius:6px;margin:15px 0;font-size:14px;">
+                <strong>Quick Navigation:</strong>
+                <a href="{maps_links['view']}" style="color:{link_color};text-decoration:none;">View on Map</a> |
+                <a href="{maps_links['navigation']}" style="color:{link_color};text-decoration:none;">Get Directions</a>
+            </div>
+            <p style="font-size:12px;color:#888;margin-top:20px;">This is an automated notification from TrustBond. If you have questions, please contact your supervisor.</p>
         """
+        html_body = _email_html(title, _body)
         
         text_body = f"""
         {title}: {report_id[:8]}...
@@ -744,49 +646,26 @@ class EmailNotificationService:
             except:
                 pass
         
-        html_body = f"""
-        <html>
-        <body>
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <div style="background-color: #dc2626; color: white; padding: 20px; text-align: center;">
-                    <h1>TrustBond System</h1>
-                    <h2>🔥 New Safety Hotspots Detected</h2>
-                </div>
-                
-                <div style="padding: 20px; background-color: #f8f9fa;">
-                    <p>Dear Team,</p>
-                    
-                    <p><strong>{hotspot_count}</strong> new safety hotspots have been automatically detected based on recent report clusters.</p>
-                    
-                    <div style="background-color: white; padding: 15px; border-left: 4px solid #dc2626; margin: 15px 0;">
-                        <h3>📍 Hotspot Analysis</h3>
-                        <p><strong>Hotspots Detected:</strong> {hotspot_count}</p>
-                        <p><strong>Analysis:</strong> AI-powered clustering of verified reports</p>
-                        <p><strong>Priority:</strong> Requires immediate attention</p>
-                        {f'<p><strong>Primary Location:</strong> {location_display}</p>' if location_display else ''}
-                        {f'<p><strong>Coordinates:</strong> {hotspot_coordinates}</p>' if hotspot_coordinates else ''}
-                    </div>
-                    
-                    <p><strong>Action Required:</strong> Please review the Safety Map to assess these hotspots and deploy appropriate resources.</p>
-                    
-                    <div style="text-align: center; margin: 20px 0;">
-                        <a href="{self.frontend_url}/hotspots" style="background-color: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">
-                            🔥 View Safety Map
-                        </a>
-                        {f'<a href="{maps_links["navigation"]}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">🚗 Navigate to Hotspot</a>' if maps_links else ''}
-                    </div>
-                    
-                    {f'<div style="background-color: #fef2f2; padding: 10px; border-radius: 4px; margin: 15px 0;"><p style="margin: 0; font-size: 14px;"><strong>📍 Quick Navigation:</strong> <a href="{maps_links["view"]}" style="color: #dc2626; text-decoration: none;">View on Map</a> | <a href="{maps_links["navigation"]}" style="color: #dc2626; text-decoration: none;">Get Directions</a></p></div>' if maps_links else ''}
-                    
-                    <p style="font-size: 12px; color: #666; margin-top: 20px;">
-                        This is an automated notification from the TrustBond system. 
-                        Hotspots are generated using AI-powered analysis of report patterns.
-                    </p>
-                </div>
+        _body = f"""
+            <p>Dear Team,</p>
+            <p><strong>{hotspot_count}</strong> new safety hotspots have been automatically detected based on recent report clusters.</p>
+            <div style="background-color:#fff5f5;padding:15px;border-left:4px solid #dc2626;border-radius:6px;margin:15px 0;">
+                <h3 style="margin:0 0 8px">Hotspot Analysis</h3>
+                <p style="margin:4px 0"><strong>Hotspots Detected:</strong> {hotspot_count}</p>
+                <p style="margin:4px 0"><strong>Analysis:</strong> AI-powered clustering of verified reports</p>
+                <p style="margin:4px 0"><strong>Priority:</strong> Requires immediate attention</p>
+                {f'<p style="margin:4px 0"><strong>Primary Location:</strong> {location_display}</p>' if location_display else ''}
+                {f'<p style="margin:4px 0"><strong>Coordinates:</strong> {hotspot_coordinates}</p>' if hotspot_coordinates else ''}
             </div>
-        </body>
-        </html>
+            <p><strong>Action Required:</strong> Please review the Safety Map to assess these hotspots and deploy appropriate resources.</p>
+            <div style="text-align:center;margin:20px 0;">
+                <a href="{self.frontend_url}/hotspots" style="background-color:#dc2626;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;margin:5px;font-weight:600;">View Safety Map</a>
+                {f'<a href="{maps_links["navigation"]}" style="background-color:#10b981;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;margin:5px;font-weight:600;">Navigate to Hotspot</a>' if maps_links else ''}
+            </div>
+            {f'<div style="background-color:#fef2f2;padding:10px;border-radius:6px;margin:15px 0;font-size:14px;"><strong>Quick Navigation:</strong> <a href="{maps_links["view"]}" style="color:#dc2626;text-decoration:none;">View on Map</a> | <a href="{maps_links["navigation"]}" style="color:#dc2626;text-decoration:none;">Get Directions</a></div>' if maps_links else ''}
+            <p style="font-size:12px;color:#888;margin-top:20px;">This is an automated notification from TrustBond. Hotspots are generated using AI-powered analysis of report patterns.</p>
         """
+        html_body = _email_html("New Safety Hotspots Detected", _body)
         
         text_body = f"""
         New Safety Hotspots Detected: {hotspot_count} Hotspots
@@ -806,7 +685,11 @@ class EmailNotificationService:
         This is an automated notification from the TrustBond system.
         Hotspots are generated using AI-powered analysis of report patterns.
         """
-        
+
+        emails = [user.email for user in users_with_email]
+        if self.send_email(emails, subject, html_body, text_body):
+            successful_sends = len(emails)
+
         return successful_sends
 
 

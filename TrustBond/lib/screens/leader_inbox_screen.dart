@@ -6,6 +6,7 @@ import '../config/theme.dart';
 import '../services/leader_service.dart';
 import '../services/notification_service.dart';
 import '../services/platform_service.dart';
+import 'leader_report_detail_screen.dart';
 import 'report_step1_screen.dart';
 
 class LeaderInboxScreen extends StatefulWidget {
@@ -491,7 +492,19 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
     final isHighlighted = _highlightReportId != null && id == _highlightReportId;
     _reportKeys.putIfAbsent(id, GlobalKey.new);
 
-    return Container(
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => LeaderReportDetailScreen(
+              reportId: id,
+              previewData: r,
+            ),
+          ),
+        );
+        if (mounted) _load();
+      },
+      child: Container(
       key: _reportKeys[id],
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -706,6 +719,7 @@ class _LeaderInboxScreenState extends State<LeaderInboxScreen> {
             ),
         ],
       ),
-    );
+    ),   // Container
+    );   // GestureDetector
   }
 }

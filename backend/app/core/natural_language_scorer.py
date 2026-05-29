@@ -172,49 +172,235 @@ class NaturalLanguageScorer:
         incident_type_name: str,
         metadata: Dict[str, Any]
     ) -> Tuple[float, Dict[str, Any]]:
-        """Fallback keyword-based consistency analysis."""
+        """Keyword-based semantic consistency: description vs incident type.
+
+        Keys are substrings matched against the incident type name so that
+        e.g. 'drug dealing' matches the 'drug' entry, 'domestic abuse' matches
+        the 'domestic' entry, etc.  No match → score 20 (not 40), making it
+        much harder for irrelevant descriptions to pass the NL minimum threshold.
+        """
         description_lower = description.lower()
         incident_type_lower = incident_type_name.lower()
-        
-        # Keyword mappings for different incident types
+
+        # ── Keyword map (substring keys → evidence keywords in the description) ─────
+        # Keys match as substrings of the incident type name (case-insensitive).
+        # Values are words/phrases that SHOULD appear in a genuine description.
         keyword_mappings = {
-            "theft": {"steal", "stolen", "rob", "robbed", "snatch", "burglary", "thief", "took"},
-            "vandalism": {"damage", "destroy", "broken", "graffiti", "deface", "smashed"},
-            "suspicious activity": {"suspicious", "strange", "unknown", "lurking", "watching", "weird"},
-            "domestic violence": {"husband", "wife", "family", "home", "domestic", "partner", "beating"},
-            "drug activity": {"drug", "weed", "cocaine", "heroin", "dealer", "selling", "pills"},
-            "fraud/scam": {"scam", "fraud", "fake", "con", "money transfer", "phishing"},
-            "harassment": {"harass", "threat", "stalk", "intimidat", "abuse"},
-            "traffic incident": {"accident", "crash", "collision", "vehicle", "road", "car"},
-            "assault": {"assault", "attack", "fight", "hit", "beaten", "injur", "violence"}
+            # Property crimes
+            "theft": {
+                "steal", "stolen", "rob", "robbed", "snatch", "snatched",
+                "burglary", "thief", "thieves", "took", "missing", "lost",
+                "pickpocket", "bag", "phone", "wallet", "money",
+            },
+            "robbery": {
+                "rob", "robbed", "robbery", "snatch", "snatched", "gun",
+                "knife", "weapon", "forced", "threatened", "took", "money",
+                "phone", "bag",
+            },
+            "burglary": {
+                "broke", "broken", "entered", "house", "home", "door", "window",
+                "stolen", "theft", "missing",
+            },
+            "pickpocket": {
+                "pocket", "pickpocket", "stolen", "phone", "wallet", "crowd",
+                "market", "bus",
+            },
+            "larceny": {
+                "stolen", "took", "missing", "theft", "property",
+            },
+            # Violent crimes
+            "assault": {
+                "assault", "attack", "attacked", "hit", "beaten", "beat",
+                "injur", "hurt", "punch", "punch", "kick", "fight", "violence",
+                "weapon", "knife", "stick", "stone",
+            },
+            "attack": {
+                "attack", "attacked", "assault", "hit", "beaten", "hurt",
+                "weapon", "knife", "stone",
+            },
+            "fight": {
+                "fight", "fighting", "brawl", "hit", "punch", "beat",
+                "group", "conflict", "dispute",
+            },
+            "stabbing": {
+                "stab", "stabbed", "knife", "blade", "cut", "wound", "blood",
+                "injur",
+            },
+            "beating": {
+                "beat", "beaten", "hit", "punch", "kick", "stick", "injur",
+                "blood",
+            },
+            "violence": {
+                "violence", "violent", "attack", "hit", "injur", "weapon",
+                "fight", "blood",
+            },
+            "murder": {
+                "murder", "killed", "dead", "death", "body", "blood",
+                "weapon", "knife", "gun", "shot",
+            },
+            "homicide": {
+                "kill", "killed", "dead", "murder", "body", "blood",
+            },
+            "kidnap": {
+                "kidnap", "abduct", "taken", "missing", "forced", "car",
+                "vehicle", "disappeared",
+            },
+            "abduction": {
+                "abduct", "kidnap", "taken", "missing", "forced", "disappeared",
+            },
+            # Domestic / family
+            "domestic": {
+                "husband", "wife", "partner", "family", "home", "house",
+                "beating", "hit", "abuse", "domestic", "spouse", "children",
+                "child",
+            },
+            # Sexual crimes
+            "rape": {
+                "rape", "raped", "sexual", "assault", "touched", "forced",
+                "victim",
+            },
+            "sexual": {
+                "sexual", "rape", "touched", "assault", "harass", "forced",
+                "victim",
+            },
+            "indecent": {
+                "indecent", "expose", "naked", "inappropriate", "sexual",
+            },
+            # Public order
+            "harassment": {
+                "harass", "threat", "threaten", "stalk", "intimidat",
+                "abuse", "follow", "insult", "bother",
+            },
+            "threat": {
+                "threat", "threaten", "weapon", "knife", "gun", "kill",
+                "harm",
+            },
+            "disturbance": {
+                "noise", "disturbance", "shouting", "drunk", "fight",
+                "group", "crowd",
+            },
+            "riot": {
+                "riot", "crowd", "group", "stone", "burning", "property",
+                "fight", "chaos",
+            },
+            # Drug-related
+            "drug": {
+                "drug", "weed", "cannabis", "cocaine", "heroin", "pills",
+                "substance", "dealer", "selling", "buying", "smoke",
+                "inject", "narcotic",
+            },
+            "narcotic": {
+                "narcotic", "drug", "pills", "substance", "dealer",
+            },
+            "alcohol": {
+                "drunk", "alcohol", "drinking", "beer", "bottle",
+                "intoxicated",
+            },
+            # Financial crimes
+            "fraud": {
+                "fraud", "scam", "fake", "con", "money", "transfer",
+                "phishing", "deceive", "trick", "false", "cheat",
+            },
+            "scam": {
+                "scam", "fraud", "trick", "deceive", "money", "fake",
+                "promised", "cheated", "lost",
+            },
+            "forgery": {
+                "fake", "forged", "false", "document", "identity", "id",
+                "certificate",
+            },
+            "extortion": {
+                "extort", "demand", "money", "threat", "threaten", "pay",
+                "forced",
+            },
+            "bribery": {
+                "bribe", "money", "official", "pay", "corrupt",
+            },
+            "corruption": {
+                "corrupt", "bribe", "official", "money", "abuse", "power",
+            },
+            # Traffic / road
+            "traffic": {
+                "accident", "crash", "collision", "vehicle", "car",
+                "motorcycle", "bicycle", "road", "hit", "injur",
+            },
+            "road": {
+                "road", "accident", "crash", "vehicle", "car",
+                "motorcycle", "bicycle", "hit",
+            },
+            "accident": {
+                "accident", "crash", "collision", "injur", "hurt", "vehicle",
+                "car", "motorcycle", "road",
+            },
+            "reckless": {
+                "speeding", "reckless", "fast", "vehicle", "road",
+                "motorcycle",
+            },
+            # Environmental
+            "fire": {
+                "fire", "burning", "smoke", "flame", "arson", "house",
+                "building",
+            },
+            "arson": {
+                "fire", "burning", "set fire", "arson", "intentional",
+            },
+            "flood": {
+                "flood", "water", "rain", "overflow", "river", "drain",
+            },
+            "landslide": {
+                "landslide", "mud", "collapse", "hill", "rain", "debris",
+            },
+            # Catch-all suspicious
+            "suspicious": {
+                "suspicious", "strange", "unknown", "unusual", "lurking",
+                "watching", "following", "weird", "hiding",
+            },
+            "vandalism": {
+                "damage", "destroy", "broken", "graffiti", "deface",
+                "smashed", "spray", "property",
+            },
+            "trespassing": {
+                "trespass", "enter", "property", "fence", "unauthorized",
+                "break",
+            },
+            "loitering": {
+                "loiter", "standing", "hanging", "suspicious", "long",
+                "area",
+            },
         }
-        
-        # Find matching keywords
-        relevant_keywords = set()
-        for incident_type, keywords in keyword_mappings.items():
-            if incident_type in incident_type_lower:
+
+        # Find which keyword set to use (substring match on incident type name)
+        relevant_keywords: set = set()
+        matched_key = None
+        for inc_key, keywords in keyword_mappings.items():
+            if inc_key in incident_type_lower:
                 relevant_keywords.update(keywords)
-        
+                matched_key = inc_key
+
         if not relevant_keywords:
-            # Generic fallback for any incident type not explicitly in keyword_mappings.
-            # Derive lightweight keywords from incident name tokens so new DB incident types
-            # still get some consistency signal.
-            stopwords = {"incident", "activity", "case", "report", "event", "type", "and", "or"}
+            # Derive minimal keywords from the incident type name tokens.
+            stopwords = {
+                "incident", "activity", "case", "report", "event", "type",
+                "and", "or", "the", "of", "in", "at", "to",
+            }
             derived = {
                 tok for tok in re.findall(r"[a-z]{4,}", incident_type_lower)
                 if tok not in stopwords
             }
             if not derived:
-                score = 50.0
-                metadata["keyword_match_type"] = "no_specific_keywords"
-                metadata["matched_keywords"] = []
+                # Completely unknown incident type — neutral score, not generous
+                score = 35.0
+                metadata.update({
+                    "keyword_match_type": "no_specific_keywords",
+                    "matched_keywords": [],
+                    "keyword_score": score,
+                })
                 return score, metadata
 
             matched_keywords = [kw for kw in derived if kw in description_lower]
-            if matched_keywords:
-                score = 62.0
-            else:
-                score = 42.0
+            # Derived matches get moderate scores — the incident word appearing
+            # in the description is a basic signal but not definitive
+            score = 55.0 if matched_keywords else 20.0
             metadata.update({
                 "keyword_match_type": "derived_from_incident_name",
                 "matched_keywords": matched_keywords,
@@ -223,29 +409,33 @@ class NaturalLanguageScorer:
                 "keyword_score": score,
             })
             return score, metadata
-        
-        # Count matches
+
+        # Count how many relevant keywords appear in the description
         matched_keywords = [kw for kw in relevant_keywords if kw in description_lower]
         match_count = len(matched_keywords)
-        
-        # Calculate score based on matches
-        if match_count >= 3:
-            score = 85.0
+
+        # Scoring: zero matches is now 20 (not 40) — a genuine report about
+        # "drug activity" that contains none of the drug keywords is suspicious.
+        if match_count >= 4:
+            score = 90.0
+        elif match_count >= 3:
+            score = 80.0
         elif match_count >= 2:
-            score = 70.0
+            score = 65.0
         elif match_count >= 1:
-            score = 55.0
+            score = 50.0
         else:
-            score = 40.0
-        
+            score = 20.0  # No relevant keywords found — strong mismatch signal
+
         metadata.update({
             "keyword_match_type": "keyword_based",
+            "matched_incident_key": matched_key,
             "matched_keywords": matched_keywords,
             "available_keywords": list(relevant_keywords),
             "match_count": match_count,
-            "keyword_score": score
+            "keyword_score": score,
         })
-        
+
         return score, metadata
     
     def _analyze_meaningful_content(self, description: str) -> float:
