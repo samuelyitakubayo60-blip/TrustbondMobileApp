@@ -1,36 +1,74 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import api from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 
 /**
  * District Security Situation — dynamic station cards from GET /stations?include_metrics=true
  */
+
+// ── Module-level cache ─────────────────────────────────────────────────────
+// Survives navigation away and back; cleared when a real refresh is triggered.
+let _ssCache = null; // { stations }
+let _ssCacheRefreshKey = undefined; // the wsRefreshKey value that produced this cache
+
+// ── Component ──────────────────────────────────────────────────────────────
+
 const SecuritySituation = ({ goToScreen, wsRefreshKey }) => {
   const { user } = useAuth();
   const role = user?.role || "officer";
-  const [stations, setStations] = useState([]);
-  const [loading, setLoading] = useState(true);
+
+  // Initialise state from cache immediately so returning to this screen is instant.
+  const [stations, setStations] = useState(_ssCache?.stations ?? []);
+  // Only show the full spinner on the very first load (no cache yet).
+  const [loading, setLoading] = useState(_ssCache === null);
+  const [bgRefreshing, setBgRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setError("");
-    api
-      .get("/api/v1/stations/?only_active=true&include_metrics=true")
-      .then((res) => {
-        setStations(res?.items || []);
-        setLoading(false);
-      })
-      .catch((e) => {
-        setError(e?.message || "Failed to load stations");
-        setStations([]);
-        setLoading(false);
-      });
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
   }, []);
 
+  const fetchStations = useCallback(async ({ silent = false } = {}) => {
+    if (silent) {
+      setBgRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    setError("");
+    try {
+      const res = await api.get("/api/v1/stations/?only_active=true&include_metrics=true");
+      if (!mountedRef.current) return;
+      const list = res?.items || [];
+      _ssCache = { stations: list };
+      _ssCacheRefreshKey = wsRefreshKey;
+      setStations(list);
+    } catch (e) {
+      if (!mountedRef.current) return;
+      // On background refresh keep showing stale data; only surface error on hard load.
+      if (!silent) {
+        setError(e?.message || "Failed to load stations");
+        setStations([]);
+      }
+    } finally {
+      if (!mountedRef.current) return;
+      setLoading(false);
+      setBgRefreshing(false);
+    }
+  }, [wsRefreshKey]);
+
   useEffect(() => {
-    load();
-  }, [load, wsRefreshKey]);
+    if (_ssCache === null) {
+      // Truly first load (no cache) — show spinner.
+      fetchStations({ silent: false });
+    } else {
+      // Cache exists (including WS-triggered refresh) — stay silent, update key.
+      _ssCacheRefreshKey = wsRefreshKey;
+      fetchStations({ silent: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsRefreshKey]);
 
   const totalActive = stations.reduce((n, s) => n + (s.active_case_count || 0), 0);
   const totalIncidents = stations.reduce((n, s) => n + (s.total_incident_count || 0), 0);
@@ -49,7 +87,14 @@ const SecuritySituation = ({ goToScreen, wsRefreshKey }) => {
           }}
         >
           <div>
-            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Security Situation</h2>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+              <h2 style={{ margin: 0, fontSize: 22 }}>Security Situation</h2>
+              {bgRefreshing && (
+                <span style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>
+                  refreshing…
+                </span>
+              )}
+            </div>
             <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
               Cases are grouped by station based on incident location.{" "}
               {role === "officer"

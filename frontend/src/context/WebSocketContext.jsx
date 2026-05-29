@@ -8,6 +8,36 @@ import React, {
   useState,
 } from "react";
 import { useAuth } from "./AuthContext";
+import { cacheBust, cacheClear } from "../api/client";
+
+// Entity name → API path segments to bust when that entity changes.
+// All cache entries whose URL contains any of these strings are cleared.
+const ENTITY_CACHE_PATHS = {
+  report:                  ["/api/v1/reports", "/api/v1/stats"],
+  case:                    ["/api/v1/reports", "/api/v1/stats"],  // cases are fetched via /reports/; stats update too
+  station:                 ["/api/v1/stations"],
+  user:                    ["/api/v1/police-users"],   // covers /police-users/sessions too
+  incident_type:           ["/api/v1/incident-types"],
+  local_leader:            ["/api/v1/local-leaders"],
+  special_assignment_unit: ["/api/v1/special-assignment-units"],
+  hotspot:                 ["/api/v1/hotspots", "/api/v1/public/hotspots"],
+  geographic_intelligence: ["/api/v1/geographic-intelligence", "/api/v1/stats"],
+  config:                  ["/api/v1/system-config"],
+  system:                  ["/api/v1/system-config"],
+  notification:            ["/api/v1/notifications"],
+  audit:                   ["/api/v1/audit-logs"],
+  device:                  ["/api/v1/devices"],
+};
+
+function bustEntityCache(entity) {
+  const paths = ENTITY_CACHE_PATHS[String(entity || "").toLowerCase()];
+  if (paths) {
+    paths.forEach((p) => cacheBust(p));
+  } else {
+    // Unknown entity — bust everything so stale data never silently persists.
+    cacheClear();
+  }
+}
 
 const WebSocketContext = createContext({
   lastMessage: null,
@@ -86,6 +116,10 @@ export const WebSocketProvider = ({ children }) => {
         try {
           const data = JSON.parse(event.data);
           if (data.type === "refresh_data") {
+            // Bust the API client's GET cache for the affected entity so that
+            // when screens re-fetch they always get fresh data from the server,
+            // not a stale 30-second cached response.
+            bustEntityCache(data.entity);
             setLastMessage(data);
             setRefreshKey((prev) => prev + 1);
           }

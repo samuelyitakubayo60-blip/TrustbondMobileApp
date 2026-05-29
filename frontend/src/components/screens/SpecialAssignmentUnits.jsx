@@ -1,43 +1,80 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import api from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import AssignmentUnitModal from "../Modals/AssignmentUnitModal";
+
+// ── Module-level cache ─────────────────────────────────────────────────────
+// Keyed by showInactive (true/false) since the API URL differs.
+// Survives navigation away and back; cleared when a real refresh is triggered.
+let _sauCache = {}; // { [showInactive]: unitList }
+let _sauCacheRefreshKey = undefined; // the wsRefreshKey value that produced this cache
+
+// ── Component ──────────────────────────────────────────────────────────────
 
 const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
   const { user } = useAuth();
   const canManage = user?.role === "admin";
   const canView = canManage;
-  const [units, setUnits] = useState([]);
-  const [loading, setLoading] = useState(true);
+
+  // Initialise state from cache immediately so returning to this screen is instant.
+  const [units, setUnits] = useState(_sauCache[false] ?? []);
+  // Only show the full spinner on the very first load (no cache for current key).
+  const [loading, setLoading] = useState(_sauCache[false] === undefined);
+  const [bgRefreshing, setBgRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("add");
   const [selectedUnit, setSelectedUnit] = useState(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const fetchUnits = useCallback(async ({ silent = false } = {}) => {
+    if (silent) {
+      setBgRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError("");
     const path = showInactive
       ? "/api/v1/special-assignment-units/?active_only=false"
       : "/api/v1/special-assignment-units/";
-    api
-      .get(path)
-      .then((res) => {
-        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
-        setUnits(list);
-        setLoading(false);
-      })
-      .catch((e) => {
+    try {
+      const res = await api.get(path);
+      if (!mountedRef.current) return;
+      const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      _sauCache[showInactive] = list;
+      _sauCacheRefreshKey = wsRefreshKey;
+      setUnits(list);
+    } catch (e) {
+      if (!mountedRef.current) return;
+      // On background refresh keep showing stale data; only surface error on hard load.
+      if (!silent) {
         setError(e?.message || "Failed to load units");
         setUnits([]);
-        setLoading(false);
-      });
-  }, [showInactive]);
+      }
+    } finally {
+      if (!mountedRef.current) return;
+      setLoading(false);
+      setBgRefreshing(false);
+    }
+  }, [showInactive, wsRefreshKey]);
 
   useEffect(() => {
-    load();
-  }, [load, wsRefreshKey]);
+    if (_sauCache[showInactive] === undefined) {
+      // No cache for this key — show spinner.
+      fetchUnits({ silent: false });
+    } else {
+      // Cache exists (including WS-triggered refresh) — stay silent, update key.
+      _sauCacheRefreshKey = wsRefreshKey;
+      fetchUnits({ silent: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsRefreshKey, showInactive]);
 
   const openAdd = () => {
     setSelectedUnit(null);
@@ -67,7 +104,8 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
     }
     try {
       await api.delete(`/api/v1/special-assignment-units/${unit.unit_id}`);
-      load();
+      delete _sauCache[showInactive];
+      fetchUnits({ silent: false });
     } catch (err) {
       window.alert(err?.message || "Failed to delete unit.");
     }
@@ -81,7 +119,14 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
       <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
           <div>
-            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Assignment Units</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <h2 style={{ margin: 0, fontSize: 22 }}>Assignment Units</h2>
+              {bgRefreshing && (
+                <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>
+                  refreshing…
+                </span>
+              )}
+            </div>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
               Units used when routing cases (auto-created from incident types), case updates, and deployment decisions.
             </p>
@@ -134,7 +179,7 @@ const SpecialAssignmentUnits = ({ wsRefreshKey }) => {
         onClose={closeModal}
         mode={modalMode}
         unit={selectedUnit}
-        onSaved={load}
+        onSaved={() => { delete _sauCache[showInactive]; fetchUnits({ silent: false }); }}
       />
 
       <div className="card">

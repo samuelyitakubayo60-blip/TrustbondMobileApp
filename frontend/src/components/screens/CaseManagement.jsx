@@ -44,9 +44,19 @@ const RANGE_OPTIONS = [
   { label: 'All time',      days: null },
 ];
 
+// ── Module-level cache ─────────────────────────────────────────────────────
+// Survives navigation away and back; cleared when a real refresh is triggered.
+let _caseCache = null; // { reports }
+let _caseCacheRefreshKey = undefined; // the wsRefreshKey value that produced this cache
+
+// ── Component ──────────────────────────────────────────────────────────────
+
 const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
-  const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Initialise state from cache immediately so returning to this screen is instant.
+  const [reports, setReports] = useState(_caseCache?.reports ?? []);
+  // Only show the full spinner on the very first load (no cache yet).
+  const [loading, setLoading] = useState(_caseCache === null);
+  const [bgRefreshing, setBgRefreshing] = useState(false);
   const [error, setError]     = useState('');
   const [range, setRange]     = useState(null); // default: all time
 
@@ -55,27 +65,51 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
   const pieChart  = useRef(null);
   const lineChart = useRef(null);
 
-  /* ── Load data ── */
-  const load = useCallback(() => {
-    setLoading(true);
-    setError('');
-    api.get('/api/v1/reports/?limit=500')
-      .then((res) => {
-        let arr = [];
-        if (Array.isArray(res))  arr = res;
-        else if (res?.items)     arr = res.items;
-        else if (res?.reports)   arr = res.reports;
-        else if (res?.data)      arr = res.data;
-        setReports(arr);
-        setLoading(false);
-      })
-      .catch((e) => {
-        setError(e?.message || 'Failed to load reports.');
-        setLoading(false);
-      });
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
   }, []);
 
-  useEffect(() => { load(); }, [load, wsRefreshKey]);
+  /* ── Load data ── */
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (silent) {
+      setBgRefreshing(true);
+    } else {
+      setLoading(true);
+      setError('');
+    }
+    try {
+      const res = await api.get('/api/v1/reports/?limit=500');
+      if (!mountedRef.current) return;
+      let arr = [];
+      if (Array.isArray(res))  arr = res;
+      else if (res?.items)     arr = res.items;
+      else if (res?.reports)   arr = res.reports;
+      else if (res?.data)      arr = res.data;
+      _caseCache = { reports: arr };
+      _caseCacheRefreshKey = wsRefreshKey;
+      setReports(arr);
+    } catch (e) {
+      if (!mountedRef.current) return;
+      // On background refresh keep showing stale data; only show error on hard load.
+      if (!silent) setError(e?.message || 'Failed to load reports.');
+    } finally {
+      if (!mountedRef.current) return;
+      setLoading(false);
+      setBgRefreshing(false);
+    }
+  }, [wsRefreshKey]);
+
+  useEffect(() => {
+    if (_caseCache === null) {
+      // Truly first load (no cache) — show spinner.
+      load({ silent: false });
+    } else {
+      // Cache exists (including WS-triggered refresh) — stay silent.
+      load({ silent: true });
+    }
+  }, [load, wsRefreshKey]);
 
   /* ── Derived data ── */
   const filteredReports = reports.filter((r) => {
@@ -250,7 +284,12 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
   return (
     <>
       <div className="page-header">
-        <h2>District Security Analysis</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h2>District Security Analysis</h2>
+          {bgRefreshing && (
+            <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>refreshing…</span>
+          )}
+        </div>
         <p>Visual breakdown of incident trends and type distribution across Musanze District.</p>
       </div>
 

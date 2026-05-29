@@ -1,44 +1,56 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import SkeletonTable from '../Common/SkeletonTable';
 import api from '../../api/client';
 
 const PAGE_SIZE = 10;
 
+// ── Module-level cache ─────────────────────────────────────────────────────
+let _sessCache = null; // { sessions }
+
 const ActiveSessions = ({ wsRefreshKey }) => {
-  const [sessions, setSessions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const mountedRef = useRef(true);
+  const [sessions, setSessions] = useState(_sessCache?.sessions ?? []);
+  const [loading, setLoading] = useState(_sessCache === null);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
 
-  const loadSessions = useCallback(() => {
-    let mounted = true;
-    setLoading(true);
-    
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const loadSessions = useCallback(({ silent = false } = {}) => {
+    if (silent) setBackgroundRefreshing(true);
+    else setLoading(true);
+
     const params = new URLSearchParams();
-    params.set("limit", String(100)); // Get more data for client-side pagination
-    
+    params.set("limit", String(100));
+
     api.get(`/api/v1/police-users/sessions?${params.toString()}`)
       .then((res) => {
-        if (!mounted) return;
-        setSessions(res || []);
-        setTotal(res?.length || 0);
+        if (!mountedRef.current) return;
+        const newSessions = res || [];
+        _sessCache = { sessions: newSessions };
+        setSessions(newSessions);
+        setTotal(newSessions.length);
         setLoading(false);
+        setBackgroundRefreshing(false);
       })
       .catch(() => {
-        if (!mounted) return;
+        if (!mountedRef.current) return;
         setLoading(false);
+        setBackgroundRefreshing(false);
       });
-    return () => {
-      mounted = false;
-    };
-  }, []); // No dependencies since we always get all data
+  }, []);
 
   useEffect(() => {
-    loadSessions();
-  }, [loadSessions, wsRefreshKey]);
+    if (_sessCache === null) loadSessions({ silent: false });
+    else loadSessions({ silent: true });
+  }, [wsRefreshKey]);
 
   // Client-side filtering
   const filteredSessions = sessions.filter((s) => {
@@ -66,11 +78,10 @@ const ActiveSessions = ({ wsRefreshKey }) => {
     if (!window.confirm('Are you sure you want to revoke all sessions for this user?')) {
       return;
     }
-    
     try {
       await api.post(`/api/v1/police-users/${userId}/revoke-sessions`);
-      // Refresh the sessions list
-      loadSessions();
+      _sessCache = null;
+      loadSessions({ silent: false });
     } catch (error) {
       console.error('Failed to revoke sessions:', error);
       alert('Failed to revoke sessions');
@@ -86,7 +97,12 @@ const ActiveSessions = ({ wsRefreshKey }) => {
       <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
           <div>
-            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Active Sessions</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <h2 style={{ margin: 0, fontSize: 22 }}>Active Sessions</h2>
+              {backgroundRefreshing && (
+                <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>refreshing…</span>
+              )}
+            </div>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
               Recent login sessions, IP addresses, and user agents for security review.
             </p>

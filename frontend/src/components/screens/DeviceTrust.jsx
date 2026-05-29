@@ -1,6 +1,11 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import SkeletonTable from '../Common/SkeletonTable';
 import api from '../../api/client';
+
+// ── Module-level cache ─────────────────────────────────────────────────────
+// Keyed by trustLevel filter so switching filters re-fetches while restoring
+// the previous selection instantly on return navigation.
+const _devCache = {}; // { [trustLevel]: { devices, deviceTotal, stats } }
 
 // Helper functions for location analysis
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -146,11 +151,13 @@ const resolveLastLocation = (device) => {
 };
 
 const DeviceTrust = ({ wsRefreshKey }) => {
-  const [devices, setDevices] = useState([]);
-  const [deviceTotal, setDeviceTotal] = useState(0);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const mountedRef = useRef(true);
   const [trustLevel, setTrustLevel] = useState('all'); // all | high | medium | low
+  const [devices, setDevices] = useState(_devCache['all']?.devices ?? []);
+  const [deviceTotal, setDeviceTotal] = useState(_devCache['all']?.deviceTotal ?? 0);
+  const [stats, setStats] = useState(_devCache['all']?.stats ?? null);
+  const [loading, setLoading] = useState(!_devCache['all']);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState('device_trust_score');
   const [sortDir, setSortDir] = useState('desc'); // asc | desc
@@ -166,9 +173,26 @@ const DeviceTrust = ({ wsRefreshKey }) => {
     details: '',
   });
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   // Load devices from backend, filtered by trust level
   useEffect(() => {
-    let mounted = true;
+    const cached = _devCache[trustLevel];
+    const silent = !!cached;
+
+    // Restore from cache immediately; show spinner only on first load of this filter.
+    if (cached) {
+      setDevices(cached.devices);
+      setDeviceTotal(cached.deviceTotal);
+      setStats(cached.stats);
+      setBackgroundRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
     const params = new URLSearchParams({ limit: '50', offset: '0' });
     params.set('include_banned', 'true');
     if (trustLevel !== 'all') {
@@ -177,20 +201,22 @@ const DeviceTrust = ({ wsRefreshKey }) => {
     api
       .get(`/api/v1/devices/?${params.toString()}`)
       .then((res) => {
-        if (!mounted) return;
-        setDevices(res.items || []);
-        setDeviceTotal(
-          typeof res.total === 'number' ? res.total : (res.items || []).length,
-        );
-        setStats(res.stats || null);
+        if (!mountedRef.current) return;
+        const newDevices = res.items || [];
+        const newTotal = typeof res.total === 'number' ? res.total : newDevices.length;
+        const newStats = res.stats || null;
+        _devCache[trustLevel] = { devices: newDevices, deviceTotal: newTotal, stats: newStats };
+        setDevices(newDevices);
+        setDeviceTotal(newTotal);
+        setStats(newStats);
         setLoading(false);
+        setBackgroundRefreshing(false);
       })
       .catch(() => {
-        if (mounted) setLoading(false);
+        if (!mountedRef.current) return;
+        setLoading(false);
+        setBackgroundRefreshing(false);
       });
-    return () => {
-      mounted = false;
-    };
   }, [trustLevel, wsRefreshKey]);
 
   // Load sectors for dropdown (locations with type=sector)
@@ -823,7 +849,12 @@ const DeviceTrust = ({ wsRefreshKey }) => {
       <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
           <div>
-            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Device Trust Management</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <h2 style={{ margin: 0, fontSize: 22 }}>Device Trust Management</h2>
+              {backgroundRefreshing && (
+                <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>refreshing…</span>
+              )}
+            </div>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
               Pseudonymous device profiles — track reporting patterns, trust scores, and spam behavior without exposing user identity.
             </p>

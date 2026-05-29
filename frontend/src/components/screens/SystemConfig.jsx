@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import api, { cacheBust } from '../../api/client';
 
 // Group config keys by prefix for visual sections
@@ -24,54 +24,113 @@ const groupItems = (items) => {
   return groups;
 };
 
+// ── Module-level cache ─────────────────────────────────────────────────────
+// Stores raw items only. Drafts are always derived locally and are NOT cached.
+let _scCache = null; // { items }
+let _scCacheRefreshKey = undefined; // wsRefreshKey value that produced this cache
+
+// Helper: derive initial draft + savedKeys maps from a list of items.
+const deriveDrafts = (rows) => {
+  const nextDrafts = {};
+  const nextSaved  = {};
+  rows.forEach((row) => {
+    const val = JSON.stringify(row.config_value ?? {}, null, 2);
+    nextDrafts[row.config_key] = val;
+    nextSaved[row.config_key]  = val;
+  });
+  return { nextDrafts, nextSaved };
+};
+
+// ── Component ──────────────────────────────────────────────────────────────
+
 const SystemConfig = ({ wsRefreshKey }) => {
-  const [items, setItems]                   = useState([]);
-  const [loading, setLoading]               = useState(true);
+  // Initialise items from cache immediately if available.
+  const cachedItems = _scCache?.items ?? [];
+  const { nextDrafts: initDrafts, nextSaved: initSaved } = deriveDrafts(cachedItems);
+
+  const [items, setItems]                   = useState(cachedItems);
+  const [loading, setLoading]               = useState(_scCache === null);
+  const [bgRefreshing, setBgRefreshing]     = useState(false);
   const [error, setError]                   = useState('');
   const [savingKey, setSavingKey]           = useState(null);
-  const [drafts, setDrafts]                 = useState({});
-  const [savedKeys, setSavedKeys]           = useState({}); // original saved values for dirty check
+  const [drafts, setDrafts]                 = useState(initDrafts);
+  const [savedKeys, setSavedKeys]           = useState(initSaved);
   const [effectiveFormula, setEffectiveFormula] = useState(null);
   const [saveSuccess, setSaveSuccess]       = useState('');
   const [recomputingHotspots, setRecomputingHotspots] = useState(false);
   const [recomputeHours, setRecomputeHours] = useState(168);
   const [recomputeMessage, setRecomputeMessage] = useState('');
 
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const loadEffectiveFormula = async () => {
     try {
       const res = await api.get('/api/v1/system-config/effective/trust-score-formula');
-      setEffectiveFormula(res || null);
+      if (mountedRef.current) setEffectiveFormula(res || null);
     } catch {
-      setEffectiveFormula(null);
+      if (mountedRef.current) setEffectiveFormula(null);
     }
   };
 
-  useEffect(() => {
+  const fetchConfig = ({ silent = false } = {}) => {
+    if (silent) {
+      setBgRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     let cancelled = false;
-    setLoading(true);
     api.get('/api/v1/system-config/')
       .then((res) => {
-        if (cancelled) return;
+        if (cancelled || !mountedRef.current) return;
         const rows = res?.items || [];
+        // Update cache.
+        _scCache = { items: rows };
+        _scCacheRefreshKey = wsRefreshKey;
         setItems(rows);
-        const nextDrafts = {};
-        const nextSaved  = {};
-        rows.forEach((row) => {
-          const val = JSON.stringify(row.config_value ?? {}, null, 2);
-          nextDrafts[row.config_key] = val;
-          nextSaved[row.config_key]  = val;
-        });
-        setDrafts(nextDrafts);
-        setSavedKeys(nextSaved);
+        if (!silent) {
+          // On a hard load always replace drafts (no user edits in progress yet).
+          const { nextDrafts, nextSaved } = deriveDrafts(rows);
+          setDrafts(nextDrafts);
+          setSavedKeys(nextSaved);
+        } else {
+          // Background refresh: only update items/drafts when no key is being edited.
+          setSavingKey((currentSavingKey) => {
+            if (currentSavingKey === null) {
+              const { nextDrafts, nextSaved } = deriveDrafts(rows);
+              setDrafts(nextDrafts);
+              setSavedKeys(nextSaved);
+            }
+            return currentSavingKey;
+          });
+        }
         loadEffectiveFormula();
         setLoading(false);
+        setBgRefreshing(false);
       })
       .catch((e) => {
-        if (cancelled) return;
-        setError(e?.message || 'Failed to load system configuration.');
+        if (cancelled || !mountedRef.current) return;
+        if (!silent) setError(e?.message || 'Failed to load system configuration.');
         setLoading(false);
+        setBgRefreshing(false);
       });
     return () => { cancelled = true; };
+  };
+
+  // On mount and wsRefreshKey change.
+  useEffect(() => {
+    if (_scCache === null) {
+      // Truly first load (no cache) — show spinner.
+      fetchConfig({ silent: false });
+    } else {
+      // Cache exists (including WS-triggered refresh) — background refresh only
+      // when no key is being edited (savingKey guard is inside fetchConfig).
+      fetchConfig({ silent: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsRefreshKey]);
 
   const handleChangeDraft = (key) => (e) => {
@@ -97,8 +156,13 @@ const SystemConfig = ({ wsRefreshKey }) => {
         config_value: parsed,
         description:  row.description,
       });
-      setItems((prev) => prev.map((r) => (r.config_key === key ? updated : r)));
       const newVal = JSON.stringify(updated.config_value ?? {}, null, 2);
+      // Update items in state and patch cache with the new item.
+      setItems((prev) => {
+        const newItems = prev.map((r) => (r.config_key === key ? updated : r));
+        _scCache = { items: newItems };
+        return newItems;
+      });
       setDrafts((prev)    => ({ ...prev, [key]: newVal }));
       setSavedKeys((prev) => ({ ...prev, [key]: newVal }));
       setSaveSuccess(`"${key}" saved.`);
@@ -144,7 +208,14 @@ const SystemConfig = ({ wsRefreshKey }) => {
   return (
     <>
       <div className="page-header">
-        <h2>System Configuration</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h2>System Configuration</h2>
+          {bgRefreshing && (
+            <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>
+              refreshing…
+            </span>
+          )}
+        </div>
         <p>Admin settings for risk scoring, alert thresholds, and system performance.</p>
       </div>
 

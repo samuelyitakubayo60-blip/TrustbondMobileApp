@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import SkeletonTable from '../Common/SkeletonTable';
 import {
   Circle,
@@ -66,9 +66,18 @@ const riskColor = (riskLevel) => {
   return "#34d399";
 };
 
+// ── Module-level cache ─────────────────────────────────────────────────────
+// Keyed by { riskFilter, time_window_hours } so different filter combos are
+// each cached independently. Cleared entirely when the user recomputes.
+let _hotCache = {}; // { [cacheKey]: hotspots[] }
+let _hotCacheKey = null; // the key that was last successfully loaded
+
+// ── Component ──────────────────────────────────────────────────────────────
+
 const Hotspots = ({ wsRefreshKey }) => {
   const [hotspots, setHotspots] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [bgRefreshing, setBgRefreshing] = useState(false);
   const [riskFilter, setRiskFilter] = useState("all");
   const [params, setParams] = useState({
     time_window_hours: 24,
@@ -78,15 +87,32 @@ const Hotspots = ({ wsRefreshKey }) => {
   });
   const [recomputing, setRecomputing] = useState(false);
 
-  const loadHotspots = (activeParams = params) => {
-    setLoading(true);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  // Build the cache key from the filter state that actually affects the query.
+  const buildCacheKey = (currentRiskFilter, currentParams) =>
+    JSON.stringify({ riskFilter: currentRiskFilter, time_window_hours: currentParams.time_window_hours });
+
+  const loadHotspots = (activeParams = params, activeRiskFilter = riskFilter, { silent = false } = {}) => {
+    const currentKey = buildCacheKey(activeRiskFilter, activeParams);
+
+    if (silent) {
+      setBgRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
     const query = new URLSearchParams();
-    if (riskFilter !== "all") {
+    if (activeRiskFilter !== "all") {
       query.set(
         "risk_level",
-        riskFilter === "critical"
+        activeRiskFilter === "critical"
           ? "high"
-          : riskFilter === "warning"
+          : activeRiskFilter === "warning"
             ? "medium"
             : "low",
       );
@@ -98,18 +124,40 @@ const Hotspots = ({ wsRefreshKey }) => {
     api
       .get(path)
       .then((res) => {
-        setHotspots(res || []);
+        if (!mountedRef.current) return;
+        const newHotspots = res || [];
+        _hotCache[currentKey] = newHotspots;
+        _hotCacheKey = currentKey;
+        setHotspots(newHotspots);
         setLoading(false);
+        setBgRefreshing(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        if (!mountedRef.current) return;
+        setLoading(false);
+        setBgRefreshing(false);
+      });
   };
 
   const handleDetailsClick = (hotspotId) => {
     window.location.href = `/hotspots/${hotspotId}`;
   };
 
+  // On filter change or wsRefreshKey change: check cache validity.
   useEffect(() => {
-    loadHotspots();
+    const currentKey = buildCacheKey(riskFilter, params);
+    if (_hotCache[currentKey] !== undefined) {
+      // Cache hit for this exact filter combo — show instantly and refresh quietly.
+      setHotspots(_hotCache[currentKey]);
+      setLoading(false);
+      loadHotspots(params, riskFilter, { silent: true });
+    } else {
+      // No cache for this combo — bust the whole cache so WS refresh fetches fresh,
+      // then hard load (map stays visible via existing hotspots state until response).
+      _hotCache = {};
+      _hotCacheKey = null;
+      loadHotspots(params, riskFilter, { silent: hotspots.length > 0 });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [riskFilter, wsRefreshKey]);
 
@@ -175,7 +223,15 @@ const Hotspots = ({ wsRefreshKey }) => {
           ...res,
         };
         setParams(nextParams);
-        loadHotspots(nextParams);
+        // Trigger a load with the new params; reuse cache if key matches.
+        const currentKey = buildCacheKey(riskFilter, nextParams);
+        if (_hotCacheKey === currentKey && _hotCache[currentKey] !== undefined) {
+          setHotspots(_hotCache[currentKey]);
+          setLoading(false);
+          loadHotspots(nextParams, riskFilter, { silent: true });
+        } else {
+          loadHotspots(nextParams, riskFilter, { silent: false });
+        }
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -194,7 +250,14 @@ const Hotspots = ({ wsRefreshKey }) => {
   return (
     <>
       <div className="page-header">
-        <h2>Crime Hotspots</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <h2>Crime Hotspots</h2>
+          {bgRefreshing && (
+            <span style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>
+              refreshing…
+            </span>
+          )}
+        </div>
         <p>Auto-detected incident clusters from verified reports.</p>
       </div>
 
@@ -604,7 +667,14 @@ const Hotspots = ({ wsRefreshKey }) => {
                     time_window_hours: Number(e.target.value),
                   };
                   setParams(nextParams);
-                  loadHotspots(nextParams);
+                  // Check cache for this new filter combo before fetching.
+                  const nextKey = buildCacheKey(riskFilter, nextParams);
+                  if (_hotCacheKey === nextKey && _hotCache[nextKey] !== undefined) {
+                    setHotspots(_hotCache[nextKey]);
+                    loadHotspots(nextParams, riskFilter, { silent: true });
+                  } else {
+                    loadHotspots(nextParams, riskFilter, { silent: false });
+                  }
                 }}
               >
                 {HOTSPOT_PERIOD_OPTIONS.map((option) => (
@@ -648,7 +718,10 @@ const Hotspots = ({ wsRefreshKey }) => {
                 setRecomputing(true);
                 try {
                   await api.post("/api/v1/hotspots/recompute", params);
-                  loadHotspots(params);
+                  // Bust the entire cache — recompute changes underlying data.
+                  _hotCache = {};
+                  _hotCacheKey = null;
+                  loadHotspots(params, riskFilter, { silent: false });
                 } catch {
                   // ignore
                 } finally {

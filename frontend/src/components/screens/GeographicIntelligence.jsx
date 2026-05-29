@@ -1,12 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import api from '../../api/client';
 import { useRealtime } from '../../context/WebSocketContext';
 import { Chart } from 'chart.js/auto';
 import 'chartjs-adapter-date-fns';
 
+// ── Module-level cache ─────────────────────────────────────────────────────
+// Keyed by filter combo so switching filters still fetches fresh data while
+// returning to the same filter combo is instant.
+const _geoCache = {}; // { [key]: { data, chartData } }
+
 const GeographicIntelligence = ({ wsRefreshKey }) => {
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState(null);
+  const mountedRef = useRef(true);
+  const _cacheKey = () => `all_720`; // default key; updated dynamically in loadData
+  const [loading, setLoading] = useState(!_geoCache['all_720_all_all']);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
+  const [data, setData] = useState(_geoCache['all_720_all_all']?.data ?? null);
   const [timeWindow, setTimeWindow] = useState(720);
   const [selectedSector, setSelectedSector] = useState('all');
   const [selectedCell, setSelectedCell] = useState('all');
@@ -35,10 +43,23 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
     timeSeriesData: []
   });
 
-  // Real-time WebSocket effect - replaces polling
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  // Single unified effect: runs on WS events AND filter changes
   useEffect(() => {
     if (autoRefresh) {
-      loadData();
+      const key = `${selectedSector}_${timeWindow}_${selectedCell}_${selectedVillage}`;
+      const cached = _geoCache[key];
+      if (cached) {
+        setData(cached.data);
+        setChartData(cached.chartData);
+        loadData({ silent: true });
+      } else {
+        loadData({ silent: false });
+      }
       setLastUpdate(new Date());
     }
   }, [wsRefreshKey, autoRefresh, timeWindow, selectedSector, selectedCell, selectedVillage]);
@@ -59,13 +80,10 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
       });
   }, []);
 
-  // Load data based on filters
-  useEffect(() => {
-    loadData();
-  }, [timeWindow, selectedSector, selectedCell, selectedVillage]);
-
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async ({ silent = false } = {}) => {
+    const cacheKey = `${selectedSector}_${timeWindow}_${selectedCell}_${selectedVillage}`;
+    if (silent) setBackgroundRefreshing(true);
+    else setLoading(true);
     try {
       const params = new URLSearchParams({
         time_window_hours: timeWindow,
@@ -239,25 +257,21 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
         };
       }
       
+      if (!mountedRef.current) return;
+      _geoCache[cacheKey] = { data: resultData, chartData: chartSpecificData };
       setData(resultData);
       setChartData(chartSpecificData);
     } catch (error) {
+      if (!mountedRef.current) return;
       console.error('Error loading geographic intelligence data:', error);
-      // Set empty data when API fails
-      setData({
-        sectors: [],
-        cells: [],
-        villages: [],
-        allLocations: [],
-        behaviorAnalysis: []
-      });
-      setChartData({
-        timeSeriesData: [],
-        incidentTypes: {},
-        reportStatuses: {}
-      });
+      if (!silent) {
+        setData({ sectors: [], cells: [], villages: [], allLocations: [], behaviorAnalysis: [] });
+        setChartData({ timeSeriesData: [], incidentTypes: {}, reportStatuses: {} });
+      }
     } finally {
+      if (!mountedRef.current) return;
       setLoading(false);
+      setBackgroundRefreshing(false);
     }
   };
 
@@ -664,6 +678,9 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
 
   return (
     <div className="p-6">
+      {backgroundRefreshing && (
+        <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 8 }}>refreshing…</div>
+      )}
       {/* Content */}
       <div className="bg-white rounded-lg shadow p-6">
         {loading ? (

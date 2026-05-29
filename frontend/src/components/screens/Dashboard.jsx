@@ -1,17 +1,27 @@
-﻿import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 import api from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { formatRelativeTime } from "../../utils/dateTime";
 import AdvancedGeographicCharts from "../charts/AdvancedGeographicCharts";
 import ReportTrustScore from "../ReportTrustScore";
 
+// ── Module-level cache ─────────────────────────────────────────────────────
+let _dashCache = null; // { stats, sectorData: { [role_timeWindow]: data } }
+
 const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
   const { user } = useAuth();
   const role = user?.role || "officer";
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const mountedRef = useRef(true);
+  const [stats, setStats] = useState(_dashCache?.stats ?? null);
+  const [loading, setLoading] = useState(_dashCache === null);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [sectorData, setSectorData] = useState(null);
   const [selectedTimeWindow, setSelectedTimeWindow] = useState(24);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   // Simplify technical system status names
   const simplifySystemStatusName = (name) => {
@@ -65,9 +75,12 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
 
   // Load sector performance data with time window
   const loadSectorData = (timeWindow) => {
+    const cacheKey = `${role}_${timeWindow}`;
+    // Restore from cache immediately if available
+    const cached = _dashCache?.sectorData?.[cacheKey];
+    if (cached) setSectorData(cached);
+
     let endpoint;
-    
-    // Role-based endpoint selection
     switch(role) {
       case "admin":
         endpoint = `/api/v1/geographic-intelligence/sector-performance?time_window_hours=${timeWindow}`;
@@ -83,42 +96,39 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
     api
       .get(endpoint)
       .then((d) => {
-        console.log(`${role} performance data loaded:`, d);
-        console.log(`${role} performance_data:`, d.performance_data);
-        console.log(`${role} performance_data[0]:`, d.performance_data?.[0]);
-        console.log(`${role} total_reports:`, d.total_reports ?? d.total_sectors ?? 0);
+        if (!mountedRef.current) return;
+        if (!_dashCache) _dashCache = { stats: null, sectorData: {} };
+        _dashCache.sectorData[cacheKey] = d;
         setSectorData(d);
       })
       .catch((err) => {
+        if (!mountedRef.current) return;
         console.warn(`${role} performance data unavailable:`, err);
-        setSectorData({ performance_data: [], load_error: true });
+        if (!cached) setSectorData({ performance_data: [], load_error: true });
       });
   };
 
   useEffect(() => {
-    let mounted = true;
-    
-    // Load dashboard stats
+    const silent = _dashCache !== null;
+    if (silent) setBackgroundRefreshing(true);
+
     api
       .get("/api/v1/stats/dashboard")
       .then((d) => {
-        if (mounted) {
-          setStats(d);
-          setLoading(false);
-        }
+        if (!mountedRef.current) return;
+        if (!_dashCache) _dashCache = { stats: null, sectorData: {} };
+        _dashCache.stats = d;
+        setStats(d);
+        setLoading(false);
+        setBackgroundRefreshing(false);
       })
       .catch(() => {
-        if (mounted) setLoading(false);
+        if (!mountedRef.current) return;
+        setLoading(false);
+        setBackgroundRefreshing(false);
       });
 
-    // Load initial sector performance data
-    if (mounted) {
-      loadSectorData(selectedTimeWindow);
-    }
-
-    return () => {
-      mounted = false;
-    };
+    loadSectorData(selectedTimeWindow);
   }, [user, wsRefreshKey]);
 
   // Reload sector data when time window changes
@@ -273,13 +283,19 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
 
   if (loading) return <div className="loading-state">Loading dashboard...</div>;
 
+
   return (
     <div className="dashboard-police">
       {/* ── Welcome header ── */}
       <div className="card" style={{ marginBottom: 16, padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <div className="page-title" style={{ marginBottom: 2 }}>
-            Welcome back, {user ? `${user.first_name} ${user.last_name}` : "Officer"}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 2 }}>
+            <div className="page-title" style={{ margin: 0 }}>
+              Welcome back, {user ? `${user.first_name} ${user.last_name}` : "Officer"}
+            </div>
+            {backgroundRefreshing && (
+              <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>refreshing…</span>
+            )}
           </div>
           <div className="page-sub">
             {role === "officer"

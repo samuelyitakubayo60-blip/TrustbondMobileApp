@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import api, { cacheBust } from '../../api/client';
 import { formatRelativeTime } from '../../utils/dateTime';
 import { isHotspotNotification, notificationCategory } from '../../utils/notificationHelpers';
 
 const LIST_LIMIT = 50;
+
+// ── Module-level cache ─────────────────────────────────────────────────────
+let _notifCache = null; // { items, summary }
 
 const friendlyFlagReason = (text) => {
   if (!text) return '';
@@ -25,8 +28,9 @@ const friendlyFlagReason = (text) => {
 };
 
 const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
-  const [items, setItems] = useState([]);
-  const [summary, setSummary] = useState({
+  const mountedRef = useRef(true);
+  const [items, setItems] = useState(_notifCache?.items ?? []);
+  const [summary, setSummary] = useState(_notifCache?.summary ?? {
     unread_count: 0,
     total_count: 0,
     reports: 0,
@@ -34,36 +38,50 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
     assignments: 0,
     system: 0,
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(_notifCache === null);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [filterType, setFilterType] = useState('all');
   const [searchText, setSearchText] = useState('');
 
-  const loadNotifications = async () => {
-    setLoading(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const loadNotifications = async ({ silent = false } = {}) => {
+    if (silent) setBackgroundRefreshing(true);
+    else setLoading(true);
     cacheBust('/api/v1/notifications');
     try {
       const [list, sum] = await Promise.all([
         api.get(`/api/v1/notifications/?limit=${LIST_LIMIT}`),
         api.get('/api/v1/notifications/summary'),
       ]);
-      setItems(Array.isArray(list) ? list : []);
-      setSummary({
+      if (!mountedRef.current) return;
+      const newSummary = {
         unread_count: sum?.unread_count ?? 0,
         total_count: sum?.total_count ?? 0,
         reports: sum?.reports ?? 0,
         hotspots: sum?.hotspots ?? 0,
         assignments: sum?.assignments ?? 0,
         system: sum?.system ?? 0,
-      });
+      };
+      _notifCache = { items: Array.isArray(list) ? list : [], summary: newSummary };
+      setItems(_notifCache.items);
+      setSummary(newSummary);
     } catch {
-      setItems([]);
+      if (!mountedRef.current) return;
+      if (!silent) setItems([]);
     } finally {
+      if (!mountedRef.current) return;
       setLoading(false);
+      setBackgroundRefreshing(false);
     }
   };
 
   useEffect(() => {
-    loadNotifications();
+    if (_notifCache === null) loadNotifications({ silent: false });
+    else loadNotifications({ silent: true });
   }, [wsRefreshKey]);
 
   const filtered = items.filter((n) => {
@@ -87,7 +105,8 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
   const markAllRead = async () => {
     try {
       await api.post('/api/v1/notifications/mark-all-read');
-      await loadNotifications();
+      _notifCache = null;
+      await loadNotifications({ silent: false });
     } catch {
       // ignore
     }
@@ -181,7 +200,12 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
       <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
           <div>
-            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Notifications</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <h2 style={{ margin: 0, fontSize: 22 }}>Notifications</h2>
+              {backgroundRefreshing && (
+                <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>refreshing…</span>
+              )}
+            </div>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
               System alerts, hotspot escalations, and high-priority report notifications.
             </p>

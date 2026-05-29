@@ -342,12 +342,17 @@ const ZoomTracker = ({ onZoom }) => {
   return null;
 };
 
+// ── Module-level cache ─────────────────────────────────────────────────────
+const _mapHotCache = {}; // { [timePeriod_customHours]: hotspots[] }
+
 const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
-  const [loading, setLoading] = useState(true);
+  const _defaultKey = `${DEFAULT_TIME_PERIOD}_`;
+  const [loading, setLoading] = useState(!_mapHotCache[`${DEFAULT_TIME_PERIOD}_`]);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [typeFilter, setTypeFilter] = useState("all"); // 'all' | incident_type_name
   const [timePeriod, setTimePeriod] = useState(DEFAULT_TIME_PERIOD); // '', 'day', 'week', 'month', 'quarter', 'year' — default 30 days
   const [customHours, setCustomHours] = useState(""); // Custom hours input
-  const [historicalHotspots, setHistoricalHotspots] = useState([]);
+  const [historicalHotspots, setHistoricalHotspots] = useState(_mapHotCache[`${DEFAULT_TIME_PERIOD}_`] ?? []);
   /** True when last /hotspots fetch included time_period or hours_back (backend already filtered). */
   const [apiTimeFilterActive, setApiTimeFilterActive] = useState(false);
   const [hotspotStats, setHotspotStats] = useState({
@@ -405,8 +410,14 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
 
   const singlesDefaultApplied = useRef(false);
 
-  const loadHistoricalHotspots = () => {
-    setLoading(true);
+  const loadHistoricalHotspots = ({ silent = false } = {}) => {
+    const cacheKey = `${timePeriod}_${customHours}`;
+    const cached = _mapHotCache[cacheKey];
+    if (silent || cached) {
+      setBackgroundRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setLoadError(null);
     cacheBust("/api/v1/hotspots");
     const params = new URLSearchParams();
@@ -424,25 +435,33 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
       .get(`/api/v1/hotspots/?${params.toString()}`)
       .then((res) => {
         const raw = res || [];
-        // Deduplicate by hotspot_id so the table and map always agree
         const seen = new Set();
         const rows = raw.filter((h) => {
           if (seen.has(h.hotspot_id)) return false;
           seen.add(h.hotspot_id);
           return true;
         });
+        _mapHotCache[cacheKey] = rows;
         setApiTimeFilterActive(hasApiTimeFilter);
         setHistoricalHotspots(rows);
         setLoading(false);
+        setBackgroundRefreshing(false);
       })
       .catch((err) => {
         setLoadError(err?.message || "Failed to load hotspots");
         setLoading(false);
+        setBackgroundRefreshing(false);
       });
   };
 
   useEffect(() => {
-    loadHistoricalHotspots();
+    const cacheKey = `${timePeriod}_${customHours}`;
+    if (_mapHotCache[cacheKey]) {
+      setHistoricalHotspots(_mapHotCache[cacheKey]);
+      loadHistoricalHotspots({ silent: true });
+    } else {
+      loadHistoricalHotspots({ silent: false });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsRefreshKey]);
 
@@ -694,7 +713,12 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
       <div className="card" style={{ marginBottom: 16, padding: '16px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
           <div>
-            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Community Safety Map</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <h2 style={{ margin: 0, fontSize: 22 }}>Community Safety Map</h2>
+              {backgroundRefreshing && (
+                <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>refreshing…</span>
+              )}
+            </div>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
               Musanze District hotspot clusters — polygons show cluster boundaries, colored dots show individual incidents.
             </p>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../../api/client";
 
 const ROLE_LABEL = {
@@ -6,12 +6,23 @@ const ROLE_LABEL = {
   executive_of_cell: "Cell executive",
 };
 
+// ── Module-level cache ─────────────────────────────────────────────────────
+// Survives navigation away and back; cleared when a real refresh is triggered.
+let _cache = null; // { leaders, coverageGaps, stats }
+let _cacheRefreshKey = undefined; // the refreshKey value that produced this cache
+
+// ── Component ──────────────────────────────────────────────────────────────
+
 const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader }) => {
   const PAGE_SIZE = 20;
-  const [leaders, setLeaders] = useState([]);
-  const [coverageGaps, setCoverageGaps] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+
+  // Initialise state from cache immediately so returning to this screen is instant.
+  const [leaders, setLeaders] = useState(_cache?.leaders ?? []);
+  const [coverageGaps, setCoverageGaps] = useState(_cache?.coverageGaps ?? []);
+  const [stats, setStats] = useState(_cache?.stats ?? null);
+  // Only show the full spinner on the very first load (no cache yet).
+  const [loading, setLoading] = useState(_cache === null);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [searchText, setSearchText] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -19,28 +30,60 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [sendingNotifyId, setSendingNotifyId] = useState(null);
 
-  const loadLeaders = useCallback(async () => {
-    setLoading(true);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const fetchAll = useCallback(async ({ silent = false } = {}) => {
+    if (silent) {
+      setBackgroundRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const [res, gapsRes, statsRes] = await Promise.all([
         api.get("/api/v1/local-leaders/"),
         api.get("/api/v1/local-leaders/coverage-gaps?limit=1000"),
         api.get("/api/v1/local-leaders/stats"),
       ]);
-      setLeaders(res || []);
-      setCoverageGaps(gapsRes?.items || []);
-      setStats(statsRes || null);
+      if (!mountedRef.current) return;
+      const newLeaders = res || [];
+      const newGaps = gapsRes?.items || [];
+      const newStats = statsRes || null;
+      _cache = { leaders: newLeaders, coverageGaps: newGaps, stats: newStats };
+      _cacheRefreshKey = refreshKey;
+      setLeaders(newLeaders);
+      setCoverageGaps(newGaps);
+      setStats(newStats);
       setError("");
     } catch (e) {
-      setError(e?.message || "Failed to load local leaders.");
+      if (!mountedRef.current) return;
+      // On background refresh keep showing stale data; only show error on hard load.
+      if (!silent) setError(e?.message || "Failed to load local leaders.");
     } finally {
+      if (!mountedRef.current) return;
       setLoading(false);
+      setBackgroundRefreshing(false);
     }
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
-    loadLeaders();
-  }, [loadLeaders, wsRefreshKey, refreshKey]);
+    if (_cache === null) {
+      // Truly first load (no cache) — show spinner.
+      fetchAll({ silent: false });
+    } else {
+      // Cache exists (including WS-triggered refresh) — stay silent.
+      fetchAll({ silent: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsRefreshKey, refreshKey]);
+
+  const loadLeaders = () => {
+    _cache = null;
+    fetchAll({ silent: false });
+  };
 
   const resendAccountNotification = async (leader) => {
     if (!leader?.email) {
@@ -66,7 +109,7 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
     if (!ok) return;
     try {
       await api.delete(`/api/v1/local-leaders/${leader.local_leader_id}`);
-      await loadLeaders();
+      loadLeaders();
     } catch (e) {
       setError(e?.message || "Failed to delete local leader.");
     }
@@ -93,7 +136,6 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
   const villageGaps = coverageGaps.filter(g => g.location_type === "village");
   const cellGaps    = coverageGaps.filter(g => g.location_type === "cell");
 
-  // Use accurate totals from stats (not limited list lengths)
   const villagesWithoutLeader = stats?.villages_without_leader ?? villageGaps.length;
   const cellsWithoutExecutive = stats?.cells_without_executive ?? cellGaps.length;
 
@@ -103,7 +145,14 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
       <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
           <div>
-            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Local Leaders</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <h2 style={{ margin: 0, fontSize: 22 }}>Local Leaders</h2>
+              {backgroundRefreshing && (
+                <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>
+                  refreshing…
+                </span>
+              )}
+            </div>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
               Register village chiefs and cell executives. They receive an email that their account is ready; they request a setup code in the TrustBond mobile app to choose a password.
             </p>
@@ -113,7 +162,7 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
           </button>
         </div>
 
-        {/* Stats — accurate counts from the database */}
+        {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: coverageGaps.length > 0 ? 16 : 0 }}>
           {[
             { label: 'Village Chiefs',        value: stats?.village_chiefs      ?? '—', cls: 'sb-blue'   },
@@ -128,7 +177,7 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
           ))}
         </div>
 
-        {/* Coverage gaps warning — split by village / cell */}
+        {/* Coverage gaps warning */}
         {(villagesWithoutLeader > 0 || cellsWithoutExecutive > 0) && (
           <div style={{ background: 'var(--c-warning-dim)', border: '1px solid var(--c-warning-ring)', borderRadius: 8, padding: '10px 14px', fontSize: 12 }}>
             <div style={{ fontWeight: 700, color: 'var(--warning)', marginBottom: 4 }}>
@@ -162,8 +211,8 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
                   <ul style={{ margin: 0, paddingLeft: 16, color: 'var(--muted)' }}>
                     {cellGaps.slice(0, 8).map((g) => (
                       <li key={g.location_id}>
-                        <span style={{ color: 'var(--text)' }}>{g.location_name}</span>
-                        {g.parent_name ? ` (${g.parent_name})` : ""}
+                        <span style={{ color: 'var(--text)' }}>{g.parent_name ?? g.location_name}</span>
+                        {g.parent_name ? ` — ${g.location_name}` : ""}
                       </li>
                     ))}
                     {cellsWithoutExecutive > 8 && <li>…and {cellsWithoutExecutive - Math.min(cellGaps.length, 8)} more</li>}
@@ -239,65 +288,63 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
               </tr>
             </thead>
             <tbody>
-              {paginatedLeaders.map((l, idx) => (
-                <tr key={l.local_leader_id}>
-                  <td>{offset + idx + 1}</td>
-                  <td>
-                    <strong>{l.full_name}</strong>
-                  </td>
-                  <td>
-                    <span className="badge b-blue">{ROLE_LABEL[l.role] || l.role}</span>
-                  </td>
-                  <td>{l.email || "—"}</td>
-                  <td>{l.phone_number || "—"}</td>
-                  <td style={{ fontSize: 11, color: "var(--muted)" }}>
-                    {(l.covered_location_names || []).slice(0, 2).join(", ") || "—"}
-                    {(l.covered_location_names || []).length > 2 ? "…" : ""}
-                  </td>
-                  <td>
-                    <span className={`badge ${l.is_active ? "b-green" : "b-red"}`}>
-                      {l.is_active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                      <button type="button" className="btn btn-outline btn-sm" onClick={() => onEditLeader?.(l)}>
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-outline btn-sm"
-                        disabled={!l.email || sendingNotifyId === l.local_leader_id}
-                        onClick={() => resendAccountNotification(l)}
-                        title={l.email ? "Resend account-ready email (no OTP)" : "No email on file"}
-                      >
-                        {sendingNotifyId === l.local_leader_id ? "Sending…" : "Resend welcome email"}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        style={{ background: 'var(--c-danger-dim)', color: 'var(--danger)', border: '1px solid var(--c-danger-ring)', cursor: 'pointer' }}
-                        onClick={() => deleteLeader(l)}
-                      >
-                        Delete
-                      </button>
-                    </div>
+              {loading ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: "center", color: "var(--muted)" }}>
+                    Loading…
                   </td>
                 </tr>
-              ))}
-              {!paginatedLeaders.length && !loading && (
+              ) : paginatedLeaders.length === 0 ? (
                 <tr>
                   <td colSpan={8} style={{ textAlign: "center", color: "var(--muted)" }}>
                     No local leaders found.
                   </td>
                 </tr>
-              )}
-              {loading && (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: "center", color: "var(--muted)" }}>
-                    Loading...
-                  </td>
-                </tr>
+              ) : (
+                paginatedLeaders.map((l, idx) => (
+                  <tr key={l.local_leader_id}>
+                    <td>{offset + idx + 1}</td>
+                    <td><strong>{l.full_name}</strong></td>
+                    <td>
+                      <span className="badge b-blue">{ROLE_LABEL[l.role] || l.role}</span>
+                    </td>
+                    <td>{l.email || "—"}</td>
+                    <td>{l.phone_number || "—"}</td>
+                    <td style={{ fontSize: 11, color: "var(--muted)" }}>
+                      {(l.covered_location_names || []).slice(0, 2).join(", ") || "—"}
+                      {(l.covered_location_names || []).length > 2 ? "…" : ""}
+                    </td>
+                    <td>
+                      <span className={`badge ${l.is_active ? "b-green" : "b-red"}`}>
+                        {l.is_active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                        <button type="button" className="btn btn-outline btn-sm" onClick={() => onEditLeader?.(l)}>
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          disabled={!l.email || sendingNotifyId === l.local_leader_id}
+                          onClick={() => resendAccountNotification(l)}
+                          title={l.email ? "Resend account-ready email (no OTP)" : "No email on file"}
+                        >
+                          {sendingNotifyId === l.local_leader_id ? "Sending…" : "Resend welcome email"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          style={{ background: 'var(--c-danger-dim)', color: 'var(--danger)', border: '1px solid var(--c-danger-ring)', cursor: 'pointer' }}
+                          onClick={() => deleteLeader(l)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
@@ -313,7 +360,7 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
           }}
         >
           <div style={{ fontSize: "12px", color: "var(--muted)" }}>
-            Showing {Math.min(offset + 1, filteredLeaders.length)}-
+            Showing {Math.min(offset + 1, filteredLeaders.length)}–
             {Math.min(offset + pageSize, filteredLeaders.length)} of {filteredLeaders.length} local leaders
           </div>
           <div className="pagination">

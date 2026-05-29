@@ -1,12 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import api from '../../api/client';
 import AdvancedGeographicCharts from '../charts/AdvancedGeographicCharts';
 import AdvancedGeoMap from '../maps/AdvancedGeoMap';
 
-const EnhancedGeographicIntelligence = () => {
+// ── Module-level cache ─────────────────────────────────────────────────────
+const _egiCache = {}; // { [activeTab_timeWindow_sector]: data }
+
+const EnhancedGeographicIntelligence = ({ wsRefreshKey }) => {
+  const mountedRef = useRef(true);
   const [activeTab, setActiveTab] = useState('overview');
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(!_egiCache['overview_720_all']);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
+  const [data, setData] = useState(_egiCache['overview_720_all'] ?? null);
   const [timeWindow, setTimeWindow] = useState(720);
   const [selectedSector, setSelectedSector] = useState('all');
   const [sectors, setSectors] = useState([]);
@@ -34,13 +39,27 @@ const EnhancedGeographicIntelligence = () => {
       .catch(() => setSectors([]));
   }, []);
 
-  // Load data based on active tab
   useEffect(() => {
-    loadData();
-  }, [activeTab, timeWindow, selectedSector]);
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
-  const loadData = async () => {
-    setLoading(true);
+  // Load data based on active tab or WS refresh
+  useEffect(() => {
+    const cacheKey = `${activeTab}_${timeWindow}_${selectedSector}`;
+    const cached = _egiCache[cacheKey];
+    if (cached) {
+      setData(cached);
+      loadData({ silent: true });
+    } else {
+      loadData({ silent: false });
+    }
+  }, [activeTab, timeWindow, selectedSector, wsRefreshKey]);
+
+  const loadData = async ({ silent = false } = {}) => {
+    const cacheKey = `${activeTab}_${timeWindow}_${selectedSector}`;
+    if (silent) setBackgroundRefreshing(true);
+    else setLoading(true);
     try {
       const params = new URLSearchParams({
         time_window_hours: timeWindow,
@@ -49,16 +68,15 @@ const EnhancedGeographicIntelligence = () => {
 
       let endpoint;
       switch (activeTab) {
-        case 'overview':
-          // Load multiple endpoints for overview
+        case 'overview': {
           const [heatMap, sectorPerf, behavior, movement] = await Promise.all([
             api.get(`/api/v1/geographic-intelligence/heat-map?${params}`),
             api.get(`/api/v1/geographic-intelligence/sector-performance?${params}`),
             api.get(`/api/v1/geographic-intelligence/behavior-patterns?${params}`),
             api.get(`/api/v1/geographic-intelligence/movement-flows?${params}`)
           ]);
-          
-          setData({
+          if (!mountedRef.current) return;
+          const overviewData = {
             heatMapData: heatMap.heat_map_data,
             sectors: sectorPerf.performance_data,
             behaviorAnalysis: behavior.behavior_analysis,
@@ -66,70 +84,101 @@ const EnhancedGeographicIntelligence = () => {
             totalReports: heatMap.total_reports,
             totalDevices: behavior.devices_analyzed,
             timeWindow: heatMap.time_window_hours
-          });
+          };
+          _egiCache[cacheKey] = overviewData;
+          setData(overviewData);
           break;
+        }
 
-        case 'heat-map':
+        case 'heat-map': {
           endpoint = `/api/v1/geographic-intelligence/heat-map?${params}`;
           const heatData = await api.get(endpoint);
-          setData({
-            ...heatData,
-            reportsByTime: generateTimeSeriesData(heatData.reports || [])
-          });
+          if (!mountedRef.current) return;
+          const heatResult = { ...heatData, reportsByTime: generateTimeSeriesData(heatData.reports || []) };
+          _egiCache[cacheKey] = heatResult;
+          setData(heatResult);
           break;
+        }
 
-        case 'movement-flows':
+        case 'movement-flows': {
           endpoint = `/api/v1/geographic-intelligence/movement-flows?${params}`;
           const flowData = await api.get(endpoint);
+          if (!mountedRef.current) return;
+          _egiCache[cacheKey] = flowData;
           setData(flowData);
           break;
+        }
 
-        case 'coverage':
+        case 'coverage': {
           endpoint = `/api/v1/geographic-intelligence/coverage-analysis?${params}`;
           const coverageData = await api.get(endpoint);
+          if (!mountedRef.current) return;
+          _egiCache[cacheKey] = coverageData;
           setData(coverageData);
           break;
+        }
 
-        case 'sector-performance':
+        case 'sector-performance': {
           endpoint = `/api/v1/geographic-intelligence/sector-performance?${params}`;
           const sectorData = await api.get(endpoint);
+          if (!mountedRef.current) return;
+          _egiCache[cacheKey] = sectorData;
           setData(sectorData);
           break;
+        }
 
-        case 'behavior-patterns':
+        case 'behavior-patterns': {
           endpoint = `/api/v1/geographic-intelligence/behavior-patterns?${params}`;
           const behaviorData = await api.get(endpoint);
+          if (!mountedRef.current) return;
+          _egiCache[cacheKey] = behaviorData;
           setData(behaviorData);
           break;
+        }
 
-        case 'speed-analysis':
+        case 'speed-analysis': {
           endpoint = `/api/v1/geographic-intelligence/speed-analysis?${params}`;
           const speedData = await api.get(endpoint);
+          if (!mountedRef.current) return;
+          _egiCache[cacheKey] = speedData;
           setData(speedData);
           break;
+        }
 
-        case 'geographic-clustering':
+        case 'geographic-clustering': {
           endpoint = `/api/v1/geographic-intelligence/geographic-clustering?${params}`;
           const clusterData = await api.get(endpoint);
+          if (!mountedRef.current) return;
+          _egiCache[cacheKey] = clusterData;
           setData(clusterData);
           break;
+        }
 
-        case 'frequency-analysis':
+        case 'frequency-analysis': {
           endpoint = `/api/v1/geographic-intelligence/frequency-analysis?${params}`;
           const frequencyData = await api.get(endpoint);
+          if (!mountedRef.current) return;
+          _egiCache[cacheKey] = frequencyData;
           setData(frequencyData);
           break;
+        }
 
         default:
           endpoint = `/api/v1/geographic-intelligence/heat-map?${params}`;
           const defaultData = await api.get(endpoint);
-          setData(defaultData);
+          if (mountedRef.current) {
+            _egiCache[cacheKey] = defaultData;
+            setData(defaultData);
+          }
       }
     } catch (error) {
       console.error('Error loading geographic intelligence data:', error);
-      setData(null);
+      if (!silent && mountedRef.current) setData(null);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setBackgroundRefreshing(false);
+      }
     }
   };
 

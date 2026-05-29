@@ -1,54 +1,87 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import SkeletonTable from '../Common/SkeletonTable';
 import api from '../../api/client';
 
 const PAGE_SIZE = 10;
 
+// ── Module-level cache ─────────────────────────────────────────────────────
+// Survives navigation away and back; cleared when a real refresh is triggered.
+let _auditCache = null; // { logs }
+let _auditCacheRefreshKey = undefined; // the wsRefreshKey value that produced this cache
+
+// ── Component ──────────────────────────────────────────────────────────────
+
 const AuditLog = ({ wsRefreshKey }) => {
-  const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Initialise state from cache immediately so returning to this screen is instant.
+  const [logs, setLogs] = useState(_auditCache?.logs ?? []);
+  // Only show the full spinner on the very first load (no cache yet).
+  const [loading, setLoading] = useState(_auditCache === null);
+  const [bgRefreshing, setBgRefreshing] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [entityFilter, setEntityFilter] = useState('');
   const [actionFilter, setActionFilter] = useState('');
   const [resultFilter, setResultFilter] = useState('all');
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [offset, setOffset] = useState(0);
-  const [total, setTotal] = useState(0);
+  const [total, setTotal] = useState(_auditCache?.logs?.length ?? 0);
 
-  const loadLogs = useCallback(() => {
-    let mounted = true;
-    setLoading(true);
-    
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const loadLogs = useCallback(async ({ silent = false } = {}) => {
+    if (silent) {
+      setBgRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
     const params = new URLSearchParams();
-    params.set("limit", String(500));
-    params.set("sort_by", "created_at");
-    params.set("sort_order", "desc");
+    params.set('limit', '500');
+    params.set('sort_by', 'created_at');
+    params.set('sort_order', 'desc');
 
-    if (entityFilter.trim()) {
-      params.set("entity_type", entityFilter.trim());
+    try {
+      const res = await api.get(`/api/v1/audit-logs/?${params.toString()}`);
+      if (!mountedRef.current) return;
+      const newLogs = res || [];
+      _auditCache = { logs: newLogs };
+      _auditCacheRefreshKey = wsRefreshKey;
+      setLogs(newLogs);
+      setTotal(newLogs.length);
+    } catch (_e) {
+      // On background refresh keep showing stale data; only clear on hard load error.
+    } finally {
+      if (!mountedRef.current) return;
+      setLoading(false);
+      setBgRefreshing(false);
     }
-    if (actionFilter.trim()) {
-      params.set("action_type", actionFilter.trim());
-    }
-    
-    api.get(`/api/v1/audit-logs/?${params.toString()}`)
-      .then((res) => { 
-        if (mounted) { 
-          setLogs(res || []); 
-          setTotal(res?.length || 0);
-          setLoading(false); 
-        } 
-      })
-      .catch(() => { if (mounted) setLoading(false); });
-    return () => { mounted = false; };
-  }, [entityFilter, actionFilter]); // Remove pageSize and offset dependencies
+  }, [wsRefreshKey]);
 
   useEffect(() => {
-    loadLogs();
+    if (_auditCache === null) {
+      // Truly first load (no cache) — show spinner.
+      loadLogs({ silent: false });
+    } else {
+      // Cache exists (including WS-triggered refresh) — stay silent.
+      loadLogs({ silent: true });
+    }
   }, [loadLogs, wsRefreshKey]);
 
   // Client-side filtering
   const filteredLogs = logs.filter((a) => {
+    if (entityFilter.trim()) {
+      if (!(a.entity_type || '').toLowerCase().includes(entityFilter.trim().toLowerCase())) {
+        return false;
+      }
+    }
+    if (actionFilter.trim()) {
+      if (!(a.action_type || '').toLowerCase().includes(actionFilter.trim().toLowerCase())) {
+        return false;
+      }
+    }
     if (searchText.trim()) {
       const q = searchText.trim().toLowerCase();
       const blob = [
@@ -65,8 +98,8 @@ const AuditLog = ({ wsRefreshKey }) => {
         return false;
       }
     }
-    if (resultFilter !== "all") {
-      const isSuccess = resultFilter === "success";
+    if (resultFilter !== 'all') {
+      const isSuccess = resultFilter === 'success';
       if (a.success !== isSuccess) {
         return false;
       }
@@ -107,7 +140,12 @@ const AuditLog = ({ wsRefreshKey }) => {
       <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
           <div>
-            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Audit Log</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Audit Log</h2>
+              {bgRefreshing && (
+                <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>refreshing…</span>
+              )}
+            </div>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
               Tamper-evident record of system actions. New logins, case updates, hotspot recompute, and user changes are recorded after deploy.
             </p>
@@ -286,8 +324,8 @@ const AuditLog = ({ wsRefreshKey }) => {
             )}
           </div>
           <div className="pagination">
-            <button 
-              className="page-btn" 
+            <button
+              className="page-btn"
               onClick={() => setOffset(Math.max(0, offset - pageSize))}
               disabled={offset === 0}
             >
@@ -296,7 +334,7 @@ const AuditLog = ({ wsRefreshKey }) => {
             {(() => {
               const totalPages = Math.ceil(filteredLogs.length / pageSize);
               const currentPage = Math.floor(offset / pageSize) + 1;
-              
+
               // Show all page numbers if total pages <= 10, otherwise show smart pagination
               if (totalPages <= 10) {
                 return Array.from({ length: totalPages }, (_, i) => {
@@ -314,12 +352,12 @@ const AuditLog = ({ wsRefreshKey }) => {
                   );
                 });
               }
-              
+
               // Smart pagination for many pages
               const pages = [];
               const startPage = Math.max(1, currentPage - 2);
               const endPage = Math.min(totalPages, currentPage + 2);
-              
+
               // Always show first page
               if (startPage > 1) {
                 pages.push(
@@ -335,7 +373,7 @@ const AuditLog = ({ wsRefreshKey }) => {
                   pages.push(<span key="start-ellipsis" style={{ padding: '0 8px' }}>...</span>);
                 }
               }
-              
+
               // Show pages around current page
               for (let i = startPage; i <= endPage; i++) {
                 const pageOffset = (i - 1) * pageSize;
@@ -350,7 +388,7 @@ const AuditLog = ({ wsRefreshKey }) => {
                   </button>
                 );
               }
-              
+
               // Always show last page
               if (endPage < totalPages) {
                 if (endPage < totalPages - 1) {
@@ -366,11 +404,11 @@ const AuditLog = ({ wsRefreshKey }) => {
                   </button>
                 );
               }
-              
+
               return pages;
             })()}
-            <button 
-              className="page-btn" 
+            <button
+              className="page-btn"
               onClick={() => setOffset(Math.min(filteredLogs.length - pageSize, offset + pageSize))}
               disabled={offset + pageSize >= filteredLogs.length}
             >

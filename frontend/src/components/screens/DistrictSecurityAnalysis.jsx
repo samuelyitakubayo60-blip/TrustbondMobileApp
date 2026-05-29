@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Chart from 'chart.js/auto';
 import api from '../../api/client';
 
+// ── Module-level cache ─────────────────────────────────────────────────────
+const _dsaCache = {}; // { [daysBack]: data }
+
 const PERIOD_OPTIONS = [
   { label: 'Last 30 days', days: 30 },
   { label: 'Last 90 days', days: 90 },
@@ -21,33 +24,55 @@ const CHART_COLORS = [
 ];
 
 const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
+  const mountedRef = useRef(true);
   const [daysBack, setDaysBack] = useState(90);
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(_dsaCache[90] ?? null);
+  const [loading, setLoading] = useState(!_dsaCache[90]);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [error, setError] = useState('');
   const typeChartRef = useRef(null);
   const trendChartRef = useRef(null);
   const typeChartInstance = useRef(null);
   const trendChartInstance = useRef(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const load = useCallback(({ silent = false } = {}) => {
+    const cached = _dsaCache[daysBack];
+    if (silent || cached) setBackgroundRefreshing(true);
+    else setLoading(true);
     setError('');
     api
       .get(`/api/v1/stats/district-security-analysis?days_back=${daysBack}`)
       .then((res) => {
+        if (!mountedRef.current) return;
+        _dsaCache[daysBack] = res || null;
         setData(res || null);
         setLoading(false);
+        setBackgroundRefreshing(false);
       })
       .catch((e) => {
-        setError(e?.message || 'Failed to load district security analysis.');
-        setData(null);
+        if (!mountedRef.current) return;
+        if (!silent && !cached) {
+          setError(e?.message || 'Failed to load district security analysis.');
+          setData(null);
+        }
         setLoading(false);
+        setBackgroundRefreshing(false);
       });
   }, [daysBack]);
 
   useEffect(() => {
-    load();
+    const cached = _dsaCache[daysBack];
+    if (cached) {
+      setData(cached);
+      load({ silent: true });
+    } else {
+      load({ silent: false });
+    }
   }, [load, wsRefreshKey]);
 
   useEffect(() => {
@@ -145,7 +170,12 @@ const DistrictSecurityAnalysis = ({ wsRefreshKey }) => {
   return (
     <>
       <div className="page-header">
-        <h2>District Security Analysis</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h2 style={{ margin: 0 }}>District Security Analysis</h2>
+          {backgroundRefreshing && (
+            <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>refreshing…</span>
+          )}
+        </div>
         <p>
           Visual breakdown of incident trends and type distribution across Musanze District.
           {data?.scope === 'station' ? ' Showing your station coverage.' : ''}

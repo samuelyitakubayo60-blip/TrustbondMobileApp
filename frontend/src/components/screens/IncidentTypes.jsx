@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../../api/client';
 import Chart from 'chart.js/auto';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
@@ -20,39 +20,36 @@ const RANKED_PALETTE = [
 ];
 const paletteColor = (i) => RANKED_PALETTE[Math.min(i, RANKED_PALETTE.length - 1)];
 
+// ── Module-level cache ─────────────────────────────────────────────────────
+// Survives navigation away and back; cleared when a mutation occurs.
+let _itCache = null; // { types, chartData }
+let _itCacheRefreshKey = undefined; // the refreshKey value that produced this cache
+
+// ── Component ──────────────────────────────────────────────────────────────
+
 const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey, goToScreen }) => {
   const { user: me } = useAuth();
   const role     = me?.role || 'officer';
   const canManage = canManageIncidentTypes(role);
 
-  const [types, setTypes]       = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [chartData, setChartData] = useState({});
-  const [sortBy, setSortBy]     = useState('incidentType');
-  const [sortOrder, setSortOrder] = useState('desc');
+  // Initialise from cache immediately so returning to this screen is instant.
+  const [types, setTypes]           = useState(_itCache?.types ?? []);
+  const [chartData, setChartData]   = useState(_itCache?.chartData ?? {});
+  const [loading, setLoading]       = useState(_itCache === null);
+  const [bgRefreshing, setBgRefreshing] = useState(false);
+  const [sortBy, setSortBy]         = useState('incidentType');
+  const [sortOrder, setSortOrder]   = useState('desc');
   const chartRef  = useRef(null);
   const chartInst = useRef(null);
 
-  /* ── Load data ── */
-  const loadTypes = () => {
-    setLoading(true);
-    Promise.all([
-      api.get('/api/v1/incident-types/?include_inactive=true'),
-      api.get('/api/v1/reports/?limit=500'),
-    ])
-      .then(([typesRes, reportsRes]) => {
-        setTypes(typesRes || []);
-        processChartData(reportsRes);
-        setLoading(false);
-      })
-      .catch(() => {
-        api.get('/api/v1/incident-types/?include_inactive=true')
-          .then((r) => { setTypes(r || []); setLoading(false); })
-          .catch(() => setLoading(false));
-      });
-  };
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
-  const processChartData = (reports) => {
+  /* ── processChartData (pure, returns object) ── */
+  const buildChartData = (reports) => {
     let arr = Array.isArray(reports) ? reports
             : reports?.items ?? reports?.data ?? reports?.reports ?? [];
 
@@ -71,8 +68,56 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
       if (sta) stations[sta] = (stations[sta] || 0) + 1;
     });
 
-    setChartData({ incidentTypes, sectors, stations });
+    return { incidentTypes, sectors, stations };
   };
+
+  /* ── fetchTypes ── */
+  const fetchTypes = useCallback(async ({ silent = false } = {}) => {
+    if (silent) {
+      setBgRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    try {
+      const [typesRes, reportsRes] = await Promise.all([
+        api.get('/api/v1/incident-types/?include_inactive=true'),
+        api.get('/api/v1/reports/?limit=500'),
+      ]);
+      if (!mountedRef.current) return;
+      const newTypes     = typesRes || [];
+      const newChartData = buildChartData(reportsRes);
+      _itCache = { types: newTypes, chartData: newChartData };
+      _itCacheRefreshKey = refreshKey;
+      setTypes(newTypes);
+      setChartData(newChartData);
+    } catch {
+      if (!mountedRef.current) return;
+      // On background refresh keep stale data; on hard load try types-only fallback.
+      if (!silent) {
+        try {
+          const r = await api.get('/api/v1/incident-types/?include_inactive=true');
+          if (!mountedRef.current) return;
+          setTypes(r || []);
+        } catch { /* ignore */ }
+      }
+    } finally {
+      if (!mountedRef.current) return;
+      setLoading(false);
+      setBgRefreshing(false);
+    }
+  }, [refreshKey]);
+
+  /* ── Mount / key-change effect ── */
+  useEffect(() => {
+    if (_itCache === null) {
+      // Truly first load (no cache) — show spinner.
+      fetchTypes({ silent: false });
+    } else {
+      // Cache exists (including WS-triggered refresh) — stay silent.
+      fetchTypes({ silent: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsRefreshKey, refreshKey]);
 
   /* ── Sorted chart entries ── */
   const getSorted = () => {
@@ -98,7 +143,6 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
     const displayLabels = labels.length ? labels : ['No Data'];
     const displayData   = data.length   ? data   : [0];
 
-    // Assign ranked colors - index 0 = highest count
     const bgColors     = displayLabels.map((_, i) => paletteColor(i));
     const borderColors = bgColors;
 
@@ -162,8 +206,6 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
     };
   }, [chartData, sortBy, sortOrder]);
 
-  useEffect(() => { loadTypes(); }, [refreshKey, wsRefreshKey]);
-
   /* ── Derived stats ── */
   const activeCount   = types.filter((t) => t.is_active).length;
   const inactiveCount = types.length - activeCount;
@@ -173,9 +215,12 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
     (Number(t.severity_weight || 0) > Number(best?.severity_weight || 0)) ? t : best, null
   );
 
+  /* ── Mutations ── */
   const handleToggleActive = async (type) => {
     try {
       const updated = await api.put(`/api/v1/incident-types/${type.incident_type_id}`, { is_active: !type.is_active });
+      // Optimistic local update + bust cache so next navigation re-fetches.
+      _itCache = null;
       setTypes((prev) => prev.map((t) => t.incident_type_id === updated.incident_type_id ? updated : t));
     } catch (e) { window.alert(e.message || 'Failed to update'); }
   };
@@ -184,7 +229,8 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
     if (!window.confirm(`Delete "${type.type_name}"? This cannot be undone.`)) return;
     try {
       await api.delete(`/api/v1/incident-types/${type.incident_type_id}`);
-      setTypes((prev) => prev.filter((t) => t.incident_type_id !== type.incident_type_id));
+      _itCache = null;
+      fetchTypes({ silent: false });
     } catch (e) { window.alert(e.message || 'Failed to delete'); }
   };
 
@@ -194,7 +240,14 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
       <div className="card" style={{ marginBottom: 20, padding: '20px 24px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
           <div>
-            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Incident Types</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <h2 style={{ margin: 0, fontSize: 22 }}>Incident Types</h2>
+              {bgRefreshing && (
+                <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>
+                  refreshing…
+                </span>
+              )}
+            </div>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
               Configure categories and severity levels for incident reporting and analysis.
             </p>
