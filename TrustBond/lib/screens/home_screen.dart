@@ -11,6 +11,7 @@ import '../services/location_service.dart';
 import '../services/hotspot_service.dart';
 import '../services/app_refresh_bus.dart';
 import '../services/notification_service.dart';
+import '../services/proximity_alert_service.dart';
 import '../models/report_model.dart';
 import '../utils/json_helpers.dart';
 import 'notifications_screen.dart';
@@ -139,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen>
   VillageLocation? _userVillage;
 
   // Safety / Nearby
-  double _selectedRadiusKm = 1.0;
+  double _selectedRadiusKm = 1.5; // default matches ProximityAlertService default (1500m)
   List<Hotspot> _nearbyHotspots = [];
   bool _loadingHotspots = false;
 
@@ -158,6 +159,7 @@ class _HomeScreenState extends State<HomeScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
+    _loadSavedRadius();
     _loadData();
     _loadCurrentLocation();
     _refreshSub = AppRefreshBus.stream.listen((_) => _loadData());
@@ -321,11 +323,19 @@ class _HomeScreenState extends State<HomeScreen>
     } catch (_) {}
   }
 
+  Future<void> _loadSavedRadius() async {
+    final meters = await ProximityAlertService.loadSavedRadius();
+    if (!mounted) return;
+    setState(() => _selectedRadiusKm = meters / 1000.0);
+  }
+
   Future<void> _onRadiusChanged(double km) async {
     setState(() {
       _selectedRadiusKm = km;
       _loadingHotspots = true;
     });
+    // Keep ProximityAlertService in sync so actual notifications use this radius.
+    unawaited(ProximityAlertService().updateRadius(km * 1000));
     try {
       final all = await _hotspotService.getAllHotspots();
       _updateNearbyHotspots(all);
@@ -613,10 +623,10 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildDistanceSelector() {
-    const radii = [0.5, 1.0, 2.0, 5.0];
+    const radii = [0.5, 1.5, 3.0, 5.0];
     return Row(
       children: radii.map((km) {
-        final selected = _selectedRadiusKm == km;
+        final selected = (_selectedRadiusKm - km).abs() < 0.01;
         final label = km < 1.0
             ? '${(km * 1000).toInt()}m'
             : '${km.toStringAsFixed(km == km.toInt() ? 0 : 1)}km';

@@ -28,11 +28,20 @@ class StorageService {
     _log('Storage: Encryption disabled (mock implementation)');
   }
 
-  /// Check if biometric authentication is available on this device.
-  Future<bool> isBiometricAvailable() async {
-    if (!PlatformService.isMobile) {
+  /// Returns true if the device has any lock set (biometric, PIN, pattern, or password).
+  Future<bool> isDeviceLockAvailable() async {
+    if (!PlatformService.isMobile) return false;
+    try {
+      return await _localAuth.isDeviceSupported();
+    } on PlatformException catch (e) {
+      _log('Storage: device lock check failed: $e');
       return false;
     }
+  }
+
+  /// Check if biometric authentication is available on this device.
+  Future<bool> isBiometricAvailable() async {
+    if (!PlatformService.isMobile) return false;
     try {
       final supported = await _localAuth.isDeviceSupported();
       if (!supported) return false;
@@ -41,35 +50,31 @@ class StorageService {
     } on PlatformException catch (e) {
       _log('Storage: biometric availability check failed: $e');
       return false;
-    } catch (e) {
-      _log('Storage: biometric availability check failed: $e');
-      return false;
     }
   }
 
-  /// Prompt fingerprint / face ID. Returns true when the user authenticates.
+  /// Authenticate using the device lock (fingerprint, face, PIN, pattern, password).
+  /// Falls back to PIN/pattern/password if biometrics are not enrolled.
   Future<bool> authenticateWithBiometrics({
-    String reason = 'Unlock TrustBond',
+    String reason = 'Unlock TrustBond to continue',
   }) async {
-    if (!PlatformService.isMobile) {
-      return false;
-    }
+    if (!PlatformService.isMobile) return false;
     try {
-      final available = await isBiometricAvailable();
-      if (!available) return false;
+      final supported = await _localAuth.isDeviceSupported();
+      if (!supported) return false;
 
       return await _localAuth.authenticate(
         localizedReason: reason,
         options: const AuthenticationOptions(
-          biometricOnly: true,
+          biometricOnly: false,
           stickyAuth: true,
         ),
       );
     } on PlatformException catch (e) {
-      _log('Storage: biometric authentication failed: $e');
+      _log('Storage: authentication failed: $e');
       return false;
     } catch (e) {
-      _log('Storage: biometric authentication failed: $e');
+      _log('Storage: authentication failed: $e');
       return false;
     }
   }

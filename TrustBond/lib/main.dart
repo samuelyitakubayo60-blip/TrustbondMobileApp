@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config/theme.dart';
 import 'firebase_options.dart';
+import 'screens/biometric_gate.dart';
 import 'screens/main_shell.dart';
 import 'screens/splash_screen.dart';
 import 'services/platform_service.dart';
@@ -99,7 +100,9 @@ class _StartupGateState extends State<_StartupGate> {
           );
         }
 
-        return snapshot.data! ? const SplashScreen() : const MainShell();
+        return snapshot.data!
+            ? const SplashScreen()
+            : const BiometricGate(child: MainShell());
       },
     );
   }

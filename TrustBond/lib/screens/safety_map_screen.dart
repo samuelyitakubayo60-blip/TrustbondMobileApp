@@ -87,6 +87,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   void initState() {
     super.initState();
     _showDetailedView = widget.showDetailedView;
+    _loadSavedRadius();
     _loadMap();
     _loadSectorsFromBackend();
     _getUserLocation();
@@ -212,6 +213,16 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
 
   double get _alertsRadiusKm =>
       (_nearbyHotspotRadiusMeters / 1000.0).clamp(0.5, 3.0);
+
+  Future<void> _loadSavedRadius() async {
+    final meters = await ProximityAlertService.loadSavedRadius();
+    if (!mounted) return;
+    setState(() {
+      _nearbyHotspotRadiusMeters = meters.toInt();
+      _distanceController.text =
+          _distanceInKm ? (meters / 1000).toStringAsFixed(1) : meters.toStringAsFixed(0);
+    });
+  }
 
   Future<void> _getUserLocation() async {
     setState(() => _locatingUser = true);
@@ -945,7 +956,13 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                 ? null
                 : () {
                     if (selected) return;
-                    setState(() => _nearbyHotspotRadiusMeters = meters);
+                    setState(() {
+                      _nearbyHotspotRadiusMeters = meters;
+                      _distanceController.text = _distanceInKm
+                          ? (meters / 1000).toStringAsFixed(1)
+                          : meters.toStringAsFixed(0);
+                    });
+                    unawaited(ProximityAlertService().updateRadius(meters.toDouble()));
                     _loadHotspots();
                     _loadPublicAlerts();
                   },

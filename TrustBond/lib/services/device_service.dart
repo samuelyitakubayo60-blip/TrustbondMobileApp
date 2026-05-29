@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -58,6 +59,26 @@ class DeviceService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_deviceIdKey);
     await prefs.remove(_deviceHashKey);
+  }
+
+  /// Replaces the current device identity with a fresh random one.
+  ///
+  /// The old [device_hash] stays on the server linked to previous reports,
+  /// but this app will never use that hash again — permanently severing
+  /// the link so old reports can no longer be retrieved on this device.
+  /// New reports submitted after calling this will use the new identity.
+  Future<void> resetIdentity() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Generate a cryptographically random 32-byte value and hash it.
+    // This is deliberately NOT derived from hardware so it differs from
+    // any previous identity.
+    final rng = Random.secure();
+    final randomBytes = List<int>.generate(32, (_) => rng.nextInt(256));
+    final newHash = sha256.convert(randomBytes).toString();
+
+    await prefs.setString(_deviceHashKey, newHash);
+    await prefs.remove(_deviceIdKey); // will re-register on next report
   }
 
   /// Ensure a backend device_id exists and is cached locally.

@@ -136,24 +136,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _onBiometricAuthChanged(bool value) async {
     try {
       if (value) {
-        final available = await _storageService.isBiometricAvailable();
+        final available = await _storageService.isDeviceLockAvailable();
         if (!available) {
-          _showError('Biometric authentication not available on this device');
+          _showError('No device lock found. Set up a PIN, pattern, or fingerprint in your device settings first.');
           return;
         }
-        final authenticated = await _storageService.authenticateWithBiometrics();
+        // Verify once before enabling so the user confirms it works
+        final authenticated = await _storageService.authenticateWithBiometrics(
+          reason: 'Verify your identity to enable app lock',
+        );
         if (!authenticated) {
-          _showError('Biometric authentication failed');
+          _showError('Authentication failed. App lock was not enabled.');
           return;
         }
-        _showSuccess('Biometric authentication enabled');
+        _showSuccess('App lock enabled');
       } else {
-        _showSuccess('Biometric authentication disabled');
+        _showSuccess('App lock disabled');
       }
       setState(() => _biometricAuth = value);
       await _saveSetting('biometric_auth', value);
     } catch (e) {
-      _showError('Failed to update biometric authentication');
+      _showError('Failed to update app lock setting');
     }
   }
 
@@ -298,7 +301,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               _locationSharing, _onLocationSharingChanged),
                           _toggle('Data Encryption', 'End-to-end encrypt report data',
                               _dataEncryption, _onDataEncryptionChanged),
-                          _toggle('Biometric Authentication', 'Use fingerprint or face ID to unlock',
+                          _toggle('App Lock', 'Require device lock (fingerprint, face, or PIN) to open the app',
                               _biometricAuth, _onBiometricAuthChanged),
                           _toggle('Secure Storage', 'Store sensitive data in encrypted local storage',
                               _secureStorage, _onSecureStorageChanged),
@@ -423,62 +426,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildDangerActions() {
-    return Column(
-      children: [
-        SizedBox(
-          width: double.infinity,
-          height: 44,
-          child: OutlinedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.download, size: 16),
-            label: const Text('Export My Data',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.border),
-              foregroundColor: AppColors.text,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
+    return SizedBox(
+      width: double.infinity,
+      height: 44,
+      child: OutlinedButton.icon(
+        onPressed: () => _showClearDialog(),
+        icon: const Icon(Icons.delete_outline, size: 16),
+        label: const Text('Clear My Data',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: AppColors.danger),
+          foregroundColor: AppColors.danger,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
         ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          height: 44,
-          child: OutlinedButton.icon(
-            onPressed: () => _showClearDialog(),
-            icon: const Icon(Icons.delete_outline, size: 16),
-            label: const Text('Clear All Data',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.danger),
-              foregroundColor: AppColors.danger,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
   Future<void> _clearAllLocalData() async {
     try {
+      // Clear offline report queue
       await OfflineReportQueueService().clearAllQueuedReports();
+
+      // Clear all locally cached report/incident data
       await ApiService().clearLocalCaches();
-      await DeviceService().clearLocalIdentity();
+
+      // Log out any active leader session
       await LeaderService().logout();
+
+      // Generate a new random device identity so old reports on the server
+      // are permanently unlinked from this device.  Previous reports remain
+      // in the database but can no longer be retrieved here.
+      await DeviceService().resetIdentity();
+
+      // Remove report-related prefs; preserve user settings
       final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      const settingsToKeep = {
+        'biometric_auth',
+        'location_sharing',
+        'data_encryption',
+        'push_notifications',
+        'hotspot_alerts',
+        'report_updates',
+        'secure_storage',
+        'auto_backup',
+        'has_accepted_terms_and_privacy',
+        'has_seen_splash_once',
+      };
+      for (final key in prefs.getKeys().toList()) {
+        if (!settingsToKeep.contains(key)) {
+          await prefs.remove(key);
+        }
+      }
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Local data cleared. Restart the app to register again.')),
+        const SnackBar(
+          content: Text(
+            'Data cleared. A new anonymous identity has been created. '
+            'Previous reports are no longer linked to this device.',
+          ),
+        ),
       );
       AppRefreshBus.notify('local_data_cleared');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not clear all data: $e')),
+        SnackBar(content: Text('Could not clear data: $e')),
       );
     }
   }
@@ -489,11 +504,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Clear All Data?',
+        title: const Text('Clear My Data?',
             style: TextStyle(fontWeight: FontWeight.w700)),
         content: const Text(
-          'This will erase all local data including your device identity. This cannot be undone.',
-          style: TextStyle(fontSize: 13, color: AppColors.muted),
+          'This will:\n'
+          '• Remove all cached reports from this device\n'
+          '• Generate a new anonymous identity\n\n'
+          'Reports you submitted before will remain in the system but will no longer be linked to this device and cannot be retrieved here again.\n\n'
+          'New reports submitted after clearing will use the new identity.',
+          style: TextStyle(fontSize: 13, color: AppColors.muted, height: 1.55),
         ),
         actions: [
           TextButton(

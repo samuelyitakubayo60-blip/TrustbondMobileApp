@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'hotspot_service.dart';
 import 'platform_service.dart';
@@ -39,9 +40,23 @@ class ProximityAlertService {
   final Map<String, DateTime> _alerted = {};
   static const _alertCooldown = Duration(minutes: 15);
 
-  // Alert radius in metres — updated via [updateRadius]
+  // Alert radius in metres — updated via [updateRadius] and persisted
   double _radiusMeters = 1500;
   double get radiusMeters => _radiusMeters;
+
+  static const _radiusPrefKey = 'alert_radius_meters';
+
+  /// Reads the user's last saved radius from SharedPreferences.
+  /// Returns 1500 (default) if nothing was saved yet.
+  static Future<double> loadSavedRadius() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getDouble(_radiusPrefKey) ?? 1500).clamp(100, 20000);
+  }
+
+  static Future<void> _saveRadius(double meters) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_radiusPrefKey, meters);
+  }
 
   // ── public API ────────────────────────────────────────────────────────────
 
@@ -50,6 +65,10 @@ class ProximityAlertService {
     if (_started) return;
     if (!PlatformService.supportsFirebase) return;
     _started = true;
+
+    // Restore the user's last saved radius so alerts use the same distance
+    // they configured (either on the map screen or home screen).
+    _radiusMeters = await loadSavedRadius();
 
     await _initLocalNotifications();
     await _ensureLocationPermission();
@@ -69,6 +88,7 @@ class ProximityAlertService {
     final clamped = meters.clamp(100, 20000).toDouble();
     if (clamped == _radiusMeters) return;
     _radiusMeters = clamped;
+    await _saveRadius(clamped);
 
     if (!_started) return;
 
