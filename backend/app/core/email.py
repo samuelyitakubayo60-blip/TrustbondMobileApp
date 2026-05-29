@@ -24,13 +24,18 @@ EMAIL_LOGO_CID = "trustbond-logo"
 EMAIL_LOGO_PATH = Path(__file__).resolve().parents[2] / "logo.jpeg"
 
 
-def is_email_configured() -> bool:
-    """True when Brevo or SMTP can send mail."""
-    if is_brevo_configured():
-        return bool(resolved_from_address())
+def is_smtp_delivery_enabled() -> bool:
+    """True when Gmail/other SMTP app-password delivery is allowed and configured."""
     if getattr(settings, "smtp_disable", False):
         return False
     return smtp_settings_ready(settings.smtp_host, settings.smtp_user, settings.smtp_pass)
+
+
+def is_email_configured() -> bool:
+    """True when Brevo or SMTP can send mail."""
+    if is_brevo_configured() and bool(resolved_from_address()):
+        return True
+    return is_smtp_delivery_enabled()
 
 
 def is_smtp_configured() -> bool:
@@ -163,10 +168,23 @@ def deliver_email_message(
     from_addr: str,
     to_addrs: Iterable[str],
 ) -> tuple[bool, str | None]:
-    """Send via Brevo when configured, otherwise SMTP."""
+    """Send via Brevo when configured; fall back to SMTP (e.g. Gmail app password) if Brevo fails."""
+    smtp_from = (
+        clean_env_value(settings.smtp_from)
+        or clean_env_value(settings.smtp_user)
+        or from_addr
+    )
     if is_brevo_configured():
-        return deliver_brevo_from_mime(msg, to_addrs)
-    return deliver_smtp_message(msg, from_addr, to_addrs)
+        ok, err = deliver_brevo_from_mime(msg, to_addrs)
+        if ok:
+            return True, None
+        if is_smtp_delivery_enabled():
+            print(f"[Email] Brevo failed ({err or 'unknown'}); trying SMTP fallback.")
+            return deliver_smtp_message(msg, smtp_from, to_addrs)
+        return False, err
+    if is_smtp_delivery_enabled():
+        return deliver_smtp_message(msg, smtp_from, to_addrs)
+    return False, "Email is not configured (Brevo or SMTP)."
 
 
 def send_email(to: str, subject: str, body_plain: str, body_html: str | None = None) -> tuple[bool, str | None]:
@@ -181,11 +199,23 @@ def send_email(to: str, subject: str, body_plain: str, body_html: str | None = N
         )
 
     if is_brevo_configured():
-        return send_brevo_email(
+        ok, err = send_brevo_email(
             to,
             subject,
             html=body_html,
             text=body_plain,
+        )
+        if ok:
+            return True, None
+        if is_smtp_delivery_enabled():
+            print(f"[Email] Brevo failed ({err or 'unknown'}); trying SMTP fallback.")
+
+    if not is_smtp_delivery_enabled():
+        if is_brevo_configured():
+            return False, err or "Brevo send failed and SMTP is disabled or not configured."
+        return False, (
+            "Email is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL, "
+            "or SMTP_HOST, SMTP_USER, and SMTP_PASS."
         )
 
     from_addr = clean_env_value(settings.smtp_from) or clean_env_value(settings.smtp_user) or ""
