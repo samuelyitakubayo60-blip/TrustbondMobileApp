@@ -276,6 +276,8 @@ class ReportDetailItem {
 
   final String? userVote;
 
+  final String? leaderVerificationStatus;
+
 
 
   ReportDetailItem({
@@ -329,6 +331,8 @@ class ReportDetailItem {
     this.communityVotes = const {},
 
     this.userVote,
+
+    this.leaderVerificationStatus,
 
   });
 
@@ -411,6 +415,8 @@ class ReportDetailItem {
       communityVotes: votes,
 
       userVote: json['user_vote'] as String?,
+
+      leaderVerificationStatus: json['leader_verification_status'] as String?,
 
     );
 
