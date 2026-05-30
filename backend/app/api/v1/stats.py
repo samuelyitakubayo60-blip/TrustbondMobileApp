@@ -345,7 +345,6 @@ def get_dashboard_stats(
 ):
     """Return counts and widgets for dashboard. Officers see only assigned reports."""
     current_role = getattr(current_user, "role", None)
-    is_officer = current_role == "officer"
     since_7d = datetime.now(timezone.utc) - timedelta(days=7)
     since_30d = datetime.now(timezone.utc) - timedelta(days=30)
 
@@ -430,16 +429,12 @@ def get_dashboard_stats(
     open_cases = 0
     try:
         from app.models.case import Case
-        case_q = db.query(func.count(Case.case_id)).filter(
+        from app.api.v1.cases import _apply_case_list_scope
+
+        case_q = _apply_case_list_scope(db.query(Case), current_user, db).filter(
             Case.status.in_(["open", "investigating"])
         )
-        if current_role in ("officer", "supervisor"):
-            station_id = getattr(current_user, "station_id", None)
-            if station_id is not None:
-                case_q = case_q.filter(Case.assigned_to.has(PoliceUser.station_id == station_id))
-            else:
-                case_q = case_q.filter(False)
-        open_cases = case_q.scalar() or 0
+        open_cases = case_q.with_entities(func.count(Case.case_id)).scalar() or 0
     except Exception:
         pass
 
@@ -517,43 +512,48 @@ def get_dashboard_stats(
             "risk_level": h.risk_level,
         })
 
+    from app.core.station_scope import get_station, role_uses_station_scope, station_visible_report_ids
+
     current_role = getattr(current_user, "role", None)
     visible_report_ids: set[str] = set()
     visible_case_ids: set[str] = set()
-    if current_role == "officer":
-        rep_rows = (
-            db.query(ReportAssignment.report_id)
-            .filter(ReportAssignment.police_user_id == current_user.police_user_id)
-            .distinct()
-            .all()
-        )
-        visible_report_ids = {str(rid) for (rid,) in rep_rows}
-        case_rows = (
-            db.query(Case.case_id)
-            .filter(Case.assigned_to_id == current_user.police_user_id)
-            .all()
-        )
-        visible_case_ids = {str(cid) for (cid,) in case_rows}
-    elif current_role == "supervisor":
+    station_name: str | None = None
+    scope_label = "all"
+    if role_uses_station_scope(current_role):
         station_id = getattr(current_user, "station_id", None)
         if station_id is not None:
-            rep_rows = (
-                db.query(Report.report_id)
-                .filter(
-                    (Report.handling_station_id == station_id)
-                    | (Report.assignments.any(
-                        ReportAssignment.police_user.has(PoliceUser.station_id == station_id)
-                    ))
+            station = get_station(db, int(station_id))
+            station_name = station.station_name if station else None
+            scope_label = "station"
+            visible_report_ids = station_visible_report_ids(db, int(station_id))
+            case_scope = db.query(Case.case_id)
+            if station:
+                from app.core.station_scope import station_covered_village_ids
+
+                covered_village_ids = station_covered_village_ids(db, station)
+                if covered_village_ids:
+                    case_scope = case_scope.filter(
+                        or_(
+                            Case.station_id == station_id,
+                            Case.assigned_to.has(PoliceUser.station_id == station_id),
+                            Case.location_id.in_(list(covered_village_ids)),
+                        )
+                    )
+                else:
+                    case_scope = case_scope.filter(
+                        or_(
+                            Case.station_id == station_id,
+                            Case.assigned_to.has(PoliceUser.station_id == station_id),
+                        )
+                    )
+            else:
+                case_scope = case_scope.filter(
+                    or_(
+                        Case.station_id == station_id,
+                        Case.assigned_to.has(PoliceUser.station_id == station_id),
+                    )
                 )
-                .all()
-            )
-            visible_report_ids = {str(rid) for (rid,) in rep_rows}
-            case_rows = (
-                db.query(Case.case_id)
-                .filter(Case.assigned_to.has(PoliceUser.station_id == station_id))
-                .all()
-            )
-            visible_case_ids = {str(cid) for (cid,) in case_rows}
+            visible_case_ids = {str(cid) for (cid,) in case_scope.all()}
 
     # Pull a slightly larger recent window then trim after role-scope filtering.
     recent_activity_raw = (
@@ -762,7 +762,8 @@ def get_dashboard_stats(
         "open_cases": open_cases,
         "active_devices": active_devices,
         "by_status": by_status,
-        "scope": "assigned_to_me" if is_officer else "all",
+        "scope": scope_label,
+        "station_name": station_name,
         "recent_reports": recent_reports_data,
         "top_hotspots": hotspot_list,
         "recent_activity": activity_list,

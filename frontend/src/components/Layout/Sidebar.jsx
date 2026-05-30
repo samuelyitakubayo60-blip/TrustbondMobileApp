@@ -231,9 +231,15 @@ const Sidebar = ({
                 },
               ]
             : role === "supervisor"
-            ? [{ id: "users", idx: 8, label: "Users", icon: "ni-us" }]
+            ? [
+                { id: "users", idx: 8, label: "Users", icon: "ni-us" },
+                { id: "local-leaders", idx: 16, label: "Local Leaders", icon: "ni-us" },
+              ]
             : role === "officer"
-            ? [{ id: "users", idx: 8, label: "Users", icon: "ni-us" }]
+            ? [
+                { id: "users", idx: 8, label: "Users", icon: "ni-us" },
+                { id: "local-leaders", idx: 16, label: "Local Leaders", icon: "ni-us" },
+              ]
             : []),
         ],
       },

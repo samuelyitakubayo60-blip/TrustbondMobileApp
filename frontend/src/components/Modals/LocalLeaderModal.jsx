@@ -1,10 +1,13 @@
 import React, { useEffect, useState, useMemo } from "react";
 import api from "../../api/client";
+import { useAuth } from "../../context/AuthContext";
 
 const ROLE_VILLAGE = "chief_of_village";
 const ROLE_CELL = "executive_of_cell";
 
 const LocalLeaderModal = ({ isOpen, onClose, mode = "add", leader = null, onSaved }) => {
+  const { user } = useAuth();
+  const role = user?.role || "officer";
   const [form, setForm] = useState({
     full_name: "",
     role: ROLE_CELL,
@@ -25,13 +28,21 @@ const LocalLeaderModal = ({ isOpen, onClose, mode = "add", leader = null, onSave
     let cancelled = false;
     const load = async () => {
       try {
-        const [cellRes, vilRes] = await Promise.all([
-          api.get("/api/v1/public/locations/?location_type=cell&limit=2000"),
-          api.get("/api/v1/public/locations/?location_type=village&limit=2000"),
-        ]);
-        if (!cancelled) {
-          setCells(cellRes || []);
-          setVillages(vilRes || []);
+        if (role === "admin") {
+          const [cellRes, vilRes] = await Promise.all([
+            api.get("/api/v1/public/locations/?location_type=cell&limit=2000"),
+            api.get("/api/v1/public/locations/?location_type=village&limit=2000"),
+          ]);
+          if (!cancelled) {
+            setCells(cellRes || []);
+            setVillages(vilRes || []);
+          }
+        } else {
+          const scoped = await api.get("/api/v1/local-leaders/assignable-locations");
+          if (!cancelled) {
+            setCells(scoped?.cells || []);
+            setVillages(scoped?.villages || []);
+          }
         }
       } catch {
         if (!cancelled) {
@@ -44,7 +55,7 @@ const LocalLeaderModal = ({ isOpen, onClose, mode = "add", leader = null, onSave
     return () => {
       cancelled = true;
     };
-  }, [isOpen]);
+  }, [isOpen, role]);
 
   useEffect(() => {
     if (!isOpen) return;

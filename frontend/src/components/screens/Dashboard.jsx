@@ -146,7 +146,8 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
   const openCases = stats?.open_cases ?? 0;
   const recentReports = stats?.recent_reports ?? [];
   const topHotspots = stats?.top_hotspots ?? [];
-  const myScope = stats?.scope === "assigned_to_me";
+  const stationScoped = stats?.scope === "station";
+  const stationName = stats?.station_name || null;
   const weeklyVolume = stats?.weekly_volume || [];
   const avgTrustScore = stats?.avg_trust_score ?? null;
 
@@ -298,8 +299,10 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
             )}
           </div>
           <div className="page-sub">
-            {role === "officer"
-              ? "Here's what's happening in your station area right now."
+            {role === "officer" || role === "supervisor"
+              ? stationName
+                ? `Here's what's happening at ${stationName} right now.`
+                : "Here's what's happening in your station area right now."
               : "Here's what's happening in Musanze District right now."}
           </div>
         </div>
@@ -325,7 +328,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
           <span className="stat-link-hint">View all →</span>
           <div className="stat-label">{role === "officer" ? "Station reports" : "Total reports"}</div>
           <div className="stat-value neutral">{total}</div>
-          <div className="stat-meta">{myScope ? "Your scope" : "All time"}</div>
+          <div className="stat-meta">{stationScoped ? (stationName || "Your station") : "All time"}</div>
         </div>
         <div
           className="stat-card clickable"

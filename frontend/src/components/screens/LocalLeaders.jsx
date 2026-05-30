@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../../api/client";
+import { useAuth } from "../../context/AuthContext";
 
 const ROLE_LABEL = {
   chief_of_village: "Village chief",
@@ -14,6 +15,8 @@ let _cacheRefreshKey = undefined; // the refreshKey value that produced this cac
 // ── Component ──────────────────────────────────────────────────────────────
 
 const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader }) => {
+  const { user } = useAuth();
+  const role = user?.role || "officer";
   const PAGE_SIZE = 20;
 
   // Initialise state from cache immediately so returning to this screen is instant.
@@ -138,6 +141,8 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
 
   const villagesWithoutLeader = stats?.villages_without_leader ?? villageGaps.length;
   const cellsWithoutExecutive = stats?.cells_without_executive ?? cellGaps.length;
+  const stationScoped = stats?.scope === "station";
+  const stationName = stats?.station_name || null;
 
   return (
     <>
@@ -146,7 +151,9 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-              <h2 style={{ margin: 0, fontSize: 22 }}>Local Leaders</h2>
+              <h2 style={{ margin: 0, fontSize: 22 }}>
+                {stationScoped && stationName ? `Local Leaders — ${stationName}` : "Local Leaders"}
+              </h2>
               {backgroundRefreshing && (
                 <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>
                   refreshing…
@@ -154,7 +161,9 @@ const LocalLeaders = ({ wsRefreshKey, refreshKey = 0, onAddLeader, onEditLeader 
               )}
             </div>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
-              Register village chiefs and cell executives. They receive an email that their account is ready; they request a setup code in the TrustBond mobile app to choose a password.
+              {stationScoped
+                ? `Manage village chiefs and cell executives in your station coverage${stationName ? ` (${stationName})` : ""}. Add, edit, or remove leaders for villages and cells you are responsible for.`
+                : "Register village chiefs and cell executives. They receive an email that their account is ready; they request a setup code in the TrustBond mobile app to choose a password."}
             </p>
           </div>
           <button type="button" className="btn btn-primary" style={{ alignSelf: 'center' }} onClick={() => onAddLeader?.()}>

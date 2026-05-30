@@ -137,6 +137,26 @@ async def get_current_admin_supervisor_or_officer(
     return current_user
 
 
+async def get_current_admin_or_station_staff(
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+) -> PoliceUser:
+    """
+    Admin: district-wide local leader management.
+    Officer / IO: station-scoped local leader management (station_id required).
+    """
+    if current_user.role == "admin":
+        return current_user
+    if current_user.role in ("officer", "supervisor"):
+        from app.core.station_scope import require_station_id
+
+        require_station_id(current_user)
+        return current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Admin, supervisor, or officer access required",
+    )
+
+
 @router.post("/login", response_model=Token)
 def login(data: LoginRequest, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db)):
     user = _authenticate_user(db, data.email, data.password)

@@ -7,7 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.v1.auth import get_current_admin
+from app.api.v1.auth import get_current_admin_or_station_staff
+from app.core.station_scope import (
+    assert_leader_in_station_scope,
+    assert_locations_in_station_scope,
+    filter_leaders_to_station,
+    get_station,
+    require_station_id,
+    station_covered_cell_ids,
+    station_scope_location_ids,
+)
 from app.core.email import is_smtp_configured
 from app.core.security import get_password_hash
 from app.database import get_db
@@ -103,6 +112,179 @@ def _to_response(db: Session, leader: LocalLeader) -> LocalLeaderResponse:
     )
 
 
+def _admin_station_id(current_user) -> int | None:
+    """None = district admin (no station filter)."""
+    if current_user.role == "admin":
+        return None
+    return require_station_id(current_user)
+
+
+def _leader_stats_payload(db: Session, station_id: int | None) -> dict:
+    if station_id is None:
+        village_chiefs = db.query(func.count(LocalLeader.local_leader_id)).filter(
+            LocalLeader.role == "chief_of_village",
+            LocalLeader.is_active.is_(True),
+        ).scalar() or 0
+        cell_executives = db.query(func.count(LocalLeader.local_leader_id)).filter(
+            LocalLeader.role == "executive_of_cell",
+            LocalLeader.is_active.is_(True),
+        ).scalar() or 0
+        total_villages = db.query(func.count(Location.location_id)).filter(
+            Location.location_type == "village",
+            Location.is_active.is_(True),
+        ).scalar() or 0
+        total_cells = db.query(func.count(Location.location_id)).filter(
+            Location.location_type == "cell",
+            Location.is_active.is_(True),
+        ).scalar() or 0
+        covered_cell_ids = (
+            select(LocalLeaderCoverageLocation.location_id)
+            .join(LocalLeader, LocalLeader.local_leader_id == LocalLeaderCoverageLocation.local_leader_id)
+            .where(
+                LocalLeader.is_active.is_(True),
+                LocalLeader.role == "executive_of_cell",
+            )
+            .distinct()
+        )
+        cells_without_executive = db.query(func.count(Location.location_id)).filter(
+            Location.location_type == "cell",
+            Location.is_active.is_(True),
+            ~Location.location_id.in_(covered_cell_ids),
+        ).scalar() or 0
+        directly_covered_ids = (
+            select(LocalLeaderCoverageLocation.location_id)
+            .join(LocalLeader, LocalLeader.local_leader_id == LocalLeaderCoverageLocation.local_leader_id)
+            .where(LocalLeader.is_active.is_(True))
+            .distinct()
+        )
+        villages_without_leader = db.query(func.count(Location.location_id)).filter(
+            Location.location_type == "village",
+            Location.is_active.is_(True),
+            ~Location.location_id.in_(directly_covered_ids),
+            or_(
+                Location.parent_location_id.is_(None),
+                ~Location.parent_location_id.in_(covered_cell_ids),
+            ),
+        ).scalar() or 0
+        return {
+            "village_chiefs": int(village_chiefs),
+            "cell_executives": int(cell_executives),
+            "total_villages": int(total_villages),
+            "total_cells": int(total_cells),
+            "villages_without_leader": int(villages_without_leader),
+            "cells_without_executive": int(cells_without_executive),
+            "scope": "district",
+            "station_name": None,
+        }
+
+    scope_ids = station_scope_location_ids(db, station_id)
+    cell_ids = station_covered_cell_ids(db, station_id)
+    village_ids = scope_ids - cell_ids
+    station = get_station(db, station_id)
+    station_name = station.station_name if station else None
+
+    if not scope_ids:
+        return {
+            "village_chiefs": 0,
+            "cell_executives": 0,
+            "total_villages": 0,
+            "total_cells": 0,
+            "villages_without_leader": 0,
+            "cells_without_executive": 0,
+            "scope": "station",
+            "station_name": station_name,
+        }
+
+    leader_in_scope = (
+        select(LocalLeaderCoverageLocation.local_leader_id)
+        .filter(LocalLeaderCoverageLocation.location_id.in_(list(scope_ids)))
+        .distinct()
+    )
+
+    village_chiefs = (
+        db.query(func.count(LocalLeader.local_leader_id))
+        .filter(
+            LocalLeader.role == "chief_of_village",
+            LocalLeader.is_active.is_(True),
+            LocalLeader.local_leader_id.in_(leader_in_scope),
+        )
+        .scalar()
+        or 0
+    )
+    cell_executives = (
+        db.query(func.count(LocalLeader.local_leader_id))
+        .filter(
+            LocalLeader.role == "executive_of_cell",
+            LocalLeader.is_active.is_(True),
+            LocalLeader.local_leader_id.in_(leader_in_scope),
+        )
+        .scalar()
+        or 0
+    )
+
+    covered_cell_ids = (
+        select(LocalLeaderCoverageLocation.location_id)
+        .join(LocalLeader, LocalLeader.local_leader_id == LocalLeaderCoverageLocation.local_leader_id)
+        .where(
+            LocalLeader.is_active.is_(True),
+            LocalLeader.role == "executive_of_cell",
+            LocalLeaderCoverageLocation.location_id.in_(list(cell_ids)),
+        )
+        .distinct()
+    )
+    cells_without_executive = 0
+    if cell_ids:
+        cells_without_executive = (
+            db.query(func.count(Location.location_id))
+            .filter(
+                Location.location_type == "cell",
+                Location.is_active.is_(True),
+                Location.location_id.in_(list(cell_ids)),
+                ~Location.location_id.in_(covered_cell_ids),
+            )
+            .scalar()
+            or 0
+        )
+
+    directly_covered_ids = (
+        select(LocalLeaderCoverageLocation.location_id)
+        .join(LocalLeader, LocalLeader.local_leader_id == LocalLeaderCoverageLocation.local_leader_id)
+        .where(
+            LocalLeader.is_active.is_(True),
+            LocalLeaderCoverageLocation.location_id.in_(list(scope_ids)),
+        )
+        .distinct()
+    )
+    villages_without_leader = 0
+    if village_ids:
+        villages_without_leader = (
+            db.query(func.count(Location.location_id))
+            .filter(
+                Location.location_type == "village",
+                Location.is_active.is_(True),
+                Location.location_id.in_(list(village_ids)),
+                ~Location.location_id.in_(directly_covered_ids),
+                or_(
+                    Location.parent_location_id.is_(None),
+                    ~Location.parent_location_id.in_(covered_cell_ids),
+                ),
+            )
+            .scalar()
+            or 0
+        )
+
+    return {
+        "village_chiefs": int(village_chiefs),
+        "cell_executives": int(cell_executives),
+        "total_villages": len(village_ids),
+        "total_cells": len(cell_ids),
+        "villages_without_leader": int(villages_without_leader),
+        "cells_without_executive": int(cells_without_executive),
+        "scope": "station",
+        "station_name": station_name,
+    }
+
+
 def _replace_coverage(db: Session, leader_id: int, location_ids: list[int]) -> None:
     deduped = sorted({int(x) for x in location_ids if x is not None})
     if deduped:
@@ -125,83 +307,98 @@ def _replace_coverage(db: Session, leader_id: int, location_ids: list[int]) -> N
 @router.get("/stats")
 def get_leader_stats(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_admin),
+    current_user=Depends(get_current_admin_or_station_staff),
 ):
-    """Accurate counts: leaders by role, locations covered vs uncovered."""
-    # Count active leaders by role
-    village_chiefs = db.query(func.count(LocalLeader.local_leader_id)).filter(
-        LocalLeader.role == "chief_of_village",
-        LocalLeader.is_active.is_(True),
-    ).scalar() or 0
+    """Leaders by role and coverage gaps — district-wide for admin, station-only for officer/IO."""
+    return _leader_stats_payload(db, _admin_station_id(current_user))
 
-    cell_executives = db.query(func.count(LocalLeader.local_leader_id)).filter(
-        LocalLeader.role == "executive_of_cell",
-        LocalLeader.is_active.is_(True),
-    ).scalar() or 0
 
-    total_villages = db.query(func.count(Location.location_id)).filter(
-        Location.location_type == "village",
-        Location.is_active.is_(True),
-    ).scalar() or 0
-
-    total_cells = db.query(func.count(Location.location_id)).filter(
-        Location.location_type == "cell",
-        Location.is_active.is_(True),
-    ).scalar() or 0
-
-    # Cells that have at least one active cell executive assigned
-    covered_cell_ids = (
-        select(LocalLeaderCoverageLocation.location_id)
-        .join(LocalLeader, LocalLeader.local_leader_id == LocalLeaderCoverageLocation.local_leader_id)
-        .where(
-            LocalLeader.is_active.is_(True),
-            LocalLeader.role == "executive_of_cell",
+@router.get("/assignable-locations")
+def list_assignable_locations(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin_or_station_staff),
+):
+    """Villages and cells an officer/IO may assign when creating a local leader."""
+    station_id = _admin_station_id(current_user)
+    if station_id is None:
+        cells = (
+            db.query(Location.location_id, Location.location_name, Location.parent_location_id)
+            .filter(Location.location_type == "cell", Location.is_active.is_(True))
+            .order_by(Location.location_name.asc())
+            .limit(2000)
+            .all()
         )
-        .distinct()
-    )
-    cells_without_executive = db.query(func.count(Location.location_id)).filter(
-        Location.location_type == "cell",
-        Location.is_active.is_(True),
-        ~Location.location_id.in_(covered_cell_ids),
-    ).scalar() or 0
-
-    # Locations covered by ANY active leader (village chiefs + cell executives)
-    directly_covered_ids = (
-        select(LocalLeaderCoverageLocation.location_id)
-        .join(LocalLeader, LocalLeader.local_leader_id == LocalLeaderCoverageLocation.local_leader_id)
-        .where(LocalLeader.is_active.is_(True))
-        .distinct()
-    )
-
-    # Villages not directly covered AND whose parent cell also has no active executive
-    villages_without_leader = db.query(func.count(Location.location_id)).filter(
-        Location.location_type == "village",
-        Location.is_active.is_(True),
-        ~Location.location_id.in_(directly_covered_ids),
-        or_(
-            Location.parent_location_id.is_(None),
-            ~Location.parent_location_id.in_(covered_cell_ids),
-        ),
-    ).scalar() or 0
+        villages = (
+            db.query(Location.location_id, Location.location_name, Location.parent_location_id)
+            .filter(Location.location_type == "village", Location.is_active.is_(True))
+            .order_by(Location.location_name.asc())
+            .limit(5000)
+            .all()
+        )
+    else:
+        scope_ids = station_scope_location_ids(db, station_id)
+        if not scope_ids:
+            station = get_station(db, station_id)
+            return {
+                "cells": [],
+                "villages": [],
+                "scope": "station",
+                "station_name": station.station_name if station else None,
+            }
+        cell_ids = station_covered_cell_ids(db, station_id)
+        village_ids = scope_ids - cell_ids
+        cells = (
+            db.query(Location.location_id, Location.location_name, Location.parent_location_id)
+            .filter(Location.location_id.in_(list(cell_ids)), Location.is_active.is_(True))
+            .order_by(Location.location_name.asc())
+            .all()
+        ) if cell_ids else []
+        villages = (
+            db.query(Location.location_id, Location.location_name, Location.parent_location_id)
+            .filter(Location.location_id.in_(list(village_ids)), Location.is_active.is_(True))
+            .order_by(Location.location_name.asc())
+            .all()
+        ) if village_ids else []
+        station = get_station(db, station_id)
+        return {
+            "scope": "station",
+            "station_name": station.station_name if station else None,
+            "cells": [
+                {"location_id": int(r[0]), "location_name": r[1], "parent_location_id": r[2]}
+                for r in cells
+            ],
+            "villages": [
+                {"location_id": int(r[0]), "location_name": r[1], "parent_location_id": r[2]}
+                for r in villages
+            ],
+        }
 
     return {
-        "village_chiefs": int(village_chiefs),
-        "cell_executives": int(cell_executives),
-        "total_villages": int(total_villages),
-        "total_cells": int(total_cells),
-        "villages_without_leader": int(villages_without_leader),
-        "cells_without_executive": int(cells_without_executive),
+        "scope": "district",
+        "station_name": None,
+        "cells": [
+            {"location_id": int(r[0]), "location_name": r[1], "parent_location_id": r[2]}
+            for r in cells
+        ],
+        "villages": [
+            {"location_id": int(r[0]), "location_name": r[1], "parent_location_id": r[2]}
+            for r in villages
+        ],
     }
 
 
 @router.get("/coverage-gaps", response_model=LeaderCoverageGapsResponse)
 def list_leader_coverage_gaps(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_admin),
+    current_user=Depends(get_current_admin_or_station_staff),
     limit: int = Query(500, ge=1, le=2000),
 ):
     """Villages/cells with no active local leader registered (admin warning)."""
     raw = find_leader_coverage_gaps(db, limit=limit)
+    station_id = _admin_station_id(current_user)
+    if station_id is not None:
+        scope_ids = station_scope_location_ids(db, station_id)
+        raw = [row for row in raw if int(row.get("location_id") or 0) in scope_ids]
     items = [LeaderCoverageGapItem(**row) for row in raw]
     return LeaderCoverageGapsResponse(items=items, total=len(items))
 
@@ -209,10 +406,14 @@ def list_leader_coverage_gaps(
 @router.get("/", response_model=list[LocalLeaderResponse])
 def list_local_leaders(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_admin),
+    current_user=Depends(get_current_admin_or_station_staff),
     limit: int = Query(200, ge=1, le=500),
 ):
-    rows = db.query(LocalLeader).order_by(LocalLeader.full_name.asc()).limit(limit).all()
+    q = db.query(LocalLeader).order_by(LocalLeader.full_name.asc())
+    station_id = _admin_station_id(current_user)
+    if station_id is not None:
+        q = filter_leaders_to_station(q, db, station_id)
+    rows = q.limit(limit).all()
     if not rows:
         return []
 
@@ -266,7 +467,7 @@ def list_local_leaders(
 def create_local_leader(
     payload: LocalLeaderCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_admin),
+    current_user=Depends(get_current_admin_or_station_staff),
 ):
     role = (payload.role or "").strip()
     email_norm = _norm_email(payload.email)
@@ -282,6 +483,9 @@ def create_local_leader(
             raise HTTPException(status_code=409, detail="phone_number already exists")
 
     covered = _validate_role_and_coverage(db, role, payload.covered_location_ids)
+    station_id = _admin_station_id(current_user)
+    if station_id is not None:
+        assert_locations_in_station_scope(db, covered, station_id)
 
     leader = LocalLeader(
         full_name=payload.full_name.strip(),
@@ -310,12 +514,15 @@ def create_local_leader(
 def admin_send_account_notification(
     local_leader_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_admin),
+    current_user=Depends(get_current_admin_or_station_staff),
 ):
     """Resend account-ready notification (no OTP — leader requests setup code in the mobile app)."""
     leader = db.query(LocalLeader).filter(LocalLeader.local_leader_id == local_leader_id).first()
     if not leader:
         raise HTTPException(status_code=404, detail="Local leader not found")
+    station_id = _admin_station_id(current_user)
+    if station_id is not None:
+        assert_leader_in_station_scope(db, local_leader_id, station_id)
     if not leader.is_active:
         raise HTTPException(status_code=400, detail="Leader account is inactive.")
     if not (leader.email or "").strip():
@@ -339,11 +546,14 @@ def update_local_leader(
     local_leader_id: int,
     payload: LocalLeaderUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_admin),
+    current_user=Depends(get_current_admin_or_station_staff),
 ):
     leader = db.query(LocalLeader).filter(LocalLeader.local_leader_id == local_leader_id).first()
     if not leader:
         raise HTTPException(status_code=404, detail="Local leader not found")
+    station_id = _admin_station_id(current_user)
+    if station_id is not None:
+        assert_leader_in_station_scope(db, local_leader_id, station_id)
 
     if payload.full_name is not None:
         leader.full_name = payload.full_name.strip()
@@ -384,6 +594,8 @@ def update_local_leader(
 
     if payload.covered_location_ids is not None:
         covered = _validate_role_and_coverage(db, eff_role, payload.covered_location_ids)
+        if station_id is not None:
+            assert_locations_in_station_scope(db, covered, station_id)
         _replace_coverage(db, leader.local_leader_id, covered)
     elif payload.role is not None:
         cur = [
@@ -405,11 +617,14 @@ def update_local_leader(
 def delete_local_leader(
     local_leader_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_admin),
+    current_user=Depends(get_current_admin_or_station_staff),
 ):
     leader = db.query(LocalLeader).filter(LocalLeader.local_leader_id == local_leader_id).first()
     if not leader:
         raise HTTPException(status_code=404, detail="Local leader not found")
+    station_id = _admin_station_id(current_user)
+    if station_id is not None:
+        assert_leader_in_station_scope(db, local_leader_id, station_id)
     lid = int(local_leader_id)
     # ORM delete() would nullify child FKs first; coverage uses NOT NULL + we want CASCADE semantics.
     db.query(LocalLeaderCoverageLocation).filter(
