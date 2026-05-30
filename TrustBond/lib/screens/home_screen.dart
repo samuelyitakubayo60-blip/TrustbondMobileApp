@@ -124,8 +124,22 @@ class _HomeScreenState extends State<HomeScreen>
 
   // Safety / Nearby
   double _selectedRadiusKm = 1.5; // default matches ProximityAlertService default (1500m)
+  int _selectedTimeHours = 24;    // time window for safety recommendations
   List<Hotspot> _nearbyHotspots = [];
   bool _loadingHotspots = false;
+
+  // Human-readable label for a time window in hours
+  static String _timeWindowLabel(int hours) {
+    if (hours < 24) return '${hours}h';
+    final days = hours ~/ 24;
+    if (days < 7) return '${days}d';
+    final weeks = days ~/ 7;
+    if (days < 30) return '${weeks}w';
+    final months = days ~/ 30;
+    if (days < 365) return '${months}mo';
+    final years = days ~/ 365;
+    return '${years}yr';
+  }
 
   // Animation
   late AnimationController _pulseController;
@@ -233,7 +247,9 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadAllHotspots() async {
     try {
-      final hotspots = await _hotspotService.getAllHotspots();
+      final hotspots = await _hotspotService.getAllHotspots(
+        timeWindowHours: _selectedTimeHours,
+      );
       if (!mounted) return;
       final transformed = hotspots.map((h) => {
             'latitude': h.centerLat,
@@ -320,10 +336,171 @@ class _HomeScreenState extends State<HomeScreen>
     // Keep ProximityAlertService in sync so actual notifications use this radius.
     unawaited(ProximityAlertService().updateRadius(km * 1000));
     try {
-      final all = await _hotspotService.getAllHotspots();
+      final all = await _hotspotService.getAllHotspots(timeWindowHours: _selectedTimeHours);
       _updateNearbyHotspots(all);
     } catch (_) {}
     if (mounted) setState(() => _loadingHotspots = false);
+  }
+
+  Future<void> _onTimeWindowChanged(int hours) async {
+    setState(() {
+      _selectedTimeHours = hours;
+      _loadingHotspots = true;
+    });
+    try {
+      final all = await _hotspotService.getAllHotspots(timeWindowHours: hours);
+      _updateNearbyHotspots(all);
+    } catch (_) {}
+    if (mounted) setState(() => _loadingHotspots = false);
+  }
+
+  Future<void> _pickTimeWindow() async {
+    final controller = TextEditingController();
+    String selectedUnit = 'Days';
+    const units = ['Hours', 'Days', 'Months', 'Years'];
+
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text(
+            'Set Time Window',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Show safety recommendations for incidents reported in the last:',
+                style: TextStyle(fontSize: 12, color: AppColors.muted, height: 1.5),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.number,
+                      autofocus: true,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                      decoration: InputDecoration(
+                        hintText: '1',
+                        hintStyle: TextStyle(color: AppColors.muted.withValues(alpha: 0.5)),
+                        filled: true,
+                        fillColor: AppColors.surface2,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: AppColors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 3,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface2,
+                        border: Border.all(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: selectedUnit,
+                          dropdownColor: AppColors.surface,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.text,
+                          ),
+                          items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                          onChanged: (v) {
+                            if (v != null) setLocal(() => selectedUnit = v);
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Quick pick chips
+              Wrap(
+                spacing: 7,
+                runSpacing: 6,
+                children: [
+                  _quickChip('24h', 24, controller, setLocal, () => selectedUnit = 'Hours'),
+                  _quickChip('3 days', 72, controller, setLocal, () => selectedUnit = 'Hours'),
+                  _quickChip('1 week', 7, controller, setLocal, () => selectedUnit = 'Days'),
+                  _quickChip('1 month', 1, controller, setLocal, () => selectedUnit = 'Months'),
+                  _quickChip('3 months', 3, controller, setLocal, () => selectedUnit = 'Months'),
+                  _quickChip('1 year', 1, controller, setLocal, () => selectedUnit = 'Years'),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel', style: TextStyle(color: AppColors.muted)),
+            ),
+            TextButton(
+              onPressed: () {
+                final n = int.tryParse(controller.text.trim()) ?? 0;
+                if (n <= 0) return;
+                final hours = switch (selectedUnit) {
+                  'Hours'  => n,
+                  'Days'   => n * 24,
+                  'Months' => n * 30 * 24,
+                  'Years'  => n * 365 * 24,
+                  _        => n * 24,
+                };
+                // Cap at 2 years
+                Navigator.of(ctx).pop(hours.clamp(1, 17520));
+              },
+              child: const Text('Apply', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result != null) _onTimeWindowChanged(result);
+  }
+
+  Widget _quickChip(String label, int value, TextEditingController ctrl,
+      StateSetter setLocal, VoidCallback setUnit) {
+    return GestureDetector(
+      onTap: () => setLocal(() {
+        ctrl.text = '$value';
+        setUnit();
+      }),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppColors.accent.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
+        ),
+        child: Text(label,
+            style: const TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.accent)),
+      ),
+    );
   }
 
   // ── Build ───────────────────────────────────────────────────────────────────
@@ -849,11 +1026,60 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     final tips = liveTips.isNotEmpty ? liveTips : _fallbackTips;
+    final timeLabel = _timeWindowLabel(_selectedTimeHours);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionLabel('SAFETY RECOMMENDATIONS'),
+        Row(
+          children: [
+            const Icon(Icons.shield_outlined, size: 13, color: AppColors.muted),
+            const SizedBox(width: 5),
+            Text(
+              'SAFETY RECOMMENDATIONS · $timeLabel',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.muted,
+                letterSpacing: 0.9,
+              ),
+            ),
+            const Spacer(),
+            if (_loadingHotspots)
+              const SizedBox(
+                width: 11,
+                height: 11,
+                child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.accent),
+              )
+            else
+              GestureDetector(
+                onTap: _pickTimeWindow,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        timeLabel,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.accent,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.expand_more_rounded, size: 13, color: AppColors.accent),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
         const SizedBox(height: 10),
         SizedBox(
           height: 100,

@@ -125,6 +125,7 @@ def list_public_hotspots(
             classification=classification,
             incident_count=int(h.incident_count or 0),
             dominant_crime=incident_type_name,
+            time_window_hours=int(h.time_window_hours or effective_hours),
         )
         responses.append(
             HotspotResponse(

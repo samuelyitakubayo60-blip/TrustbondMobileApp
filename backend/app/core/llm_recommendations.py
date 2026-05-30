@@ -377,15 +377,19 @@ def _build_citizen_advisory(
     incident_mix: Optional[Dict[str, int]],
     verified_report_count: int = 0,
     cluster_case_context: Optional[Dict[str, Any]] = None,
+    time_window_hours: Optional[int] = None,
 ) -> str:
     """
-    Community-facing notice (plain language). Uses case outcomes when available:
-    e.g. suspect apprehended vs ongoing watch-and-report for theft clusters.
+    Community-facing notice (plain language, time-aware).
+    Mentions the observation period so advisories never feel like stale news.
     """
-    area = (area_label or "this area").strip()
+    area = (area_label or "your area").strip()
     crime = (dominant_crime or "incidents").strip().lower()
     cls = (classification or "").strip().lower()
     ctx = cluster_case_context or {}
+    t = _time_window_label(time_window_hours)   # e.g. "in the past 24 hours"
+    n = incident_count
+    count_phrase = f"{n} {'report' if n == 1 else 'reports'}"
     theft_count = _theft_incident_weight(dominant_crime, incident_mix)
     is_theft_cluster = theft_count >= 1 or bool(
         re.search(r"theft|robbery|burglary|steal", crime, re.I)
@@ -393,45 +397,59 @@ def _build_citizen_advisory(
 
     if ctx.get("suspect_apprehended") and is_theft_cluster:
         return (
-            f"Police have acted on theft-related reports in {area}. A suspect was apprehended "
-            f"in connection with investigations linked to this area. Thank you to residents who reported. "
-            f"Please continue to secure valuables and report anything new or seriously concerning."
+            f"A suspect linked to theft reports near {area} has been apprehended. "
+            f"Thank you to everyone who reported — your contributions made a difference. "
+            f"Please continue to secure valuables and report anything new or suspicious through TrustBond."
         )
 
     if ctx.get("closed_cases", 0) >= 1 and is_theft_cluster:
         return (
-            f"Police have closed at least one investigation tied to theft reports near {area}. "
-            f"Thank you for reporting. Stay alert, protect your property, and contact police if you see "
-            f"new suspicious activity or anything that should be investigated urgently."
-        )
-
-    if verified_report_count >= max(2, incident_count // 2) and incident_count >= 2:
-        return (
-            f"Police have responded to recent verified reports in {area}. Thank you for sharing information. "
-            f"Please stay alert and report anything new or seriously concerning."
+            f"An investigation tied to theft reports near {area} has been closed. "
+            f"Stay alert, secure your property, and report new suspicious activity through TrustBond."
         )
 
     if is_theft_cluster:
+        urgency = "There is elevated risk" if cls in ("critical", "active") else "There have been reports"
         return (
-            f"There have been theft-related reports near {area}. Secure valuables and shared spaces, "
-            f"watch for suspicious behaviour, and report anything serious to police so patrols can respond."
+            f"{urgency} of theft near {area} — {count_phrase} {t}. "
+            f"Secure your valuables, stay aware of your surroundings, and avoid isolated spots especially after dark. "
+            f"Report any suspicious activity through TrustBond immediately."
         )
 
     if re.search(r"traffic|accident|road|vehicle", crime, re.I):
         return (
-            f"Traffic-related incidents have been reported around {area}. Use caution on the road "
-            f"and report dangerous driving or serious accidents to police."
+            f"Traffic-related incidents have been reported near {area} {t} ({count_phrase}). "
+            f"Drive carefully, stay cautious on the road, and report dangerous driving or serious accidents through TrustBond."
         )
 
-    if cls in {"critical", "active"} or cluster_kind == "mixed_hotspot":
+    if re.search(r"assault|fight|violence|attack", crime, re.I):
         return (
-            f"Police are monitoring increased incident reports in {area}. Avoid unnecessary risk, "
-            f"look out for neighbours, and report emergencies or serious concerns immediately."
+            f"There is a heightened risk of violent incidents near {area} — {count_phrase} reported {t}. "
+            f"Avoid confrontations, stay in well-lit and populated areas, and report anything alarming through TrustBond."
+        )
+
+    if cls in {"critical"} or (cls == "active" and n >= 3):
+        return (
+            f"There is high risk of incidents near {area} — {count_phrase} of {crime} reported {t}. "
+            f"Be attentive, avoid unnecessary movement in the area, look out for neighbours, "
+            f"and report any unusual behaviour or incident immediately through TrustBond."
+        )
+
+    if cls in {"active", "high"} or cluster_kind == "mixed_hotspot":
+        return (
+            f"Multiple suspicious cases were reported near {area} {t} ({count_phrase}). "
+            f"Stay alert and ready to report any incident or unusual behaviour you detect through TrustBond."
+        )
+
+    if verified_report_count >= max(2, n // 2) and n >= 2:
+        return (
+            f"Verified incidents have been reported near {area} {t}. "
+            f"Stay vigilant and report anything new or concerning through TrustBond."
         )
 
     return (
-        f"Occasional incident reports have been noted in {area}. Remain observant and contact police "
-        f"if you see anything that should be investigated."
+        f"Incident activity has been noted near {area} {t} ({count_phrase}). "
+        f"Remain observant and report anything unusual through TrustBond."
     )
 
 
@@ -1073,6 +1091,27 @@ def generate_recommendation(
 _citizen_advisory_cache: Dict[tuple, str] = {}
 
 
+def _time_window_label(hours: Optional[int]) -> str:
+    """Human-readable label for a time window."""
+    if not hours or hours <= 0:
+        return "recently"
+    if hours <= 6:
+        return "in the past few hours"
+    if hours <= 24:
+        return "in the past 24 hours"
+    if hours <= 48:
+        return "in the past 2 days"
+    if hours <= 72:
+        return "in the past 3 days"
+    if hours <= 168:
+        return "in the past week"
+    if hours <= 360:
+        return "in the past 2 weeks"
+    if hours <= 720:
+        return "in the past month"
+    return "recently"
+
+
 def _build_citizen_advisory_prompt(
     *,
     classification: str,
@@ -1080,33 +1119,47 @@ def _build_citizen_advisory_prompt(
     dominant_crime: Optional[str],
     area_label: Optional[str],
     incident_mix: Optional[Dict[str, int]],
+    time_window_hours: Optional[int] = None,
 ) -> str:
     area = area_label or "your area"
     crime = dominant_crime or "incidents"
+    time_label = _time_window_label(time_window_hours)
     mix_lines = ""
     if incident_mix:
         top = sorted(incident_mix.items(), key=lambda x: x[1], reverse=True)[:4]
         mix_lines = ", ".join(f"{name} ({cnt})" for name, cnt in top)
 
+    urgency_note = ""
+    if classification in ("critical",):
+        urgency_note = "This is a high-urgency situation. The advisory should convey clear and immediate risk."
+    elif classification in ("active", "high"):
+        urgency_note = "This is an elevated-risk situation. The advisory should convey noticeable concern and urgency."
+
     return f"""You are writing a short public safety notice for citizens in Musanze, Rwanda.
 
 Situation:
 - Area              : {area}
+- Time period       : {time_label}
 - Security level    : {classification}
 - Incident type     : {crime}
-- Incident count    : {incident_count}
+- Incident count    : {incident_count} reports
 - Incident breakdown: {mix_lines or crime}
+{urgency_note}
 
-Write 2–3 plain sentences in calm, clear English for the general public.
+Write 2–3 plain sentences in calm but honest English for the general public.
+You MUST mention the time period ("{time_label}") naturally in the advisory.
 Tell them:
-1. What kind of security situation has been reported nearby.
-2. What practical steps they should take (e.g. stay alert, secure valuables, avoid the area at night, report anything suspicious).
-3. Encourage them to report incidents through the TrustBond app.
+1. What kind of incidents have been reported nearby and when (use the time period).
+2. The practical risk level and what they should watch for (specific to the incident type).
+3. Encourage them to stay alert and report any incidents or unusual behaviour through the TrustBond app.
+
+Example tone (adapt the content — do not copy verbatim):
+"There is elevated risk of theft in your area as {incident_count} cases were reported nearby {time_label}. Stay attentive, secure your valuables, and avoid isolated areas especially at night. If you notice suspicious activity or anything unusual, report it immediately through TrustBond."
 
 STRICT RULES — your response must NOT mention:
-- Any police unit names, team names, or department codes (e.g. RRU, DEU, CPU).
-- Any police tactics, deployments, or operational plans.
-- Any classified or internal police information.
+- Any authority unit names, team names, or department codes.
+- Any tactical deployments or operational plans.
+- Any classified or internal security information.
 
 Return JSON only:
 {{
@@ -1121,14 +1174,15 @@ def generate_citizen_advisory(
     dominant_crime: Optional[str],
     area_label: Optional[str] = None,
     incident_mix: Optional[Dict[str, int]] = None,
+    time_window_hours: Optional[int] = None,
 ) -> str:
     """
     Generate a plain-language public safety advisory for citizens.
-    Contains no police unit names, tactical details, or operational information.
+    Mentions the observation time window so advisories never feel stale.
     Falls back to a template when no LLM key is configured.
     """
     mix_tuple = tuple(sorted((incident_mix or {}).items()))
-    cache_key = (classification, incident_count, dominant_crime, area_label, mix_tuple)
+    cache_key = (classification, incident_count, dominant_crime, area_label, mix_tuple, time_window_hours)
     if cache_key in _citizen_advisory_cache:
         return _citizen_advisory_cache[cache_key]
 
@@ -1138,13 +1192,13 @@ def generate_citizen_advisory(
         dominant_crime=dominant_crime,
         area_label=area_label,
         incident_mix=incident_mix,
+        time_window_hours=time_window_hours,
     )
 
     result = _call_hotspot_llm(prompt)
     advisory = (result or {}).get("advisory", "").strip()
 
     if not advisory:
-        # Template fallback — still unit-free
         advisory = _build_citizen_advisory(
             area_label=area_label,
             dominant_crime=dominant_crime,
@@ -1152,6 +1206,7 @@ def generate_citizen_advisory(
             classification=classification,
             cluster_kind="single_type",
             incident_mix=incident_mix,
+            time_window_hours=time_window_hours,
         )
 
     _citizen_advisory_cache[cache_key] = advisory
