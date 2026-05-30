@@ -1,5 +1,5 @@
 """
-Plain-language verification summaries for police officers.
+Plain-language verification summaries for dashboard users.
 
 One unified briefing (description + evidence + outcome). Technical codes stay
 in structured fields only — never in text shown to officers.
@@ -66,7 +66,7 @@ def humanize_flag_reason(reason: Optional[str]) -> str:
             "Evidence failed an integrity check."
         ),
         "rejected_by_reviewer": (
-            "A police reviewer rejected this report."
+            "A reviewer rejected this report."
         ),
         "rejected_by_local_leader": (
             "A local leader reviewed and rejected this report."
@@ -102,17 +102,17 @@ def _decision_headline(
         )
     if rs == "flagged" or is_flagged:
         return (
-            "Needs police review",
-            "Automated screening found concerns. An officer must confirm or reject.",
+            "Needs leader review",
+            "Automated screening found concerns. A local leader must confirm or reject.",
         )
     if vs == "under_review":
         return (
-            "Pending police review",
-            "The report was not auto-confirmed. An officer must decide after reading it.",
+            "Pending leader review",
+            "The report was not auto-confirmed. A local leader must decide after reviewing it.",
         )
     return (
         "Pending",
-        "Screening is incomplete or inconclusive until an officer acts.",
+        "Screening is incomplete or inconclusive.",
     )
 
 
@@ -200,7 +200,7 @@ def _evidence_paragraph(snapshot: Dict[str, Any]) -> str:
         )
     elif not any_failed:
         parts.append(
-            "Officers should still verify media on scene; automated screening is advisory only."
+            "Media should still be verified on scene; automated screening is advisory only."
         )
 
     return " ".join(parts)
@@ -324,7 +324,7 @@ def build_unified_verification_summary(
     parts.append("Recommended next step:")
     if effective_vs == "verified":
         parts.append(
-            "Proceed with normal police workflow unless field knowledge contradicts this report."
+            "Proceed unless field knowledge contradicts this report."
         )
     elif effective_vs == "rejected" or rs == "rejected":
         parts.append(
@@ -338,7 +338,7 @@ def build_unified_verification_summary(
         )
 
     if (reviewer_note or "").strip():
-        parts.append(f"\nOfficer note on file: {reviewer_note.strip()}")
+        parts.append(f"\nNote on file: {reviewer_note.strip()}")
 
     return "\n".join(parts).strip()
 
@@ -378,7 +378,7 @@ def polish_unified_summary_with_llm(brief: str) -> str:
         return brief
 
     prompt = (
-        "Rewrite this police report screening summary for a district commander.\n"
+        "Rewrite this report screening summary for a district commander.\n"
         "Requirements:\n"
         "- Keep ONE unified narrative (do not split into separate 'evidence' and 'verification' documents).\n"
         "- Use simple, direct sentences. No technical codes (no INCIDENT_TEXT_MISMATCH, CONTEXT_MISMATCH, "

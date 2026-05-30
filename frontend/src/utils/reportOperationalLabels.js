@@ -204,7 +204,7 @@ export const REPORT_QUEUE_PRESETS = {
     verification_status_filter: null,
     verification_status_in: null,
     hint:
-      "No preset — use filters below. AI verification is separate from police confirmation; community confirmation is local-leader attestation (separate from both).",
+      "No preset — use filters below. AI verification is separate from leader confirmation; community confirmation is local-leader attestation (separate from both).",
   },
   awaiting_leader: {
     label: "Awaiting leader input (my jurisdiction)",
@@ -215,12 +215,12 @@ export const REPORT_QUEUE_PRESETS = {
       "Saved search for DPC/IO: village/cell leaders have not confirmed community attestation yet. Station screening may still run in parallel.",
   },
   confirmed_screening: {
-    label: "Leader confirmed · under police screening",
+    label: "Leader confirmed · under AI screening",
     leader_confirmation: "confirmed",
     verification_status_filter: "under_review",
     verification_status_in: null,
     hint:
-      "For IO/DPC triage: community attestation done; incident still under officer or station screening (under_review).",
+      "For DPC triage: community attestation done; incident still under AI/system screening (under_review).",
   },
   leader_rejected: {
     label: "Leader disputed / not confirmed",
@@ -231,12 +231,12 @@ export const REPORT_QUEUE_PRESETS = {
       "DPC/IO queue: leader flagged narrative mismatch or unreliability. Compare with technical screening before closing out.",
   },
   station_need_action: {
-    label: "Station ops — police screening queue",
+    label: "Station ops — review queue",
     leader_confirmation: null,
     verification_status_filter: null,
     verification_status_in: "pending,under_review",
     hint:
-      "Station workload slice: verification_status pending or under_review (needs police action). Combine with location filters as needed.",
+      "Station workload slice: verification_status pending or under_review (needs action). Combine with location filters as needed.",
   },
   dpu_analytics_lens: {
     label: "DPU / safety analytics lens — leader confirmed only",
@@ -252,15 +252,15 @@ export const REPORT_QUEUE_PRESETS = {
     verification_status_filter: "verified",
     verification_status_in: null,
     hint:
-      "Leader confirmed and police verification_status verified — matches backend case/hotspot eligibility.",
+      "Leader confirmed and AI verification_status verified — matches backend case/hotspot eligibility.",
   },
   leader_yes_police_pending: {
-    label: "Leader confirmed · police still pending",
+    label: "Leader confirmed · AI verification pending",
     leader_confirmation: "confirmed",
     verification_status_filter: null,
     verification_status_in: "pending,under_review",
     hint:
-      "Community attestation done; report stays pending for operations until police verifies (diagram: stays pending for ops).",
+      "Community attestation done; report stays pending for operations until AI verifies (diagram: stays pending for ops).",
   },
   leader_submitted: {
     label: "Filed by local leader (mobile attestation)",

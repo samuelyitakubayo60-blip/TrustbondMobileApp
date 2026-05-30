@@ -7,7 +7,7 @@ import {
 } from '../../utils/reportOperationalLabels';
 import { caseDisplayName, caseDisplayRef } from '../../utils/caseDisplay';
 
-// AI-only status — excludes police/officer verification
+// AI-only status — AI threshold result
 const formatAIStatus = (report) => {
   const rs = (report?.rule_status || '').trim().toLowerCase();
   const vs = (report?.verification_status || '').trim().toLowerCase();

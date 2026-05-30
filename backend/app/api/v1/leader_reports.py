@@ -94,6 +94,11 @@ def list_leader_reports(
         .filter(Report.village_location_id.in_(covered_villages))
         .order_by(Report.reported_at.desc())
     )
+    # Never show AI-rejected reports in the leader inbox — only flagged/under_review ones need review
+    q = q.filter(
+        ~((Report.verification_status == "rejected") & (Report.leader_verification_status.is_(None)))
+    ).filter(Report.rule_status != "rejected")
+
     if only_pending:
         q = q.filter((Report.leader_verification_status.is_(None)) | (Report.leader_verification_status == "pending"))
 
@@ -286,7 +291,7 @@ def verify_report(
     r.leader_verified_at = now
     r.leader_verification_note = (payload.note or "").strip()[:500] if payload.note else None
 
-    # Leader confirmation is sufficient for map display — no police review needed.
+    # Leader confirmation is sufficient for map display.
     if decision == "confirmed" and r.verification_status not in ("rejected",):
         r.verification_status = "verified"
         r.status = "verified"
@@ -299,9 +304,10 @@ def verify_report(
         r.flag_reason = r.flag_reason or "rejected_by_local_leader"
 
     # ── Update ML trust score based on leader decision ──────────────────────
-    # confirmed: raise score to at least 80, is_final=False (future evidence can still adjust)
-    # rejected:  hard-set score to 10, is_final=True (locks scorecard — prevents any rerun
-    #            from restoring the report to verified after leader rejection)
+    # confirmed: raise score to AT LEAST 90 (workflow rule: AI + leader only,
+    #            leader confirmation is the final gate — must reach ≥ 90)
+    # rejected:  hard-set score to 10, is_final=True (locks scorecard — prevents
+    #            any rerun from restoring the report after leader rejection; must be < 40)
     existing_ml = (
         db.query(MLPrediction)
         .filter(MLPrediction.report_id == r.report_id)
@@ -310,7 +316,7 @@ def verify_report(
     )
 
     # Always persist the leader decision in feature_vector so the scorecard
-    # is aware of it even if it reruns (e.g. from a community vote).
+    # is aware of it even if it reruns (e.g. from a background reprocessing task).
     fv = r.feature_vector if isinstance(getattr(r, "feature_vector", None), dict) else {}
     fv["leader_decision"] = {
         "decision": decision,
@@ -323,19 +329,19 @@ def verify_report(
     if decision == "confirmed":
         if existing_ml:
             current_score = float(existing_ml.trust_score or 50.0)
-            new_score = max(80.0, current_score)
+            new_score = max(90.0, current_score)  # must reach ≥ 90
             existing_ml.trust_score = Decimal(str(round(new_score, 2)))
             existing_ml.prediction_label = "likely_real"
-            existing_ml.confidence = Decimal("0.85")
+            existing_ml.confidence = Decimal("0.90")
             existing_ml.model_type = "leader_override"
-            existing_ml.is_final = False  # community votes can still adjust
+            existing_ml.is_final = False
         else:
             db.add(MLPrediction(
                 prediction_id=uuid4(),
                 report_id=r.report_id,
-                trust_score=Decimal("80.0"),
+                trust_score=Decimal("90.0"),
                 prediction_label="likely_real",
-                confidence=Decimal("0.85"),
+                confidence=Decimal("0.90"),
                 model_type="leader_override",
                 is_final=False,
                 evaluated_at=now,
@@ -349,12 +355,12 @@ def verify_report(
             r.device.trusted_reports = (r.device.trusted_reports or 0) + 1
 
     elif decision == "rejected":
-        # Hard-lock: score drops to 10, is_final=True prevents any background
-        # rerun (community vote, backlog processor) from overwriting this decision.
+        # Hard-lock at 10 (well below the < 40 rejection threshold).
+        # is_final=True prevents any background rerun from overwriting this.
         if existing_ml:
             existing_ml.trust_score = Decimal("10.0")
             existing_ml.prediction_label = "fake"
-            existing_ml.confidence = Decimal("0.90")
+            existing_ml.confidence = Decimal("0.95")
             existing_ml.model_type = "leader_override"
             existing_ml.is_final = True
         else:
@@ -363,7 +369,7 @@ def verify_report(
                 report_id=r.report_id,
                 trust_score=Decimal("10.0"),
                 prediction_label="fake",
-                confidence=Decimal("0.90"),
+                confidence=Decimal("0.95"),
                 model_type="leader_override",
                 is_final=True,
                 evaluated_at=now,
@@ -379,15 +385,8 @@ def verify_report(
     db.add(r)
     db.commit()
 
-    from app.core.leader_verification_notifications import notify_police_leader_verification_task
     from app.core.mobile_push_notifications import notify_citizen_leader_decision_task
 
-    background_tasks.add_task(
-        notify_police_leader_verification_task,
-        str(r.report_id),
-        decision,
-        int(current_leader.local_leader_id),
-    )
     background_tasks.add_task(notify_citizen_leader_decision_task, str(r.report_id), decision)
 
     if decision == "confirmed":

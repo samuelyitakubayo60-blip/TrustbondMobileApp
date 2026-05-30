@@ -1092,7 +1092,7 @@ def _compose_ai_verification_reason(
             ),
             "rejected_by_reviewer": (
                 "HUMAN_REJECTION",
-                "police reviewer explicitly rejected the report",
+                "reviewer explicitly rejected the report",
             ),
             "duplicate_report": (
                 "DUPLICATE_REPORT",
@@ -1219,9 +1219,9 @@ def _compose_ai_verification_reason(
     note = (reviewer_note or "").strip()
     if note:
         if effective_status == "verified":
-            _add_pattern("HUMAN_CONFIRMED", "police reviewer confirmed the report")
+            _add_pattern("HUMAN_CONFIRMED", "reviewer confirmed the report")
         elif effective_status == "rejected":
-            _add_pattern("HUMAN_REJECTION", "police reviewer rejected the report")
+            _add_pattern("HUMAN_REJECTION", "reviewer rejected the report")
 
     snapshot = _build_ai_analysis_snapshot(
         verification_status=verification_status,
@@ -3630,9 +3630,14 @@ def create_report(
             except Exception:
                 db.rollback()
         else:
-            # AI could not fully confirm (pending / under_review / flagged).
-            # Notify local leader to do community verification regardless of evidence.
-            background_tasks.add_task(notify_local_leaders_needs_verification_task, str(report.report_id))
+            # Only notify leader when AI flagged the report for human review (under_review).
+            # AI-rejected reports must NOT reach the leader inbox at all.
+            ai_rejected = (
+                report.verification_status == "rejected"
+                or report.rule_status == "rejected"
+            )
+            if not ai_rejected:
+                background_tasks.add_task(notify_local_leaders_needs_verification_task, str(report.report_id))
 
     elif submitting_leader is not None:
         from app.core.leader_verification_notifications import (
