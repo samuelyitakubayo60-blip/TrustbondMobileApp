@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
-// import 'package:record/record.dart'; // Temporarily disabled
+import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../config/theme.dart';
 import '../services/device_status_service.dart';
 import '../services/motion_service.dart';
@@ -45,7 +46,7 @@ class ReportStep3Screen extends StatefulWidget {
 
 class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   final _picker = ImagePicker();
-  // final _record = Record(); // Temporarily disabled due to Windows compatibility issues
+  final _audioRecorder = AudioRecorder();
   final _statusService = DeviceStatusService();
   final _queueService = OfflineReportQueueService();
 
@@ -54,6 +55,15 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   String? _error;
   String? _submitStatus;
   bool _isRecording = false;
+  Duration _recordingDuration = Duration.zero;
+  Timer? _recordingTimer;
+
+  @override
+  void dispose() {
+    _recordingTimer?.cancel();
+    _audioRecorder.dispose();
+    super.dispose();
+  }
 
   Future<String> _sanitizePhotoPath(String sourcePath) async {
     try {
@@ -122,17 +132,78 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   }
 
   Future<void> _pickAudio() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Audio recording is not available in this version.'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    // Request microphone permission
+    final status = await Permission.microphone.request();
+    if (!status.isGranted) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Microphone permission is required to record audio evidence.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    final hasPermission = await _audioRecorder.hasPermission();
+    if (!hasPermission) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Microphone permission denied. Please enable it in settings.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    try {
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/tb_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _audioRecorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000),
+        path: path,
+      );
+      setState(() {
+        _isRecording = true;
+        _recordingDuration = Duration.zero;
+      });
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (_isRecording && mounted) {
+          setState(() => _recordingDuration += const Duration(seconds: 1));
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to start recording: $e'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   Future<void> _stopRecording() async {
-    // Audio recording temporarily disabled
-    setState(() => _isRecording = false);
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+    try {
+      final path = await _audioRecorder.stop();
+      setState(() => _isRecording = false);
+      if (path != null && path.isNotEmpty) {
+        setState(() => _files.add(_EvidenceFile(path: path, type: 'audio', isLive: true)));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Audio recorded (${_recordingDuration.inSeconds}s) ✓'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() => _isRecording = false);
+    }
   }
 
   Future<void> _validateAndAddEvidence(String filePath, String fileType, bool isLiveCapture) async {
@@ -546,9 +617,12 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
                   SizedBox(
                     width: itemWidth,
                     child: _actionChip(
-                      _isRecording ? 'Stop' : 'Audio',
+                      _isRecording
+                          ? 'Stop ${_recordingDuration.inSeconds}s'
+                          : 'Audio',
                       _isRecording ? _stopRecording : _pickAudio,
                       icon: _isRecording ? Icons.stop_circle_outlined : Icons.mic_outlined,
+                      highlight: _isRecording,
                     ),
                   ),
                 SizedBox(
@@ -568,9 +642,10 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
     );
   }
 
-  Widget _actionChip(String label, Future<void> Function() onTap, {IconData? icon}) {
+  Widget _actionChip(String label, Future<void> Function() onTap, {IconData? icon, bool highlight = false}) {
+    final chipColor = highlight ? AppColors.danger : AppColors.accent;
     return Material(
-      color: AppColors.surface2,
+      color: highlight ? AppColors.danger.withValues(alpha: 0.08) : AppColors.surface2,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -582,7 +657,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: highlight ? AppColors.danger.withValues(alpha: 0.5) : AppColors.border),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -590,13 +665,13 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 14, color: AppColors.accent),
+                Icon(icon, size: 14, color: chipColor),
                 const SizedBox(width: 4),
               ],
               Text(
                 label,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12, color: AppColors.text),
+                style: TextStyle(fontSize: 12, color: highlight ? chipColor : AppColors.text),
               ),
             ],
           ),

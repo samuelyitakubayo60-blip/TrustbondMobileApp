@@ -136,27 +136,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _onBiometricAuthChanged(bool value) async {
     try {
       if (value) {
+        // Check device supports any lock method (fingerprint, face, PIN, pattern).
         final available = await _storageService.isDeviceLockAvailable();
         if (!available) {
-          _showError('No device lock found. Set up a PIN, pattern, or fingerprint in your device settings first.');
+          _showError('No device lock found. Set up a PIN, pattern, or fingerprint in your device settings first, then come back to enable App Lock.');
           return;
         }
-        // Verify once before enabling so the user confirms it works
+        // Just save the setting — BiometricGate will enforce auth at next app launch.
+        setState(() => _biometricAuth = true);
+        await _saveSetting('biometric_auth', true);
+        _showSuccess('App lock enabled. You will be asked to authenticate next time you open the app.');
+      } else {
+        // Require authentication before allowing the lock to be turned OFF
+        // (prevents someone from quickly disabling app lock on an unattended phone).
         final authenticated = await _storageService.authenticateWithBiometrics(
-          reason: 'Verify your identity to enable app lock',
+          reason: 'Authenticate to disable app lock',
         );
         if (!authenticated) {
-          _showError('Authentication failed. App lock was not enabled.');
+          _showError('Authentication required to disable app lock.');
           return;
         }
-        _showSuccess('App lock enabled');
-      } else {
-        _showSuccess('App lock disabled');
+        setState(() => _biometricAuth = false);
+        await _saveSetting('biometric_auth', false);
+        _showSuccess('App lock disabled.');
       }
-      setState(() => _biometricAuth = value);
-      await _saveSetting('biometric_auth', value);
     } catch (e) {
-      _showError('Failed to update app lock setting');
+      _showError('Failed to update app lock setting.');
     }
   }
 

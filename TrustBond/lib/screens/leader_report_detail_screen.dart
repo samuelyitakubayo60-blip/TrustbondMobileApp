@@ -261,8 +261,11 @@ class _LeaderReportDetailScreenState extends State<LeaderReportDetailScreen> {
         const SizedBox(height: 16),
         if (isPending)
           _buildActionSection()
-        else
+        else ...[
           _buildDecisionResult(r),
+          const SizedBox(height: 12),
+          _buildOverallOutcomeCard(r),
+        ],
       ],
     );
   }
@@ -429,7 +432,7 @@ class _LeaderReportDetailScreenState extends State<LeaderReportDetailScreen> {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: files.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            separatorBuilder: (context, index) => const SizedBox(width: 10),
             itemBuilder: (context, i) {
               final f = files[i] as Map<String, dynamic>;
               return _evidenceTile(f);
@@ -469,7 +472,7 @@ class _LeaderReportDetailScreenState extends State<LeaderReportDetailScreen> {
                   : const Center(
                       child: CircularProgressIndicator(
                           color: AppColors.accent, strokeWidth: 2)),
-              errorBuilder: (_, __, ___) => const Center(
+              errorBuilder: (context, error, stack) => const Center(
                 child: Icon(Icons.broken_image,
                     color: AppColors.muted, size: 32),
               ),
@@ -841,6 +844,160 @@ class _LeaderReportDetailScreenState extends State<LeaderReportDetailScreen> {
             ],
           ),
       ],
+    );
+  }
+
+  Widget _buildOverallOutcomeCard(Map<String, dynamic> r) {
+    final leaderStatus = (r['leader_verification_status'] ?? '').toString();
+    final verificationStatus = (r['verification_status'] ?? '').toString();
+    final isConfirmed = leaderStatus == 'confirmed';
+    final isRejected = leaderStatus == 'rejected';
+
+    final raw = r['trust_score'];
+    final score = raw is num
+        ? raw.toDouble()
+        : double.tryParse(raw?.toString() ?? '') ?? 0.0;
+
+    final Color headerColor;
+    final IconData headerIcon;
+    final String headline;
+    final String subtext;
+
+    if (isConfirmed) {
+      headerColor = AppColors.accent;
+      headerIcon = Icons.verified_rounded;
+      headline = 'Incident VERIFIED';
+      subtext = verificationStatus == 'verified'
+          ? 'Visible on community safety map. Eligible for auto-cases and hotspot clusters.'
+          : 'Your confirmation is recorded. Final system status: ${verificationStatus.replaceAll('_', ' ')}.';
+    } else if (isRejected) {
+      headerColor = AppColors.danger;
+      headerIcon = Icons.cancel_rounded;
+      headline = 'Incident REJECTED';
+      subtext = 'Removed from community safety map. Will not feed cases or hotspot clusters.';
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    final scoreColor = score >= 70
+        ? AppColors.accent
+        : score >= 45
+            ? AppColors.warn
+            : AppColors.danger;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: headerColor.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: headerColor.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(headerIcon, color: headerColor, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                headline,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: headerColor,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtext,
+            style: const TextStyle(fontSize: 12, color: AppColors.muted, height: 1.45),
+          ),
+          if (score > 0) ...[
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Final credibility score',
+                  style: TextStyle(fontSize: 11, color: AppColors.muted),
+                ),
+                Text(
+                  '${score.toStringAsFixed(0)} / 100',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: scoreColor,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: (score / 100).clamp(0.0, 1.0),
+                minHeight: 7,
+                backgroundColor: AppColors.surface2,
+                valueColor: AlwaysStoppedAnimation<Color>(scoreColor),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              isConfirmed
+                  ? score >= 90
+                      ? 'Score raised to ≥90 — leader confirmation applied'
+                      : 'Score reflects AI + leader decision'
+                  : 'Score set to low — leader rejection applied',
+              style: const TextStyle(fontSize: 10, color: AppColors.muted),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _outcomePill(
+                icon: isConfirmed ? Icons.map_outlined : Icons.hide_source,
+                label: isConfirmed ? 'On safety map' : 'Off safety map',
+                color: headerColor,
+              ),
+              const SizedBox(width: 8),
+              _outcomePill(
+                icon: isConfirmed ? Icons.folder_open_outlined : Icons.block,
+                label: isConfirmed ? 'Cases eligible' : 'Cases blocked',
+                color: isConfirmed ? AppColors.accent2 : AppColors.muted,
+              ),
+              const SizedBox(width: 8),
+              _outcomePill(
+                icon: isConfirmed ? Icons.groups_outlined : Icons.person_off_outlined,
+                label: isConfirmed ? 'Community active' : 'Inactive',
+                color: isConfirmed ? AppColors.ok : AppColors.muted,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _outcomePill({required IconData icon, required String label, required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
+        ],
+      ),
     );
   }
 

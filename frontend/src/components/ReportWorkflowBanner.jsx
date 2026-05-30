@@ -7,7 +7,7 @@ import {
 } from "../utils/reportOperationalLabels";
 
 /**
- * Visual summary of the two-gate report pipeline (AI/police → leader → cases/hotspots).
+ * Visual summary of the two-gate report pipeline (AI → leader → cases/hotspots).
  */
 export default function ReportWorkflowBanner({ report, compact = false }) {
   if (!report) return null;

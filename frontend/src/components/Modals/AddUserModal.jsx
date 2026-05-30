@@ -52,12 +52,12 @@ const AddUserModal = ({ isOpen, onClose, onSaved }) => {
     }
 
     if (!form.rank.trim()) {
-      setError('Rank is required for every police user.');
+      setError('Rank is required for every user.');
       return;
     }
 
     if (form.role === 'officer' && !form.station_id) {
-      setError('Officers must be assigned to a police station.');
+      setError('Officers must be assigned to a station.');
       return;
     }
 

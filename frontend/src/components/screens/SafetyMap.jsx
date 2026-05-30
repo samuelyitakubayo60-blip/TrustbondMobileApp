@@ -2127,7 +2127,7 @@ const SecurityRecommendations = ({
                   </div>
                 )}
 
-                {/* Recommended action — police deployment */}
+                {/* Recommended action — deployment */}
                 <div style={{
                   fontSize: "11px", color: "var(--text)", lineHeight: 1.5,
                   padding: "7px 10px", borderRadius: "6px",

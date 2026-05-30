@@ -48,10 +48,7 @@ dependencies:
   exif: ^3.3.0
   path: ^1.8.3
   flutter_secure_storage: ^9.2.4
-  # flutter_sound: ^9.2.13
-  # record: ^6.2.0
-  # audioplayers: ^5.2.1
-  # Audio packages temporarily disabled due to Windows compatibility issues
+  record: ^6.2.0
   permission_handler: ^11.3.1
   local_auth: ^2.3.0
 

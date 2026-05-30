@@ -80,7 +80,7 @@ const EditUserModal = ({ isOpen, onClose, user, onSaved }) => {
     setError('');
 
     if (!form.rank.trim()) {
-      setError('Rank is required for every police user.');
+      setError('Rank is required for every user.');
       return;
     }
 
