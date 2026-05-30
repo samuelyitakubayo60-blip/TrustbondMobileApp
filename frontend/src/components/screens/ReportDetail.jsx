@@ -737,12 +737,12 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
         await api.post(`/api/v1/cases/reports/${reportId}/move`, {
           target_case_id: selectedCase
         });
-        setActionMessage("✅ Report moved to different case successfully");
+        setActionMessage("Report moved to different case successfully");
       } else {
         await api.post(`/api/v1/cases/${selectedCase}/reports`, {
           report_ids: [reportId]
         });
-        setActionMessage("✅ Report linked to case successfully");
+        setActionMessage("Report linked to case successfully");
       }
 
       // Update report data
@@ -759,11 +759,11 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
       
       // Provide more user-friendly error messages
       if (errorMessage.includes("incident type mismatch")) {
-        errorMessage = "❌ Cannot link to this case: Incident types don't match. Reports can only be linked to cases with the same incident type.";
+        errorMessage = "Cannot link to this case: Incident types do not match. Reports can only be linked to cases with the same incident type.";
       } else if (errorMessage.includes("already linked to another case")) {
-        errorMessage = "❌ This report is already linked to a case. Use the 'Move to different case' option instead.";
+        errorMessage = "This report is already linked to a case. Use the Move to different case option instead.";
       } else if (errorMessage.includes("Access denied")) {
-        errorMessage = "❌ You don't have permission to link to this case.";
+        errorMessage = "You do not have permission to link to this case.";
       }
       
       setError(errorMessage);
@@ -793,7 +793,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
       
       setReportCase(null);
 
-      setActionMessage("✅ Report unlinked from case successfully");
+      setActionMessage("Report unlinked from case successfully");
       refreshInBackground();
     } catch (e) {
       setError(e?.message || "Failed to unlink report from case");
@@ -1079,7 +1079,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                           gap: "4px"
                         }}
                       >
-                        🚗 Navigate to report
+                        Navigate to report
                       </button>
                       <button
                         onClick={() => {
@@ -1103,7 +1103,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                           gap: "4px"
                         }}
                       >
-                        📍 Open map
+                        Open map
                       </button>
                     </div>
                   ) : (
@@ -1159,7 +1159,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
             <div className="card">
               <div className="card-header">
                 <div className="card-title">
-                  📋 Case Information
+                  Case Information
                   <span className={`badge ${
                     reportCase.status === 'open' ? 'b-green' : 
                     reportCase.status === 'closed' ? 'b-red' : 'b-gray'
@@ -1286,7 +1286,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                         Location
                       </div>
                       <div>
-                        📍 {reportCase.location.location_name}
+                        {reportCase.location.location_name}
                       </div>
                     </div>
                   )}
@@ -1305,7 +1305,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                       Assigned Officer
                       </div>
                       <div>
-                        👮 {reportCase.assigned_to.full_name || "Unknown Officer"}
+                        {reportCase.assigned_to.full_name || "Unknown Officer"}
                       </div>
                     </div>
                   )}
@@ -1414,7 +1414,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                             Avg movement: {avgDistance.toFixed(1)}km between reports
                             {suspiciousJumps > 0 && (
                               <div style={{ color: "var(--danger)", marginTop: 2 }}>
-                                ⚠️ {suspiciousJumps} suspicious jump{suspiciousJumps > 1 ? 's' : ''}
+                                {suspiciousJumps} suspicious jump{suspiciousJumps > 1 ? 's' : ''}
                               </div>
                             )}
                           </div>
@@ -1594,7 +1594,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                       marginBottom: "6px",
                     }}
                   >
-                    📍 Location History
+                    Location History
                   </div>
                   {locationLoading ? (
                     <div style={{ padding: "10px", textAlign: "center", color: "var(--muted)" }}>
@@ -1650,7 +1650,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                                       fontSize: "9px",
                                       fontWeight: "bold"
                                     }}>
-                                      📍 MOVED
+                                      MOVED
                                     </span>
                                   )}
                                 </div>
@@ -1663,7 +1663,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                               </div>
                               {entry.latitude && entry.longitude && (
                                 <div style={{ marginTop: "2px", color: "var(--muted)", fontSize: "9px" }}>
-                                  📍 {entry.latitude.toFixed(6)}, {entry.longitude.toFixed(6)}
+                                  {entry.latitude.toFixed(6)}, {entry.longitude.toFixed(6)}
                                 </div>
                               )}
                             </div>
@@ -2616,7 +2616,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
               fontSize: '12px',
               color: 'var(--text)'
             }}>
-              <strong>📋 Filtering Rules:</strong>
+              <strong>Filtering Rules:</strong>
               <ul style={{ margin: '4px 0 0 0', paddingLeft: '16px' }}>
                 <li>Only showing cases with incident type: <strong>{report.incident_type_name || 'Unknown'}</strong></li>
                 {report.case_id && <li>Current case is excluded from the list</li>}
@@ -2696,7 +2696,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                       </div>
                       {case_item.location?.location_name && (
                         <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '2px' }}>
-                          📍 {case_item.location.location_name}
+                          {case_item.location.location_name}
                         </div>
                       )}
                     </div>

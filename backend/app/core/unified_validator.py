@@ -180,25 +180,29 @@ class UnifiedValidator:
         # and the incident type. If evidence was submitted but objects are irrelevant
         # AND NL shows poor semantic similarity, this is a strong mismatch signal.
         cross_validation_mismatch = False
+        volo_has_relevant = False
         if volo_results and natural_language_result is not None:
             volo_has_relevant = any(
                 (r.metadata.get("authenticity_analysis") or {}).get("context_relevance_bonus", 0) > 0
                 for r in volo_results
             )
             nl_semantic_weak = (natural_language_result.semantic_similarity_score or 0.0) < 40.0
-            if not volo_has_relevant:
-                # Evidence content doesn't match incident type
+            # Only flag cross-validation mismatch when BOTH evidence lacks relevant objects
+            # AND NL semantic similarity is weak. This prevents false positives from valid
+            # evidence (e.g. a photo showing the theft victim) where detected objects like
+            # "person" don't match incident-type keywords like "phone" or "bicycle".
+            if not volo_has_relevant and nl_semantic_weak:
                 cross_validation_mismatch = True
                 logger.info(
                     "Cross-validation mismatch for report %s: "
-                    "Volo found no relevant objects for incident type, "
-                    "NL semantic score: %.2f",
+                    "Volo found no relevant objects for incident type AND "
+                    "NL semantic score is weak (%.2f < 40.0)",
                     report.report_id,
                     natural_language_result.semantic_similarity_score or 0.0,
                 )
-                # Apply a heavy penalty to volo_score when evidence is irrelevant
+                # Reduced penalty — combined signal is meaningful but not conclusive on its own
                 if volo_score is not None:
-                    volo_score = max(0.0, volo_score - 30.0)
+                    volo_score = max(0.0, volo_score - 15.0)
 
         # 4. Aggregate all scores using central aggregator
         try:
@@ -221,6 +225,7 @@ class UnifiedValidator:
                     "volo": {
                         "confidence": sum(r.confidence for r in volo_results) / len(volo_results) if volo_results else 0.0,
                         "evidence_count": len(volo_results),
+                        "context_relevant": volo_has_relevant,
                         "objects_detected": list(set(obj for r in volo_results for obj in r.metadata.get("detection_analysis", {}).get("detected_objects", [])))
                     }
                 }

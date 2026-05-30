@@ -1045,6 +1045,8 @@ def _compose_ai_verification_reason(
     gps_accuracy: Optional[Any] = None,
     location_label: Optional[str] = None,
     text_only_reason_codes: Optional[List[str]] = None,
+    evidence_validations: Optional[List[Dict[str, Any]]] = None,
+    evidence_file_count: Optional[int] = None,
 ) -> str:
     """Plain-language unified screening summary for officers (no technical codes in text)."""
     status = (verification_status or "pending").lower()
@@ -1234,6 +1236,8 @@ def _compose_ai_verification_reason(
         context_tags=context_tags,
         unified_validation=unified_validation,
         scorecard=scorecard,
+        evidence_validations=evidence_validations,
+        evidence_file_count=evidence_file_count,
         latitude=latitude,
         longitude=longitude,
         gps_accuracy=gps_accuracy,
@@ -1655,56 +1659,151 @@ def _compute_threshold_scorecard(
 
     # Prefer unified model aggregation when available so no single model concludes on its own.
     if isinstance(unified_validation, dict):
-        from app.core.trust_thresholds import trust_thresholds
-
-        model_cap = float(trust_thresholds.config.MAX_CONTRIBUTIONS_PER_MODEL)
         model_breakdown = (
             unified_validation.get("model_breakdown")
             if isinstance(unified_validation.get("model_breakdown"), dict)
             else {}
         )
-        aggregated_score = float(unified_validation.get("aggregated_score") or 0.0)
         scorecard_type = "evidence_scorecard" if has_evidence else "text_only_scorecard"
 
-        factors = {}
-        mapping = {
-            "trustbond": "trustbond_contribution",
-            "natural_language": "natural_language_contribution",
-            "volo": "volo_contribution",
-            "base": "base_credibility",
+        # ── Extract per-model sub-signals ─────────────────────────────────────────────
+        nl_model   = model_breakdown.get("natural_language") or {}
+        nl_meta    = nl_model.get("metadata") or {}
+        nl_sem     = clamp01(float(nl_meta.get("semantic_similarity")  or 0.0) / 100.0)
+        nl_desc    = clamp01(float(nl_meta.get("description_quality")  or 0.0) / 100.0)
+        nl_valid   = bool(nl_model.get("is_valid", False))
+
+        volo_model = model_breakdown.get("volo") or {}
+        volo_meta  = volo_model.get("metadata") or {}
+        volo_raw   = clamp01(float(volo_model.get("raw_score") or 0.0) / 100.0)
+        volo_valid = bool(volo_model.get("is_valid", False))
+        ctx_rel    = bool(volo_meta.get("context_relevant", False))
+
+        tb_model   = model_breakdown.get("trustbond") or {}
+        tb_raw     = clamp01(float(tb_model.get("raw_score") or 0.0) / 100.0)
+        tb_valid   = bool(tb_model.get("is_valid", False))
+
+        # Triple-alignment scores from the LLM semantic check (stored in feature_vector)
+        sa = semantic if isinstance(semantic, dict) else {}
+        desc_inc_sim  = sa.get("description_incident_similarity")
+        inc_evid_sim  = sa.get("incident_evidence_similarity")
+        triple_avail  = desc_inc_sim is not None
+        desc_inc_sig  = clamp01(float(desc_inc_sim or 0.0) / 100.0) if triple_avail else None
+        inc_evid_sig  = clamp01(float(inc_evid_sim  or 0.0) / 100.0) if inc_evid_sim is not None else None
+
+        # ── 3-Pillar explicit formula ─────────────────────────────────────────────────
+        # Points allocation differs by whether evidence was submitted:
+        #
+        #  WITH EVIDENCE   — sum-of-pillars can reach 110, capped at 100
+        #    Pillar 1: Description Quality      20 pts
+        #    Pillar 2: Incident Type Alignment  20 pts
+        #    Pillar 3: Evidence Authenticity    28 pts  (Volo)
+        #    Pillar 3b: Evid-Incident Alignment 12 pts  (triple LLM / Volo context)
+        #    Pillar 4: Device / TrustBond       12 pts
+        #    Community (bonus)                   8 pts
+        #                               max = 100
+        #
+        #  TEXT-ONLY — no evidence, evidence pillars = 0, weights re-distributed
+        #    Pillar 1: Description Quality      25 pts
+        #    Pillar 2: Incident Type Alignment  35 pts
+        #    Pillar 4: Device / TrustBond       25 pts
+        #    Community (bonus)                  15 pts
+        #                               max = 100
+
+        if has_evidence:
+            # Pillar 1 — Description quality
+            p1_pts = round(nl_desc * 20.0, 2)
+            # Pillar 2 — Incident type alignment
+            # Blend NL semantic with triple-LLM alignment if available
+            if triple_avail:
+                p2_signal = 0.55 * nl_sem + 0.45 * desc_inc_sig
+            else:
+                p2_signal = nl_sem
+            p2_pts = round(p2_signal * 20.0, 2)
+            # Pillar 3a — Evidence authenticity (Volo score, already cross-val-adjusted)
+            p3a_pts = round(volo_raw * 28.0, 2)
+            # Pillar 3b — Evidence-incident alignment
+            if inc_evid_sig is not None:
+                p3b_signal = 0.6 * inc_evid_sig + 0.4 * (1.0 if ctx_rel else 0.0)
+            elif ctx_rel:
+                p3b_signal = 0.75
+            elif volo_valid:
+                p3b_signal = volo_raw * 0.6
+            else:
+                p3b_signal = 0.0
+            p3b_pts = round(p3b_signal * 12.0, 2)
+            # Pillar 4 — Device / TrustBond (user history, GPS quality, device trust)
+            p4_pts = round(tb_raw * 12.0, 2)
+            # Community bonus
+            comm_pts = round(community_signal * 8.0, 2)
+        else:
+            # Text-only
+            p1_pts  = round(nl_desc * 25.0, 2)
+            p2_signal = (0.55 * nl_sem + 0.45 * desc_inc_sig) if triple_avail else nl_sem
+            p2_pts  = round(p2_signal * 35.0, 2)
+            p3a_pts = 0.0
+            p3b_pts = 0.0
+            p4_pts  = round(tb_raw * 25.0, 2)
+            comm_pts = round(community_signal * 15.0, 2)
+
+        total = round(min(100.0, max(0.0, p1_pts + p2_pts + p3a_pts + p3b_pts + p4_pts + comm_pts)), 2)
+
+        # Build named factors for transparency
+        factors: Dict[str, Any] = {}
+        factors["description_quality"] = {
+            "pillar": 1,
+            "max_points": 20.0 if has_evidence else 25.0,
+            "signal": round(nl_desc, 4),
+            "points_awarded": p1_pts,
+            "model": "natural_language",
+            "is_valid": nl_valid,
         }
-        for model_name, factor_name in mapping.items():
-            model_data = model_breakdown.get(model_name)
-            if not isinstance(model_data, dict):
-                continue
-            contribution = float(model_data.get("contribution") or 0.0)
-            raw_score = float(model_data.get("raw_score") or 0.0)
-            max_pts = model_cap
-            if model_name == "base":
-                max_pts = max(
-                    contribution,
-                    raw_score,
-                    10.0,
-                )
-            factors[factor_name] = {
-                "weight": round(contribution, 2),
-                "max_points": round(max_pts, 2),
-                "signal": round(clamp01(raw_score / 100.0), 4),
-                "points_awarded": round(contribution, 2),
-                "model": model_name,
-                "is_valid": bool(model_data.get("is_valid", False)),
+        factors["incident_type_alignment"] = {
+            "pillar": 2,
+            "max_points": 20.0 if has_evidence else 35.0,
+            "signal": round(p2_signal, 4),
+            "points_awarded": p2_pts,
+            "model": "natural_language+triple_alignment",
+            "is_valid": nl_valid,
+            "triple_alignment_used": triple_avail,
+        }
+        if has_evidence:
+            factors["evidence_authenticity"] = {
+                "pillar": "3a",
+                "max_points": 28.0,
+                "signal": round(volo_raw, 4),
+                "points_awarded": p3a_pts,
+                "model": "volo",
+                "is_valid": volo_valid,
+                "context_relevant": ctx_rel,
             }
-        comm_points = round(min(10.0, community_signal * 10.0), 2)
+            factors["evidence_incident_alignment"] = {
+                "pillar": "3b",
+                "max_points": 12.0,
+                "signal": round(p3b_signal, 4),
+                "points_awarded": p3b_pts,
+                "model": "volo+triple_alignment",
+                "is_valid": volo_valid,
+                "triple_alignment_used": inc_evid_sig is not None,
+            }
+        factors["device_trustbond"] = {
+            "pillar": 4,
+            "max_points": 12.0 if has_evidence else 25.0,
+            "signal": round(tb_raw, 4),
+            "points_awarded": p4_pts,
+            "model": "trustbond",
+            "is_valid": tb_valid,
+        }
         factors["community_signal"] = {
-            "weight": 10.0,
-            "max_points": 10.0,
+            "pillar": "bonus",
+            "max_points": 8.0 if has_evidence else 15.0,
             "signal": round(community_signal, 4),
-            "points_awarded": comm_points,
+            "points_awarded": comm_pts,
             "model": "community",
             "is_valid": True,
         }
 
-        total = round(min(100.0, max(0.0, aggregated_score + comm_points)), 2)
+        comm_points = comm_pts  # keep name consistent for penalty block below
 
         # ── Text-only penalties ───────────────────────────────────────────────────────
         if not has_evidence:
@@ -3409,6 +3508,8 @@ def create_report(
                     context_tags=list(getattr(r, "context_tags", None) or []),
                     unified_validation=uv,
                     scorecard=sc,
+                    evidence_validations=ev,
+                    evidence_file_count=ec_final,
                     latitude=getattr(r, "latitude", None),
                     longitude=getattr(r, "longitude", None),
                     gps_accuracy=getattr(r, "gps_accuracy", None),
@@ -4564,6 +4665,8 @@ async def upload_evidence(
                 context_tags=list(getattr(r, "context_tags", None) or []),
                 unified_validation=uv,
                 scorecard=sc,
+                evidence_validations=ev,
+                evidence_file_count=len(evidence_files_all or []),
                 latitude=getattr(r, "latitude", None),
                 longitude=getattr(r, "longitude", None),
                 gps_accuracy=getattr(r, "gps_accuracy", None),

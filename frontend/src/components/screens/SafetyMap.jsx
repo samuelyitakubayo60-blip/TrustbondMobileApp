@@ -1625,12 +1625,25 @@ function hotspotUnitLabel(h) {
   return code || "Patrol unit";
 }
 
-/** Single severity dot — the only decorative symbol on each card. */
+/** Single severity dot — coloured CSS circle, no emoji. */
 function severityDot(alarm) {
-  if (alarm >= 75) return "🔴";
-  if (alarm >= 50) return "🟠";
-  if (alarm >= 30) return "🟡";
-  return "🟢";
+  const color =
+    alarm >= 75 ? '#ef4444' :
+    alarm >= 50 ? '#f97316' :
+    alarm >= 30 ? '#eab308' :
+    '#22c55e';
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        width: 10,
+        height: 10,
+        borderRadius: '50%',
+        background: color,
+        flexShrink: 0,
+      }}
+    />
+  );
 }
 
 /**

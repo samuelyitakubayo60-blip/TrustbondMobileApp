@@ -166,16 +166,16 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
     bool shouldBlock = false;
     
     if (hasSuspiciousName) {
-      warningMessage = '⚠️ This file appears to be from another app or was downloaded. For evidence integrity, please use original photos/videos taken with your camera.';
+      warningMessage = 'This file appears to be from another app or was downloaded. For evidence integrity, please use original photos/videos taken with your camera.';
       shouldBlock = true;
     } else if (isOldFile && isRecentlyModified) {
-      warningMessage = '⚠️ This file was created a while ago but recently modified. This may indicate it was copied from another source. Please use original evidence.';
+      warningMessage = 'This file was created a while ago but recently modified. This may indicate it was copied from another source. Please use original evidence.';
       shouldBlock = true;
     } else if (isScreenshotSize && !isLiveCapture) {
-      warningMessage = '⚠️ This appears to be a screenshot. Screenshots can be edited. Please use original photos or videos for better evidence quality.';
+      warningMessage = 'This appears to be a screenshot. Screenshots can be edited. Please use original photos or videos for better evidence quality.';
       shouldBlock = false; // Warning but allow
     } else if (!isLiveCapture) {
-      warningMessage = 'ℹ️ For best evidence quality, original camera captures are preferred. Gallery items may have reduced authenticity.';
+      warningMessage = 'For best evidence quality, original camera captures are preferred. Gallery items may have reduced authenticity.';
       shouldBlock = false; // Just a gentle warning
     }
     
@@ -185,7 +185,14 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
-            title: Text(shouldBlock ? '⚠️ Evidence Validation Alert' : 'ℹ️ Evidence Quality Notice'),
+            title: Row(
+              children: [
+                Icon(shouldBlock ? Icons.warning_amber_rounded : Icons.info_outline,
+                    size: 18, color: shouldBlock ? AppColors.warn : AppColors.accent),
+                const SizedBox(width: 8),
+                Text(shouldBlock ? 'Evidence Validation Alert' : 'Evidence Quality Notice'),
+              ],
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -302,7 +309,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
       // Show a non-blocking warning for 'warning' status (e.g. gallery items).
       if (mobileVerification.status == 'warning' && mounted) {
         setState(() {
-          _error = "⚠️ Evidence quality warning: original live captures are preferred. Your report will be submitted with a lower trust score.";
+          _error = "Evidence quality warning: original live captures are preferred. Your report will be submitted with a lower trust score.";
         });
       }
 
@@ -529,23 +536,24 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
               final chips = <Widget>[
                 SizedBox(
                   width: itemWidth,
-                  child: _actionChip('📷 Photo', _pickPhoto),
+                  child: _actionChip('Photo', _pickPhoto, icon: Icons.camera_alt_outlined),
                 ),
                 SizedBox(
                   width: itemWidth,
-                  child: _actionChip('🎥 Video', _pickVideo),
+                  child: _actionChip('Video', _pickVideo, icon: Icons.videocam_outlined),
                 ),
                 if (!Platform.isWindows)
                   SizedBox(
                     width: itemWidth,
                     child: _actionChip(
-                      _isRecording ? '⏹️ Stop' : '🎤 Audio',
+                      _isRecording ? 'Stop' : 'Audio',
                       _isRecording ? _stopRecording : _pickAudio,
+                      icon: _isRecording ? Icons.stop_circle_outlined : Icons.mic_outlined,
                     ),
                   ),
                 SizedBox(
                   width: itemWidth,
-                  child: _actionChip('🖼️ Gallery', _pickGallery),
+                  child: _actionChip('Gallery', _pickGallery, icon: Icons.photo_library_outlined),
                 ),
               ];
               return Wrap(
@@ -560,7 +568,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
     );
   }
 
-  Widget _actionChip(String label, Future<void> Function() onTap) {
+  Widget _actionChip(String label, Future<void> Function() onTap, {IconData? icon}) {
     return Material(
       color: AppColors.surface2,
       borderRadius: BorderRadius.circular(12),
@@ -577,10 +585,20 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
             border: Border.all(color: AppColors.border),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, color: AppColors.text),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 14, color: AppColors.accent),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: AppColors.text),
+              ),
+            ],
           ),
         ),
       ),
@@ -676,7 +694,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
         children: [
           const Row(
             children: [
-              Text('🤖', style: TextStyle(fontSize: 14)),
+              Icon(Icons.smart_toy_outlined, size: 14, color: AppColors.accent),
               SizedBox(width: 6),
               Text('AI Pre-Check',
                   style:

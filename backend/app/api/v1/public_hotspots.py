@@ -63,14 +63,15 @@ def list_public_hotspots(
     Returns recent hotspots with center coordinates, radius, incident count,
     risk level, and incident_type_name for labeling.
     """
-    # Show clusters from recent DBSCAN runs; each hotspot still carries the
-    # report window it was generated from in time_window_hours.
-    recent_run_cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    # Respect the caller's time window. Default to 24 h so the map still
+    # shows the most-recent clusters when no filter is selected.
+    effective_hours = int(time_window_hours) if time_window_hours is not None else 24
+    period_cutoff = datetime.now(timezone.utc) - timedelta(hours=effective_hours)
 
     query = db.query(Hotspot).options(joinedload(Hotspot.incident_type))
-    query = query.filter(Hotspot.detected_at >= recent_run_cutoff)
+    query = query.filter(Hotspot.detected_at >= period_cutoff)
     query = query.order_by(Hotspot.detected_at.desc())
-    
+
     if risk_level:
         rl = risk_level.strip().lower()
         aliases = {
@@ -83,12 +84,7 @@ def list_public_hotspots(
         }
         allowed_levels = aliases.get(rl, [rl])
         query = query.filter(Hotspot.risk_level.in_(allowed_levels))
-    if time_window_hours is not None:
-        # UX expectation: larger periods include smaller-period hotspots.
-        # So treat this as "detected within last N hours" rather than exact
-        # DBSCAN generation window equality.
-        period_cutoff = datetime.now(timezone.utc) - timedelta(hours=int(time_window_hours))
-        query = query.filter(Hotspot.detected_at >= period_cutoff)
+
     hotspots = query.limit(500).all()
     if (lat is None) != (lon is None):
         raise HTTPException(

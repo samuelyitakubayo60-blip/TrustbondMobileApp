@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import api, { cacheBust } from '../../api/client';
 import { formatRelativeTime } from '../../utils/dateTime';
 import { isHotspotNotification, notificationCategory } from '../../utils/notificationHelpers';
+import { notificationIcon } from '../../utils/incidentIcons';
 
 const LIST_LIMIT = 50;
 
@@ -274,9 +275,9 @@ const Notifications = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
           >
             <div
               className="notif-icon"
-              style={{ background: 'var(--c-accent-dim)', color: 'var(--accent)', fontWeight: 700 }}
+              style={{ background: 'var(--c-accent-dim)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
-              {(isHotspotNotification(n) ? 'HSP' : n.type?.toUpperCase().slice(0, 4)) || 'INFO'}
+              {notificationIcon(notificationCategory(n), n.incident_type_name || n.title, 18)}
             </div>
             <div className="notif-body">
               <div className="notif-title">{n.title}</div>

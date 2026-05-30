@@ -581,26 +581,7 @@ class LocationQualityIndicator extends StatelessWidget {
 
 // ─── Shared helper functions (used by multiple screens) ─────────────────────
 
-/// Returns an emoji icon for the given incident type name.
-/// Kept for backward compatibility — prefer [iconDataForIncidentType].
-String iconForIncidentType(String typeName) {
-  final l = typeName.toLowerCase();
-  if (l.contains('suspicious')) return '👁️';
-  if (l.contains('theft') || l.contains('robbery')) return '💼';
-  if (l.contains('vandalism')) return '🏚️';
-  if (l.contains('assault')) return '⚠️';
-  if (l.contains('traffic')) return '🚗';
-  if (l.contains('drug')) return '💊';
-  if (l.contains('fire') || l.contains('hazard')) return '🔥';
-  if (l.contains('noise') || l.contains('disturbance')) return '🔊';
-  if (l.contains('domestic')) return '🏠';
-  if (l.contains('fraud') || l.contains('scam')) return '🎭';
-  if (l.contains('harassment')) return '🚫';
-  return '📋';
-}
-
 /// Returns a Material [IconData] for the given incident type name.
-/// Use this instead of [iconForIncidentType] wherever a proper icon is needed.
 IconData iconDataForIncidentType(String typeName) {
   final l = typeName.toLowerCase();
   if (l.contains('suspicious')) return Icons.visibility_outlined;

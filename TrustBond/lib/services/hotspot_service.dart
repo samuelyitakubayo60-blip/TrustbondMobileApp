@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 
@@ -49,20 +50,39 @@ class Hotspot {
     );
   }
 
-  String get riskEmoji {
+  IconData get riskIconData {
     switch (riskLevel.toLowerCase()) {
       case 'critical':
+        return Icons.crisis_alert;
       case 'active':
       case 'high':
-        return '🔴';
+        return Icons.warning_amber_rounded;
       case 'emerging':
       case 'medium':
-        return '🟡';
+        return Icons.info_outline;
       case 'low_activity':
       case 'low':
-        return '🟢';
+        return Icons.shield_outlined;
       default:
-        return '⚪';
+        return Icons.circle_outlined;
+    }
+  }
+
+  Color get riskColor {
+    switch (riskLevel.toLowerCase()) {
+      case 'critical':
+        return const Color(0xFFef4444);
+      case 'active':
+      case 'high':
+        return const Color(0xFFf97316);
+      case 'emerging':
+      case 'medium':
+        return const Color(0xFFeab308);
+      case 'low_activity':
+      case 'low':
+        return const Color(0xFF22c55e);
+      default:
+        return const Color(0xFF94a3b8);
     }
   }
 

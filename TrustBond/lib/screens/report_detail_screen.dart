@@ -259,7 +259,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     return _card([
       const Row(
         children: [
-          Text('📝', style: TextStyle(fontSize: 14)),
+          Icon(Icons.description_outlined, size: 14, color: AppColors.accent),
           SizedBox(width: 6),
           Text('Description',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
@@ -282,7 +282,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     return _card([
       const Row(
         children: [
-          Text('🤖', style: TextStyle(fontSize: 14)),
+          Icon(Icons.smart_toy_outlined, size: 14, color: AppColors.accent),
           SizedBox(width: 6),
           Text('AI Analysis',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
@@ -348,7 +348,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     return _card([
       const Row(
         children: [
-          Text('📍', style: TextStyle(fontSize: 14)),
+          Icon(Icons.location_on_outlined, size: 14, color: AppColors.accent),
           SizedBox(width: 6),
           Text('Location',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
@@ -387,7 +387,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     return _card([
       Row(
         children: [
-          const Text('📎', style: TextStyle(fontSize: 14)),
+          const Icon(Icons.attach_file_outlined, size: 14, color: AppColors.accent),
           const SizedBox(width: 6),
           const Text('Evidence',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
@@ -495,7 +495,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     final rows = <Widget>[
       const Row(
         children: [
-          Text('🔬', style: TextStyle(fontSize: 14)),
+          Icon(Icons.biotech_outlined, size: 14, color: AppColors.accent),
           SizedBox(width: 6),
           Text('Evidence quality & verification',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),

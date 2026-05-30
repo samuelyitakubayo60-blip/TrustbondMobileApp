@@ -236,25 +236,25 @@ const EnhancedGeographicIntelligence = ({ wsRefreshKey }) => {
 
       {/* Heat Map */}
       <div className="bg-white p-4 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-4">🗺️ Geographic Heat Map</h3>
+        <h3 className="text-lg font-semibold mb-4">Geographic Heat Map</h3>
         <AdvancedGeoMap data={data} mapType="heatmap" />
       </div>
 
       {/* Sector Performance Chart */}
       <div className="bg-white p-4 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-4">📊 Sector Performance</h3>
+        <h3 className="text-lg font-semibold mb-4">Sector Performance</h3>
         <AdvancedGeographicCharts data={data} type="sectorPerformance" timeWindow={timeWindow} />
       </div>
 
       {/* Movement Flows */}
       <div className="bg-white p-4 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-4">🌊 Movement Flows</h3>
+        <h3 className="text-lg font-semibold mb-4">Movement Flows</h3>
         <AdvancedGeoMap data={data} mapType="flows" />
       </div>
 
       {/* Behavior Patterns */}
       <div className="bg-white p-4 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-4">🧠 Behavior Patterns</h3>
+        <h3 className="text-lg font-semibold mb-4">Behavior Patterns</h3>
         <AdvancedGeographicCharts data={data} type="behaviorRadar" timeWindow={timeWindow} />
       </div>
     </div>
@@ -263,11 +263,11 @@ const EnhancedGeographicIntelligence = ({ wsRefreshKey }) => {
   const renderAdvancedTab = (chartType, mapType, title) => (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="bg-white p-4 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-4">📊 {title} Analysis</h3>
+        <h3 className="text-lg font-semibold mb-4">{title} Analysis</h3>
         <AdvancedGeographicCharts data={data} type={chartType} timeWindow={timeWindow} />
       </div>
       <div className="bg-white p-4 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-4">🗺️ {title} Map</h3>
+        <h3 className="text-lg font-semibold mb-4">{title} Map</h3>
         <AdvancedGeoMap data={data} mapType={mapType} onMarkerClick={setSelectedDevice} />
       </div>
     </div>
@@ -330,7 +330,7 @@ const EnhancedGeographicIntelligence = ({ wsRefreshKey }) => {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">🧠 Advanced Geographic Intelligence</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Advanced Geographic Intelligence</h1>
           <p className="text-gray-600">Comprehensive location analytics and pattern detection</p>
         </div>
         <div className="flex gap-3">
@@ -428,7 +428,7 @@ const EnhancedGeographicIntelligence = ({ wsRefreshKey }) => {
               <h3 className="text-sm font-medium text-blue-800">Selected Device</h3>
               <p className="mt-1 text-sm text-blue-700">
                 <strong>Device:</strong> {selectedDevice.device_hash}<br/>
-                <strong>Status:</strong> {selectedDevice.suspicious_score > 50 ? '⚠️ Suspicious' : '✅ Normal'}<br/>
+                <strong>Status:</strong> {selectedDevice.suspicious_score > 50 ? 'Suspicious' : 'Normal'}<br/>
                 <strong>Reports:</strong> {selectedDevice.total_reports}<br/>
                 <strong>Trust Score:</strong> {selectedDevice.trust_score || 0}
               </p>
@@ -448,15 +448,15 @@ const EnhancedGeographicIntelligence = ({ wsRefreshKey }) => {
         <div className="border-b border-gray-200">
           <nav className="flex -mb-px">
             {[
-              { id: 'overview', label: '📊 Overview', icon: 'dashboard' },
-              { id: 'heat-map', label: '🔥 Heat Map', icon: 'fire' },
-              { id: 'movement-flows', label: '🌊 Movement Flows', icon: 'exchange' },
-              { id: 'coverage', label: '📈 Coverage', icon: 'map' },
-              { id: 'sector-performance', label: '🏆 Sector Performance', icon: 'trophy' },
-              { id: 'behavior-patterns', label: '🧠 Behavior Patterns', icon: 'brain' },
-              { id: 'speed-analysis', label: '⚡ Speed Analysis', icon: 'tachometer' },
-              { id: 'geographic-clustering', label: '🗺️ Clustering', icon: 'cluster' },
-              { id: 'frequency-analysis', label: '📊 Frequency', icon: 'clock-o' }
+              { id: 'overview', label: 'Overview', icon: 'dashboard' },
+              { id: 'heat-map', label: 'Heat Map', icon: 'fire' },
+              { id: 'movement-flows', label: 'Movement Flows', icon: 'exchange' },
+              { id: 'coverage', label: 'Coverage', icon: 'map' },
+              { id: 'sector-performance', label: 'Sector Performance', icon: 'trophy' },
+              { id: 'behavior-patterns', label: 'Behavior Patterns', icon: 'brain' },
+              { id: 'speed-analysis', label: 'Speed Analysis', icon: 'tachometer' },
+              { id: 'geographic-clustering', label: 'Clustering', icon: 'cluster' },
+              { id: 'frequency-analysis', label: 'Frequency', icon: 'clock-o' }
             ].map(tab => (
               <button
                 key={tab.id}

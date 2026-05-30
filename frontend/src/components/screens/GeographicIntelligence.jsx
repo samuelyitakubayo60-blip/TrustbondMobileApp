@@ -102,7 +102,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
 
       // Load geographic data for all levels
       try {
-        console.log('🔍 Loading geographic intelligence data with params:', params.toString());
+        console.log('Loading geographic intelligence data with params:', params.toString());
         
         const [sectorPerf, behavior, locations, reports, incidentTypes] = await Promise.all([
           api.get(`/api/v1/geographic-intelligence/sector-performance?${params}`),
@@ -112,7 +112,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
           api.get('/api/v1/incident-types/')
         ]);
         
-        console.log('📊 API Responses:');
+        console.log('API Responses:');
         console.log('- Sector Performance:', sectorPerf);
         console.log('- Behavior Patterns:', behavior);
         console.log('- Locations:', locations);
@@ -127,7 +127,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
         
         // Process real report data for charts
         const reportsData = Array.isArray(reports) ? reports : (reports?.items || reports?.reports || []);
-        console.log('📋 Processing reports data:', reportsData.length, 'reports');
+        console.log('Processing reports data:', reportsData.length, 'reports');
 
         // Combine sector performance with location data
         const sectorsWithPerformance = sectorData.map(sector => {
@@ -219,7 +219,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
         });
         chartSpecificData.reportStatuses = statusCounts;
         
-        console.log('📈 Processed Chart Data:');
+        console.log('Processed Chart Data:');
         console.log('- Incident Types:', chartSpecificData.incidentTypes);
         console.log('- Report Statuses:', chartSpecificData.reportStatuses);
         
@@ -235,7 +235,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
           reports: reportsData
         };
         
-        console.log('🏗️ Final Result Data:', resultData);
+        console.log('Final Result Data:', resultData);
       } catch (err) {
         console.error('API calls failed:', err);
         resultData = {
@@ -306,7 +306,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
 
   // Comprehensive chart cleanup function
   const cleanupAllCharts = async () => {
-    console.log('🧹 Cleaning up all charts...');
+    console.log('Cleaning up all charts...');
     
     // Destroy all chart instances
     const charts = [
@@ -322,7 +322,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
           chart.destroy();
           setter(null);
         } catch (error) {
-          console.warn('⚠️ Error destroying chart:', error);
+          console.warn('Error destroying chart:', error);
         }
       }
     });
@@ -333,7 +333,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
         try {
           instance.destroy();
         } catch (error) {
-          console.warn('⚠️ Error destroying chart instance:', error);
+          console.warn('Error destroying chart instance:', error);
         }
       });
     }
@@ -363,7 +363,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
   // Chart creation functions
 
   const createTrustDistributionChart = (chartData) => {
-    console.log('🎯 Creating Trust Distribution Chart');
+    console.log('Creating Trust Distribution Chart');
     const canvas = document.getElementById('trustChart');
     if (!canvas) return;
 
@@ -414,7 +414,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
         plugins: {
           title: {
             display: true,
-            text: '🎯 Device Trust Score Distribution'
+            text: 'Device Trust Score Distribution'
           },
           legend: {
             position: 'bottom'
@@ -427,10 +427,10 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
   };
 
   const createIncidentTypeChart = (chartData) => {
-    console.log('⚠️ Creating Incident Type Chart with data:', chartData);
+    console.log('Creating Incident Type Chart with data:', chartData);
     const canvas = document.getElementById('incidentChart');
     if (!canvas) {
-      console.error('❌ Incident Chart canvas not found');
+      console.error('Incident Chart canvas not found');
       return;
     }
 
@@ -447,11 +447,11 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
 
     // Use real incident type data from backend
     const incidentTypes = chartData.incidentTypes || {};
-    console.log('📊 Incident Types data:', incidentTypes);
+    console.log('Incident Types data:', incidentTypes);
     
     // Don't render chart if no data available
     if (Object.keys(incidentTypes).length === 0) {
-      console.warn('⚠️ No incident types data available, skipping chart');
+      console.warn('No incident types data available, skipping chart');
       return;
     }
 
@@ -472,7 +472,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
         plugins: {
           title: {
             display: true,
-            text: '⚠️ Incident Type Distribution'
+            text: 'Incident Type Distribution'
           }
         },
         scales: {
@@ -526,7 +526,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
         plugins: {
           title: {
             display: true,
-            text: '🏛️ Sector Performance Comparison'
+            text: 'Sector Performance Comparison'
           }
         },
         scales: {
@@ -593,7 +593,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
         plugins: {
           title: {
             display: true,
-            text: '📊 Report Status Breakdown'
+            text: 'Report Status Breakdown'
           },
           legend: {
             position: 'bottom'
@@ -607,7 +607,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
 
   // Initialize charts when data loads
   useEffect(() => {
-    console.log('🚀 Chart initialization triggered:', { 
+    console.log('Chart initialization triggered:', { 
       hasData: !!data, 
       isLoading: loading, 
       hasChartData: !!chartData 
@@ -632,7 +632,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
           
           createStatusChart(chartData);
         } catch (error) {
-          console.error('❌ Error during chart initialization:', error);
+          console.error('Error during chart initialization:', error);
         }
       };
       
@@ -726,14 +726,14 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
 
             {/* Charts Section */}
             <div className="space-y-6">
-              <h3 className="text-2xl font-bold text-gray-900">📊 Geographic Intelligence Analytics</h3>
+              <h3 className="text-2xl font-bold text-gray-900">Geographic Intelligence Analytics</h3>
               
               {/* Row 1: Trust Distribution */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white p-6 rounded-lg border border-gray-200">
                   <canvas id="trustChart" width="400" height="200"></canvas>
                   <div className="mt-4 text-sm text-gray-600">
-                    <p><strong>🎯 Device Trust Score Distribution</strong></p>
+                    <p><strong>Device Trust Score Distribution</strong></p>
                     <p>This pie chart categorizes devices by their trust scores. High-trust devices (80-100%) 
                     consistently provide reliable reports, while low-trust devices may require additional 
                     verification. Monitor this distribution to assess overall data quality.</p>
@@ -746,7 +746,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
                 <div className="bg-white p-6 rounded-lg border border-gray-200">
                   <canvas id="incidentChart" width="400" height="200"></canvas>
                   <div className="mt-4 text-sm text-gray-600">
-                    <p><strong>⚠️ Incident Type Distribution</strong></p>
+                    <p><strong>Incident Type Distribution</strong></p>
                     <p>This bar chart displays the breakdown of incident types reported. 
                     Understanding incident patterns helps allocate resources effectively and identify 
                     emerging crime trends or safety concerns in different areas.</p>
@@ -756,7 +756,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
                 <div className="bg-white p-6 rounded-lg border border-gray-200">
                   <canvas id="sectorChart" width="400" height="200"></canvas>
                   <div className="mt-4 text-sm text-gray-600">
-                    <p><strong>🏛️ Sector Performance Comparison</strong></p>
+                    <p><strong>Sector Performance Comparison</strong></p>
                     <p>This bar chart compares reporting activity across different sectors. 
                     Higher report volumes may indicate greater community engagement or 
                     areas requiring increased attention. Use this to identify hotspots and resource needs.</p>
@@ -769,7 +769,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
                 <div className="bg-white p-6 rounded-lg border border-gray-200">
                   <canvas id="statusChart" width="400" height="200"></canvas>
                   <div className="mt-4 text-sm text-gray-600">
-                    <p><strong>📊 Report Status Breakdown</strong></p>
+                    <p><strong>Report Status Breakdown</strong></p>
                     <p>This donut chart shows the current status of all reports. 
                     Track the flow from pending to verified/flagged to monitor system efficiency 
                     and identify bottlenecks in the report processing pipeline.</p>
@@ -777,7 +777,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
                 </div>
                 
                 <div className="bg-white p-6 rounded-lg border border-gray-200">
-                  <h4 className="text-lg font-semibold mb-4 text-gray-900">🔍 Key Insights</h4>
+                  <h4 className="text-lg font-semibold mb-4 text-gray-900">Key Insights</h4>
                   <div className="space-y-3 text-sm">
                     <div className="flex items-start">
                       <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5 mr-3"></div>
@@ -816,7 +816,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Sectors List */}
               <div>
-                <h4 className="text-lg font-semibold mb-3 text-blue-600">🏛️ Sectors</h4>
+                <h4 className="text-lg font-semibold mb-3 text-blue-600">Sectors</h4>
                 <div className="space-y-2">
                   {data.sectors?.slice(0, 10).map((sector, idx) => (
                     <div key={idx} className="bg-gray-50 p-3 rounded border border-gray-200">
@@ -837,7 +837,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
 
               {/* Cells List */}
               <div>
-                <h4 className="text-lg font-semibold mb-3 text-green-600">🏘️ Cells</h4>
+                <h4 className="text-lg font-semibold mb-3 text-green-600">Cells</h4>
                 <div className="space-y-2">
                   {data.cells?.slice(0, 10).map((cell, idx) => (
                     <div key={idx} className="bg-gray-50 p-3 rounded border border-gray-200">
@@ -858,7 +858,7 @@ const GeographicIntelligence = ({ wsRefreshKey }) => {
 
               {/* Villages List */}
               <div>
-                <h4 className="text-lg font-semibold mb-3 text-purple-600">🏡 Villages</h4>
+                <h4 className="text-lg font-semibold mb-3 text-purple-600">Villages</h4>
                 <div className="space-y-2">
                   {data.villages?.slice(0, 10).map((village, idx) => (
                     <div key={idx} className="bg-gray-50 p-3 rounded border border-gray-200">

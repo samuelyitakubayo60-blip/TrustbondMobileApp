@@ -49,7 +49,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         final status = r.ruleStatus;
         if (status == 'confirmed' || status == 'verified' || status == 'trusted') {
           notifs.add(_NotifItem(
-            icon: '✅',
+            icon: iconDataForIncidentType(r.incidentTypeName ?? ''),
             title: 'Report Verified',
             body: '${r.incidentTypeName ?? "Report"} has been verified.',
             time: timeAgo(r.reportedAt),
@@ -58,7 +58,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ));
         } else if (status == 'rejected' || status == 'suspicious') {
           notifs.add(_NotifItem(
-            icon: '⚠️',
+            icon: iconDataForIncidentType(r.incidentTypeName ?? ''),
             title: 'Report Flagged',
             body: '${r.incidentTypeName ?? "Report"} was flagged as $status.',
             time: timeAgo(r.reportedAt),
@@ -67,7 +67,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ));
         } else if (status == 'pending') {
           notifs.add(_NotifItem(
-            icon: '🔄',
+            icon: iconDataForIncidentType(r.incidentTypeName ?? ''),
             title: 'Report Processing',
             body: '${r.incidentTypeName ?? "Report"} is being processed.',
             time: timeAgo(r.reportedAt),
@@ -95,7 +95,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
           for (final r in nearbyReports) {
             notifs.add(_NotifItem(
-              icon: '🗳️',
+              icon: iconDataForIncidentType(r.incidentTypeName ?? ''),
               title: 'Confirm nearby report',
               body: '${r.incidentTypeName ?? "Report"} is pending verification. Vote to help.',
               time: timeAgo(r.reportedAt),
@@ -142,7 +142,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
             if (dist <= 1500) {
               notifs.add(_NotifItem(
-                icon: '🚨',
+                icon: Icons.crisis_alert,
                 title: 'High-risk area alert',
                 body: 'Stay cautious: $risk-risk hotspot nearby.',
                 time: timeAgo(h.detectedAt),
@@ -291,7 +291,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               color: n.color.withValues(alpha: 0.1),
             ),
             alignment: Alignment.center,
-            child: Text(n.icon, style: const TextStyle(fontSize: 16)),
+            child: Icon(n.icon, size: 18, color: n.color),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -340,7 +340,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 }
 
 class _NotifItem {
-  final String icon;
+  final IconData icon;
   final String title;
   final String body;
   final String time;

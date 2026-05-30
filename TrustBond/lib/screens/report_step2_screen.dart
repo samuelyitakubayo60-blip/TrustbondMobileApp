@@ -167,7 +167,7 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('📋', style: TextStyle(fontSize: 14)),
+          Icon(iconDataForIncidentType(widget.incidentTypeName), size: 14, color: AppColors.accent),
           const SizedBox(width: 6),
           Text(widget.incidentTypeName,
               style: const TextStyle(
@@ -260,7 +260,7 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
         children: [
           Row(
             children: [
-              const Text('📍', style: TextStyle(fontSize: 16)),
+              const Icon(Icons.location_on_outlined, size: 16, color: AppColors.accent),
               const SizedBox(width: 8),
               const Text('Location',
                   style:
@@ -296,11 +296,11 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _locationRow('🏘️', 'Village', _villageLocation!.village),
+                    _locationRow(Icons.home_outlined, 'Village', _villageLocation!.village),
                     const SizedBox(height: 4),
-                    _locationRow('📍', 'Cell', _villageLocation!.cell),
+                    _locationRow(Icons.location_on_outlined, 'Cell', _villageLocation!.cell),
                     const SizedBox(height: 4),
-                    _locationRow('🗺️', 'Sector', _villageLocation!.sector),
+                    _locationRow(Icons.map_outlined, 'Sector', _villageLocation!.sector),
                   ],
                 ),
               ),
@@ -367,10 +367,10 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
     );
   }
 
-  Widget _locationRow(String emoji, String label, String value) {
+  Widget _locationRow(IconData icon, String label, String value) {
     return Row(
       children: [
-        Text(emoji, style: const TextStyle(fontSize: 13)),
+        Icon(icon, size: 13, color: AppColors.accent),
         const SizedBox(width: 6),
         Text('$label: ',
             style: const TextStyle(

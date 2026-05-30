@@ -61,15 +61,31 @@ def build_text_only_validation_from_nl(nl: Any) -> Dict[str, Any]:
     reason_codes: List[str] = []
     if desc_q < 25.0:
         reason_codes.append("GIBBERISH")
-    # semantic_similarity_score is 0–100 (same scale as NL scorer output)
-    if sem < 35.0:
-        reason_codes.append("INCIDENT_TEXT_MISMATCH")
+    # semantic_similarity_score is 0–100 (same scale as NL scorer output).
+    # Only flag INCIDENT_TEXT_MISMATCH when we have a reliable signal:
+    #   - LLM-based scoring: threshold 35 is trustworthy.
+    #   - Keyword fallback: 0 matches gives score 20, but this can legitimately
+    #     happen for non-English descriptions (Kinyarwanda, French). Only flag
+    #     when description quality is ALSO poor, confirming the content is weak.
+    sem_meta = (getattr(nl, "metadata", {}) or {}).get("semantic_analysis", {}) or {}
+    is_llm_based = bool(sem_meta.get("semantic_model_available", False))
+    if is_llm_based:
+        if sem < 35.0:
+            reason_codes.append("INCIDENT_TEXT_MISMATCH")
+    else:
+        # Keyword fallback: only flag when both semantic AND quality are low
+        if sem < 25.0 and desc_q < 40.0:
+            reason_codes.append("INCIDENT_TEXT_MISMATCH")
     if overall < 35.0:
         reason_codes.append("REJECT_QUALITY")
     elif overall < 55.0:
         reason_codes.append("REVIEW_QUALITY")
 
-    if overall >= 60.0 and sem >= 42.0 and desc_q >= 40.0:
+    # For LLM-based scoring, require strong semantic alignment.
+    # For keyword fallback, only require description quality since keywords
+    # can miss valid non-English descriptions.
+    sem_accept_min = 42.0 if is_llm_based else 20.0
+    if overall >= 60.0 and sem >= sem_accept_min and desc_q >= 40.0:
         quality_band = "accept_quality"
         valid = True
     elif overall < 40.0 or "REJECT_QUALITY" in reason_codes:
@@ -315,21 +331,25 @@ def apply_evidence_semantic_checks(
                 report.flag_reason = "evidence_incident_mismatch"
 
         # Cross-validate: check if Volo-detected objects are relevant to the incident.
-        # This runs even when Volo validation passed (score above threshold) but
-        # the detected content clearly doesn't match the incident type.
+        # Only flag when objects WERE detected but clearly don't match the incident type.
+        # Empty detected_objects means the model could not analyse the media (e.g. blurry /
+        # low-resolution image) — that's already captured by the Volo quality score.
+        # Treating empty detection as "irrelevant" produces false positives for genuine
+        # reports whose evidence just happens to be low quality.
         if validations and not failed:
             irrelevant_count = 0
             for ev in validations:
                 val = (ev or {}).get("validation") or {}
                 auth_meta = (val.get("analysis_summary") or {})
-                volo_meta = val  # check penalty stored in the merged validation
-                # Look for context_relevance_penalty in authenticity_analysis metadata
-                full_meta = fv.get("unified_validation", {})
-                # Simpler: check if all evidence has empty/no detected objects for this incident
-                detected = auth_meta.get("detected_objects") or []
-                incident_name = type_name.lower() if type_name else ""
-                if incident_name and not detected:
-                    irrelevant_count += 1
+                detected = [str(o).strip().lower() for o in (auth_meta.get("detected_objects") or []) if str(o).strip()]
+                incident_name = (type_name or "").lower().strip()
+                # Only count as irrelevant when objects were actually detected AND
+                # none of the incident-type words appear in any detected object label.
+                if incident_name and detected:
+                    incident_words = set(incident_name.split())
+                    obj_text = " ".join(detected)
+                    if not any(w in obj_text for w in incident_words):
+                        irrelevant_count += 1
             if irrelevant_count == len(validations) and irrelevant_count > 0:
                 report.rule_status = "flagged"
                 report.is_flagged = True

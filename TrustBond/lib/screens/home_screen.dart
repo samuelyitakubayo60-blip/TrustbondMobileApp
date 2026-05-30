@@ -68,23 +68,6 @@ String _riskLabel(String level) {
   }
 }
 
-String _riskIcon(String level) {
-  switch (level.toLowerCase()) {
-    case 'critical':
-      return '🔴';
-    case 'active':
-    case 'high':
-      return '🟠';
-    case 'emerging':
-    case 'medium':
-      return '🟡';
-    case 'low_activity':
-    case 'low':
-      return '🟢';
-    default:
-      return '⚪';
-  }
-}
 
 String _safetyMessage(String level, String? crimeType) {
   final crime = crimeType ?? 'incidents';
@@ -704,8 +687,7 @@ class _HomeScreenState extends State<HomeScreen>
           children: [
             Row(
               children: [
-                Text(_riskIcon(top.riskLevel),
-                    style: const TextStyle(fontSize: 20)),
+                Icon(_riskIcon(top.riskLevel), size: 20, color: color),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -840,16 +822,16 @@ class _HomeScreenState extends State<HomeScreen>
   // ── Safety Tips ─────────────────────────────────────────────────────────────
 
   static const _fallbackTips = [
-    ('🔔', 'Stay Alert', 'Keep aware of your surroundings at all times.'),
-    ('📱', 'Report Fast', 'Report incidents quickly — early reports save lives.'),
-    ('👥', 'Travel Together', 'Move in groups especially at night or in risky areas.'),
-    ('📍', 'Share Location', 'Let trusted contacts know where you are.'),
+    (Icons.notifications_outlined, 'Stay Alert', 'Keep aware of your surroundings at all times.'),
+    (Icons.smartphone_outlined, 'Report Fast', 'Report incidents quickly — early reports save lives.'),
+    (Icons.group_outlined, 'Travel Together', 'Move in groups especially at night or in risky areas.'),
+    (Icons.location_on_outlined, 'Share Location', 'Let trusted contacts know where you are.'),
   ];
 
   Widget _buildSafetyTips() {
     // Build tip cards from nearby hotspot citizen advisories (LLM-generated).
     // Each advisory is split on ". " so long sentences become separate cards.
-    final liveTips = <(String, String, String)>[];
+    final liveTips = <(IconData, String, String)>[];
     for (final h in _nearbyHotspots) {
       final advisory = h.citizenAdvisory?.trim() ?? '';
       if (advisory.isEmpty) continue;
@@ -900,7 +882,7 @@ class _HomeScreenState extends State<HomeScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(icon, style: const TextStyle(fontSize: 20)),
+                    Icon(icon, size: 20, color: AppColors.accent),
                     const SizedBox(height: 6),
                     Text(
                       title,
@@ -928,18 +910,18 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  String _riskIcon(String riskLevel) {
+  IconData _riskIcon(String riskLevel) {
     switch (riskLevel.toLowerCase()) {
       case 'critical':
-        return '🚨';
+        return Icons.crisis_alert;
       case 'high':
       case 'active':
-        return '⚠️';
+        return Icons.warning_amber_rounded;
       case 'medium':
       case 'emerging':
-        return '🔶';
+        return Icons.info_outline;
       default:
-        return '🛡️';
+        return Icons.shield_outlined;
     }
   }
 
@@ -989,14 +971,21 @@ class _HomeScreenState extends State<HomeScreen>
                       color: AppColors.bg.withValues(alpha: 0.88),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
-                      _userVillage != null
-                          ? '📍 ${_userVillage!.village}, ${_userVillage!.sector}'
-                          : '📍 Musanze District · ${_mapData?.sectors.length ?? 0} sectors',
-                      style: const TextStyle(
-                          fontSize: 10,
-                          color: AppColors.muted,
-                          fontFamily: 'monospace'),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.location_on_outlined, size: 11, color: AppColors.muted),
+                        const SizedBox(width: 3),
+                        Text(
+                          _userVillage != null
+                              ? '${_userVillage!.village}, ${_userVillage!.sector}'
+                              : 'Musanze District · ${_mapData?.sectors.length ?? 0} sectors',
+                          style: const TextStyle(
+                              fontSize: 10,
+                              color: AppColors.muted,
+                              fontFamily: 'monospace'),
+                        ),
+                      ],
                     ),
                   ),
                 ),
