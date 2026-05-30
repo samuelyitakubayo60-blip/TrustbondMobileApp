@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from "react";
 import api from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
-import {
-  canAssignReports,
-  canCreateCases,
-  canManageReportCaseLinks,
-} from "../../utils/roleMapping";
 import { formatLocalDateTime } from "../../utils/dateTime";
 import {
   formatTechnicalStatus,
@@ -903,26 +898,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
             flexWrap: "wrap",
           }}
         >
-          {canAssignReports(role) && (
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => openModal("assign")}
-              style={{ display: "flex", alignItems: "center", gap: 4 }}
-            >
-              Assign officer
-            </button>
-          )}
-
-          {canCreateCases(role) && !hasCase && (
-            <button
-              className="btn btn-success btn-sm"
-              onClick={() => openModal("newCase")}
-              style={{ display: "flex", alignItems: "center", gap: 4 }}
-            >
-              Create case
-            </button>
-          )}
-
           {hasCase && (
             <button
               className="btn btn-info btn-sm"
@@ -930,30 +905,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
               style={{ display: "flex", alignItems: "center", gap: 4 }}
             >
               View case
-            </button>
-          )}
-
-          {canManageReportCaseLinks(role) && hasCase && (
-            <button
-              className="btn btn-danger btn-sm"
-              onClick={unlinkReportFromCase}
-              disabled={linkingCase}
-              style={{ display: "flex", alignItems: "center", gap: 4 }}
-            >
-              {linkingCase ? "Unlinking..." : "Unlink from case"}
-            </button>
-          )}
-
-          {canManageReportCaseLinks(role) && (
-            <button
-              className="btn btn-warn btn-sm"
-              onClick={openLinkCaseModal}
-              disabled={linkingCase}
-              style={{ display: "flex", alignItems: "center", gap: 4 }}
-            >
-              {linkingCase
-                ? "Processing..."
-                : (report.case_id ? "Move to different case" : "Link to existing case")}
             </button>
           )}
         </div>
