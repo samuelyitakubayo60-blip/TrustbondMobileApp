@@ -113,6 +113,8 @@ def list_public_hotspots(
         hotspots = hotspots[:limit]
         distance_by_id = {}
     responses = []
+    hotspots_needing_advisory: List[Hotspot] = []
+
     for h in hotspots:
         classification = (
             "critical" if h.risk_level == "critical"
@@ -121,12 +123,23 @@ def list_public_hotspots(
             else "low_activity"
         )
         incident_type_name = h.incident_type.type_name if h.incident_type else None
-        advisory = generate_citizen_advisory(
-            classification=classification,
-            incident_count=int(h.incident_count or 0),
-            dominant_crime=incident_type_name,
-            time_window_hours=int(h.time_window_hours or effective_hours),
-        )
+
+        # Use the persisted advisory when available — avoids calling the LLM/template
+        # on every mobile request.  Only generate (and then save) when missing.
+        advisory = h.llm_citizen_advisory
+        if not advisory:
+            advisory = generate_citizen_advisory(
+                classification=classification,
+                incident_count=int(h.incident_count or 0),
+                dominant_crime=incident_type_name,
+                time_window_hours=int(h.time_window_hours or effective_hours),
+            )
+            # Mark for persistence so future requests can use the cached text.
+            h.llm_citizen_advisory = advisory
+            h.llm_provider = "api_generated"
+            h.llm_generated_at = datetime.now(timezone.utc)
+            hotspots_needing_advisory.append(h)
+
         responses.append(
             HotspotResponse(
                 hotspot_id=h.hotspot_id,
@@ -146,6 +159,16 @@ def list_public_hotspots(
                 else None,
             )
         )
+
+    # Persist newly generated advisories in one batch.
+    if hotspots_needing_advisory:
+        try:
+            for h in hotspots_needing_advisory:
+                db.add(h)
+            db.commit()
+        except Exception:
+            db.rollback()
+
     return responses
 
 

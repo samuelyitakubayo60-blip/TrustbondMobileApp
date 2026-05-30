@@ -201,6 +201,22 @@ def merge_volo_into_evidence_validations(
         issues: List[str] = []
         if not valid:
             issues.append("low_evidence_authenticity_score")
+        matched_ef = next((e for e in analyzed if (e.file_url or "").strip() == url), None)
+        media_type = (getattr(matched_ef, "file_type", None) or "media")
+        analysis_summary: Dict[str, Any] = {
+            "quality_score": round(score / 100.0, 4),
+            "detected_objects": det.get("detected_objects") or [],
+            "media_type": media_type,
+        }
+        # For audio evidence, surface the transcript so semantic alignment can use it
+        audio_meta = meta.get("audio_analysis") if isinstance(meta.get("audio_analysis"), dict) else {}
+        transcript = (
+            det.get("transcript_excerpt")
+            or audio_meta.get("transcript")
+            or ""
+        )
+        if transcript:
+            analysis_summary["extracted_text"] = transcript.strip()[:800]
         entry["validation"] = {
             "valid": valid,
             "confidence": max(0.0, min(1.0, conf)),
@@ -208,15 +224,7 @@ def merge_volo_into_evidence_validations(
             "issues": issues,
             "source": "volo",
             "volo_overall_score": round(score, 2),
-            "analysis_summary": {
-                "quality_score": round(score / 100.0, 4),
-                "detected_objects": det.get("detected_objects") or [],
-                "media_type": (getattr(
-                    next((e for e in analyzed if (e.file_url or "").strip() == url), None),
-                    "file_type",
-                    None,
-                ) or "media"),
-            },
+            "analysis_summary": analysis_summary,
         }
         merged.append(entry)
     return merged

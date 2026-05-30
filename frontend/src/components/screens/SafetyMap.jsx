@@ -1970,7 +1970,6 @@ const SecurityRecommendations = ({
         const unitChips = Array.isArray(hFull.prediction?.recommended_units)
           ? hFull.prediction.recommended_units
           : [];
-        const citizenNote = (hFull.prediction?.citizen_advisory || "").trim();
         const dot = severityDot(alarm);
         const narrative = buildNarrative(hFull);
         const action = buildAction(hFull, unit);
@@ -2144,22 +2143,6 @@ const SecurityRecommendations = ({
                   {action}
                 </div>
 
-                {citizenNote && (
-                  <div style={{
-                    fontSize: "11px", color: "var(--text)", lineHeight: 1.5,
-                    padding: "7px 10px", borderRadius: "6px",
-                    backgroundColor: "rgba(34, 197, 94, 0.08)",
-                    border: "1px solid rgba(34, 197, 94, 0.25)",
-                  }}>
-                    <div style={{
-                      fontSize: "9px", fontWeight: 700, color: "#16a34a",
-                      letterSpacing: "0.07em", marginBottom: "3px",
-                    }}>
-                      COMMUNITY NOTICE
-                    </div>
-                    {citizenNote}
-                  </div>
-                )}
 
                 {/* Operation window — always show when available */}
                 {(hFull.prediction?.operation_hours || hFull.prediction?.concentrate_window) && (

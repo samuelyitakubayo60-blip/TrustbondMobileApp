@@ -17,6 +17,7 @@ from app.models.local_leader import LocalLeader
 from app.api.v1.leader_auth import get_current_local_leader
 from app.core.leader_workflow import leader_covered_village_ids as _leader_covered_village_ids
 from app.core.report_credibility_summary import build_credibility_summary
+from app.core.credibility_model import update_device_ml_aggregates
 
 
 router = APIRouter(prefix="/leader", tags=["leader"])
@@ -346,13 +347,13 @@ def verify_report(
                 is_final=False,
                 evaluated_at=now,
             ))
-        # Reward reporting device slightly
-        if getattr(r, "device", None) and hasattr(r.device, "device_trust_score"):
-            r.device.device_trust_score = Decimal(
-                str(min(100.0, float(r.device.device_trust_score or 50.0) + 1.0))
-            )
-        if hasattr(r.device, "trusted_reports"):
-            r.device.trusted_reports = (r.device.trusted_reports or 0) + 1
+        # Reward reporting device — increment counter then recalculate full score
+        if getattr(r, "device", None):
+            if hasattr(r.device, "trusted_reports"):
+                r.device.trusted_reports = (r.device.trusted_reports or 0) + 1
+            db.add(r)
+            db.flush()  # make new ML score + verified status visible to aggregator
+            update_device_ml_aggregates(db, r.device, window=30)
 
     elif decision == "rejected":
         # Hard-lock at 10 (well below the < 40 rejection threshold).
@@ -374,15 +375,16 @@ def verify_report(
                 is_final=True,
                 evaluated_at=now,
             ))
-        # Penalise reporting device
-        if getattr(r, "device", None) and hasattr(r.device, "device_trust_score"):
-            r.device.device_trust_score = Decimal(
-                str(max(0.0, float(r.device.device_trust_score or 50.0) - 5.0))
-            )
-        if hasattr(r.device, "flagged_reports"):
-            r.device.flagged_reports = (r.device.flagged_reports or 0) + 1
+        # Penalise reporting device — increment counter then recalculate full score
+        if getattr(r, "device", None):
+            if hasattr(r.device, "flagged_reports"):
+                r.device.flagged_reports = (r.device.flagged_reports or 0) + 1
+            db.add(r)
+            db.flush()
+            update_device_ml_aggregates(db, r.device, window=30)
 
-    db.add(r)
+    if not getattr(r, "device", None):
+        db.add(r)
     db.commit()
 
     from app.core.mobile_push_notifications import notify_citizen_leader_decision_task

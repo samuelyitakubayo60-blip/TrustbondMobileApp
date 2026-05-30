@@ -918,66 +918,19 @@ def _create_geographic_hotspots(
 
     created = 0
 
-    def _create_solo_hotspot(db, group_name, p, radius_meters, time_window_hours):
-        """Single-report hotspot, or append to an existing cluster within epsilon."""
-        nonlocal created
-        if _try_append_report_to_nearby_hotspot(db, p, eps_m, group_name):
-            return
-        solo_lat  = p["lat"]
-        solo_long = p["lon"]
-        i_name    = p.get("incident_type_name", "Unknown")
-        i_tid     = p.get("incident_type_id")
-        solo_sev  = _get_severity(i_name)
-        report_id_str = str(p["report"].report_id)
-
-        # Idempotency: if a hotspot already links this exact report, skip creation.
-        already = db.execute(
-            text(
-                "SELECT hr.hotspot_id FROM hotspot_reports hr "
-                "JOIN hotspots h ON h.hotspot_id = hr.hotspot_id "
-                "WHERE hr.report_id = :rid AND h.incident_count = 1"
-            ),
-            {"rid": report_id_str},
-        ).fetchone()
-        if already:
-            return
-
-        hotspot = Hotspot(
-            center_lat          = Decimal(str(solo_lat)),
-            center_long         = Decimal(str(solo_long)),
-            radius_meters       = Decimal(str(radius_meters)),
-            incident_count      = 1,
-            risk_level          = "low",
-            time_window_hours   = time_window_hours,
-            incident_type_id    = int(i_tid) if i_tid else None,
-            detected_at         = datetime.now(timezone.utc),
-            lifecycle_state     = "emerging",
-            composition         = json.dumps({i_name: 1}),
-            temporal_intensity  = Decimal("0.0"),
-            severity_score      = Decimal(str(round(solo_sev, 4))),
-            trend_direction     = "stable",
-            cluster_confidence  = Decimal("1.0"),
-            polygon_points      = None,
-            crime_group         = group_name,
-        )
-        db.add(hotspot)
-        db.flush()
-        created += 1
-
-        db.execute(
-            text(
-                "INSERT INTO hotspot_reports (hotspot_id, report_id, is_core) "
-                "VALUES (:hid, :rid, true) "
-                "ON CONFLICT (hotspot_id, report_id) DO UPDATE SET is_core = true"
-            ),
-            {"hid": hotspot.hotspot_id, "rid": report_id_str},
-        )
+    # A single isolated report is NOT a hotspot.  Only try to attach it to an
+    # already-existing cluster within the clustering radius.  If no such cluster
+    # exists the report is silently skipped — it will be re-evaluated the next
+    # time clustering runs once more nearby reports arrive.
+    def _try_attach_isolated(p: Dict[str, Any]) -> None:
+        _try_append_report_to_nearby_hotspot(db, p, eps_m, group_name)
 
     for group_name, group_pts in groups.items():
         if len(group_pts) < dbscan_min_pts:
-            # All points in a too-small group are effectively solo noise
+            # Whole group is too small to cluster — try to merge each point into
+            # an existing nearby hotspot but do NOT create new single-point hotspots.
             for p in group_pts:
-                _create_solo_hotspot(db, group_name, p, radius_meters, time_window_hours)
+                _try_attach_isolated(p)
             continue
 
         # ── 2. ST-DBSCAN ──────────────────────────────────────────────────
@@ -993,9 +946,10 @@ def _create_geographic_hotspots(
         for cluster_pts in raw_clusters.values():
             incident_count = len(cluster_pts)
             if incident_count < int(min_incidents):
-                # Under-sized DBSCAN cluster — treat each point as a solo incident
+                # Under-sized DBSCAN cluster — try to attach each point to an
+                # existing nearby hotspot; never create a new single-point hotspot.
                 for p in cluster_pts:
-                    _create_solo_hotspot(db, group_name, p, radius_meters, time_window_hours)
+                    _try_attach_isolated(p)
                 continue
 
             # Time-span guard
@@ -1090,6 +1044,9 @@ def _create_geographic_hotspots(
                 hotspot.cluster_confidence  = Decimal(str(conf))
                 hotspot.polygon_points      = polygon_json
                 hotspot.crime_group         = group_name
+                # Clear cached advisory so the API regenerates it with fresh incident data.
+                hotspot.llm_citizen_advisory = None
+                hotspot.llm_generated_at     = None
                 db.execute(
                     text("DELETE FROM hotspot_reports WHERE hotspot_id = :hid"),
                     {"hid": hotspot.hotspot_id},
@@ -1214,7 +1171,9 @@ def _create_geographic_hotspots(
         else:
             leftover_noise = noise_pts
 
+        # Leftover noise: try to attach each point to an existing nearby hotspot.
+        # Never create a new single-point hotspot — skip if no cluster is available.
         for p in leftover_noise:
-            _create_solo_hotspot(db, group_name, p, radius_meters, time_window_hours)
+            _try_append_report_to_nearby_hotspot(db, p, eps_m, group_name)
 
     return created

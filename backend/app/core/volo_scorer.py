@@ -540,31 +540,43 @@ class VoloScorer:
             transcript = (meta.get("transcript") or "").strip()
             dur = float(meta.get("duration_seconds") or 0.0)
 
-            authenticity = 45.0 + min(25.0, dur * 3.0)
+            # Authenticity: audio presence + duration + transcript richness
+            authenticity = 50.0 + min(20.0, dur * 2.5)
             if transcript:
                 authenticity += min(25.0, len(transcript) / 8.0)
             authenticity = max(0.0, min(100.0, authenticity))
 
-            detection_score = 30.0
+            # Detection: audio is content evidence — base on duration + transcript keyword match
+            # (no YOLO objects — don't penalise for missing visual detection)
+            detection_score = 55.0  # audio presence is itself evidence
+            if dur >= 2.0:
+                detection_score += min(15.0, dur * 1.5)
             if transcript:
-                detection_score += min(55.0, len(transcript) / 5.0)
+                detection_score += min(25.0, len(transcript) / 6.0)
+                # Keyword relevance bonus if incident type words appear in transcript
+                if incident_type_name:
+                    type_words = set(incident_type_name.lower().split())
+                    transcript_lower = transcript.lower()
+                    matched = sum(1 for w in type_words if w in transcript_lower)
+                    if matched:
+                        detection_score += min(10.0, matched * 3.0)
             detection_score = max(0.0, min(100.0, detection_score))
 
-            quality_score = 45.0
+            quality_score = 50.0
             if dur > 0.5:
-                quality_score += 20.0
+                quality_score += 15.0
             if meta.get("rms_energy"):
                 quality_score += 10.0
             if transcript:
-                quality_score += min(15.0, len(transcript) / 20.0)
+                quality_score += min(20.0, len(transcript) / 15.0)
             quality_score = max(0.0, min(100.0, quality_score))
 
             overall_score = authenticity * 0.35 + detection_score * 0.35 + quality_score * 0.3
-            confidence = 0.55
+            confidence = 0.60
             if transcript:
                 confidence += 0.15
             if dur > 2.0:
-                confidence += 0.1
+                confidence += 0.10
             confidence = max(0.3, min(1.0, confidence))
 
             detection_metadata = {

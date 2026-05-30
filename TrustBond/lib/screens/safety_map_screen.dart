@@ -11,6 +11,7 @@ import '../models/musanze_map_data.dart';
 import '../services/location_service.dart';
 import '../services/api_service.dart';
 import '../services/hotspot_service.dart';
+import '../services/hotspot_prefs_service.dart';
 import '../services/proximity_alert_service.dart';
 import '../widgets/musanze_map_painter.dart' show sectorColor;
 
@@ -56,8 +57,8 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   List<Hotspot> _hotspots = [];
   List<Map<String, dynamic>> _publicAlerts = [];
   bool _loadingAlerts = false;
-  /// Default list/stats filter (1 week). Map always shows all clusters.
-  int _hotspotTimeWindowHours = 168;
+  /// Reads from shared singleton — always in sync with Home tab.
+  int get _hotspotTimeWindowHours => HotspotPrefsService.instance.timeWindowHours;
   int _nearbyHotspotRadiusMeters = 1500;
   final TextEditingController _distanceController =
       TextEditingController(text: '1.5');
@@ -91,6 +92,8 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     _loadMap();
     _loadSectorsFromBackend();
     _getUserLocation();
+
+    HotspotPrefsService.instance.addListener(_onHotspotPrefsChanged);
 
     // Keep hotspots fresh (mobile app has no websocket push).
     _hotspotRefreshTimer = Timer.periodic(const Duration(seconds: 45), (_) {
@@ -339,43 +342,172 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     }
   }
 
-  Future<void> _loadPublicAlerts() async {
-    if (_loadingAlerts) return;
-    if (_userLat == null || _userLng == null) {
-      if (mounted) {
-        setState(() {
-          _publicAlerts = [];
-        });
-      }
-      return;
-    }
-
-    setState(() => _loadingAlerts = true);
-    try {
-      final alerts = await _api.getPublicAlerts(
-        latitude: _userLat!,
-        longitude: _userLng!,
-        radiusKm: _alertsRadiusKm,
-        limit: 10,
-      );
-      if (!mounted) return;
-      setState(() {
-        _publicAlerts = alerts.cast<Map<String, dynamic>>();
-        _loadingAlerts = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loadingAlerts = false;
-      });
-    }
-  }
+  /// No-op — advisories are now sourced from the already-fetched [_hotspots] list.
+  Future<void> _loadPublicAlerts() async {}
 
   @override
   void dispose() {
+    HotspotPrefsService.instance.removeListener(_onHotspotPrefsChanged);
     _distanceController.dispose();
     _hotspotRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  /// Called whenever the shared time window changes (e.g. user changed it on the Home tab).
+  void _onHotspotPrefsChanged() {
+    if (!mounted) return;
+    setState(() {}); // rebuild chips + header
+    _loadHotspots();
+    _loadPublicAlerts();
+  }
+
+  Future<void> _onTimeWindowChanged(int hours) async {
+    HotspotPrefsService.instance.setTimeWindow(hours);
+    // Listener (_onHotspotPrefsChanged) handles reload.
+  }
+
+  Future<void> _pickTimeWindow() async {
+    final controller = TextEditingController();
+    String selectedUnit = 'Days';
+    const units = ['Hours', 'Days', 'Months', 'Years'];
+
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text(
+            'Set Time Window',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Show hotspots for incidents reported in the last:',
+                style: TextStyle(fontSize: 12, color: AppColors.muted, height: 1.5),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.number,
+                      autofocus: true,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                      decoration: InputDecoration(
+                        hintText: '1',
+                        hintStyle: TextStyle(color: AppColors.muted.withValues(alpha: 0.5)),
+                        filled: true,
+                        fillColor: AppColors.surface2,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 3,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface2,
+                        border: Border.all(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: selectedUnit,
+                          dropdownColor: AppColors.surface,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.text,
+                          ),
+                          items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                          onChanged: (v) {
+                            if (v != null) setLocal(() => selectedUnit = v);
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 7,
+                runSpacing: 6,
+                children: [
+                  _quickChip('24h', 24, controller, setLocal, () => selectedUnit = 'Hours'),
+                  _quickChip('3 days', 72, controller, setLocal, () => selectedUnit = 'Hours'),
+                  _quickChip('1 week', 7, controller, setLocal, () => selectedUnit = 'Days'),
+                  _quickChip('1 month', 1, controller, setLocal, () => selectedUnit = 'Months'),
+                  _quickChip('3 months', 3, controller, setLocal, () => selectedUnit = 'Months'),
+                  _quickChip('1 year', 1, controller, setLocal, () => selectedUnit = 'Years'),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel', style: TextStyle(color: AppColors.muted)),
+            ),
+            TextButton(
+              onPressed: () {
+                final n = int.tryParse(controller.text.trim()) ?? 0;
+                if (n <= 0) return;
+                final hours = switch (selectedUnit) {
+                  'Hours'  => n,
+                  'Days'   => n * 24,
+                  'Months' => n * 30 * 24,
+                  'Years'  => n * 365 * 24,
+                  _        => n * 24,
+                };
+                Navigator.of(ctx).pop(hours.clamp(1, 17520));
+              },
+              child: const Text('Apply', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result != null) _onTimeWindowChanged(result);
+  }
+
+  Widget _quickChip(String label, int value, TextEditingController ctrl,
+      StateSetter setLocal, VoidCallback setUnit) {
+    return GestureDetector(
+      onTap: () => setLocal(() { ctrl.text = '$value'; setUnit(); }),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppColors.accent.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
+        ),
+        child: Text(label,
+            style: const TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.accent)),
+      ),
+    );
   }
 
   /// Build polygon layers from GeoJSON data.
@@ -497,16 +629,10 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     ];
   }
 
-  bool _hotspotInSelectedFilter(Hotspot hotspot) {
-    final cutoff =
-        DateTime.now().subtract(Duration(hours: _hotspotTimeWindowHours));
-    return hotspot.detectedAt.isAfter(cutoff);
-  }
-
   List<Marker> _buildHotspotMarkers() {
     if (_hotspots.isEmpty) return [];
-    // Only show clusters that fall within the selected time window.
-    final visible = _hotspots.where(_hotspotInSelectedFilter).toList();
+    // Backend already filtered by time window — show all returned clusters.
+    final visible = _hotspots;
     return visible.map((hotspot) {
       final color = _getHotspotColor(hotspot.riskLevel);
       final isSecurityCluster = hotspot.incidentCount >= 3; // Security clusters have 3+ incidents
@@ -606,84 +732,121 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   }
 
   void _showHotspotDetails(Hotspot hotspot) {
-    final isSecurityCluster = hotspot.incidentCount >= 3;
+    final color = _getHotspotColor(hotspot.riskLevel);
+    final advisory = hotspot.citizenAdvisory ?? '';
+    final distM = _userLat != null ? _distanceToHotspotMeters(hotspot) : null;
+    final timeLabel = HotspotPrefsService.label(hotspot.timeWindowHours);
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
         title: Row(
           children: [
-            if (isSecurityCluster) ...[
-              const Icon(Icons.warning, color: Colors.red, size: 20),
-              const SizedBox(width: 4),
-              const Text('Security Cluster', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-            ] else ...[
-              Icon(hotspot.riskIconData, size: 18, color: hotspot.riskColor),
-              const SizedBox(width: 8),
-              Text(hotspot.riskText),
-            ],
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (isSecurityCluster) ...[
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Icon(Icons.warning_amber_rounded, size: 14, color: Colors.red),
-                    SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'High-priority security area\nMultiple recent incidents detected',
-                        style: TextStyle(fontSize: 12, color: Colors.red),
-                      ),
-                    ),
-                  ],
-                ),
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(height: 8),
-            ],
-            if (_userLat != null && _userLng != null)
-              Text(
-                'Distance: ${(_distanceToHotspotMeters(hotspot) / 1000).toStringAsFixed(2)} km from you',
-              ),
-            Text('Incidents: ${hotspot.incidentCount}', 
-                 style: TextStyle(fontWeight: isSecurityCluster ? FontWeight.bold : FontWeight.normal)),
-            if (hotspot.incidentTypeName != null) 
-              Text('Type: ${hotspot.incidentTypeName}'),
-            Text('Time window: ${hotspot.timeWindowHours}h'),
-            Text('Radius: ${hotspot.radiusMeters.toStringAsFixed(0)}m'),
-            if (isSecurityCluster) ...[
-              const SizedBox(height: 8),
-              Row(
+              child: Icon(hotspot.riskIconData, size: 18, color: color),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Icon(Icons.location_on_outlined, size: 12, color: AppColors.muted),
-                  SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'Stay alert in this area. Report any suspicious activity.',
-                      style: TextStyle(fontSize: 11, color: AppColors.muted),
-                    ),
+                children: [
+                  Text(
+                    hotspot.riskText,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: color),
                   ),
+                  if (hotspot.incidentTypeName != null)
+                    Text(
+                      hotspot.incidentTypeName!,
+                      style: const TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w500),
+                    ),
                 ],
               ),
-            ],
+            ),
           ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Stats row
+              Row(
+                children: [
+                  _detailChip(Icons.report_rounded, '${hotspot.incidentCount} incidents', color),
+                  const SizedBox(width: 8),
+                  _detailChip(Icons.access_time_rounded, timeLabel, AppColors.muted),
+                  if (distM != null) ...[
+                    const SizedBox(width: 8),
+                    _detailChip(
+                      Icons.near_me_rounded,
+                      distM < 1000 ? '${distM.toInt()}m' : '${(distM / 1000).toStringAsFixed(1)}km',
+                      AppColors.accent,
+                    ),
+                  ],
+                ],
+              ),
+              // Advisory from backend
+              if (advisory.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.07),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: color.withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded, size: 14, color: color),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          advisory,
+                          style: const TextStyle(fontSize: 12, color: AppColors.text, height: 1.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
+            child: const Text('Close', style: TextStyle(color: AppColors.muted)),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailChip(IconData icon, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
         ],
       ),
     );
@@ -709,7 +872,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
               flex: 3,
               child: _buildMap(),
             ),
-            Container(
+            SizedBox(
               height: 150,
               child: _buildSectorInfo(),
             ),
@@ -804,7 +967,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                   _loadingHotspots
                       ? 'Loading hotspots...'
                       : _mapData != null
-                      ? '${_mapData!.features.length} villages · ${_hotspots.length} clusters · ${_formatHotspotWindow(_hotspotTimeWindowHours)} · ${_userLat != null && _userLng != null ? 'within ${(_nearbyHotspotRadiusMeters / 1000).toStringAsFixed(1)} km' : 'enable GPS'}'
+                      ? '${_hotspots.length} clusters · ${HotspotPrefsService.label(_hotspotTimeWindowHours)} · ${_userLat != null && _userLng != null ? 'within ${(_nearbyHotspotRadiusMeters / 1000).toStringAsFixed(1)} km' : 'enable GPS'}'
                           : 'Loading...',
                   style: const TextStyle(
                       fontSize: 10,
@@ -905,50 +1068,56 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   }
 
   Widget _buildHotspotPeriodFilters() {
-    const periods = <int>[24, 168, 720, 2160, 8760];
-    return Container(
-      height: 34,
-      margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: periods.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, i) {
-          final hours = periods[i];
-          final selected = hours == _hotspotTimeWindowHours;
-          return GestureDetector(
-            onTap: () {
-              if (selected) return;
-              debugPrint('Filter tapped: ${_formatHotspotWindow(hours)} ($hours hours)');
-              setState(() => _hotspotTimeWindowHours = hours);
-              if (_userLat != null && _userLng != null) {
-                _loadHotspots();
-                _loadPublicAlerts();
-              }
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: selected
-                    ? AppColors.accent.withValues(alpha: 0.15)
-                    : AppColors.surface2,
-                border: Border.all(
-                  color: selected ? AppColors.accent : AppColors.border,
+    final timeLabel = HotspotPrefsService.label(_hotspotTimeWindowHours);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: Row(
+        children: [
+          const Icon(Icons.access_time_rounded, size: 13, color: AppColors.muted),
+          const SizedBox(width: 5),
+          Text(
+            'Showing clusters · $timeLabel',
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.muted,
+            ),
+          ),
+          const Spacer(),
+          if (_loadingHotspots)
+            const SizedBox(
+              width: 11,
+              height: 11,
+              child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.accent),
+            )
+          else
+            GestureDetector(
+              onTap: _pickTimeWindow,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
                 ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                _formatHotspotWindow(hours),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                  color: selected ? AppColors.accent : AppColors.muted,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      timeLabel,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.accent,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.expand_more_rounded, size: 13, color: AppColors.accent),
+                  ],
                 ),
               ),
             ),
-          );
-        },
+        ],
       ),
     );
   }
@@ -1424,9 +1593,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   }
 
   Widget _buildSectorInfo() {
-    // Always show nearby AI recommendation panel.
     return Container(
-      height: 150,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.surface2,
@@ -1440,93 +1607,109 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     if (_userLat == null || _userLng == null) {
       return const Center(
         child: Text(
-          'Enable location to get nearby safety recommendations',
+          'Enable location to get nearby safety advisories',
           style: TextStyle(fontSize: 12, color: AppColors.muted),
           textAlign: TextAlign.center,
         ),
       );
     }
 
-    if (_loadingAlerts) {
+    if (_loadingHotspots) {
       return const Center(
-        child: Text(
-          'Analyzing nearby safety alerts...',
-          style: TextStyle(fontSize: 12, color: AppColors.muted),
+        child: SizedBox(
+          width: 16, height: 16,
+          child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.accent),
         ),
       );
     }
 
-    if (_publicAlerts.isEmpty) {
+    final advisories = _hotspots
+        .where((h) => (h.citizenAdvisory ?? '').trim().isNotEmpty)
+        .toList();
+
+    if (advisories.isEmpty) {
       return const Center(
         child: Text(
-          'No safety alerts near you. See something? Tap + to report it.',
+          'No active safety advisories nearby. Stay alert and report anything unusual.',
           style: TextStyle(fontSize: 12, color: AppColors.muted),
           textAlign: TextAlign.center,
         ),
       );
     }
 
+    final timeLabel = HotspotPrefsService.label(_hotspotTimeWindowHours);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Nearby AI Safety Alerts (${_alertsRadiusKm.toStringAsFixed(1)} km)',
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        Row(
+          children: [
+            const Icon(Icons.shield_outlined, size: 12, color: AppColors.muted),
+            const SizedBox(width: 5),
+            Text(
+              'SAFETY ADVISORIES · $timeLabel',
+              style: const TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w700,
+                color: AppColors.muted, letterSpacing: 0.8,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         Expanded(
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: _publicAlerts.length,
+            itemCount: advisories.length,
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (context, i) {
-              final a = _publicAlerts[i];
-              final title = (a['title'] ?? 'Safety Alert').toString();
-              final msg = (a['message'] ?? '').toString();
-              final dist = (a['distance_km'] ?? '').toString();
-              final sev = (a['severity'] ?? 'info').toString().toLowerCase();
-              final color = sev == 'high'
-                  ? AppColors.danger
-                  : sev == 'medium'
-                      ? AppColors.warn
-                      : AppColors.ok;
+              final h = advisories[i];
+              final color = _getHotspotColor(h.riskLevel);
+              final distM = _distanceToHotspotMeters(h);
+              final distLabel = distM < 1000
+                  ? '${distM.toInt()}m away'
+                  : '${(distM / 1000).toStringAsFixed(1)}km away';
 
-              return Container(
-                width: 240,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.08),
-                  border: Border.all(color: color.withValues(alpha: 0.3)),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: color,
+              return GestureDetector(
+                onTap: () => _showHotspotDetails(h),
+                child: Container(
+                  width: 220,
+                  padding: const EdgeInsets.all(11),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.07),
+                    border: Border.all(color: color.withValues(alpha: 0.3)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(h.riskIconData, size: 12, color: color),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              '${h.incidentTypeName ?? h.riskText} · $distLabel',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10, fontWeight: FontWeight.w700, color: color,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Expanded(
-                      child: Text(
-                        msg,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 10),
+                      const SizedBox(height: 5),
+                      Expanded(
+                        child: Text(
+                          h.citizenAdvisory!,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10, color: AppColors.text, height: 1.4,
+                          ),
+                        ),
                       ),
-                    ),
-                    if (dist.isNotEmpty)
-                      Text(
-                        '$dist km away',
-                        style: const TextStyle(fontSize: 10, color: AppColors.muted),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             },
@@ -1535,6 +1718,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
       ],
     );
   }
+
 }
 
 class _LegendDot extends StatelessWidget {

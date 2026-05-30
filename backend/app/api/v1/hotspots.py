@@ -700,12 +700,27 @@ def list_hotspots(
             prediction["concentrate_window"] = llm.get("concentrate_window")
 
             # Persist for future requests (one-time generation).
+            # NOTE: llm_citizen_advisory is generated via the dedicated citizen prompt
+            # (generate_citizen_advisory), NOT from the law-enforcement briefing JSON.
+            # This keeps civilian advice fully separate from police tactical content.
             try:
-                if llm.get("narrative") or llm.get("recommendation") or llm.get("citizen_advisory"):
+                if llm.get("narrative") or llm.get("recommendation"):
                     h.llm_narrative = llm.get("narrative")
                     h.llm_recommendation = llm.get("recommendation")
                     h.llm_status = llm.get("status")
-                    h.llm_citizen_advisory = llm.get("citizen_advisory")
+                    # Generate a proper citizen advisory via the civilian-facing prompt.
+                    try:
+                        citizen_adv = generate_citizen_advisory(
+                            classification=classification,
+                            incident_count=incident_count,
+                            dominant_crime=dominant_crime,
+                            area_label=area_label,
+                            incident_mix=incident_mix,
+                            time_window_hours=int(h.time_window_hours or 24),
+                        )
+                    except Exception:
+                        citizen_adv = llm.get("citizen_advisory") or ""
+                    h.llm_citizen_advisory = citizen_adv or None
                     h.llm_provider = "llm"
                     h.llm_generated_at = datetime.now(timezone.utc)
                     db.add(h)

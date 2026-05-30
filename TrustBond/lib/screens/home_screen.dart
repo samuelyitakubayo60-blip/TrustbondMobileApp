@@ -9,6 +9,7 @@ import '../services/api_service.dart';
 import '../services/device_service.dart';
 import '../services/location_service.dart';
 import '../services/hotspot_service.dart';
+import '../services/hotspot_prefs_service.dart';
 import '../services/app_refresh_bus.dart';
 import '../services/notification_service.dart';
 import '../services/proximity_alert_service.dart';
@@ -124,22 +125,12 @@ class _HomeScreenState extends State<HomeScreen>
 
   // Safety / Nearby
   double _selectedRadiusKm = 1.5; // default matches ProximityAlertService default (1500m)
-  int _selectedTimeHours = 24;    // time window for safety recommendations
+  /// Reads from shared singleton — always in sync with Map tab.
+  int get _selectedTimeHours => HotspotPrefsService.instance.timeWindowHours;
   List<Hotspot> _nearbyHotspots = [];
   bool _loadingHotspots = false;
 
-  // Human-readable label for a time window in hours
-  static String _timeWindowLabel(int hours) {
-    if (hours < 24) return '${hours}h';
-    final days = hours ~/ 24;
-    if (days < 7) return '${days}d';
-    final weeks = days ~/ 7;
-    if (days < 30) return '${weeks}w';
-    final months = days ~/ 30;
-    if (days < 365) return '${months}mo';
-    final years = days ~/ 365;
-    return '${years}yr';
-  }
+  static String _timeWindowLabel(int hours) => HotspotPrefsService.label(hours);
 
   // Animation
   late AnimationController _pulseController;
@@ -164,14 +155,23 @@ class _HomeScreenState extends State<HomeScreen>
     _unreadSub = NotificationService().unreadCountStream.listen((count) {
       if (mounted) setState(() => _unreadCount = count);
     });
+    HotspotPrefsService.instance.addListener(_onHotspotPrefsChanged);
   }
 
   @override
   void dispose() {
+    HotspotPrefsService.instance.removeListener(_onHotspotPrefsChanged);
     _pulseController.dispose();
     _refreshSub?.cancel();
     _unreadSub?.cancel();
     super.dispose();
+  }
+
+  /// Called whenever the shared time window changes (e.g. user changed it on the Map tab).
+  void _onHotspotPrefsChanged() {
+    if (!mounted) return;
+    setState(() {}); // rebuild header label
+    _loadAllHotspots();
   }
 
   Future<void> _loadData() async {
@@ -343,15 +343,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _onTimeWindowChanged(int hours) async {
-    setState(() {
-      _selectedTimeHours = hours;
-      _loadingHotspots = true;
-    });
-    try {
-      final all = await _hotspotService.getAllHotspots(timeWindowHours: hours);
-      _updateNearbyHotspots(all);
-    } catch (_) {}
-    if (mounted) setState(() => _loadingHotspots = false);
+    // Write to shared singleton — both Home and Map tabs will react via their listeners.
+    HotspotPrefsService.instance.setTimeWindow(hours);
+    // Listener (_onHotspotPrefsChanged) handles the reload; nothing else needed here.
   }
 
   Future<void> _pickTimeWindow() async {

@@ -117,6 +117,12 @@ def _disable_groq(reason: str) -> None:
         _groq_skip_logged = True
 
 
+# ── LAW ENFORCEMENT / TACTICAL BRIEFING ──────────────────────────────────────
+# These functions produce POLICE-FACING operational content.
+# Unit codes, deployment tactics, and concentration windows are appropriate here.
+# Used by: hotspots.py (authenticated officer/admin endpoint)
+# ──────────────────────────────────────────────────────────────────────────────
+
 # Investigation / case-handover units — not for hotspot tactical deployment
 _HOTSPOT_EXCLUDED_UNITS = frozenset({"RIB", "CID", "LIB"})
 
@@ -380,8 +386,16 @@ def _build_citizen_advisory(
     time_window_hours: Optional[int] = None,
 ) -> str:
     """
-    Community-facing notice (plain language, time-aware).
-    Mentions the observation period so advisories never feel like stale news.
+    CITIZEN-FACING template advisory (plain language, time-aware).
+
+    Audience: ordinary residents, commuters, and members of the public.
+    Purpose : inform them of nearby risk and encourage TrustBond reporting.
+    Rules   : no police unit names, no tactical language, no jargon.
+              Empowering and calm — help people act, not panic.
+
+    This function is the template fallback used by generate_citizen_advisory()
+    when no LLM key is configured.  It is SEPARATE from _template_fallback()
+    which is the law-enforcement-only tactical briefing template.
     """
     area = (area_label or "your area").strip()
     crime = (dominant_crime or "incidents").strip().lower()
@@ -588,14 +602,15 @@ Return JSON only:
   "recommendation": "<20-40 words: name primary unit, tactic, duration, concentration window — reference the trend and lifecycle state>",
   "narrative": "<60-90 words: describe the cluster evolution in {area}, reference the trend direction, severity, nearby clusters if any, and why the chosen units fit this specific crime mix>",
   "status": "<escalation_likely | monitor_growth | emerging_trend | security_alert>",
-  "citizen_advisory": "<2-3 sentences plain English for citizens; reference the area and crime type; calm tone, no codes>"
+  "citizen_advisory": "<Internal hint only — 1-2 sentences a community liaison officer could relay to residents; plain language, no unit codes, no tactical details>"
 }}
 
 Rules:
+- recommendation and narrative are LAW ENFORCEMENT content — tactical language, unit names, and operational details are appropriate here.
+- citizen_advisory is an INTERNAL COMMUNITY MESSAGE HINT for officers — plain language, no unit codes, no classified tactics. It is NOT published directly to the public; the public receives a separately generated civilian advisory.
 - recommendation MUST name "{primary}" (and "{support}" if support).
 - If trend is "rising" or lifecycle is "escalating", reflect urgency in the recommendation.
 - If nearby_clusters > 1, suggest coordinated multi-location response.
-- citizen_advisory: community-facing only; no unit codes or classified tactics.
 - Use real numbers and place names. No markdown.
 """
 
@@ -797,7 +812,18 @@ def _template_fallback(
     citizen_advisory: str,
     registry: Dict[str, Dict[str, str]],
 ) -> Dict[str, Any]:
-    """Crime- and unit-specific templates using the full tactical unit registry."""
+    """
+    LAW-ENFORCEMENT-ONLY tactical template (used when no LLM key is configured).
+
+    Audience: police officers and security dispatchers.
+    Purpose : recommend which unit to deploy, for how long, and what tactic to use.
+    Rules   : tactical and operational language is appropriate here.
+              Unit codes, deployment instructions, and concentration windows are expected.
+
+    The `citizen_advisory` field this returns is sourced from _build_citizen_advisory()
+    and is kept as an INTERNAL HINT for officers.  It is NOT published to the public;
+    the public advisory is generated separately via generate_citizen_advisory().
+    """
     area = area_label or "this area"
     crime = (dominant_crime or "incidents").strip()
     primary = plan["primary_name"]
@@ -1086,7 +1112,11 @@ def generate_recommendation(
     return clean
 
 
-# ── Public / citizen-only advisory (no unit or tactical details) ──────────────
+# ── PUBLIC / CITIZEN ADVISORY ────────────────────────────────────────────────
+# These functions produce CIVILIAN-FACING text only.
+# They must NEVER mention police units, tactics, or operational plans.
+# Used by: public_hotspots.py (no-auth mobile endpoint)
+# ──────────────────────────────────────────────────────────────────────────────
 
 _citizen_advisory_cache: Dict[tuple, str] = {}
 
@@ -1131,11 +1161,14 @@ def _build_citizen_advisory_prompt(
 
     urgency_note = ""
     if classification in ("critical",):
-        urgency_note = "This is a high-urgency situation. The advisory should convey clear and immediate risk."
+        urgency_note = "This is a high-urgency situation. The advisory should convey clear and immediate risk without causing panic."
     elif classification in ("active", "high"):
-        urgency_note = "This is an elevated-risk situation. The advisory should convey noticeable concern and urgency."
+        urgency_note = "This is an elevated-risk situation. The advisory should convey noticeable concern while keeping a calm tone."
 
-    return f"""You are writing a short public safety notice for citizens in Musanze, Rwanda.
+    return f"""You are writing a PUBLIC SAFETY NOTICE for ordinary citizens (residents, commuters, and members of the public) in Musanze, Rwanda.
+
+IMPORTANT: This is NOT a police briefing. Your reader is a civilian — not a law enforcement officer, not a security professional.
+Write as if you are informing a neighbour, not briefing a patrol unit.
 
 Situation:
 - Area              : {area}
@@ -1146,24 +1179,30 @@ Situation:
 - Incident breakdown: {mix_lines or crime}
 {urgency_note}
 
-Write 2–3 plain sentences in calm but honest English for the general public.
+Write 2–3 plain sentences in calm, everyday English that any adult can understand.
 You MUST mention the time period ("{time_label}") naturally in the advisory.
 Tell them:
-1. What kind of incidents have been reported nearby and when (use the time period).
-2. The practical risk level and what they should watch for (specific to the incident type).
-3. Encourage them to stay alert and report any incidents or unusual behaviour through the TrustBond app.
+1. What kind of incidents have been reported nearby and when (use the time period naturally).
+2. Simple, practical steps they can take to stay safe (tailored to the incident type — e.g. secure valuables for theft, stay off the road for traffic, stay in groups for assault).
+3. Encourage them to stay alert and report incidents or unusual behaviour through the TrustBond app.
 
-Example tone (adapt the content — do not copy verbatim):
-"There is elevated risk of theft in your area as {incident_count} cases were reported nearby {time_label}. Stay attentive, secure your valuables, and avoid isolated areas especially at night. If you notice suspicious activity or anything unusual, report it immediately through TrustBond."
+Tone guidelines:
+- Empowering, not alarming — help people feel informed and able to act, not frightened.
+- Simple language — no jargon, no acronyms, no technical terms.
+- Community-focused — use "you", "your neighbours", "your area" to make it feel personal.
 
-STRICT RULES — your response must NOT mention:
-- Any authority unit names, team names, or department codes.
-- Any tactical deployments or operational plans.
-- Any classified or internal security information.
+Example tone (adapt the content — do NOT copy verbatim):
+"Several theft incidents were reported near {area} {time_label}. Secure your valuables, avoid isolated spots especially after dark, and look out for your neighbours. If you see anything suspicious, report it through TrustBond right away."
+
+STRICT RULES — your response MUST NOT include any of the following:
+- Police unit names, team codes, or department names (e.g. RRU, CPU, DEU, K9, RNP — none of these).
+- Tactical deployments, patrol instructions, or operational plans.
+- Internal security classifications or police procedures.
+- Any language that implies the reader is a law enforcement officer.
 
 Return JSON only:
 {{
-  "advisory": "<2-3 sentences, plain citizen-facing English>"
+  "advisory": "<2-3 sentences, plain everyday English for ordinary citizens>"
 }}
 """
 
