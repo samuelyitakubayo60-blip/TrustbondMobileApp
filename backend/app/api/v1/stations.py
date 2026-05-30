@@ -25,17 +25,15 @@ from app.schemas.station import (
 router = APIRouter(prefix="/stations", tags=["stations"])
 
 
-_ACTIVE_CASE_STATUSES = ("open", "assigned", "in_progress")
-
-
 def _station_case_metrics(db: Session, station_id: int) -> tuple[int, int]:
+    from app.api.v1.cases import ACTIVE_CASE_STATUSES
     from app.models.case import Case
 
     active = (
         db.query(func.count(Case.case_id))
         .filter(
             Case.station_id == station_id,
-            Case.status.in_(_ACTIVE_CASE_STATUSES),
+            Case.status.in_(ACTIVE_CASE_STATUSES),
         )
         .scalar()
         or 0
@@ -44,7 +42,7 @@ def _station_case_metrics(db: Session, station_id: int) -> tuple[int, int]:
         db.query(func.coalesce(func.sum(Case.report_count), 0))
         .filter(
             Case.station_id == station_id,
-            Case.status.in_(_ACTIVE_CASE_STATUSES),
+            Case.status.in_(ACTIVE_CASE_STATUSES),
         )
         .scalar()
         or 0
@@ -264,7 +262,9 @@ def get_station_cases(
     if status:
         q = q.filter(Case.status == status)
     else:
-        q = q.filter(Case.status.in_(_ACTIVE_CASE_STATUSES))
+        from app.api.v1.cases import ACTIVE_CASE_STATUSES
+
+        q = q.filter(Case.status.in_(ACTIVE_CASE_STATUSES))
 
     cases = q.order_by(Case.opened_at.desc()).all()
     active_count, incident_count = _station_case_metrics(db, station_id)

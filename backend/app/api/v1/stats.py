@@ -420,8 +420,10 @@ def get_dashboard_stats(
         from app.models.case import Case
         from app.api.v1.cases import _apply_case_list_scope
 
+        from app.api.v1.cases import ACTIVE_CASE_STATUSES
+
         case_q = _apply_case_list_scope(db.query(Case), current_user, db).filter(
-            Case.status.in_(["open", "investigating"])
+            Case.status.in_(ACTIVE_CASE_STATUSES)
         )
         open_cases = case_q.with_entities(func.count(Case.case_id)).scalar() or 0
     except Exception:

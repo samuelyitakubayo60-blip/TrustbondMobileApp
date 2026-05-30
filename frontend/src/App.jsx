@@ -398,9 +398,10 @@ function App() {
         setSidebarCounts({
           // Sidebar badges should reflect totals (matches Reports screen header).
           reports: dash?.total_reports ?? 0,
-          cases: caseStats
-            ? (caseStats?.open ?? 0) + (caseStats?.in_progress ?? 0) + (caseStats?.closed ?? 0)
-            : (dash?.total_cases ?? dash?.open_cases ?? 0),
+          cases:
+            caseStats?.active ??
+            dash?.open_cases ??
+            0,
           notifications: notif?.unread_count ?? 0,
         });
       } catch {

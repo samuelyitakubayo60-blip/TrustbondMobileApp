@@ -21,6 +21,9 @@ from app.schemas.report import ReportResponse
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
+# Matches Security Situation station cards and sidebar "Security Situation" badge.
+ACTIVE_CASE_STATUSES = ("open", "assigned", "in_progress")
+
 
 def _require_supervisor_station_id(current_user: PoliceUser) -> int:
     station_id = getattr(current_user, "station_id", None)
@@ -648,9 +651,12 @@ def get_case_stats(
                 time.sleep(0.5)
 
     open_c = _count(Case.status == "open")
-    in_progress = _count(Case.status == "investigating")
+    assigned_c = _count(Case.status == "assigned")
+    in_progress = _count(Case.status == "in_progress")
+    investigating_legacy = _count(Case.status == "investigating")
     closed = _count(Case.status == "closed")
-    
+    active = _count(Case.status.in_(ACTIVE_CASE_STATUSES))
+
     # Get total reports with retry
     total_reports = 0
     max_retries = 3
@@ -667,8 +673,11 @@ def get_case_stats(
                 db.rollback()
                 time.sleep(0.5)
     return {
+        "active": active,
         "open": open_c,
+        "assigned": assigned_c,
         "in_progress": in_progress,
+        "investigating": investigating_legacy,
         "closed": closed,
         "reports_merged": total_reports,
     }
