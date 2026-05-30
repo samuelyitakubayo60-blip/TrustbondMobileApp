@@ -2,13 +2,16 @@ from decimal import Decimal
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.core.websocket import manager
 import asyncio
 
 from app.database import get_db
 from app.models.incident_type import IncidentType
+from app.models.location import Location
 from app.models.police_user import PoliceUser
+from app.models.report import Report
 from app.api.v1.auth import get_current_admin, get_optional_user
 from app.schemas.incident_type import (
     IncidentTypeCreate,
@@ -17,6 +20,57 @@ from app.schemas.incident_type import (
 )
 
 router = APIRouter(prefix="/incident-types", tags=["incident-types"])
+
+
+@router.get("/distribution")
+def get_incident_distribution(
+    db: Session = Depends(get_db),
+    current_user: Annotated[Optional[PoliceUser], Depends(get_optional_user)] = None,
+):
+    """
+    Aggregated report counts by incident type, sector, and police station.
+    Used by the dashboard chart — returns lightweight GROUP BY counts instead
+    of fetching hundreds of full report objects.
+    """
+    # Counts by incident type
+    by_type = (
+        db.query(IncidentType.type_name, func.count(Report.report_id).label("cnt"))
+        .join(Report, Report.incident_type_id == IncidentType.incident_type_id)
+        .group_by(IncidentType.type_name)
+        .order_by(func.count(Report.report_id).desc())
+        .all()
+    )
+
+    # Counts by sector — resolve via village → cell → sector hierarchy (2 levels up)
+    cell_alias = db.query(
+        Location.location_id.label("village_id"),
+        Location.parent_location_id.label("cell_id"),
+    ).filter(Location.location_type == "village").subquery()
+
+    sector_alias = db.query(
+        Location.location_id.label("cell_id"),
+        Location.parent_location_id.label("sector_id"),
+    ).filter(Location.location_type == "cell").subquery()
+
+    sector_names_sq = db.query(
+        Location.location_id.label("sector_id"),
+        Location.location_name.label("sector_name"),
+    ).filter(Location.location_type == "sector").subquery()
+
+    by_sector = (
+        db.query(sector_names_sq.c.sector_name, func.count(Report.report_id).label("cnt"))
+        .join(cell_alias, Report.village_location_id == cell_alias.c.village_id)
+        .join(sector_alias, cell_alias.c.cell_id == sector_alias.c.cell_id)
+        .join(sector_names_sq, sector_alias.c.sector_id == sector_names_sq.c.sector_id)
+        .group_by(sector_names_sq.c.sector_name)
+        .order_by(func.count(Report.report_id).desc())
+        .all()
+    )
+
+    return {
+        "incident_types": {row[0]: row[1] for row in by_type},
+        "sectors": {row[0]: row[1] for row in by_sector},
+    }
 
 
 @router.get("/", response_model=List[IncidentTypeResponse])

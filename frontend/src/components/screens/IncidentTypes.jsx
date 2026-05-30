@@ -48,29 +48,6 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
     return () => { mountedRef.current = false; };
   }, []);
 
-  /* ── processChartData (pure, returns object) ── */
-  const buildChartData = (reports) => {
-    let arr = Array.isArray(reports) ? reports
-            : reports?.items ?? reports?.data ?? reports?.reports ?? [];
-
-    const incidentTypes = {};
-    const sectors       = {};
-    const stations      = {};
-
-    arr.forEach((r) => {
-      const t = r.incident_type?.type_name || r.incident_type_name || 'Unknown';
-      incidentTypes[t] = (incidentTypes[t] || 0) + 1;
-
-      const sec = r.sector_name || r.sector;
-      if (sec) sectors[sec] = (sectors[sec] || 0) + 1;
-
-      const sta = r.assigned_station?.station_name || r.station_name || r.station;
-      if (sta) stations[sta] = (stations[sta] || 0) + 1;
-    });
-
-    return { incidentTypes, sectors, stations };
-  };
-
   /* ── fetchTypes ── */
   const fetchTypes = useCallback(async ({ silent = false } = {}) => {
     if (silent) {
@@ -79,13 +56,18 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
       setLoading(true);
     }
     try {
-      const [typesRes, reportsRes] = await Promise.all([
+      const [typesRes, distRes] = await Promise.all([
         api.get('/api/v1/incident-types/?include_inactive=true'),
-        api.get('/api/v1/reports/?limit=500'),
+        api.get('/api/v1/incident-types/distribution'),
       ]);
       if (!mountedRef.current) return;
-      const newTypes     = typesRes || [];
-      const newChartData = buildChartData(reportsRes);
+      const newTypes = typesRes || [];
+      // Distribution endpoint returns pre-aggregated counts — no need to iterate reports
+      const newChartData = {
+        incidentTypes: distRes?.incident_types ?? {},
+        sectors:       distRes?.sectors ?? {},
+        stations:      distRes?.stations ?? {},
+      };
       _itCache = { types: newTypes, chartData: newChartData };
       _itCacheRefreshKey = refreshKey;
       setTypes(newTypes);

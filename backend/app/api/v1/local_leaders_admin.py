@@ -213,7 +213,53 @@ def list_local_leaders(
     limit: int = Query(200, ge=1, le=500),
 ):
     rows = db.query(LocalLeader).order_by(LocalLeader.full_name.asc()).limit(limit).all()
-    return [_to_response(db, r) for r in rows]
+    if not rows:
+        return []
+
+    # Batch-load all coverage in 2 queries instead of 2×N via _to_response
+    leader_ids = [r.local_leader_id for r in rows]
+    coverage_rows = (
+        db.query(
+            LocalLeaderCoverageLocation.local_leader_id,
+            LocalLeaderCoverageLocation.location_id,
+        )
+        .filter(LocalLeaderCoverageLocation.local_leader_id.in_(leader_ids))
+        .all()
+    )
+    coverage_map: dict[int, list[int]] = {}
+    all_loc_ids: set[int] = set()
+    for lid, loc_id in coverage_rows:
+        coverage_map.setdefault(int(lid), []).append(int(loc_id))
+        all_loc_ids.add(int(loc_id))
+
+    name_map: dict[int, str] = {}
+    if all_loc_ids:
+        for row in (
+            db.query(Location.location_id, Location.location_name)
+            .filter(Location.location_id.in_(all_loc_ids))
+            .all()
+        ):
+            if row[1]:
+                name_map[int(row[0])] = str(row[1])
+
+    result = []
+    for leader in rows:
+        lid = int(leader.local_leader_id)
+        covered_ids = coverage_map.get(lid, [])
+        names = [name_map[loc_id] for loc_id in covered_ids if loc_id in name_map]
+        result.append(LocalLeaderResponse(
+            local_leader_id=leader.local_leader_id,
+            full_name=leader.full_name,
+            role=leader.role,
+            phone_number=leader.phone_number,
+            email=leader.email,
+            is_active=bool(leader.is_active),
+            covered_location_ids=covered_ids,
+            covered_location_names=names,
+            created_at=leader.created_at,
+            last_login_at=leader.last_login_at,
+        ))
+    return result
 
 
 @router.post("/", response_model=LocalLeaderResponse, status_code=201)

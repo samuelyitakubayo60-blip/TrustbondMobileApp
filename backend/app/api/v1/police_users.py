@@ -207,7 +207,7 @@ def list_police_users(
     db: Session = Depends(get_db),
     current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)] = None,
     skip: int = 0,
-    limit: int = Query(50, le=200),
+    limit: int = Query(50, le=500),
     station_id: Optional[int] = Query(
         None,
         description="Optional station_id to filter officers by assigned station. Admins only.",
