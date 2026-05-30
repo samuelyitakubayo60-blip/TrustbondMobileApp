@@ -56,22 +56,18 @@ def _station_covered_village_ids(db: Session, station: Station) -> set[int]:
 
 
 def _analysis_report_scope(db: Session, current_user: PoliceUser):
-    """DPC and IO: district-wide. Officers: station cell coverage only."""
+    """DPC and IO: district-wide. Officers: station village/cell coverage only."""
+    from app.core.station_scope import get_station, report_scope_filters_for_station, role_uses_station_scope
+
     role = getattr(current_user, "role", None)
-    if role == "officer":
+    if role_uses_station_scope(role):
         station_id = getattr(current_user, "station_id", None)
         if station_id is None:
-            raise HTTPException(status_code=403, detail="Officer station is not configured")
-        station = db.query(Station).filter(Station.station_id == station_id).first()
-        covered_village_ids = _station_covered_village_ids(db, station) if station else set()
-        scope_filters = [
-            Report.handling_station_id == station_id,
-            Report.assignments.any(
-                ReportAssignment.police_user.has(PoliceUser.station_id == station_id)
-            ),
-        ]
-        if covered_village_ids:
-            scope_filters.append(Report.village_location_id.in_(list(covered_village_ids)))
+            raise HTTPException(status_code=403, detail="Station is not configured on your account")
+        station = get_station(db, int(station_id))
+        if not station:
+            return Report.report_id.in_([])
+        scope_filters = report_scope_filters_for_station(db, station, role=role)
         assigned_qs = db.query(Report.report_id).filter(or_(*scope_filters)).distinct()
         return Report.report_id.in_(assigned_qs)
     return true()
@@ -348,43 +344,36 @@ def get_dashboard_stats(
     since_7d = datetime.now(timezone.utc) - timedelta(days=7)
     since_30d = datetime.now(timezone.utc) - timedelta(days=30)
 
+    from app.core.station_scope import (
+        get_station,
+        report_scope_filters_for_station,
+        role_uses_station_scope,
+        station_covered_sector_ids,
+    )
+
+    station_name: str | None = None
+    scope_label = "all"
+
     # 1) Build report_filter based on role
-    if current_role in ("officer", "supervisor"):
+    if role_uses_station_scope(current_role):
         station_id = getattr(current_user, "station_id", None)
-        
         if station_id is not None:
-            # Get station to find its sector location(s)
-            station = db.query(Station).filter(Station.station_id == station_id).first()
+            station = get_station(db, int(station_id))
             if station:
-                covered_village_ids = _station_covered_village_ids(db, station)
+                station_name = station.station_name
+                scope_label = "station"
+                scope_filters = report_scope_filters_for_station(
+                    db, station, role=current_role
+                )
                 assigned_qs = (
-                    db.query(Report.report_id)
-                    .filter(or_(
-                        Report.handling_station_id == station_id,
-                        Report.assignments.any(
-                            ReportAssignment.police_user.has(PoliceUser.station_id == station_id)
-                        ),
-                        Report.village_location_id.in_(list(covered_village_ids)) if covered_village_ids else False,
-                    ))
-                ).distinct()
+                    db.query(Report.report_id).filter(or_(*scope_filters)).distinct()
+                )
+                report_filter = Report.report_id.in_(assigned_qs)
             else:
-                # Fallback: only station-based filtering
-                assigned_qs = (
-                    db.query(Report.report_id)
-                    .filter(
-                        or_(
-                            Report.handling_station_id == station_id,
-                            Report.assignments.any(
-                                ReportAssignment.police_user.has(PoliceUser.station_id == station_id)
-                            )
-                        )
-                    )
-                ).distinct()
-            report_filter = Report.report_id.in_(assigned_qs)
+                report_filter = Report.report_id.in_([])
         else:
             report_filter = False
     else:
-        # Admin
         report_filter = True
 
     total = db.query(Report).filter(report_filter).count()
@@ -517,15 +506,12 @@ def get_dashboard_stats(
     current_role = getattr(current_user, "role", None)
     visible_report_ids: set[str] = set()
     visible_case_ids: set[str] = set()
-    station_name: str | None = None
-    scope_label = "all"
     if role_uses_station_scope(current_role):
         station_id = getattr(current_user, "station_id", None)
         if station_id is not None:
-            station = get_station(db, int(station_id))
-            station_name = station.station_name if station else None
-            scope_label = "station"
-            visible_report_ids = station_visible_report_ids(db, int(station_id))
+            visible_report_ids = station_visible_report_ids(
+                db, int(station_id), role=current_role
+            )
             case_scope = db.query(Case.case_id)
             if station:
                 from app.core.station_scope import station_covered_village_ids
@@ -764,6 +750,9 @@ def get_dashboard_stats(
         "by_status": by_status,
         "scope": scope_label,
         "station_name": station_name,
+        "covered_sector_ids": sorted(station_covered_sector_ids(db, int(current_user.station_id)))
+        if role_uses_station_scope(current_role) and getattr(current_user, "station_id", None)
+        else [],
         "recent_reports": recent_reports_data,
         "top_hotspots": hotspot_list,
         "recent_activity": activity_list,

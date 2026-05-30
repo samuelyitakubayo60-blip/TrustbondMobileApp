@@ -4,8 +4,8 @@ from __future__ import annotations
 from typing import Iterable, Optional, Set
 
 from fastapi import HTTPException
-from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Query, Session
 
 from app.models.location import Location
 from app.models.local_leader import LocalLeader
@@ -82,11 +82,42 @@ def station_scope_location_ids(db: Session, station_id: int) -> Set[int]:
 
 
 def report_scope_filters_for_station(
-    db: Session, station: Station
+    db: Session, station: Station, *, role: Optional[str] = None
 ) -> list:
-    """SQLAlchemy OR filters matching reports list for a station."""
+    """
+    SQLAlchemy OR filters for reports belonging to a station.
+
+    Officers: geography-first (villages under station cells). Assignments/handling
+    outside that geography are excluded so counts match the station area only.
+
+    Supervisors / IO: broader OR (handling, assignments, village coverage).
+    """
     station_id = int(station.station_id)
     covered_village_ids = station_covered_village_ids(db, station)
+
+    if role == "officer":
+        if covered_village_ids:
+            return [
+                Report.village_location_id.in_(list(covered_village_ids)),
+                and_(
+                    Report.village_location_id.is_(None),
+                    or_(
+                        Report.handling_station_id == station_id,
+                        Report.assignments.any(
+                            ReportAssignment.police_user.has(
+                                PoliceUser.station_id == station_id
+                            )
+                        ),
+                    ),
+                ),
+            ]
+        return [
+            Report.handling_station_id == station_id,
+            Report.assignments.any(
+                ReportAssignment.police_user.has(PoliceUser.station_id == station_id)
+            ),
+        ]
+
     scope_filters = [
         Report.handling_station_id == station_id,
         Report.assignments.any(
@@ -98,13 +129,54 @@ def report_scope_filters_for_station(
     return scope_filters
 
 
-def station_visible_report_ids(db: Session, station_id: int) -> Set[str]:
+def apply_report_list_scope(query: Query, db: Session, user: PoliceUser) -> Query:
+    """Restrict a Report query to the current user's district or station scope."""
+    role = getattr(user, "role", None)
+    if role == "admin":
+        return query
+    if role not in ("officer", "supervisor"):
+        return query
+
+    station_id = user_station_id(user)
+    if station_id is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Your police station is not configured on your account.",
+        )
+
+    station = get_station(db, int(station_id))
+    if not station:
+        return query.filter(False)
+
+    filters = report_scope_filters_for_station(db, station, role=role)
+    return query.filter(or_(*filters))
+
+
+def station_covered_sector_ids(db: Session, station_id: int) -> Set[int]:
+    """Sector location_ids touched by this station's covered cells."""
+    cell_ids = station_covered_cell_ids(db, station_id)
+    if not cell_ids:
+        return set()
+    rows = (
+        db.query(Location.parent_location_id)
+        .filter(
+            Location.location_id.in_(list(cell_ids)),
+            Location.location_type == "cell",
+        )
+        .all()
+    )
+    return {int(r[0]) for r in rows if r and r[0] is not None}
+
+
+def station_visible_report_ids(
+    db: Session, station_id: int, *, role: Optional[str] = "officer"
+) -> Set[str]:
     station = get_station(db, station_id)
     if not station:
         return set()
     rows = (
         db.query(Report.report_id)
-        .filter(or_(*report_scope_filters_for_station(db, station)))
+        .filter(or_(*report_scope_filters_for_station(db, station, role=role)))
         .distinct()
         .all()
     )

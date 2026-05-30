@@ -40,7 +40,11 @@ const SecuritySituation = ({ goToScreen, wsRefreshKey }) => {
     try {
       const res = await api.get("/api/v1/stations/?only_active=true&include_metrics=true");
       if (!mountedRef.current) return;
-      const list = res?.items || [];
+      let list = res?.items || [];
+      if (role === "officer" && user?.station_id != null) {
+        const sid = Number(user.station_id);
+        list = list.filter((st) => Number(st.station_id) === sid);
+      }
       _ssCache = { stations: list };
       _ssCacheRefreshKey = wsRefreshKey;
       setStations(list);
@@ -98,7 +102,7 @@ const SecuritySituation = ({ goToScreen, wsRefreshKey }) => {
             <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
               Cases are grouped by station based on incident location.{" "}
               {role === "officer"
-                ? "You see your station only."
+                ? `You see ${stations[0]?.station_name || "your station"} only — cases and linked incidents for your area.`
                 : role === "supervisor"
                   ? "IO view: all stations (management tasks are DPC-only)."
                   : "District-wide view."}

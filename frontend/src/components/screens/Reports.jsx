@@ -50,7 +50,9 @@ const Reports = ({
   initialStatusFilter = "all",
 }) => {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const role = user?.role || "officer";
+  const isAdmin = role === "admin";
+  const stationScoped = role === "officer" || role === "supervisor";
   const PAGE_SIZE = 20;
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState({
@@ -88,15 +90,34 @@ const Reports = ({
       .then((res) => setIncidentTypes(res || []))
       .catch(() => setIncidentTypes([]));
     // Load locations (sectors) – only sectors for dropdown
-    api
-      .get("/api/v1/locations/")
-      .then((res) => {
+    const loadSectors = async () => {
+      try {
+        if (stationScoped) {
+          const dash = await api.get("/api/v1/stats/dashboard");
+          const sectorIds = new Set(
+            (dash?.covered_sector_ids || []).map((id) => Number(id)),
+          );
+          if (sectorIds.size > 0) {
+            const res = await api.get("/api/v1/locations/");
+            const sectors = (res || []).filter(
+              (loc) =>
+                loc.location_type === "sector" &&
+                sectorIds.has(Number(loc.location_id)),
+            );
+            setLocations(sectors);
+            return;
+          }
+        }
+        const res = await api.get("/api/v1/locations/");
         const sectors = (res || []).filter(
           (loc) => loc.location_type === "sector",
         );
         setLocations(sectors);
-      })
-      .catch(() => setLocations([]));
+      } catch {
+        setLocations([]);
+      }
+    };
+    loadSectors();
   };
 
   const buildQuery = () => {
@@ -235,6 +256,7 @@ const Reports = ({
   const toItem = Math.min(offset + (data.items?.length || 0), total);
 
   // Use Dashboard API stats for accurate counts, fall back to Reports API data
+  const stationName = dashboardStats?.station_name || null;
   const allReports = dashboardStats?.total_reports ?? total;
   const pending =
     dashboardStats?.pending ??
@@ -266,9 +288,15 @@ const Reports = ({
           }}
         >
           <div>
-            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>Reports</h2>
+            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 22 }}>
+              {role === "officer" && stationName
+                ? `Reports — ${stationName}`
+                : "Reports"}
+            </h2>
             <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
-              Two gates required before a report feeds cases &amp; hotspots.
+              {role === "officer"
+                ? `Incidents in your station area only${stationName ? ` (${stationName})` : ""}. Two gates required before a report feeds cases & hotspots.`
+                : "Two gates required before a report feeds cases & hotspots."}
             </p>
           </div>
 
@@ -313,7 +341,12 @@ const Reports = ({
         {/* Stats — clickable to filter */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
           {[
-            { label: "All Reports",   value: allReports, cls: "sb-blue",   filter: "all"     },
+            {
+              label: role === "officer" ? "Station reports" : "All Reports",
+              value: allReports,
+              cls: "sb-blue",
+              filter: "all",
+            },
             { label: "Pending review", value: pending,   cls: "sb-orange", filter: "pending"  },
             { label: "Verified",       value: verified,  cls: "sb-green",  filter: "verified" },
             { label: "Flagged",        value: flagged,   cls: "sb-red",    filter: "flagged"  },

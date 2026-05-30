@@ -3749,42 +3749,9 @@ def list_reports(
         selectinload(Report.case_reports),
     )
     
-    role = getattr(current_user, "role", None)
-    
-    # Officers and supervisors: station / cell / village coverage (same scope).
-    if role in ("officer", "supervisor"):
-        supervisor_station_id = getattr(current_user, "station_id", None)
-        if supervisor_station_id is None:
-            raise HTTPException(
-                status_code=403,
-                detail="Supervisor station is not configured",
-            )
-        
-        # Get station to find its configured coverage cells (or legacy sectors)
-        station = db.query(Station).filter(Station.station_id == supervisor_station_id).first()
-        if station:
-            covered_village_ids = _station_covered_village_ids(db, station)
+    from app.core.station_scope import apply_report_list_scope
 
-            # Filter reports by station assignments + configured cell/village coverage
-            scope_filters = [
-                Report.handling_station_id == supervisor_station_id,
-                Report.assignments.any(
-                    ReportAssignment.police_user.has(PoliceUser.station_id == supervisor_station_id)
-                ),
-            ]
-            if covered_village_ids:
-                scope_filters.append(Report.village_location_id.in_(list(covered_village_ids)))
-            query = query.filter(or_(*scope_filters))
-        else:
-            # Fallback: only station-based filtering
-            query = query.filter(
-                or_(
-                    Report.handling_station_id == supervisor_station_id,
-                    Report.assignments.any(
-                        ReportAssignment.police_user.has(PoliceUser.station_id == supervisor_station_id)
-                    ),
-                )
-            )
+    query = apply_report_list_scope(query, db, current_user)
     
     if rule_status:
         query = query.filter(Report.rule_status == rule_status)

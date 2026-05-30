@@ -516,7 +516,10 @@ def get_station_performance(
             'debug_info': {'error': 'Station not found', 'station_id': current_user.station_id}
         }
     
+    from app.core.station_scope import station_covered_village_ids as _scope_village_ids
+
     sector_ids = _station_covered_sector_ids(db, station)
+    covered_village_ids = _scope_village_ids(db, station)
     sectors = []
     if sector_ids:
         sectors = db.query(Location).filter(
@@ -527,25 +530,28 @@ def get_station_performance(
     performance_data = []
     
     for sector in sectors:
-        # Get reports in this sector
-        sector_reports = _dpu_reports_query(
-            db.query(Report).filter(
-                Report.reported_at >= since,
-                Report.village_location_id.in_(
-                    db.query(Location.location_id).filter(
-                        or_(
-                            Location.parent_location_id == sector.location_id,
-                            Location.location_id == sector.location_id,
-                            Location.parent_location_id.in_(
-                                db.query(Location.location_id).filter(
-                                    Location.parent_location_id == sector.location_id
-                                )
-                            ),
-                        )
+        # Reports in this sector that fall under this station's cell/village coverage only
+        sector_report_q = db.query(Report).filter(
+            Report.reported_at >= since,
+            Report.village_location_id.in_(
+                db.query(Location.location_id).filter(
+                    or_(
+                        Location.parent_location_id == sector.location_id,
+                        Location.location_id == sector.location_id,
+                        Location.parent_location_id.in_(
+                            db.query(Location.location_id).filter(
+                                Location.parent_location_id == sector.location_id
+                            )
+                        ),
                     )
-                ),
+                )
+            ),
+        )
+        if covered_village_ids:
+            sector_report_q = sector_report_q.filter(
+                Report.village_location_id.in_(list(covered_village_ids))
             )
-        ).all()
+        sector_reports = _dpu_reports_query(sector_report_q).all()
         
         # Calculate performance metrics
         unique_devices = set(r.device_id for r in sector_reports)
