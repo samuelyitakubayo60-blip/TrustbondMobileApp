@@ -150,7 +150,7 @@ BadgeType badgeTypeFromStatus(String status) {
 
 /// Report list item card (matches ri class in mockup).
 class ReportItemCard extends StatelessWidget {
-  final String icon;
+  final IconData icon;
   final Color iconBg;
   final String typeName;
   final String description;
@@ -211,7 +211,7 @@ class ReportItemCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               alignment: Alignment.center,
-              child: Text(icon, style: const TextStyle(fontSize: 18)),
+              child: Icon(icon, size: 22, color: AppColors.muted),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -580,6 +580,29 @@ class LocationQualityIndicator extends StatelessWidget {
 }
 
 // ─── Shared helper functions (used by multiple screens) ─────────────────────
+
+/// Returns a Material [IconData] for the given incident type name (used in ReportItemCard).
+IconData iconForIncidentType(String typeName) {
+  final l = typeName.toLowerCase();
+  if (l.contains('suspicious')) return Icons.visibility_outlined;
+  if (l.contains('theft') || l.contains('robbery')) return Icons.shopping_bag_outlined;
+  if (l.contains('vandalism')) return Icons.home_repair_service_outlined;
+  if (l.contains('assault') || l.contains('beating') || l.contains('violence')) return Icons.personal_injury_outlined;
+  if (l.contains('stabbing') || l.contains('knife')) return Icons.personal_injury_outlined;
+  if (l.contains('traffic') || l.contains('accident') || l.contains('crash')) return Icons.directions_car_outlined;
+  if (l.contains('drug') || l.contains('narcotic')) return Icons.medication_outlined;
+  if (l.contains('cannabis') || l.contains('weed') || l.contains('smoking')) return Icons.smoking_rooms_outlined;
+  if (l.contains('drinking') || l.contains('alcohol')) return Icons.local_bar_outlined;
+  if (l.contains('fire') || l.contains('arson') || l.contains('hazard')) return Icons.local_fire_department_outlined;
+  if (l.contains('noise') || l.contains('disturbance')) return Icons.volume_up_outlined;
+  if (l.contains('domestic')) return Icons.home_outlined;
+  if (l.contains('fraud') || l.contains('scam') || l.contains('bribery') || l.contains('corruption')) return Icons.gavel_outlined;
+  if (l.contains('harassment')) return Icons.block_outlined;
+  if (l.contains('defilement') || l.contains('rape') || l.contains('sexual') || l.contains('molest')) return Icons.report_problem_outlined;
+  if (l.contains('abduction') || l.contains('kidnap')) return Icons.person_remove_outlined;
+  if (l.contains('trespass') || l.contains('loiter') || l.contains('burglary')) return Icons.no_accounts_outlined;
+  return Icons.report_outlined;
+}
 
 /// Returns a Material [IconData] for the given incident type name.
 IconData iconDataForIncidentType(String typeName) {

@@ -407,7 +407,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                   borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
-                child: Text(icon, style: const TextStyle(fontSize: 18)),
+                child: Icon(icon, size: 22, color: AppColors.muted),
               ),
               const SizedBox(width: 16),
               Expanded(
