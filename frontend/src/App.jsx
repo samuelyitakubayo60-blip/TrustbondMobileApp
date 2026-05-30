@@ -383,11 +383,27 @@ function App() {
       try {
         const dash = await api.get("/api/v1/stats/dashboard");
         let caseStats = null;
+        let stationActiveCases = null;
         let notif = null;
         try {
           caseStats = await api.get("/api/v1/cases/stats");
         } catch {
           caseStats = null;
+        }
+        // Officers: match Security Situation cards (station_id + active statuses).
+        if (user?.role === "officer") {
+          try {
+            const stRes = await api.get(
+              "/api/v1/stations/?only_active=true&include_metrics=true",
+            );
+            const items = stRes?.items || [];
+            stationActiveCases = items.reduce(
+              (sum, st) => sum + (Number(st.active_case_count) || 0),
+              0,
+            );
+          } catch {
+            stationActiveCases = null;
+          }
         }
         try {
           notif = await api.get("/api/v1/notifications/unread-count");
@@ -399,6 +415,7 @@ function App() {
           // Sidebar badges should reflect totals (matches Reports screen header).
           reports: dash?.total_reports ?? 0,
           cases:
+            stationActiveCases ??
             caseStats?.active ??
             dash?.open_cases ??
             0,

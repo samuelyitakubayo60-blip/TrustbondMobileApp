@@ -131,6 +131,37 @@ def _apply_case_list_scope(query, current_user: PoliceUser, db: Session):
     )
 
 
+def count_active_cases_for_sidebar(db: Session, current_user: PoliceUser) -> int:
+    """
+    Active case count for sidebar / dashboard badges.
+
+    Officers: same rule as Security Situation station cards — only cases with
+    case.station_id set to their station (open | assigned | in_progress).
+
+    Supervisors / admins: broader station coverage scope via _apply_case_list_scope.
+    """
+    if getattr(current_user, "role", None) == "officer":
+        station_id = getattr(current_user, "station_id", None)
+        if station_id is None:
+            return 0
+        return int(
+            db.query(func.count(Case.case_id))
+            .filter(
+                Case.station_id == int(station_id),
+                Case.status.in_(ACTIVE_CASE_STATUSES),
+            )
+            .scalar()
+            or 0
+        )
+    return int(
+        _apply_case_list_scope(db.query(Case), current_user, db)
+        .filter(Case.status.in_(ACTIVE_CASE_STATUSES))
+        .with_entities(func.count(Case.case_id))
+        .scalar()
+        or 0
+    )
+
+
 def _incident_case_title(type_name: str) -> str:
     name = (type_name or "Incident").strip()
     if not name:
@@ -655,7 +686,7 @@ def get_case_stats(
     in_progress = _count(Case.status == "in_progress")
     investigating_legacy = _count(Case.status == "investigating")
     closed = _count(Case.status == "closed")
-    active = _count(Case.status.in_(ACTIVE_CASE_STATUSES))
+    active = count_active_cases_for_sidebar(db, current_user)
 
     # Get total reports with retry
     total_reports = 0
