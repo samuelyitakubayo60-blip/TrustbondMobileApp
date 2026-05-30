@@ -16,7 +16,6 @@ export const ADMIN_ONLY_SCREENS = [
   'incident-types',
   'special-assignment-units',
   'stations',
-  'local-leaders',
   'system-config',
   'audit-log',
   'active-sessions',
@@ -64,6 +63,9 @@ export const canAccessScreen = (screenId, role) => {
   if (ADMIN_ONLY_SCREENS.includes(screenId)) {
     return role === 'admin';
   }
+  if (screenId === 'local-leaders') {
+    return ['admin', 'supervisor', 'officer'].includes(role);
+  }
   if (screenId === 'users') {
     return ['admin', 'supervisor', 'officer'].includes(role);
   }
@@ -83,6 +85,9 @@ export const canDeleteUsers = (role) => role === 'admin';
 export const canManageIncidentTypes = (role) => role === 'admin';
 export const canManageStations = (role) => role === 'admin';
 export const canManageAssignmentUnits = (role) => role === 'admin';
+/** Local leaders in station coverage — officers manage their area; DPC district-wide. */
+export const canManageLocalLeaders = (role) =>
+  ['admin', 'supervisor', 'officer'].includes(role);
 
 export const canAssignReports = (role) => ['admin', 'supervisor'].includes(role);
 export const canCreateCases = (role) => ['admin', 'supervisor'].includes(role);

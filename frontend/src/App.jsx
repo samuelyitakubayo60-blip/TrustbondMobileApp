@@ -42,8 +42,8 @@ function AccessDenied({ goToScreen }) {
     <div className="card" style={{ padding: 24, maxWidth: 480 }}>
       <h2 style={{ marginTop: 0 }}>Access denied</h2>
       <p style={{ color: "var(--muted)", fontSize: 14 }}>
-        You do not have permission to open this page. Configuration and district
-        admin tools are available to DPC only.
+        You do not have permission to open this page. If you need access, contact
+        your DPC or system administrator.
       </p>
       <button type="button" className="btn btn-primary" onClick={() => goToScreen("dashboard", 0)}>
         Back to dashboard
