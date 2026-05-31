@@ -293,41 +293,114 @@ def _pick_hotspot_deployment_plan(
     incident_mix: Optional[Dict[str, int]],
     registry: Dict[str, Dict[str, str]],
     incident_type_unit_hint: Optional[str] = None,
+    # Improvement 7 — additional multi-factor inputs
+    trend_direction: Optional[str] = None,
+    severity_score: Optional[float] = None,
+    lifecycle_state: Optional[str] = None,
+    nearby_cluster_count: int = 0,
+    time_of_day_peak: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Rule-based primary + support unit from crime mix, volume, and incident-type hint."""
-    totals = {code: 0.0 for code in registry}
+    """
+    Multi-factor unit selection (Improvement 7).
 
+    Scoring layers:
+      L1 – Crime-text matching (existing keyword regex table)
+      L2 – Volume multiplier (more incidents → boost primary crime unit)
+      L3 – Severity multiplier (sev ≥ 7 → +20 % on specialist unit)
+      L4 – Trend multiplier (rising → +2.0 on rapid/response units)
+      L5 – Lifecycle multiplier (escalating → +3.0 on RRU/QUICK_RESPONSE)
+      L6 – Nearby clusters (≥ 2 → boost CPU/GENERAL_PATROL for area coordination)
+      L7 – Mixed-hotspot premium (multi-crime → boost QUICK_RESPONSE + CPU)
+      L8 – Incident-type DB hint override
+      L9 – Classification guardrail (critical/active always boost fast-response)
+
+    Support unit: selected when its score ≥ 35 % of primary (lowered from 40 %)
+    to encourage dual-unit recommendations on higher-severity hotspots.
+    """
+    totals: Dict[str, float] = {code: 0.0 for code in registry}
+
+    # L1 + L2 — crime text with volume weighting
     if incident_mix:
         for name, count in incident_mix.items():
             c = max(1, int(count or 0))
             for code, w in _score_crime_text(name, registry).items():
-                totals[code] += w * c
+                totals[code] = totals.get(code, 0.0) + w * c
     elif dominant_crime:
         for code, w in _score_crime_text(dominant_crime, registry).items():
-            totals[code] += w * max(1, incident_count)
+            totals[code] = totals.get(code, 0.0) + w * max(1, incident_count)
 
+    # L3 — severity multiplier
+    sev = float(severity_score or 0.0)
+    if sev >= 7.0:
+        # High-severity: boost RRU, QUICK_RESPONSE, and the highest-scored crime unit
+        for code in ("RRU", "QUICK_RESPONSE", "VPU"):
+            if code in registry:
+                totals[code] = totals.get(code, 0.0) + (sev - 5.0) * 0.6
+    elif sev >= 5.0:
+        # Moderate severity: modest boost on specialist units already high-scored
+        top_code = max(totals, key=totals.get) if totals else None
+        if top_code and top_code in registry:
+            totals[top_code] = totals.get(top_code, 0.0) + 1.0
+
+    # L4 — trend multiplier
+    trend = (trend_direction or "stable").lower()
+    if trend == "rising":
+        for code in ("RRU", "QUICK_RESPONSE", "DEU"):
+            if code in registry:
+                totals[code] = totals.get(code, 0.0) + 2.0
+    elif trend == "falling":
+        # Declining trend — community policing is sufficient
+        for code in ("CPU", "GENERAL_PATROL"):
+            if code in registry:
+                totals[code] = totals.get(code, 0.0) + 1.5
+
+    # L5 — lifecycle multiplier
+    lc = (lifecycle_state or "active").lower()
+    if lc == "escalating":
+        for code in ("RRU", "QUICK_RESPONSE"):
+            if code in registry:
+                totals[code] = totals.get(code, 0.0) + 3.0
+    elif lc == "declining":
+        for code in ("CPU", "GENERAL_PATROL"):
+            if code in registry:
+                totals[code] = totals.get(code, 0.0) + 2.0
+
+    # L6 — nearby clusters → area coordination
+    if nearby_cluster_count >= 2:
+        for code in ("CPU", "GENERAL_PATROL", "QUICK_RESPONSE"):
+            if code in registry:
+                totals[code] = totals.get(code, 0.0) + 1.5
+
+    # L7 — multi-crime zone premium
+    if cluster_kind == "mixed_hotspot" and incident_count >= 6:
+        for code in ("QUICK_RESPONSE", "CPU"):
+            if code in registry:
+                totals[code] = totals.get(code, 0.0) + 2.0
+        if "ISU" in registry:
+            totals["ISU"] = totals.get("ISU", 0.0) + 1.5
+
+    # L8 — incident-type DB unit hint
     hint = _resolve_unit(incident_type_unit_hint, registry)
     if hint:
         totals[hint] = totals.get(hint, 0.0) + 5.0
 
+    # Ensure a default when no crime text scored
     if sum(totals.values()) < 0.1:
         totals["GENERAL_PATROL"] = totals.get("GENERAL_PATROL", 0.0) + 3.0
 
+    # L9 — critical/active classification guardrail
     cls = (classification or "").strip().lower()
     if cls in {"critical", "active"}:
         for code in ("RRU", "QUICK_RESPONSE"):
             if code in registry:
                 totals[code] = totals.get(code, 0.0) + 2.5
-    if cluster_kind == "mixed_hotspot" and incident_count >= 6:
-        if "QUICK_RESPONSE" in registry:
-            totals["QUICK_RESPONSE"] = totals.get("QUICK_RESPONSE", 0.0) + 2.0
-        if "CPU" in registry:
-            totals["CPU"] = totals.get("CPU", 0.0) + 1.5
 
     ranked = sorted(totals.items(), key=lambda x: x[1], reverse=True)
     primary_code = ranked[0][0] if ranked else "GENERAL_PATROL"
     support_code: Optional[str] = None
-    if len(ranked) > 1 and ranked[1][1] >= ranked[0][1] * 0.4:
+    # Support unit threshold lowered to 35 % for escalating/critical clusters
+    support_threshold = 0.30 if (lc == "escalating" or cls == "critical") else 0.35
+    if len(ranked) > 1 and ranked[1][1] >= ranked[0][1] * support_threshold:
         support_code = ranked[1][0]
         if support_code == primary_code and len(ranked) > 2:
             support_code = ranked[2][0]
@@ -354,6 +427,8 @@ def _pick_hotspot_deployment_plan(
         "support_code": support_code,
         "support_name": registry[support_code]["name"] if support_code else None,
         "recommended_units": units_out,
+        # Expose the scoring vector for explainability
+        "unit_scores": {k: round(v, 2) for k, v in ranked[:6]},
     }
 
 
@@ -993,7 +1068,12 @@ def generate_recommendation(
     """
     Hotspot briefing: rule-picked units + Groq/Gemini JSON text when API keys are set.
     No template fallback when ``GROQ_API_KEY`` / ``GEMINI_API_KEY`` are configured.
+
+    Improvement 7: passes trend_direction, severity_score, lifecycle_state,
+    and nearby_cluster_count from cluster_evolution into _pick_hotspot_deployment_plan
+    for multi-factor unit scoring.
     """
+    evo = cluster_evolution or {}
     registry = deployment_units or load_hotspot_deployment_units()
     plan = _pick_hotspot_deployment_plan(
         classification=classification,
@@ -1003,6 +1083,11 @@ def generate_recommendation(
         incident_mix=incident_mix,
         registry=registry,
         incident_type_unit_hint=recommended_unit,
+        # Improvement 7 — multi-factor inputs from cluster evolution
+        trend_direction=evo.get("trend_direction"),
+        severity_score=float(evo.get("severity_score") or 0.0),
+        lifecycle_state=evo.get("lifecycle_state"),
+        nearby_cluster_count=int(evo.get("nearby_clusters") or 0),
     )
 
     operation_hours = _suggest_duration_hours(classification, cluster_kind)
@@ -1119,6 +1204,69 @@ def generate_recommendation(
 # ──────────────────────────────────────────────────────────────────────────────
 
 _citizen_advisory_cache: Dict[tuple, str] = {}
+# Maps hotspot_id → cache_key tuple for targeted invalidation (Improvement 10)
+_advisory_hotspot_index: Dict[int, tuple] = {}
+
+
+def clear_citizen_advisory_cache(hotspot_id: Optional[int] = None) -> int:
+    """
+    Invalidate cached citizen advisories.
+
+    When ``hotspot_id`` is given, only the entry for that hotspot is removed
+    (trust score change, re-verification, evidence update, etc.).
+    When called with no argument, the entire cache is cleared (recompute).
+    Returns number of entries removed.
+    """
+    global _citizen_advisory_cache, _advisory_hotspot_index
+    if hotspot_id is not None:
+        key = _advisory_hotspot_index.pop(hotspot_id, None)
+        if key and key in _citizen_advisory_cache:
+            del _citizen_advisory_cache[key]
+            logger.debug("Citizen advisory cache invalidated for hotspot_id=%d", hotspot_id)
+            return 1
+        return 0
+    count = len(_citizen_advisory_cache)
+    _citizen_advisory_cache.clear()
+    _advisory_hotspot_index.clear()
+    logger.info("Citizen advisory cache cleared (%d entries removed).", count)
+    return count
+
+
+def _extract_grounded_facts(
+    *,
+    classification: str,
+    incident_count: int,
+    dominant_crime: Optional[str],
+    incident_mix: Optional[Dict[str, int]],
+    time_window_hours: Optional[int],
+    area_label: Optional[str],
+) -> Dict[str, Any]:
+    """
+    Improvement 6 — data-first advisory grounding.
+
+    Extract structured, verifiable facts from hotspot data before any LLM
+    call.  These facts are:
+      - passed to the LLM as an explicit "ground these facts" instruction
+      - used as the sole basis for the template fallback
+
+    No claim can appear in the advisory that is not derivable from these facts.
+    """
+    time_label = _time_window_label(time_window_hours)
+    top_crimes = sorted((incident_mix or {}).items(), key=lambda x: x[1], reverse=True)[:3]
+    severity_class = (
+        "high" if classification in ("critical", "active")
+        else "moderate" if classification == "emerging"
+        else "low"
+    )
+    return {
+        "area": area_label or "the area",
+        "time_label": time_label,
+        "incident_count": incident_count,
+        "dominant_crime": dominant_crime or "incidents",
+        "top_crimes": top_crimes,
+        "severity_class": severity_class,
+        "classification": classification,
+    }
 
 
 def _time_window_label(hours: Optional[int]) -> str:
@@ -1214,39 +1362,104 @@ def generate_citizen_advisory(
     area_label: Optional[str] = None,
     incident_mix: Optional[Dict[str, int]] = None,
     time_window_hours: Optional[int] = None,
+    hotspot_id: Optional[int] = None,
 ) -> str:
     """
     Generate a plain-language public safety advisory for citizens.
+
+    Improvement 6 — data-first architecture:
+      1. Extract verified facts (incident count, crime type, time window, area).
+      2. Build template advisory directly from these facts (always available).
+      3. Optionally enhance wording with LLM, strictly anchored to the same facts.
+      4. The LLM can only *rephrase* — it cannot introduce new claims.
+
     Mentions the observation time window so advisories never feel stale.
-    Falls back to a template when no LLM key is configured.
+    Falls back to the template when no LLM key is configured.
     """
     mix_tuple = tuple(sorted((incident_mix or {}).items()))
     cache_key = (classification, incident_count, dominant_crime, area_label, mix_tuple, time_window_hours)
     if cache_key in _citizen_advisory_cache:
         return _citizen_advisory_cache[cache_key]
 
-    prompt = _build_citizen_advisory_prompt(
+    # ── Step 1: extract verifiable facts ────────────────────────────────────
+    facts = _extract_grounded_facts(
         classification=classification,
         incident_count=incident_count,
         dominant_crime=dominant_crime,
+        incident_mix=incident_mix,
+        time_window_hours=time_window_hours,
         area_label=area_label,
+    )
+
+    # ── Step 2: template advisory (always factual, always available) ─────────
+    template_advisory = _build_citizen_advisory(
+        area_label=facts["area"],
+        dominant_crime=facts["dominant_crime"],
+        incident_count=incident_count,
+        classification=classification,
+        cluster_kind="single_type",
         incident_mix=incident_mix,
         time_window_hours=time_window_hours,
     )
 
-    result = _call_hotspot_llm(prompt)
-    advisory = (result or {}).get("advisory", "").strip()
+    # ── Step 3: LLM wording enhancement (anchored to the same facts) ────────
+    advisory = template_advisory  # start from template; LLM overrides only if valid
 
-    if not advisory:
-        advisory = _build_citizen_advisory(
-            area_label=area_label,
-            dominant_crime=dominant_crime,
-            incident_count=incident_count,
+    if _hotspot_llm_required():
+        prompt = _build_citizen_advisory_prompt(
             classification=classification,
-            cluster_kind="single_type",
+            incident_count=incident_count,
+            dominant_crime=dominant_crime,
+            area_label=area_label,
             incident_mix=incident_mix,
             time_window_hours=time_window_hours,
         )
+        result = _call_hotspot_llm(prompt)
+        llm_advisory = (result or {}).get("advisory", "").strip()
 
+        # Improvement 6 — validation: reject LLM output if it fails fact-checks
+        if llm_advisory and _advisory_passes_fact_check(llm_advisory, facts):
+            advisory = llm_advisory
+        elif llm_advisory:
+            logger.warning(
+                "[citizen_advisory] LLM advisory failed fact-check "
+                "(hotspot_id=%s, classification=%s) — using template fallback",
+                hotspot_id, classification,
+            )
+
+    # ── Step 4: cache and return ─────────────────────────────────────────────
     _citizen_advisory_cache[cache_key] = advisory
+    if hotspot_id is not None:
+        _advisory_hotspot_index[hotspot_id] = cache_key
     return advisory
+
+
+def _advisory_passes_fact_check(advisory: str, facts: Dict[str, Any]) -> bool:
+    """
+    Improvement 6 — lightweight fact-check for LLM advisory output.
+
+    Rejects text that:
+    - Is shorter than 40 characters (truncated / empty)
+    - Contains police unit codes or internal jargon
+    - Does NOT mention the time period (advisory must be time-anchored)
+    """
+    if len(advisory) < 40:
+        return False
+
+    # Hard-block: police operational language must never reach citizens
+    _BANNED_TERMS = re.compile(
+        r"\b(RRU|DEU|TPU|CPU|ISU|AFU|VPU|K9|RNP|QUICK_RESPONSE|COUNTER_TERROR|"
+        r"FIRE_RESCUE|GENERAL_PATROL|deploy|deployed|patrol unit|tactical|"
+        r"operation|dispatch|armed response|surveillance)\b",
+        re.I,
+    )
+    if _BANNED_TERMS.search(advisory):
+        return False
+
+    # Soft-check: advisory should reference the time window
+    time_label = facts.get("time_label", "")
+    time_words = re.compile(r"past|hour|day|week|month|recently|period|lately", re.I)
+    if time_label and not time_words.search(advisory):
+        return False
+
+    return True

@@ -468,6 +468,418 @@ def _convex_hull_points(latlon: List[Tuple[float, float]]) -> List[List[float]]:
     return [[lat, lon] for lat, lon in hull]
 
 
+# ─── Improvement 1: Corroboration ────────────────────────────────────────────
+
+def _count_unique_reporters(pts: List[Dict[str, Any]]) -> int:
+    """
+    Return the number of distinct people who submitted reports in this cluster.
+
+    Uses ``reported_by_user_id`` on the Report object when available, falling
+    back to the report's UUID so that guest/anonymous reports each count once.
+    """
+    reporter_ids: set = set()
+    for p in pts:
+        r = p.get("report")
+        if r is None:
+            continue
+        uid = (
+            getattr(r, "reported_by_user_id", None)
+            or getattr(r, "reporter_id", None)
+        )
+        if uid is not None:
+            reporter_ids.add(str(uid))
+        else:
+            # Anonymous/guest report — count each report as its own reporter
+            reporter_ids.add(str(getattr(r, "report_id", id(r))))
+    return max(1, len(reporter_ids))
+
+
+def _corroboration_score(pts: List[Dict[str, Any]], min_reporters: int = 2) -> float:
+    """
+    Composite corroboration score 0.0–1.0.
+
+    Three sub-scores:
+      reporter_diversity : fraction of independent reporters relative to target
+      trust_consistency  : 1 − normalized variance of trust scores
+      time_spread        : spread of report timestamps (full score at 24 h+)
+
+    A perfectly corroborated cluster (many reporters, consistent trust,
+    spread over 24 h) approaches 1.0.  A cluster where one person filed all
+    reports minutes apart approaches 0.0.
+    """
+    n = len(pts)
+    unique_reporters = _count_unique_reporters(pts)
+
+    reporter_diversity = min(1.0, unique_reporters / max(1, min_reporters * 2))
+
+    trusts = [float(p.get("trust", 100.0)) for p in pts]
+    avg_trust = sum(trusts) / max(1, n)
+    variance = sum((t - avg_trust) ** 2 for t in trusts) / max(1, n)
+    trust_consistency = 1.0 - min(1.0, variance / (25.0 ** 2))
+
+    ts_list = [p["reported_at"].timestamp() for p in pts if p.get("reported_at")]
+    if len(ts_list) >= 2:
+        span_h = (max(ts_list) - min(ts_list)) / 3600.0
+        time_spread = min(1.0, span_h / 24.0)
+    else:
+        time_spread = 0.0
+
+    return round(
+        reporter_diversity * 0.50 + trust_consistency * 0.25 + time_spread * 0.25,
+        4,
+    )
+
+
+# ─── Improvement 3: Adaptive clustering radius ────────────────────────────────
+
+def _adaptive_radius_meters(
+    pts: List[Dict[str, Any]],
+    *,
+    base_radius: float = DEFAULT_RADIUS_METERS,
+) -> float:
+    """
+    Derive a clustering radius suited to the geographic density of the input
+    points rather than using the global fixed value.
+
+    Heuristic:
+      - Sample pairwise distances across up to 25 points.
+      - If the median pair-distance < 200 m  → dense urban grid → shrink to 200–350 m.
+      - If the median pair-distance > 800 m  → sparse rural    → widen to 750–1 500 m.
+      - Otherwise                            → keep base_radius.
+
+    The result is clamped to [200 m, 1 500 m] regardless.
+    """
+    n = len(pts)
+    if n < 3:
+        return base_radius
+
+    sample = pts[: min(25, n)]
+    dists: List[float] = []
+    for i, p in enumerate(sample):
+        for j in range(i + 1, len(sample)):
+            q = sample[j]
+            dists.append(_haversine_meters(p["lat"], p["lon"], q["lat"], q["lon"]))
+
+    if not dists:
+        return base_radius
+
+    dists.sort()
+    median_d = dists[len(dists) // 2]
+
+    if median_d < 200:
+        adaptive = max(200.0, min(350.0, median_d * 1.5))
+    elif median_d > 800:
+        adaptive = min(1500.0, median_d * 1.2)
+    else:
+        adaptive = base_radius
+
+    return round(adaptive, 0)
+
+
+# ─── Improvement 11: Anomaly / abuse detection ────────────────────────────────
+
+_ANOMALY_FLAG_THRESHOLD = 0.55   # abuse_flag=True when anomaly_score >= this
+
+
+def _compute_anomaly_score(pts: List[Dict[str, Any]]) -> float:
+    """
+    Detect coordinated false-report injection.  Returns 0.0–1.0.
+
+    Checked patterns:
+      P1 – Time burst   : ≥ 3 reports within 5 minutes → +0.35; ≥ 5 in 30 min → +0.20
+      P2 – GPS cloning  : all points identical to 4 d.p. → +0.40
+      P3 – Reporter bias: one user > 70 % of reports → +0.25
+      P4 – Trust clone  : all trust scores identical (≥ 4 pts) → +0.10
+    """
+    n = len(pts)
+    if n < 2:
+        return 0.0
+
+    score = 0.0
+
+    # P1 — time burst
+    ts = sorted(p["reported_at"].timestamp() for p in pts if p.get("reported_at"))
+    if len(ts) >= 2:
+        span_min = (ts[-1] - ts[0]) / 60.0
+        if span_min < 5 and n >= 3:
+            score += 0.35
+        elif span_min < 30 and n >= 5:
+            score += 0.20
+
+    # P2 — GPS cloning (same location to 4 decimal places ≈ 11 m)
+    lats_r = [round(p["lat"], 4) for p in pts]
+    lons_r = [round(p["lon"], 4) for p in pts]
+    if len(set(zip(lats_r, lons_r))) == 1 and n >= 3:
+        score += 0.40
+
+    # P3 — single reporter dominates
+    reporter_counts: Dict[str, int] = {}
+    for p in pts:
+        r = p.get("report")
+        uid = str(
+            getattr(r, "reported_by_user_id", None)
+            or getattr(r, "reporter_id", None)
+            or id(r)
+        )
+        reporter_counts[uid] = reporter_counts.get(uid, 0) + 1
+    if n >= 3 and reporter_counts:
+        max_share = max(reporter_counts.values()) / n
+        if max_share > 0.70:
+            score += 0.25
+
+    # P4 — uniform trust (automated injection signal)
+    trusts_r = [round(float(p.get("trust", 100.0)), 1) for p in pts]
+    if len(set(trusts_r)) == 1 and n >= 4:
+        score += 0.10
+
+    return round(min(1.0, score), 4)
+
+
+# ─── Improvement 9: Explainability ───────────────────────────────────────────
+
+def _build_explanation(
+    *,
+    incident_count: int,
+    avg_trust: float,
+    sev_score: float,
+    trend: str,
+    lifecycle: str,
+    classification: str,
+    conf: float,
+    t_intensity: float,
+    composition: Dict[str, int],
+    unique_reporters: int,
+    corroboration_score: float,
+    anomaly_score: float,
+    is_multi_crime_zone: bool = False,
+) -> Dict[str, Any]:
+    """
+    Return a structured JSON-serialisable explanation for every numeric score
+    this hotspot carries.  Stored in ``hotspot.explanation_json`` and surfaced
+    on the law enforcement dashboard.
+    """
+    factors: List[Dict[str, Any]] = []
+
+    # Severity
+    if sev_score >= 8.0:
+        sev_level, sev_note = "high", f"Average severity {sev_score:.1f}/10 — serious crimes dominate this cluster"
+    elif sev_score >= 5.0:
+        sev_level, sev_note = "medium", f"Moderate severity {sev_score:.1f}/10 — mix of serious and minor incidents"
+    else:
+        sev_level, sev_note = "low", f"Low severity {sev_score:.1f}/10 — minor incident types"
+    factors.append({"factor": "severity", "level": sev_level, "note": sev_note})
+
+    # Trend
+    trend_notes = {
+        "rising":  "Incident rate is INCREASING — more reports in the recent half of the window than the earlier half",
+        "falling": "Incident rate is DECLINING — fewer reports in the recent half; current measures may be working",
+        "stable":  "Incident rate is STABLE — consistent volume throughout the observation window",
+    }
+    factors.append({"factor": "trend", "direction": trend, "note": trend_notes.get(trend, "Unknown trend")})
+
+    # Lifecycle
+    lifecycle_notes = {
+        "emerging":   "NEW cluster — no prior hotspot detected in this geographic area",
+        "active":     "ESTABLISHED cluster — incident count close to the previous detection in this area",
+        "escalating": "ESCALATING — incident count ≥ 40 % higher than last detection — immediate attention needed",
+        "stable":     "STABLE cluster — volume matching prior detection; sustained patrol recommended",
+        "declining":  "DECLINING — incident count ≥ 40 % lower than last detection — current response appears effective",
+    }
+    factors.append({"factor": "lifecycle", "state": lifecycle, "note": lifecycle_notes.get(lifecycle, "")})
+
+    # Corroboration
+    if corroboration_score >= 0.70:
+        corr_level = "strong"
+        corr_note = f"{unique_reporters} unique reporter(s) — high independent corroboration"
+    elif corroboration_score >= 0.40:
+        corr_level = "moderate"
+        corr_note = f"{unique_reporters} unique reporter(s) — moderate corroboration"
+    else:
+        corr_level = "weak"
+        corr_note = f"Only {unique_reporters} unique reporter(s) — low independent corroboration; treat with caution"
+    factors.append({"factor": "corroboration", "level": corr_level, "score": corroboration_score, "note": corr_note})
+
+    # Confidence breakdown
+    factors.append({
+        "factor": "confidence",
+        "score": conf,
+        "note": (
+            f"Cluster confidence {conf:.0%} = "
+            "core-point ratio × 0.35 + avg-trust × 0.45 + cluster-size-score × 0.20"
+        ),
+    })
+
+    # Anomaly warning
+    if anomaly_score >= _ANOMALY_FLAG_THRESHOLD:
+        factors.append({
+            "factor": "anomaly",
+            "score": anomaly_score,
+            "level": "high",
+            "warning": (
+                "High anomaly score — pattern consistent with coordinated false reporting "
+                "(time burst, GPS cloning, or single-reporter dominance). "
+                "Verify reports independently before acting."
+            ),
+        })
+    elif anomaly_score > 0.20:
+        factors.append({
+            "factor": "anomaly",
+            "score": anomaly_score,
+            "level": "low",
+            "warning": "Slight anomaly signal — monitoring suggested",
+        })
+
+    # Multi-crime zone
+    if is_multi_crime_zone:
+        factors.append({
+            "factor": "multi_crime_zone",
+            "note": "This hotspot overlaps with hotspots of different crime categories — composite risk zone requiring coordinated multi-unit response",
+        })
+
+    return {
+        "classification_factors": factors,
+        "score_breakdown": {
+            "severity_score": round(sev_score, 3),
+            "trust_average": round(avg_trust, 1),
+            "temporal_intensity": round(t_intensity, 4),
+            "cluster_confidence": round(conf, 4),
+            "corroboration_score": corroboration_score,
+            "anomaly_score": anomaly_score,
+        },
+        "top_crime_types": sorted(composition.items(), key=lambda x: x[1], reverse=True)[:5],
+        "incident_count": incident_count,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ─── Improvement 8: Prediction ───────────────────────────────────────────────
+
+def _predict_next_state(lifecycle: str, trend: str) -> str:
+    """
+    Rule-based prediction of the next lifecycle state.
+
+    This prediction is stored on the hotspot and checked against the actual
+    state on the next clustering run so prediction accuracy can be measured.
+
+    Transition table
+    ────────────────
+    current / trend       rising          stable          falling
+    ──────────────────────────────────────────────────────────────
+    emerging              escalating      active          declining
+    active                escalating      active          stable
+    escalating            escalating      active          stable
+    stable                active          stable          declining
+    declining             active          declining       declining
+    """
+    t = (trend or "stable").lower()
+    s = (lifecycle or "active").lower()
+
+    table: Dict[str, Dict[str, str]] = {
+        "emerging":   {"rising": "escalating", "stable": "active",    "falling": "declining"},
+        "active":     {"rising": "escalating", "stable": "active",    "falling": "stable"},
+        "escalating": {"rising": "escalating", "stable": "active",    "falling": "stable"},
+        "stable":     {"rising": "active",     "stable": "stable",    "falling": "declining"},
+        "declining":  {"rising": "active",     "stable": "declining", "falling": "declining"},
+    }
+    return table.get(s, {}).get(t, "active")
+
+
+# ─── Improvement 12: Audit trail helper ──────────────────────────────────────
+
+def _record_hotspot_event(
+    db: Session,
+    hotspot_id: int,
+    event_type: str,
+    *,
+    previous_state: Optional[str] = None,
+    new_state: Optional[str] = None,
+    event_data: Optional[Dict[str, Any]] = None,
+    note: Optional[str] = None,
+    created_by_user_id: Optional[int] = None,
+) -> None:
+    """
+    Append an immutable event to hotspot_events for the given hotspot.
+    Failures are logged and swallowed — event logging must never abort the
+    clustering pipeline.
+    """
+    try:
+        from app.models.hotspot_event import HotspotEvent
+        event = HotspotEvent(
+            hotspot_id=hotspot_id,
+            event_type=event_type,
+            previous_state=previous_state,
+            new_state=new_state,
+            event_data=json.dumps(event_data) if event_data else None,
+            note=note,
+            created_by_user_id=created_by_user_id,
+        )
+        db.add(event)
+        db.flush()
+    except Exception as _e:
+        logger.warning("[hotspot_event] failed to record %s for hotspot %s: %s", event_type, hotspot_id, _e)
+
+
+# ─── Improvement 2: Multi-crime zone detection ────────────────────────────────
+
+def detect_multi_crime_zones(db: Session, eps_meters: float) -> int:
+    """
+    Post-clustering pass: mark hotspots that overlap with hotspots of a
+    *different* crime group within ``eps_meters``.
+
+    Called once after ``_create_geographic_hotspots`` completes all groups.
+    Returns the number of hotspots flagged.
+    """
+    recent_cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+    recent = (
+        db.query(Hotspot)
+        .filter(Hotspot.detected_at >= recent_cutoff)
+        .all()
+    )
+    if len(recent) < 2:
+        return 0
+
+    flagged = 0
+    for h in recent:
+        if not h.crime_group or h.crime_group == "other":
+            h.is_multi_crime_zone = False
+            h.multi_crime_groups = None
+            continue
+
+        lat = float(h.center_lat)
+        lon = float(h.center_long)
+        nearby_groups: set = set()
+
+        for other in recent:
+            if other.hotspot_id == h.hotspot_id:
+                continue
+            if (not other.crime_group) or other.crime_group == h.crime_group:
+                continue
+            if _haversine_meters(lat, lon, float(other.center_lat), float(other.center_long)) <= eps_meters:
+                nearby_groups.add(other.crime_group)
+
+        if nearby_groups:
+            all_groups = sorted([h.crime_group] + list(nearby_groups))
+            was_flagged = bool(h.is_multi_crime_zone)
+            h.is_multi_crime_zone = True
+            h.multi_crime_groups = json.dumps(all_groups)
+            flagged += 1
+            if not was_flagged:
+                _record_hotspot_event(
+                    db,
+                    h.hotspot_id,
+                    "multi_crime_flagged",
+                    new_state=h.lifecycle_state,
+                    event_data={"crime_groups": all_groups},
+                    note=f"Overlaps with {', '.join(nearby_groups)} hotspot(s) within {int(eps_meters)} m",
+                )
+        else:
+            h.is_multi_crime_zone = False
+            h.multi_crime_groups = None
+
+    logger.info("[hotspot] multi-crime zone pass: %d hotspot(s) flagged", flagged)
+    return flagged
+
+
 def cleanup_expired_hotspots(db: Session):
     """Deprecated: Hotspots should persist for historical analysis.
     
@@ -950,15 +1362,31 @@ def _create_geographic_hotspots(
     enforce_time_span: bool = True,
 ) -> int:
     """
-    Enhanced ST-DBSCAN clustering pipeline:
+    Enhanced ST-DBSCAN clustering pipeline (v2).
 
-    1. Group eligible reports by broad crime category (violent/property/drug/…).
-    2. Run ST-DBSCAN per group — unrelated crime types cannot merge.
-    3. For each cluster: compute weighted centroid, severity, temporal intensity,
-       lifecycle state, trend direction, convex-hull polygon.
-    4. Persist clusters with full metadata.
+    1. Compute adaptive clustering radius from report density (Improvement 3).
+    2. Group eligible reports by broad crime category (violent/property/drug/…).
+    3. Run ST-DBSCAN per group — unrelated crime types cannot merge.
+    4. For each cluster:
+       a. Require ≥ 2 unique reporters (Improvement 1 — corroboration gate).
+       b. Compute corroboration score, anomaly score, explainability (Impr. 1, 9, 11).
+       c. Compute weighted centroid, severity, temporal intensity, lifecycle,
+          trend, convex-hull polygon.
+       d. Predict next lifecycle state (Improvement 8).
+    5. Persist clusters with full metadata.
+    6. Post-processing: detect multi-crime zones (Improvement 2).
+    7. Record lifecycle events in hotspot_events (Improvement 12).
     """
-    eps_m   = max(50.0, float(radius_meters))
+    # ── Improvement 3: adaptive radius ──────────────────────────────────────
+    # Compute a density-aware radius from the report point cloud.
+    # Falls back to radius_meters when too few points for meaningful sampling.
+    eps_m = _adaptive_radius_meters(reports, base_radius=max(50.0, float(radius_meters)))
+    if abs(eps_m - float(radius_meters)) > 50:
+        logger.info(
+            "[hotspot] adaptive radius: requested=%.0fm → adaptive=%.0fm "
+            "(density-adjusted for %d reports)",
+            radius_meters, eps_m, len(reports),
+        )
     # Temporal epsilon scaling:
     #   < 168 h  (< 1 week):  eps_t = window/4, clamped 6 h – 72 h
     #   168–720 h (1 wk–1 mo): eps_t = window/4, no 72 h cap — proportional
@@ -1056,6 +1484,35 @@ def _create_geographic_hotspots(
                 except Exception:
                     pass
 
+            # ── Improvement 1: corroboration gate ─────────────────────────
+            # Require at least 2 unique independent reporters before creating
+            # or updating a hotspot.  A single person repeatedly filing the
+            # same location does NOT constitute a corroborated hotspot — it is
+            # either a technical issue or a potential abuse vector.
+            unique_reporters = _count_unique_reporters(cluster_pts)
+            MIN_UNIQUE_REPORTERS = 2
+            if unique_reporters < MIN_UNIQUE_REPORTERS:
+                logger.info(
+                    "[hotspot] group=%s cluster skipped — %d unique reporter(s) "
+                    "< min_required=%d (corroboration gate)",
+                    group_name, unique_reporters, MIN_UNIQUE_REPORTERS,
+                )
+                for p in cluster_pts:
+                    _try_attach_isolated(p)
+                continue
+
+            corroboration = _corroboration_score(cluster_pts, MIN_UNIQUE_REPORTERS)
+
+            # ── Improvement 11: anomaly detection ─────────────────────────
+            anomaly = _compute_anomaly_score(cluster_pts)
+            is_abuse_flagged = anomaly >= _ANOMALY_FLAG_THRESHOLD
+            if is_abuse_flagged:
+                logger.warning(
+                    "[hotspot] group=%s cluster ABUSE FLAG — anomaly_score=%.2f "
+                    "(reporters=%d, size=%d); hotspot will be created but flagged",
+                    group_name, anomaly, unique_reporters, incident_count,
+                )
+
             # ── 3. Cluster analytics ──────────────────────────────────────
             center_lat, center_long = _weighted_centroid(cluster_pts, time_window_hours=time_window_hours)
             avg_trust   = sum(p.get("trust", 100.0) for p in cluster_pts) / incident_count
@@ -1067,6 +1524,9 @@ def _create_geographic_hotspots(
             trend       = _trend_direction(cluster_pts)
             conf        = _cluster_confidence(cluster_pts)
             lifecycle   = _lifecycle_state(db, center_lat, center_long, incident_count, eps_m, time_window_hours)
+
+            # ── Improvement 8: prediction ─────────────────────────────────
+            predicted_state = _predict_next_state(lifecycle, trend)
 
             # Composition breakdown
             composition: Dict[str, int] = {}
@@ -1121,66 +1581,170 @@ def _create_geographic_hotspots(
                 .first()
             )
 
+            # ── Improvement 9: explainability ─────────────────────────────
+            explanation = _build_explanation(
+                incident_count=incident_count,
+                avg_trust=avg_trust,
+                sev_score=sev_score,
+                trend=trend,
+                lifecycle=lifecycle,
+                classification=classification_result["classification"],
+                conf=conf,
+                t_intensity=t_intensity,
+                composition=composition,
+                unique_reporters=unique_reporters,
+                corroboration_score=corroboration,
+                anomaly_score=anomaly,
+            )
+
+            now_utc = datetime.now(timezone.utc)
+
             if existing:
+                prev_lifecycle = existing.lifecycle_state
                 hotspot = existing
-                hotspot.center_lat          = Decimal(str(center_lat))
-                hotspot.center_long         = Decimal(str(center_long))
-                hotspot.radius_meters       = Decimal(str(radius_meters))
-                hotspot.incident_count      = incident_count
-                hotspot.risk_level          = risk_level
-                hotspot.time_window_hours   = time_window_hours
-                hotspot.incident_type_id    = dominant_type_id
-                hotspot.detected_at         = datetime.now(timezone.utc)
-                hotspot.lifecycle_state     = lifecycle
-                hotspot.composition         = json.dumps(composition)
-                hotspot.temporal_intensity  = Decimal(str(round(t_intensity, 4)))
-                hotspot.severity_score      = Decimal(str(round(sev_score, 4)))
-                hotspot.trend_direction     = trend
-                hotspot.cluster_confidence  = Decimal(str(conf))
-                hotspot.polygon_points      = polygon_json
-                hotspot.crime_group         = group_name
+                hotspot.center_lat             = Decimal(str(center_lat))
+                hotspot.center_long            = Decimal(str(center_long))
+                hotspot.radius_meters          = Decimal(str(eps_m))
+                hotspot.incident_count         = incident_count
+                hotspot.risk_level             = risk_level
+                hotspot.time_window_hours      = time_window_hours
+                hotspot.incident_type_id       = dominant_type_id
+                hotspot.detected_at            = now_utc
+                hotspot.lifecycle_state        = lifecycle
+                hotspot.composition            = json.dumps(composition)
+                hotspot.temporal_intensity     = Decimal(str(round(t_intensity, 4)))
+                hotspot.severity_score         = Decimal(str(round(sev_score, 4)))
+                hotspot.trend_direction        = trend
+                hotspot.cluster_confidence     = Decimal(str(conf))
+                hotspot.polygon_points         = polygon_json
+                hotspot.crime_group            = group_name
+                # Improvements 1 & 11
+                hotspot.unique_reporter_count  = unique_reporters
+                hotspot.corroboration_score    = Decimal(str(corroboration))
+                hotspot.anomaly_score          = Decimal(str(anomaly))
+                hotspot.abuse_flag             = is_abuse_flagged
+                # Improvement 8: verify previous prediction
+                if (
+                    hotspot.predicted_next_state
+                    and hotspot.prediction_verified_at is None
+                    and hotspot.predicted_at is not None
+                ):
+                    was_accurate = (hotspot.predicted_next_state == lifecycle)
+                    hotspot.prediction_was_accurate = was_accurate
+                    hotspot.prediction_verified_at = now_utc
+                    _record_hotspot_event(
+                        db, hotspot.hotspot_id, "prediction_verified",
+                        previous_state=prev_lifecycle,
+                        new_state=lifecycle,
+                        event_data={
+                            "predicted": hotspot.predicted_next_state,
+                            "actual": lifecycle,
+                            "accurate": was_accurate,
+                        },
+                    )
+                hotspot.predicted_next_state   = predicted_state
+                hotspot.predicted_at           = now_utc
+                hotspot.prediction_verified_at = None
+                hotspot.prediction_was_accurate = None
+                # Improvement 9
+                hotspot.explanation_json       = json.dumps(explanation)
+                # Improvement 10: cache invalidation
+                hotspot.cache_version          = (hotspot.cache_version or 0) + 1
                 # Clear cached advisory so the API regenerates it with fresh incident data.
-                hotspot.llm_citizen_advisory = None
-                hotspot.llm_generated_at     = None
+                hotspot.llm_citizen_advisory   = None
+                hotspot.llm_generated_at       = None
                 db.execute(
                     text("DELETE FROM hotspot_reports WHERE hotspot_id = :hid"),
                     {"hid": hotspot.hotspot_id},
                 )
+                # Improvement 12: audit event for lifecycle change
+                if prev_lifecycle != lifecycle:
+                    event_name = (
+                        "escalated" if lifecycle == "escalating"
+                        else "stabilized" if lifecycle == "stable"
+                        else "declining" if lifecycle == "declining"
+                        else "updated"
+                    )
+                    _record_hotspot_event(
+                        db, hotspot.hotspot_id, event_name,
+                        previous_state=prev_lifecycle,
+                        new_state=lifecycle,
+                        event_data={
+                            "incident_count": incident_count,
+                            "trend": trend,
+                            "anomaly_score": anomaly,
+                        },
+                    )
+                else:
+                    _record_hotspot_event(
+                        db, hotspot.hotspot_id, "updated",
+                        previous_state=prev_lifecycle,
+                        new_state=lifecycle,
+                        event_data={"incident_count": incident_count, "trend": trend},
+                    )
                 logger.debug(
                     "[hotspot] updated existing hotspot_id=%d — group=%s, "
-                    "incidents=%d, risk=%s, lifecycle=%s, trend=%s, "
-                    "center=(%.5f, %.5f)",
+                    "incidents=%d, risk=%s, lifecycle=%s→%s, trend=%s, "
+                    "corr=%.2f, anomaly=%.2f, center=(%.5f, %.5f)",
                     hotspot.hotspot_id, group_name, incident_count, risk_level,
-                    lifecycle, trend, center_lat, center_long,
+                    prev_lifecycle, lifecycle, trend, corroboration, anomaly,
+                    center_lat, center_long,
                 )
             else:
                 hotspot = Hotspot(
-                    center_lat          = Decimal(str(center_lat)),
-                    center_long         = Decimal(str(center_long)),
-                    radius_meters       = Decimal(str(radius_meters)),
-                    incident_count      = incident_count,
-                    risk_level          = risk_level,
-                    time_window_hours   = time_window_hours,
-                    incident_type_id    = dominant_type_id,
-                    detected_at         = datetime.now(timezone.utc),
-                    lifecycle_state     = lifecycle,
-                    composition         = json.dumps(composition),
-                    temporal_intensity  = Decimal(str(round(t_intensity, 4))),
-                    severity_score      = Decimal(str(round(sev_score, 4))),
-                    trend_direction     = trend,
-                    cluster_confidence  = Decimal(str(conf)),
-                    polygon_points      = polygon_json,
-                    crime_group         = group_name,
+                    center_lat             = Decimal(str(center_lat)),
+                    center_long            = Decimal(str(center_long)),
+                    radius_meters          = Decimal(str(eps_m)),
+                    incident_count         = incident_count,
+                    risk_level             = risk_level,
+                    time_window_hours      = time_window_hours,
+                    incident_type_id       = dominant_type_id,
+                    detected_at            = now_utc,
+                    lifecycle_state        = lifecycle,
+                    composition            = json.dumps(composition),
+                    temporal_intensity     = Decimal(str(round(t_intensity, 4))),
+                    severity_score         = Decimal(str(round(sev_score, 4))),
+                    trend_direction        = trend,
+                    cluster_confidence     = Decimal(str(conf)),
+                    polygon_points         = polygon_json,
+                    crime_group            = group_name,
+                    # Improvements 1 & 11
+                    unique_reporter_count  = unique_reporters,
+                    corroboration_score    = Decimal(str(corroboration)),
+                    anomaly_score          = Decimal(str(anomaly)),
+                    abuse_flag             = is_abuse_flagged,
+                    # Improvement 8
+                    predicted_next_state   = predicted_state,
+                    predicted_at           = now_utc,
+                    # Improvement 9
+                    explanation_json       = json.dumps(explanation),
+                    # Improvement 10
+                    cache_version          = 1,
                 )
                 db.add(hotspot)
                 db.flush()
                 created += 1
+                # Improvement 12: creation event
+                _record_hotspot_event(
+                    db, hotspot.hotspot_id, "created",
+                    new_state=lifecycle,
+                    event_data={
+                        "incident_count": incident_count,
+                        "group": group_name,
+                        "corroboration_score": corroboration,
+                        "anomaly_score": anomaly,
+                        "unique_reporters": unique_reporters,
+                        "predicted_next_state": predicted_state,
+                    },
+                )
                 logger.info(
                     "[hotspot] NEW hotspot_id=%d — group=%s, incidents=%d, "
                     "risk=%s, lifecycle=%s, trend=%s, conf=%.2f, "
+                    "corr=%.2f, reporters=%d, anomaly=%.2f, "
                     "center=(%.5f, %.5f), dominant_crime=%s",
                     hotspot.hotspot_id, group_name, incident_count, risk_level,
-                    lifecycle, trend, conf, center_lat, center_long, dominant_type_name,
+                    lifecycle, trend, conf, corroboration, unique_reporters, anomaly,
+                    center_lat, center_long, dominant_type_name,
                 )
 
             for p in cluster_pts:
@@ -1356,9 +1920,18 @@ def _create_geographic_hotspots(
                 discarded_ids[:5],   # log up to 5 for brevity
             )
 
+    # ── Improvement 2: multi-crime zone post-processing ─────────────────────
+    # After all crime groups are processed, mark hotspots whose geographic
+    # footprint overlaps with hotspots of a different crime group.
+    try:
+        flagged_multi = detect_multi_crime_zones(db, eps_m)
+    except Exception as _mce:
+        logger.warning("[hotspot] multi-crime zone detection failed: %s", _mce)
+        flagged_multi = 0
+
     logger.info(
         "[hotspot] _create_geographic_hotspots done — created=%d, "
-        "total_raw_clusters=%d, total_noise_pts=%d",
-        created, total_clusters, total_noise,
+        "total_raw_clusters=%d, total_noise_pts=%d, multi_crime_zones=%d",
+        created, total_clusters, total_noise, flagged_multi,
     )
     return created

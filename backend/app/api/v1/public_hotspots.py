@@ -11,9 +11,74 @@ from app.models.evidence_file import EvidenceFile
 from app.models.report import Report
 from app.schemas.hotspot import HotspotResponse
 from app.core.village_lookup import get_village_location_info
-from app.core.llm_recommendations import generate_citizen_advisory
+from app.core.llm_recommendations import generate_citizen_advisory, clear_citizen_advisory_cache
 
 logger = logging.getLogger(__name__)
+
+# ── Improvement 5: Privacy-preserving coordinate grid ────────────────────────
+# Grid precision ≈ 111 m × cos(lat) per step (0.001° ≈ 111 m at equator).
+# Rounding exact coordinates to this grid prevents victim/reporter identification
+# via repeated API queries while keeping the map visually accurate.
+_PRIVACY_GRID_DEG = 0.001   # ≈ 111 m grid cell
+
+
+def _snap_to_grid(lat: float, lon: float) -> Tuple[float, float]:
+    """
+    Snap a coordinate to the nearest privacy grid cell.
+
+    Rounds both lat and lon to 3 decimal places (≈ 111 m precision).
+    This preserves geographic clustering accuracy while making it impossible
+    to recover exact GPS coordinates from the public API.
+    """
+    return round(lat / _PRIVACY_GRID_DEG) * _PRIVACY_GRID_DEG, \
+           round(lon / _PRIVACY_GRID_DEG) * _PRIVACY_GRID_DEG
+
+
+def _build_privacy_grid_cells(
+    reports: List,
+    *,
+    window_start: datetime,
+    window_end: datetime,
+) -> List[dict]:
+    """
+    Aggregate report coordinates into privacy grid cells.
+
+    Instead of returning one point per report (which can identify individuals),
+    this groups all reports whose snapped coordinates match and returns:
+      - The grid-cell centroid (snapped lat/lon)
+      - The incident type of the most common crime in that cell
+      - The count of reports in that cell
+    No individual report IDs, exact coordinates, or descriptions are exposed.
+    """
+    cell_counts: dict = {}   # (grid_lat, grid_lon) → {"count": int, "types": {type: count}}
+    for r in reports:
+        reported_at = r.reported_at
+        if reported_at:
+            if reported_at.tzinfo is None:
+                reported_at = reported_at.replace(tzinfo=timezone.utc)
+            if not (window_start <= reported_at <= window_end):
+                continue
+        try:
+            glat, glon = _snap_to_grid(float(r.latitude), float(r.longitude))
+        except (TypeError, ValueError):
+            continue
+        key = (glat, glon)
+        if key not in cell_counts:
+            cell_counts[key] = {"count": 0, "types": {}}
+        cell_counts[key]["count"] += 1
+        type_name = r.incident_type.type_name if r.incident_type else "Unknown"
+        cell_counts[key]["types"][type_name] = cell_counts[key]["types"].get(type_name, 0) + 1
+
+    cells = []
+    for (glat, glon), data in cell_counts.items():
+        dominant = max(data["types"], key=data["types"].get) if data["types"] else "Unknown"
+        cells.append({
+            "grid_lat": glat,
+            "grid_lon": glon,
+            "incident_count": data["count"],
+            "dominant_type": dominant,
+        })
+    return cells
 
 router = APIRouter(prefix="/public/hotspots", tags=["public"])
 
@@ -147,6 +212,7 @@ def list_public_hotspots(
                 incident_count=int(h.incident_count or 0),
                 dominant_crime=incident_type_name,
                 time_window_hours=int(h.time_window_hours or effective_hours),
+                hotspot_id=h.hotspot_id,  # Improvement 10: targeted cache invalidation
             )
             # Mark for persistence so future requests can use the cached text.
             h.llm_citizen_advisory = advisory
@@ -221,39 +287,23 @@ def get_hotspot_details(
     incident_points = []
     
     if hotspot.reports:
-        # Extract report IDs from the relationship
-        report_ids = [report.report_id for report in hotspot.reports]
-        # Get evidence files for all reports in this hotspot
-        evidence_files = db.query(EvidenceFile).filter(
-            EvidenceFile.report_id.in_(report_ids)
-        ).all()
-        
-        # Create incident points with location data for the same report period
-        # used when this DBSCAN hotspot was generated.
+        # Improvement 5: privacy-preserving grid cells instead of exact coordinates
+        # The public endpoint must NEVER expose exact report coordinates — doing so
+        # allows the exact GPS position of victims, witnesses, and anonymous reporters
+        # to be recovered via repeated API queries (triangulation / correlation).
+        # We aggregate reports into ~111 m grid cells and expose only the cell
+        # centroid + dominant crime type + count per cell.
         time_window_hours = int(hotspot.time_window_hours or 24)
         window_end = _as_utc(hotspot.detected_at) or datetime.now(timezone.utc)
         period_start = window_end - timedelta(hours=time_window_hours)
-        
-        for r in hotspot.reports:
-            reported_at = _as_utc(r.reported_at)
-            if reported_at and period_start <= reported_at <= window_end:
-                # Get location hierarchy using the village lookup utility
-                location_info = get_village_location_info(db, float(r.latitude), float(r.longitude))
-                
-                incident_points.append(
-                    {
-                        "report_id": str(r.report_id),
-                        "incident_type_name": r.incident_type.type_name if r.incident_type else None,
-                        "description": r.description,
-                        "latitude": float(r.latitude),
-                        "longitude": float(r.longitude),
-                        "reported_at": r.reported_at.isoformat() if r.reported_at else None,
-                        "trust_score": None,  # Public endpoint doesn't include ML predictions
-                        "village_name": location_info.get("village_name") if location_info else None,
-                        "cell_name": location_info.get("cell_name") if location_info else None,
-                        "sector_name": location_info.get("sector_name") if location_info else None,
-                    }
-                )
+
+        grid_cells = _build_privacy_grid_cells(
+            hotspot.reports,
+            window_start=period_start,
+            window_end=window_end,
+        )
+        # Expose grid cells as "incident_points" — same field name, safe content
+        incident_points = grid_cells
     
     return HotspotResponse(
         hotspot_id=hotspot.hotspot_id,

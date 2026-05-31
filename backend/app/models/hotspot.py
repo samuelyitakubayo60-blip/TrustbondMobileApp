@@ -48,6 +48,46 @@ class Hotspot(Base):
     llm_provider = Column(String(40), nullable=True)  # groq / gemini / template
     llm_generated_at = Column(DateTime(timezone=True), nullable=True)
 
+    # ── Improvement 1: Corroboration ─────────────────────────────────────────
+    # Require multiple independent reporters before a cluster becomes a hotspot.
+    # unique_reporter_count: distinct submitter IDs contributing to this cluster.
+    # corroboration_score:   0.0–1.0 composite (reporter diversity × trust
+    #                        consistency × temporal spread).
+    unique_reporter_count = Column(Integer, nullable=True)
+    corroboration_score = Column(Numeric(5, 4), nullable=True)
+
+    # ── Improvement 2: Multi-crime zone ──────────────────────────────────────
+    # Post-clustering pass marks hotspots that spatially overlap with hotspots
+    # of a different crime group — composite risk zone for law enforcement.
+    is_multi_crime_zone = Column(Boolean, nullable=True, default=False)
+    multi_crime_groups = Column(Text, nullable=True)    # JSON: ["violent","drug"]
+
+    # ── Improvement 8: Prediction tracking ───────────────────────────────────
+    # Rule-based prediction of next lifecycle state, verified on the following
+    # clustering run so prediction accuracy can be measured over time.
+    predicted_next_state = Column(String(30), nullable=True)
+    predicted_at = Column(DateTime(timezone=True), nullable=True)
+    prediction_verified_at = Column(DateTime(timezone=True), nullable=True)
+    prediction_was_accurate = Column(Boolean, nullable=True)
+
+    # ── Improvement 9: Explainability ────────────────────────────────────────
+    # JSON blob with human-readable reasoning for every numeric score:
+    # severity, trend, lifecycle, confidence, classification.
+    explanation_json = Column(Text, nullable=True)
+
+    # ── Improvement 10: Cache management ─────────────────────────────────────
+    # Incremented whenever any input that invalidates cached LLM text changes
+    # (trust score update, re-verification, cluster composition change).
+    cache_version = Column(Integer, nullable=True, default=0)
+
+    # ── Improvement 11: Abuse/anomaly detection ───────────────────────────────
+    # Coordinated false-report detection.
+    # abuse_flag:    True when anomaly_score exceeds the configured threshold.
+    # anomaly_score: 0.0–1.0 (time-burst, GPS copy-paste, single-reporter
+    #                dominance, uniform trust pattern).
+    abuse_flag = Column(Boolean, nullable=True, default=False)
+    anomaly_score = Column(Numeric(5, 4), nullable=True)
+
     controlled_by = relationship("PoliceUser", foreign_keys=[controlled_by_user_id])
     reports = relationship(
         "Report",

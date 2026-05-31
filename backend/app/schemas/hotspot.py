@@ -52,6 +52,25 @@ class HotspotResponse(BaseModel):
     crime_group: Optional[str] = None
     distance_meters: Optional[float] = None
 
+    # ── Improvement 1: Corroboration ─────────────────────────────────────────
+    unique_reporter_count: Optional[int] = None
+    corroboration_score: Optional[float] = None
+
+    # ── Improvement 2: Multi-crime zone ──────────────────────────────────────
+    is_multi_crime_zone: Optional[bool] = None
+    multi_crime_groups: Optional[List[str]] = None  # decoded from JSON
+
+    # ── Improvement 8: Prediction tracking ───────────────────────────────────
+    predicted_next_state: Optional[str] = None
+    prediction_was_accurate: Optional[bool] = None
+
+    # ── Improvement 9: Explainability ────────────────────────────────────────
+    explanation: Optional[Dict[str, Any]] = None   # decoded from explanation_json
+
+    # ── Improvement 11: Anomaly / abuse detection ────────────────────────────
+    anomaly_score: Optional[float] = None
+    abuse_flag: Optional[bool] = None
+
     class Config:
         from_attributes = True
 

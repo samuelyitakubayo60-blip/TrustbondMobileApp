@@ -752,6 +752,23 @@ def list_hotspots(
                 for e in (r.evidence_files or [])
             ]
 
+        # ── Decode new optional fields ────────────────────────────────────
+        explanation_data: Optional[Dict[str, Any]] = None
+        try:
+            raw_exp = getattr(h, "explanation_json", None)
+            if raw_exp:
+                explanation_data = json.loads(raw_exp)
+        except Exception:
+            pass
+
+        multi_crime_groups_data: Optional[List[str]] = None
+        try:
+            raw_mcg = getattr(h, "multi_crime_groups", None)
+            if raw_mcg:
+                multi_crime_groups_data = json.loads(raw_mcg)
+        except Exception:
+            pass
+
         responses.append(HotspotResponse(
             hotspot_id=h.hotspot_id,
             center_lat=h.center_lat,
@@ -788,6 +805,20 @@ def list_hotspots(
             trend_direction=getattr(h, "trend_direction", None),
             cluster_confidence=float(h.cluster_confidence) if getattr(h, "cluster_confidence", None) else None,
             crime_group=getattr(h, "crime_group", None),
+            # Improvement 1
+            unique_reporter_count=getattr(h, "unique_reporter_count", None),
+            corroboration_score=float(h.corroboration_score) if getattr(h, "corroboration_score", None) else None,
+            # Improvement 2
+            is_multi_crime_zone=getattr(h, "is_multi_crime_zone", None),
+            multi_crime_groups=multi_crime_groups_data,
+            # Improvement 8
+            predicted_next_state=getattr(h, "predicted_next_state", None),
+            prediction_was_accurate=getattr(h, "prediction_was_accurate", None),
+            # Improvement 9
+            explanation=explanation_data,
+            # Improvement 11
+            anomaly_score=float(h.anomaly_score) if getattr(h, "anomaly_score", None) else None,
+            abuse_flag=getattr(h, "abuse_flag", None),
         ))
         
     # Commit any persisted LLM briefings generated during this request.
@@ -1397,4 +1428,209 @@ def deploy_unit_to_hotspot(
         "assigned_unit_name": unit.unit_name,
         "email_sent": meta.get("email_sent", False),
         "email_error": meta.get("email_error"),
+    }
+
+
+# ── Improvement 8: Prediction quality monitoring ─────────────────────────────
+
+@router.get("/{hotspot_id}/prediction-accuracy")
+def get_prediction_accuracy(
+    hotspot_id: int,
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
+):
+    """
+    Return prediction accuracy metrics for a specific hotspot.
+
+    Shows whether the predicted lifecycle state (set at the last clustering
+    run) matched the actual state observed on the following run.
+    Improvement 8: prediction quality monitoring.
+    """
+    h = db.query(Hotspot).filter(Hotspot.hotspot_id == hotspot_id).first()
+    if not h:
+        raise HTTPException(status_code=404, detail="Hotspot not found")
+    return {
+        "hotspot_id": hotspot_id,
+        "current_lifecycle_state": h.lifecycle_state,
+        "predicted_next_state": h.predicted_next_state,
+        "predicted_at": h.predicted_at,
+        "prediction_verified_at": h.prediction_verified_at,
+        "prediction_was_accurate": h.prediction_was_accurate,
+        "trend_direction": h.trend_direction,
+    }
+
+
+@router.get("/prediction-accuracy/summary")
+def get_prediction_accuracy_summary(
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)] = None,
+    days_back: int = Query(30, ge=1, le=365),
+):
+    """
+    District-wide prediction accuracy summary for the past N days.
+
+    Returns counts of accurate vs inaccurate predictions, broken down by
+    lifecycle state and trend direction.  Used by supervisors to monitor
+    model reliability and tune clustering parameters.
+    Improvement 8: prediction quality monitoring.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
+    verified = (
+        db.query(Hotspot)
+        .filter(
+            Hotspot.prediction_verified_at >= cutoff,
+            Hotspot.prediction_was_accurate.isnot(None),
+        )
+        .all()
+    )
+    total = len(verified)
+    accurate = sum(1 for h in verified if h.prediction_was_accurate)
+    accuracy_pct = round(100 * accurate / total, 1) if total > 0 else None
+
+    # Breakdown by predicted state
+    by_state: Dict[str, Dict[str, int]] = {}
+    for h in verified:
+        state = h.predicted_next_state or "unknown"
+        if state not in by_state:
+            by_state[state] = {"correct": 0, "incorrect": 0}
+        if h.prediction_was_accurate:
+            by_state[state]["correct"] += 1
+        else:
+            by_state[state]["incorrect"] += 1
+
+    return {
+        "period_days": days_back,
+        "total_predictions_verified": total,
+        "accurate": accurate,
+        "inaccurate": total - accurate,
+        "accuracy_pct": accuracy_pct,
+        "by_predicted_state": by_state,
+    }
+
+
+# ── Improvement 12: Operational audit trail ───────────────────────────────────
+
+@router.get("/{hotspot_id}/events")
+def get_hotspot_events(
+    hotspot_id: int,
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
+    limit: int = Query(50, ge=1, le=200),
+):
+    """
+    Return the full lifecycle event history for a hotspot.
+
+    Events include: creation, lifecycle transitions (escalated/stabilized/declining),
+    merge, unit deployment, control changes, abuse flags, and advisory invalidations.
+    Improvement 12: operational analytics and audit trail.
+    """
+    h = db.query(Hotspot).filter(Hotspot.hotspot_id == hotspot_id).first()
+    if not h:
+        raise HTTPException(status_code=404, detail="Hotspot not found")
+    try:
+        from app.models.hotspot_event import HotspotEvent
+        events = (
+            db.query(HotspotEvent)
+            .filter(HotspotEvent.hotspot_id == hotspot_id)
+            .order_by(HotspotEvent.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+    except Exception as exc:
+        logger.warning("[hotspot_events] query failed: %s", exc)
+        return {"hotspot_id": hotspot_id, "events": []}
+
+    return {
+        "hotspot_id": hotspot_id,
+        "events": [
+            {
+                "event_id": e.event_id,
+                "event_type": e.event_type,
+                "previous_state": e.previous_state,
+                "new_state": e.new_state,
+                "event_data": json.loads(e.event_data) if e.event_data else None,
+                "created_at": e.created_at.isoformat() if e.created_at else None,
+                "created_by_user_id": e.created_by_user_id,
+                "note": e.note,
+            }
+            for e in events
+        ],
+    }
+
+
+# ── Improvement 11: Abuse flag management ────────────────────────────────────
+
+@router.post("/{hotspot_id}/clear-abuse-flag")
+def clear_hotspot_abuse_flag(
+    hotspot_id: int,
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)] = None,
+):
+    """
+    Manually clear the abuse flag on a hotspot after officer verification.
+
+    Improvement 11: abuse resistance — allows a supervisor to confirm that a
+    flagged cluster represents real incidents (not coordinated false reporting).
+    The event is logged to the audit trail.
+    """
+    h = db.query(Hotspot).filter(Hotspot.hotspot_id == hotspot_id).first()
+    if not h:
+        raise HTTPException(status_code=404, detail="Hotspot not found")
+    h.abuse_flag = False
+    from app.core.hotspot_auto import _record_hotspot_event
+    _record_hotspot_event(
+        db,
+        hotspot_id,
+        "abuse_cleared",
+        new_state=h.lifecycle_state,
+        event_data={"cleared_by": current_user.police_user_id},
+        note=f"Abuse flag cleared by {current_user.email or current_user.police_user_id}",
+        created_by_user_id=current_user.police_user_id,
+    )
+    db.commit()
+    return {"message": f"Abuse flag cleared for hotspot #{hotspot_id}.", "hotspot_id": hotspot_id}
+
+
+# ── Improvement 10: Manual cache invalidation ─────────────────────────────────
+
+@router.post("/{hotspot_id}/invalidate-advisory")
+def invalidate_hotspot_advisory(
+    hotspot_id: int,
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_admin_or_supervisor)] = None,
+):
+    """
+    Invalidate the cached LLM advisory for a specific hotspot and force
+    regeneration on the next request.
+
+    Use when: a report's trust score changed, verification status changed,
+    evidence was added or removed, or the advisory text is factually incorrect.
+    Improvement 10: targeted cache invalidation.
+    """
+    h = db.query(Hotspot).filter(Hotspot.hotspot_id == hotspot_id).first()
+    if not h:
+        raise HTTPException(status_code=404, detail="Hotspot not found")
+
+    h.llm_citizen_advisory = None
+    h.llm_generated_at = None
+    h.cache_version = (h.cache_version or 0) + 1
+
+    from app.core.llm_recommendations import clear_citizen_advisory_cache
+    clear_citizen_advisory_cache(hotspot_id=hotspot_id)
+
+    from app.core.hotspot_auto import _record_hotspot_event
+    _record_hotspot_event(
+        db,
+        hotspot_id,
+        "advisory_updated",
+        new_state=h.lifecycle_state,
+        event_data={"invalidated_by": current_user.police_user_id, "cache_version": h.cache_version},
+        note="Advisory cache manually invalidated",
+        created_by_user_id=current_user.police_user_id,
+    )
+    db.commit()
+    return {
+        "message": f"Advisory cache invalidated for hotspot #{hotspot_id}. Will regenerate on next request.",
+        "hotspot_id": hotspot_id,
+        "cache_version": h.cache_version,
     }
