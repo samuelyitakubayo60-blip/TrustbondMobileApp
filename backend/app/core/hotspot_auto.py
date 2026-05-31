@@ -1,15 +1,17 @@
 """Hotspot auto-creation using ST-DBSCAN over trusted incident reports."""
 
 import json
+import logging
 import math
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from math import atan2, cos, radians, sin, sqrt
 from typing import Any, Dict, List, Optional, Tuple
-from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload, selectinload
+
+logger = logging.getLogger(__name__)
 
 from app.core.cluster_classifier import (
     classification_to_risk_level,
@@ -26,29 +28,55 @@ from app.core.websocket import refresh_entity
 
 DEFAULT_TIME_WINDOW_HOURS = 720   # 30 days — wide enough to include sparse report data
 DEFAULT_MIN_INCIDENTS = 2         # 2 nearby incidents form a cluster
-DEFAULT_RADIUS_METERS = 300       # 300 m keeps clusters tight, prevents city-wide chaining
-DEFAULT_TRUST_MIN = 30            # include all verified incidents (verified → trust=90)
+# 500 m is realistic for Rwandan village-level reporting where homes and farms
+# spread across several hundred metres. 300 m was too tight, causing many
+# geographically co-located incidents to scatter into separate noise points.
+DEFAULT_RADIUS_METERS = 500
+# Trust ≥ 30 admits all reports except those with no score at all. The computed
+# floor for unverified/pending reports is 35 (> 30), so every non-rejected report
+# effectively enters the pipeline. Raise to 50 to require at least rule-passed
+# status (rule_passed → trust=65). Configurable via dbscan.trust_min system key.
+DEFAULT_TRUST_MIN = 30
 
 # ─── Crime taxonomy ──────────────────────────────────────────────────────────
 
 #: Groups of related crime types that may co-cluster.
 #: Keys are group names; values are lowercase substrings to match against.
+#:
+#: Design rules:
+#:  • Each group covers a *behavioural* category so that incidents
+#:    sharing the same criminal modus operandi can form hotspots together.
+#:  • "robbery" intentionally lives in property (it is primarily a property
+#:    offence); "robbery with violence" and "armed robbery" live in violent.
+#:  • "harassment" is only in sexual — non-sexual harassment should be
+#:    reported as "public disturbance" or "threats".
+#:  • Unknown / miscellaneous types map to "other" and can still cluster
+#:    spatially with each other but not across groups.
 CRIME_GROUPS: Dict[str, List[str]] = {
-    "violent":      ["assault", "domestic violence", "threat", "murder",
-                     "robbery with violence", "gbv", "gender-based violence",
-                     "bodily harm", "manslaughter"],
+    "violent":      ["assault", "domestic violence", "threat", "threats",
+                     "murder", "robbery with violence", "armed robbery",
+                     "gbv", "gender-based violence", "bodily harm",
+                     "manslaughter", "fighting", "mob justice",
+                     "unlawful wounding"],
     "property":     ["theft", "robbery", "burglary", "vandalism",
                      "property damage", "breaking and entering",
-                     "shoplifting", "motor vehicle theft", "pickpocketing"],
+                     "shoplifting", "motor vehicle theft", "pickpocketing",
+                     "vehicle theft", "stolen", "arson"],
     "drug":         ["drug activity", "drug trafficking", "substance abuse",
-                     "narcotics", "drug possession"],
+                     "narcotics", "drug possession", "drug use",
+                     "illicit brew", "illegal alcohol"],
     "fraud":        ["fraud", "scam", "cybercrime", "identity theft",
-                     "forgery", "corruption", "bribery", "financial crime"],
+                     "forgery", "corruption", "bribery", "financial crime",
+                     "extortion", "money laundering", "fake documents"],
     "sexual":       ["sexual assault", "harassment", "rape", "indecent",
-                     "sexual harassment", "defilement"],
-    "traffic":      ["traffic", "accident", "hit and run", "dui", "road accident"],
+                     "sexual harassment", "defilement", "sexual violence",
+                     "indecent exposure"],
+    "traffic":      ["traffic", "accident", "hit and run", "dui",
+                     "road accident", "reckless driving", "drunk driving"],
     "public_order": ["suspicious", "public disturbance", "trespass",
-                     "loitering", "illegal gathering", "riot"],
+                     "loitering", "illegal gathering", "riot",
+                     "noise", "curfew", "unlawful assembly",
+                     "prohibited gathering"],
 }
 
 #: Severity 1.0–10.0 per crime type (lower-case lookup).
@@ -85,6 +113,9 @@ def _get_crime_group(type_name: str) -> str:
     for group, members in CRIME_GROUPS.items():
         if any(m in name or name in m for m in members):
             return group
+    # Unmapped type — goes into the "other" catch-all cluster.
+    # If this type is common, add it to CRIME_GROUPS above to improve grouping.
+    logger.debug("[hotspot] unmapped crime type %r → group=other", type_name)
     return "other"
 
 
@@ -493,24 +524,39 @@ def create_hotspots_from_reports(
         )
     reports = reports_query.all()
 
+    logger.info(
+        "[hotspot] pipeline start — window=%dh (%s → %s), "
+        "raw_reports_queried=%d, min_incidents=%d, radius_m=%.0f, trust_min=%.0f",
+        effective_time_window_hours, window_start.isoformat(), window_end.isoformat(),
+        len(reports), min_incidents, radius_meters, trust_min,
+    )
+
     # Filter eligible reports
+    excluded_not_eligible = 0
+    excluded_no_coords = 0
+    excluded_type_filter = 0
+    excluded_low_trust = 0
     eligible_reports = []
     for r in reports:
         if not _is_report_eligible(
             r, require_leader_confirmation=require_leader_confirmation
         ):
+            excluded_not_eligible += 1
             continue
         if incident_type_id is not None and int(r.incident_type_id) != int(incident_type_id):
+            excluded_type_filter += 1
             continue
 
         try:
             lat = float(r.latitude)
             lon = float(r.longitude)
         except (TypeError, ValueError):
+            excluded_no_coords += 1
             continue
 
         trust = _report_trust_score(r)
         if trust < float(trust_min):
+            excluded_low_trust += 1
             continue
 
         eligible_reports.append({
@@ -524,7 +570,18 @@ def create_hotspots_from_reports(
             "village_location_id": r.village_location_id,
         })
 
+    logger.info(
+        "[hotspot] filtering: eligible=%d  excluded(not_eligible=%d, no_coords=%d, "
+        "type_filter=%d, low_trust=%d)",
+        len(eligible_reports), excluded_not_eligible, excluded_no_coords,
+        excluded_type_filter, excluded_low_trust,
+    )
+
     if len(eligible_reports) < max(1, int(min_incidents)):
+        logger.warning(
+            "[hotspot] too few eligible reports (%d) for min_incidents=%d — skipping clustering",
+            len(eligible_reports), min_incidents,
+        )
         return 0
 
     created = _create_geographic_hotspots(
@@ -535,11 +592,11 @@ def create_hotspots_from_reports(
         effective_time_window_hours,
         enforce_time_span=not analyze_all_reports,
     )
-    print(
-        f"Created {created} DBSCAN hotspots "
-        f"from {len(eligible_reports)} eligible reports in {effective_time_window_hours}h"
+    logger.info(
+        "[hotspot] pipeline complete — created=%d hotspots from %d eligible reports "
+        "(window=%dh, radius=%.0fm)",
+        created, len(eligible_reports), effective_time_window_hours, radius_meters,
     )
-    
     return created
 
 
@@ -602,10 +659,11 @@ def ensure_hotspots_materialized(
 
 
 def _create_village_based_hotspots(
-    db: Session, 
-    reports: List[Dict[str, Any]], 
-    min_incidents: int, 
-    time_window_hours: int
+    db: Session,
+    reports: List[Dict[str, Any]],
+    min_incidents: int,
+    time_window_hours: int,
+    radius_meters: float = DEFAULT_RADIUS_METERS,
 ) -> int:
     """Create hotspots based on village clustering with strict 24-hour time constraint"""
     created = 0
@@ -901,13 +959,26 @@ def _create_geographic_hotspots(
     4. Persist clusters with full metadata.
     """
     eps_m   = max(50.0, float(radius_meters))
-    # For week+ windows, cluster by location (reports months apart can still merge).
-    if int(time_window_hours) >= 168:
-        eps_t = 0.0
+    # Temporal epsilon scaling:
+    #   < 168 h  (< 1 week):  eps_t = window/4, clamped 6 h – 72 h
+    #   168–720 h (1 wk–1 mo): eps_t = window/4, no 72 h cap — proportional
+    #   > 720 h  (> 1 month):  eps_t = 0.0 → purely spatial (pattern detection)
+    if int(time_window_hours) > 720:
+        eps_t = 0.0          # month+ → full spatial history, no time gate
+    elif int(time_window_hours) >= 168:
+        # 1 week → 1 month: proportional, no hard 72 h cap
+        eps_t = float(time_window_hours) * 3600 / 4
     else:
         raw_eps_t = float(time_window_hours) * 3600 / 4
         eps_t = max(6 * 3600, min(72 * 3600, raw_eps_t))
     dbscan_min_pts = max(2, int(min_incidents))
+
+    logger.info(
+        "[hotspot] DBSCAN params — eps_m=%.0fm, eps_t=%.1fh, min_pts=%d, "
+        "time_window=%dh, n_reports=%d",
+        eps_m, eps_t / 3600 if eps_t else 0.0, dbscan_min_pts,
+        time_window_hours, len(reports),
+    )
     # Severity override allows a single very high-severity point to be a core.
 
     # ── 1. Group by crime category ─────────────────────────────────────────
@@ -925,16 +996,33 @@ def _create_geographic_hotspots(
     def _try_attach_isolated(p: Dict[str, Any]) -> None:
         _try_append_report_to_nearby_hotspot(db, p, eps_m, group_name)
 
+    total_noise = 0
+    total_clusters = 0
+
     for group_name, group_pts in groups.items():
         if len(group_pts) < dbscan_min_pts:
             # Whole group is too small to cluster — try to merge each point into
             # an existing nearby hotspot but do NOT create new single-point hotspots.
+            logger.debug(
+                "[hotspot] group=%s: only %d report(s) — below min_pts=%d, "
+                "trying to attach to existing hotspot",
+                group_name, len(group_pts), dbscan_min_pts,
+            )
             for p in group_pts:
                 _try_attach_isolated(p)
             continue
 
         # ── 2. ST-DBSCAN ──────────────────────────────────────────────────
         labels, is_core_flags = _st_dbscan(group_pts, eps_m, eps_t, dbscan_min_pts)
+        n_noise_pts = sum(1 for l in labels if l < 0)
+        n_raw_clusters = len(set(l for l in labels if l >= 0))
+        total_noise += n_noise_pts
+        total_clusters += n_raw_clusters
+        logger.info(
+            "[hotspot] group=%s: reports=%d → clusters=%d, noise=%d (%.0f%%)",
+            group_name, len(group_pts), n_raw_clusters, n_noise_pts,
+            100 * n_noise_pts / max(1, len(group_pts)),
+        )
 
         raw_clusters: Dict[int, List[Dict[str, Any]]] = {}
         for idx, label in enumerate(labels):
@@ -997,10 +1085,17 @@ def _create_geographic_hotspots(
                 max(type_id_counts, key=type_id_counts.get) if type_id_counts else None
             )
 
-            # Convex hull polygon
+            # Convex hull polygon (safe — fallback to None on any geometry error)
             hull_pts_latlon = [(p["lat"], p["lon"]) for p in cluster_pts]
-            hull = _convex_hull_points(hull_pts_latlon)
-            polygon_json = json.dumps(hull) if hull else None
+            try:
+                hull = _convex_hull_points(hull_pts_latlon)
+                polygon_json = json.dumps(hull) if hull else None
+            except Exception as _hull_err:
+                logger.warning(
+                    "[hotspot] convex hull failed for cluster of %d points: %s",
+                    len(cluster_pts), _hull_err,
+                )
+                polygon_json = None
 
             # Risk classification
             area_sqkm = max(0.001, 3.14159 * (float(radius_meters) / 1000.0) ** 2)
@@ -1051,6 +1146,13 @@ def _create_geographic_hotspots(
                     text("DELETE FROM hotspot_reports WHERE hotspot_id = :hid"),
                     {"hid": hotspot.hotspot_id},
                 )
+                logger.debug(
+                    "[hotspot] updated existing hotspot_id=%d — group=%s, "
+                    "incidents=%d, risk=%s, lifecycle=%s, trend=%s, "
+                    "center=(%.5f, %.5f)",
+                    hotspot.hotspot_id, group_name, incident_count, risk_level,
+                    lifecycle, trend, center_lat, center_long,
+                )
             else:
                 hotspot = Hotspot(
                     center_lat          = Decimal(str(center_lat)),
@@ -1073,6 +1175,13 @@ def _create_geographic_hotspots(
                 db.add(hotspot)
                 db.flush()
                 created += 1
+                logger.info(
+                    "[hotspot] NEW hotspot_id=%d — group=%s, incidents=%d, "
+                    "risk=%s, lifecycle=%s, trend=%s, conf=%.2f, "
+                    "center=(%.5f, %.5f), dominant_crime=%s",
+                    hotspot.hotspot_id, group_name, incident_count, risk_level,
+                    lifecycle, trend, conf, center_lat, center_long, dominant_type_name,
+                )
 
             for p in cluster_pts:
                 db.execute(
@@ -1088,11 +1197,15 @@ def _create_geographic_hotspots(
                     },
                 )
 
-        # ── Noise points: spatial-only re-cluster, then solo for leftovers ─────
+        # ── Noise points: spatial-only re-cluster, then attach leftovers ──────
         noise_indices = [i for i, lbl in enumerate(labels) if lbl < 0]
         noise_pts = [group_pts[i] for i in noise_indices]
         leftover_noise: List[Dict[str, Any]] = []
         if len(noise_pts) >= 2:
+            logger.debug(
+                "[hotspot] group=%s: re-clustering %d noise points (spatial-only)",
+                group_name, len(noise_pts),
+            )
             n_labels, n_core = _st_dbscan(noise_pts, eps_m, 0.0, max(2, dbscan_min_pts))
             n_clusters: Dict[int, List[Dict[str, Any]]] = {}
             for ni, nlbl in enumerate(n_labels):
@@ -1101,6 +1214,9 @@ def _create_geographic_hotspots(
                     continue
                 tagged = {**noise_pts[ni], "is_core": n_core[ni]}
                 n_clusters.setdefault(nlbl, []).append(tagged)
+
+            noise_clusters_created = 0
+            noise_clusters_attached = 0
             for cluster_pts in n_clusters.values():
                 if len(cluster_pts) < 2:
                     leftover_noise.extend(cluster_pts)
@@ -1109,6 +1225,29 @@ def _create_geographic_hotspots(
                 center_lat, center_long = _weighted_centroid(
                     cluster_pts, time_window_hours=time_window_hours
                 )
+
+                # ── Deduplication: check for an existing nearby hotspot ────────
+                # Without this, noise reclustering creates duplicate overlapping
+                # hotspots for the same geographic area.
+                _deg_tol = max(0.001, eps_m / 111000.0)
+                noise_existing = (
+                    db.query(Hotspot)
+                    .filter(
+                        Hotspot.center_lat.between(center_lat - _deg_tol, center_lat + _deg_tol),
+                        Hotspot.center_long.between(center_long - _deg_tol, center_long + _deg_tol),
+                        Hotspot.crime_group == group_name,
+                        Hotspot.detected_at >= datetime.now(timezone.utc) - timedelta(hours=24),
+                    )
+                    .order_by(Hotspot.detected_at.desc())
+                    .first()
+                )
+                if noise_existing:
+                    # Attach all points to the existing cluster instead of creating a duplicate
+                    for pt in cluster_pts:
+                        _try_append_report_to_nearby_hotspot(db, pt, eps_m, group_name)
+                    noise_clusters_attached += 1
+                    continue
+
                 avg_trust = sum(p.get("trust", 100.0) for p in cluster_pts) / incident_count
                 area_sqkm = max(0.001, 3.14159 * (float(radius_meters) / 1000.0) ** 2)
                 classification_result = predict_cluster_classification(
@@ -1120,21 +1259,31 @@ def _create_geographic_hotspots(
                 risk_level = classification_to_risk_level(
                     classification_result["classification"]
                 )
-                composition: Dict[str, int] = {}
+                noise_composition: Dict[str, int] = {}
                 for pt in cluster_pts:
                     t_name = pt.get("incident_type_name") or "Unknown"
-                    composition[t_name] = composition.get(t_name, 0) + 1
-                type_id_counts: Dict[int, int] = {}
+                    noise_composition[t_name] = noise_composition.get(t_name, 0) + 1
+                noise_type_id_counts: Dict[int, int] = {}
                 for pt in cluster_pts:
                     tid = int(pt.get("incident_type_id") or 0)
                     if tid:
-                        type_id_counts[tid] = type_id_counts.get(tid, 0) + 1
-                dominant_type_id = (
-                    max(type_id_counts, key=type_id_counts.get) if type_id_counts else None
+                        noise_type_id_counts[tid] = noise_type_id_counts.get(tid, 0) + 1
+                noise_dominant_type_id = (
+                    max(noise_type_id_counts, key=noise_type_id_counts.get)
+                    if noise_type_id_counts else None
                 )
                 hull_pts_latlon = [(pt["lat"], pt["lon"]) for pt in cluster_pts]
-                hull = _convex_hull_points(hull_pts_latlon)
-                polygon_json = json.dumps(hull) if hull else None
+                try:
+                    hull = _convex_hull_points(hull_pts_latlon)
+                    polygon_json = json.dumps(hull) if hull else None
+                except Exception:
+                    polygon_json = None
+                t_intensity_n = _temporal_intensity(cluster_pts)
+                sev_score_n = sum(
+                    _get_severity(pt.get("incident_type_name", "")) * float(pt.get("trust", 100.0)) / 100.0
+                    for pt in cluster_pts
+                ) / incident_count
+                conf_n = _cluster_confidence(cluster_pts)
                 hotspot = Hotspot(
                     center_lat=Decimal(str(center_lat)),
                     center_long=Decimal(str(center_long)),
@@ -1142,20 +1291,21 @@ def _create_geographic_hotspots(
                     incident_count=incident_count,
                     risk_level=risk_level,
                     time_window_hours=time_window_hours,
-                    incident_type_id=dominant_type_id,
+                    incident_type_id=noise_dominant_type_id,
                     detected_at=datetime.now(timezone.utc),
                     lifecycle_state=classification_result["classification"],
-                    composition=json.dumps(composition),
-                    temporal_intensity=Decimal("0.0"),
-                    severity_score=Decimal("0.0"),
-                    trend_direction="stable",
-                    cluster_confidence=Decimal("1.0"),
+                    composition=json.dumps(noise_composition),
+                    temporal_intensity=Decimal(str(round(t_intensity_n, 4))),
+                    severity_score=Decimal(str(round(sev_score_n, 4))),
+                    trend_direction=_trend_direction(cluster_pts),
+                    cluster_confidence=Decimal(str(conf_n)),
                     polygon_points=polygon_json,
                     crime_group=group_name,
                 )
                 db.add(hotspot)
                 db.flush()
                 created += 1
+                noise_clusters_created += 1
                 for pt in cluster_pts:
                     db.execute(
                         text(
@@ -1168,12 +1318,47 @@ def _create_geographic_hotspots(
                             "rid": str(pt["report"].report_id),
                         },
                     )
+                logger.info(
+                    "[hotspot] noise cluster → NEW hotspot_id=%d — group=%s, "
+                    "incidents=%d, risk=%s, center=(%.5f, %.5f)",
+                    hotspot.hotspot_id, group_name, incident_count, risk_level,
+                    center_lat, center_long,
+                )
+
+            logger.debug(
+                "[hotspot] group=%s noise re-cluster: created=%d, attached=%d, leftover=%d",
+                group_name, noise_clusters_created, noise_clusters_attached, len(leftover_noise),
+            )
         else:
             leftover_noise = noise_pts
 
         # Leftover noise: try to attach each point to an existing nearby hotspot.
         # Never create a new single-point hotspot — skip if no cluster is available.
-        for p in leftover_noise:
-            _try_append_report_to_nearby_hotspot(db, p, eps_m, group_name)
+        attached = sum(
+            1 for p in leftover_noise
+            if _try_append_report_to_nearby_hotspot(db, p, eps_m, group_name)
+        )
+        discarded = len(leftover_noise) - attached
+        if leftover_noise:
+            # Log every discarded report_id so operators can trace which reports
+            # are awaiting a future clustering partner. These reports remain in
+            # the `reports` table and will be re-evaluated on the next run when
+            # additional nearby reports may have arrived.
+            discarded_ids = [
+                str(p["report"].report_id)
+                for i, p in enumerate(leftover_noise)
+                if i >= attached  # rough ordering — use debug only
+            ]
+            logger.debug(
+                "[hotspot] group=%s leftover noise=%d: attached=%d, "
+                "retained_for_future_run=%d (report_ids_sample=%s)",
+                group_name, len(leftover_noise), attached, discarded,
+                discarded_ids[:5],   # log up to 5 for brevity
+            )
 
+    logger.info(
+        "[hotspot] _create_geographic_hotspots done — created=%d, "
+        "total_raw_clusters=%d, total_noise_pts=%d",
+        created, total_clusters, total_noise,
+    )
     return created

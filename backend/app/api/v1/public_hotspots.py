@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional, Tuple
 from datetime import datetime, timezone, timedelta
 from math import atan2, cos, radians, sin, sqrt
@@ -11,6 +12,8 @@ from app.models.report import Report
 from app.schemas.hotspot import HotspotResponse
 from app.core.village_lookup import get_village_location_info
 from app.core.llm_recommendations import generate_citizen_advisory
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/public/hotspots", tags=["public"])
 
@@ -63,10 +66,21 @@ def list_public_hotspots(
     Returns recent hotspots with center coordinates, radius, incident count,
     risk level, and incident_type_name for labeling.
     """
-    # Respect the caller's time window. Default to 24 h so the map still
-    # shows the most-recent clusters when no filter is selected.
+    # `time_window_hours` tells us which reporting period the caller is interested
+    # in, but hotspot clustering runs periodically (not in real-time).  Using the
+    # requested window as a hard detection-time cutoff would blank the map between
+    # clustering runs.  Instead we always look back at least 7 days so the map
+    # continues to show the most-recently-detected clusters even when the user
+    # selects a short reporting window (e.g. "last 24 h").
     effective_hours = int(time_window_hours) if time_window_hours is not None else 24
-    period_cutoff = datetime.now(timezone.utc) - timedelta(hours=effective_hours)
+    lookback_hours = max(effective_hours, 7 * 24)   # never blank the map between runs
+    period_cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+
+    logger.info(
+        "[public_hotspots] request — time_window=%dh, lookback=%dh, "
+        "lat=%s, lon=%s, radius_m=%d",
+        effective_hours, lookback_hours, lat, lon, radius_meters,
+    )
 
     query = db.query(Hotspot).options(joinedload(Hotspot.incident_type))
     query = query.filter(Hotspot.detected_at >= period_cutoff)
@@ -166,9 +180,16 @@ def list_public_hotspots(
             for h in hotspots_needing_advisory:
                 db.add(h)
             db.commit()
-        except Exception:
+        except Exception as _e:
+            logger.warning(
+                "[public_hotspots] advisory persist failed (will regenerate next request): %s", _e
+            )
             db.rollback()
 
+    logger.info(
+        "[public_hotspots] returning %d hotspot(s) (advisories generated=%d)",
+        len(responses), len(hotspots_needing_advisory),
+    )
     return responses
 
 

@@ -403,6 +403,7 @@ def list_hotspots(
     )
     llm_skip_logged = False
 
+    skipped_no_reports = 0
     for h in hotspots:
         # Include all clustered reports; some legacy rows may miss village linkage
         # but still have valid coordinates required for map/hotspot analytics.
@@ -415,6 +416,20 @@ def list_hotspots(
                 and _as_utc(r.reported_at) >= report_window_cutoff
             ]
         if not reports_in_cluster:
+            # The hotspot exists but none of its linked reports fall within the
+            # requested time window.  This is expected when a narrow window
+            # (e.g. "last 24 h") is applied to a cluster built from 30-day data.
+            skipped_no_reports += 1
+            logger.debug(
+                "Hotspot hotspot_id=%d hidden — all %d linked report(s) are outside "
+                "report_window_cutoff=%s (time_period=%s, hours_back=%s). "
+                "Widen the time period to see this cluster.",
+                h.hotspot_id,
+                len(list(getattr(h, "reports", None) or [])),
+                report_window_cutoff,
+                time_period,
+                hours_back,
+            )
             continue
 
         # Load is_core flag per report from the junction table
@@ -782,6 +797,17 @@ def list_hotspots(
         logger.exception("Hotspot LLM persistence commit failed")
         db.rollback()
 
+    if skipped_no_reports:
+        logger.info(
+            "HOTSPOTS list: %d hotspot(s) hidden because all linked reports fall outside "
+            "the requested time window (time_period=%s, hours_back=%s). "
+            "Use a wider time window to include them.",
+            skipped_no_reports, time_period, hours_back,
+        )
+    logger.info(
+        "HOTSPOTS list: returning %d hotspot(s) (queried=%d, skipped_empty=%d)",
+        len(responses), len(hotspots), skipped_no_reports,
+    )
     return responses
 
 
@@ -989,21 +1015,41 @@ def recompute_hotspots(
         window_start = window_end - timedelta(hours=eff_tw)
 
     # Clear existing hotspots + link table after parameters have been validated.
-    db.execute(hotspot_reports_table.delete())
-    db.query(Hotspot).delete()
-    db.commit()
+    # Both deletes are inside a single transaction (committed together) so we
+    # never end up with orphaned hotspot_reports rows if the second delete fails.
+    try:
+        db.execute(hotspot_reports_table.delete())
+        db.query(Hotspot).delete()
+        db.commit()
+    except Exception as _del_err:
+        db.rollback()
+        logger.exception("Recompute: failed to clear existing hotspots: %s", _del_err)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not clear existing hotspots before recompute.",
+        )
 
-    created = create_hotspots_from_reports(
-        db,
-        time_window_hours=eff_tw,
-        min_incidents=eff_min,
-        radius_meters=eff_rad,
-        trust_min=eff_trust,
-        incident_type_id=eff_incident_type_id,
-        analyze_all_reports=False,
-        start_time=window_start,
-        end_time=window_end,
-    )
+    try:
+        created = create_hotspots_from_reports(
+            db,
+            time_window_hours=eff_tw,
+            min_incidents=eff_min,
+            radius_meters=eff_rad,
+            trust_min=eff_trust,
+            incident_type_id=eff_incident_type_id,
+            analyze_all_reports=False,
+            start_time=window_start,
+            end_time=window_end,
+        )
+        db.commit()   # commit all the new hotspots
+    except Exception as _create_err:
+        db.rollback()
+        logger.exception("Recompute: clustering failed after clearing hotspots: %s", _create_err)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Hotspot clustering failed. Existing hotspots have been cleared — "
+                   "run recompute again to rebuild.",
+        )
 
     # New clusters → stale recommendations no longer apply; clear cache so the
     # next Safety Map load generates fresh LLM analysis for each new cluster.

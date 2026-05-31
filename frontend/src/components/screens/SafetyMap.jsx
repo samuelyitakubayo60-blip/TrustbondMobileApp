@@ -38,12 +38,16 @@ const applyReportTimeWindow = (hotspots, filterHours) => {
         const t = new Date(p.reported_at).getTime();
         return Number.isFinite(t) && t >= cutoff;
       });
-      const count =
-        pts.length > 0 ? pts.length : Number(h.incident_count) || 0;
+      // IMPORTANT: keep the original DB incident_count, never override it with
+      // the filtered point count.  The stored count reflects the actual cluster
+      // size used by DBSCAN; reducing it here causes valid 2-report clusters to
+      // appear as single-point clusters and then be silently hidden by the
+      // showSinglesOnMap filter.  We only swap out incident_points so the detail
+      // panel shows the time-relevant subset, not the full cluster history.
       return {
         ...h,
         incident_points: pts.length > 0 ? pts : rawPts,
-        incident_count: count,
+        // incident_count is intentionally NOT overwritten here.
       };
     })
     .filter((h) => (h.incident_count || 0) > 0);
@@ -588,9 +592,16 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
     [filteredHotspots, clusterDefaults.radius_meters],
   );
 
+  // Count genuine single-report clusters using the raw API value stored in
+  // historicalHotspots, not the potentially time-filtered plottedHotspots.
+  // Using plottedHotspots here would inflate the count whenever the client-side
+  // time filter reduces a valid 2-report cluster's displayed point count,
+  // triggering the auto-hide and removing real hotspots from the map.
   const singleClusterCount = useMemo(
-    () => plottedHotspots.filter((h) => (Number(h.incident_count) || 0) < 2).length,
-    [plottedHotspots],
+    () =>
+      historicalHotspots.filter((h) => (Number(h.incident_count) || 0) < 2)
+        .length,
+    [historicalHotspots],
   );
 
   useEffect(() => {

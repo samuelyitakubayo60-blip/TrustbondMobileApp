@@ -11,7 +11,11 @@ class HotspotPrefsService extends ChangeNotifier {
   static HotspotPrefsService get instance => _instance;
   HotspotPrefsService._();
 
-  int _timeWindowHours = 24;
+  // Default to 1 week (168 h) so the map shows hotspots built from a meaningful
+  // dataset even if the last clustering run was >24 h ago.  The backend public
+  // API now uses a 7-day lookback floor anyway, but a wider default here ensures
+  // the request window matches what the clustering system actually produces.
+  int _timeWindowHours = 168;
 
   int get timeWindowHours => _timeWindowHours;
 

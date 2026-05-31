@@ -311,16 +311,14 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
       );
       debugPrint('Received ${hotspots.length} hotspots from service');
 
-      final mapData = _mapData;
       final radius = _nearbyHotspotRadiusMeters.toDouble();
-      var filtered = mapData == null
-          ? hotspots
-          : hotspots.where((h) {
-              final village = mapData.findVillage(h.centerLat, h.centerLong);
-              return village != null;
-            }).toList();
-
-      filtered = filtered
+      // Do NOT filter by village polygon membership — the weighted centroid
+      // algorithm shifts hotspot centers slightly, so a valid hotspot may fall
+      // just outside any single village polygon even though its contributing
+      // reports are firmly inside Musanze District.  The backend already filters
+      // by distance from the user's GPS coordinates; apply only that constraint
+      // here to avoid silently discarding real hotspots.
+      final filtered = hotspots
           .where((h) => _distanceToHotspotMeters(h) <= radius)
           .toList()
         ..sort(
