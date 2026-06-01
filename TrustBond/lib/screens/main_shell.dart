@@ -2,14 +2,11 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../config/theme.dart';
 import '../services/api_service.dart';
 import '../services/device_service.dart';
 import '../services/offline_report_queue_service.dart';
 import '../services/proximity_alert_service.dart';
-import '../services/storage_service.dart';
 import 'home_screen.dart';
 import 'safety_map_screen.dart';
 import 'report_step1_screen.dart';
@@ -33,8 +30,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   final _queueService = OfflineReportQueueService();
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   bool _wasOffline = false;
-  bool _biometricLocked = false;
-  final _storageService = StorageService();
 
   @override
   void initState() {
@@ -42,7 +37,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _currentIndex = widget.initialIndex;
     _bootstrap();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _applyBiometricLockIfNeeded());
   }
 
   Future<void> _bootstrap() async {
@@ -97,39 +91,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     });
   }
 
-  Future<bool> _isBiometricUnlockEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('biometric_auth') ?? false;
-  }
-
-  Future<void> _applyBiometricLockIfNeeded() async {
-    if (!await _isBiometricUnlockEnabled()) return;
-    if (!mounted) return;
-    setState(() => _biometricLocked = true);
-    final ok = await _storageService.authenticateWithBiometrics(
-      reason: 'Unlock TrustBond',
-    );
-    if (!mounted) return;
-    setState(() => _biometricLocked = !ok);
-  }
-
-  Future<void> _unlockWithBiometrics() async {
-    final ok = await _storageService.authenticateWithBiometrics(
-      reason: 'Unlock TrustBond',
-    );
-    if (!mounted) return;
-    if (ok) {
-      setState(() => _biometricLocked = false);
-    }
-  }
-
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_queueService.scheduleSync(reason: 'resume'));
-      unawaited(_applyBiometricLockIfNeeded());
-      // Re-check proximity on resume so alerts fire immediately when user
-      // returns to the app rather than waiting for the next 60-second poll.
+      // BiometricGate (root wrapper) handles app lock; do not prompt again here.
       unawaited(ProximityAlertService().resume());
     }
   }
@@ -167,73 +133,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     ];
 
     return Scaffold(
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: _currentIndex > 2 ? _currentIndex - 1 : _currentIndex,
-            children: pages,
-          ),
-          if (_biometricLocked) _buildBiometricLockOverlay(),
-        ],
+      body: IndexedStack(
+        index: _currentIndex > 2 ? _currentIndex - 1 : _currentIndex,
+        children: pages,
       ),
-      bottomNavigationBar: _biometricLocked ? null : _buildBottomNav(),
-    );
-  }
-
-  Widget _buildBiometricLockOverlay() {
-    return Positioned.fill(
-      child: Material(
-        color: const Color(0xF0080C18),
-        child: SafeArea(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.lock_rounded,
-                    size: 64,
-                    color: AppColors.accent,
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'TrustBond is locked',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Unlock to continue',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white.withValues(alpha: 0.7),
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  FilledButton.icon(
-                    onPressed: _unlockWithBiometrics,
-                    icon: const Icon(Icons.lock_open_rounded),
-                    label: const Text('Unlock'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 28,
-                        vertical: 14,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+      bottomNavigationBar: _buildBottomNav(),
     );
   }
 

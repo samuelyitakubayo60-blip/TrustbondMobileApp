@@ -41,6 +41,18 @@ from app.core.llm_recommendations import (
 router = APIRouter(prefix="/hotspots", tags=["hotspots"])
 
 
+def _safe_json_dict(raw: Any) -> Optional[Dict[str, Any]]:
+    if not raw:
+        return None
+    if isinstance(raw, dict):
+        return raw
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        return None
+
+
 def _deployment_fields_for_hotspot(db: Session, h: Hotspot) -> dict:
     from app.models.special_assignment_unit import SpecialAssignmentUnit
 
@@ -470,19 +482,19 @@ def list_hotspots(
         area_sqkm = max(0.001, 3.14159 * (radius_m / 1000.0) ** 2)
         cluster_density = incident_count / area_sqkm
 
-        time_window_hours = int(getattr(h, "time_window_hours", 24) or 24)
+        cluster_time_window_hours = int(getattr(h, "time_window_hours", 24) or 24)
 
         hotspot_score = _dbscan_hotspot_score(
             incident_count=incident_count,
             avg_trust=avg_pre_trust,
             cluster_density=cluster_density,
-            time_window_hours=time_window_hours,
+            time_window_hours=cluster_time_window_hours,
         )
         classification_result = predict_cluster_classification(
             incident_count=incident_count,
             avg_trust=avg_pre_trust,
             cluster_density=cluster_density,
-            time_window_hours=time_window_hours,
+            time_window_hours=cluster_time_window_hours,
         )
         hotspot_score = float(classification_result["hotspot_score"])
         classification = str(classification_result["classification"])
@@ -519,9 +531,15 @@ def list_hotspots(
             if src_preds and getattr(src_preds[0], "trust_score", None) is not None:
                 report_trust = float(src_preds[0].trust_score)
 
-            # Get location hierarchy using the village lookup utility
-            location_info = get_village_location_info(db, float(r.latitude), float(r.longitude))
-            
+            location_info = None
+            if r.latitude is not None and r.longitude is not None:
+                try:
+                    location_info = get_village_location_info(
+                        db, float(r.latitude), float(r.longitude)
+                    )
+                except Exception:
+                    location_info = None
+
             incident_points.append(
                 {
                     "report_id": str(r.report_id),
@@ -799,7 +817,7 @@ def list_hotspots(
             prediction=prediction,
             boundary_points=boundary_points,
             incident_points=incident_points,
-            composition=json.loads(h.composition) if getattr(h, "composition", None) else None,
+            composition=_safe_json_dict(getattr(h, "composition", None)),
             temporal_intensity=float(h.temporal_intensity) if getattr(h, "temporal_intensity", None) else None,
             severity_score=float(h.severity_score) if getattr(h, "severity_score", None) else None,
             trend_direction=getattr(h, "trend_direction", None),

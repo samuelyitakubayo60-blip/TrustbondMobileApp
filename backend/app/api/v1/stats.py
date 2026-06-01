@@ -508,6 +508,7 @@ def get_dashboard_stats(
             visible_report_ids = station_visible_report_ids(
                 db, int(station_id), role=current_role
             )
+            station = get_station(db, int(station_id))
             case_scope = db.query(Case.case_id)
             if station:
                 from app.core.station_scope import station_covered_village_ids
