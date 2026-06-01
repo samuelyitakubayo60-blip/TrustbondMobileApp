@@ -139,7 +139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Check device supports any lock method (fingerprint, face, PIN, pattern).
         final available = await _storageService.isDeviceLockAvailable();
         if (!available) {
-          _showError('No device lock found. Set up a PIN, pattern, or fingerprint in your device settings first, then come back to enable App Lock.');
+          _showError('No device lock found. Set up a PIN or pattern in your device settings first, then come back to enable App Lock.');
           return;
         }
         // Just save the setting — BiometricGate will enforce auth at next app launch.
@@ -306,7 +306,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               _locationSharing, _onLocationSharingChanged),
                           _toggle('Data Encryption', 'End-to-end encrypt report data',
                               _dataEncryption, _onDataEncryptionChanged),
-                          _toggle('App Lock', 'Require device lock (fingerprint, face, or PIN) to open the app',
+                          _toggle('App Lock', 'Require a device lock to open the app',
                               _biometricAuth, _onBiometricAuthChanged),
                           _toggle('Secure Storage', 'Store sensitive data in encrypted local storage',
                               _secureStorage, _onSecureStorageChanged),

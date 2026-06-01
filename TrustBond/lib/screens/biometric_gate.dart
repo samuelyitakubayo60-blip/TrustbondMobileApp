@@ -42,7 +42,7 @@ enum _AuthOutcome {
   success,
   cancelled,    // user dismissed the dialog (back button, "Cancel")
   failed,       // wrong biometric / wrong PIN
-  timedOut,     // 30-second watchdog elapsed
+  timedOut,     // 90-second watchdog elapsed
   unavailable,  // no biometrics enrolled, no PIN set, hardware locked out
 }
 
@@ -51,29 +51,30 @@ enum _AuthOutcome {
 /// Wraps any child widget and enforces the app-lock (biometric / device PIN)
 /// when `biometric_auth` is `true` in SharedPreferences.
 ///
-/// Security guarantees
-/// ───────────────────
-/// • The lock screen is the ONLY path back to [child].  Every path that sets
-///   [_LockState.unlocked] must go through a successful [_AuthOutcome.success].
-/// • [_onBackground] locks on EVERY [paused]/[hidden]/[detached] event, with
-///   only two safe exceptions:
-///     1. The biometric dialog itself causes [paused] — skip to avoid killing
-///        the in-flight prompt.
-///     2. [_lastUnlockedAt] is within [_unlockCooldown] — skip because the
-///        [paused] was fired by the dialog dismissing after a successful auth.
-/// • No automatic unlock based on background duration (removed — that was a
-///   bypass: any attacker who could trigger a brief focus loss could unlock
-///   the app without biometrics).
+/// Lock trigger rules
+/// ──────────────────
+/// Auth is prompted in EXACTLY two situations:
+///   1. App first launch  — [_init] locks and calls [_promptAuth] once.
+///   2. Genuine background — the [_lockTimer] fires after [_lockDelay] and
+///      sets [_pendingLockFromTimer] = true.  [_onResumed] reads this flag and
+///      calls [_promptAuth] once, then clears the flag.
+///
+/// Everything else — post-auth biometric-Activity lifecycle events, brief OS
+/// interruptions (volume bar, permission dialog, notification shade), and any
+/// other transient focus loss — results in [_pendingLockFromTimer] being false
+/// on resume, so [_onResumed] returns early without ever showing the prompt.
 ///
 /// Loop prevention
 /// ───────────────
-/// • [_postPromptWindow] suppresses the 1-2 [resumed] events that Android fires
-///   when the biometric Activity closes.
-/// • [_unlockCooldown] in [_onResumed] silently clears a late-arriving lock
-///   after a successful auth completes.
+/// • [_pendingLockFromTimer] is the single authoritative gate in [_onResumed].
+///   It is only set inside the [_lockTimer] callback and cleared on the first
+///   resume after the timer fires.  Post-auth resumed events see it as false
+///   regardless of how long auth took or how many resumed events Android fires.
+/// • [_unlockCooldown] in [_onBackground] prevents the lock timer from starting
+///   within 3 s of a successful unlock (the biometric Activity fires [paused]
+///   on some devices immediately after delivering the auth result).
 /// • [_authGen] discards stale results from superseded auth attempts.
-/// • [_state == authenticating] blocks [_onBackground] from re-locking and
-///   blocks concurrent [_promptAuth] calls.
+/// • [_state == authenticating] blocks [_onBackground] from starting the timer.
 class BiometricGate extends StatefulWidget {
   final Widget child;
   const BiometricGate({super.key, required this.child});
@@ -95,32 +96,36 @@ class _BiometricGateState extends State<BiometricGate>
   // ── Cached setting ────────────────────────────────────────────────────────
 
   /// Cached value of `biometric_auth`.  Refreshed on [_init] and every
-  /// [resumed] event.  A plain bool — [_onBackground] is synchronous and
-  /// cannot race against an async prefs read.
+  /// [resumed] event where [_pendingLockFromTimer] is true.
   bool _lockEnabled = false;
 
-  // ── Timing guards ─────────────────────────────────────────────────────────
+  // ── Timing guard: post-unlock cooldown ────────────────────────────────────
 
   /// Stamped on every successful unlock.  [_onBackground] skips starting the
-  /// lock timer within [_unlockCooldown] — the biometric dialog fires [paused]
+  /// lock timer within [_unlockCooldown] — the biometric Activity fires [paused]
   /// on some devices immediately after delivering the auth result.
   DateTime? _lastUnlockedAt;
   static const _unlockCooldown = Duration(seconds: 3);
 
-  /// Pending lock timer started by [_onBackground].
-  /// If [_onResumed] fires before it expires the timer is cancelled — the
-  /// backgrounding was a brief OS interruption (volume bar, notification, etc.)
-  /// and the app should stay unlocked.  The timer fires only when the app has
-  /// been genuinely backgrounded for [_lockDelay].
+  // ── Background lock timer ─────────────────────────────────────────────────
+
+  /// Timer started by [_onBackground].  If [_onResumed] fires before it expires
+  /// the app was briefly interrupted (< [_lockDelay]) and stays unlocked.
   Timer? _lockTimer;
   static const _lockDelay = Duration(seconds: 5);
 
-  /// Stamped just before [_localAuth.authenticate()] is called.
-  /// [_onResumed] ignores all [resumed] events within [_postPromptWindow] of
-  /// this stamp — Android fires 1-2 rapid [resumed] events as the biometric
-  /// Activity closes, and we must not re-trigger auth for those.
-  DateTime? _lastPromptStartedAt;
-  static const _postPromptWindow = Duration(seconds: 4);
+  /// Set to true ONLY inside the [_lockTimer] callback (genuine background of
+  /// [_lockDelay]+).  Cleared by [_onResumed] on the first resume after the
+  /// timer fires.  This is the single gate that decides whether [_onResumed]
+  /// should prompt authentication.  Post-auth resumed events never set this flag
+  /// and therefore never trigger a new prompt, regardless of timing.
+  bool _pendingLockFromTimer = false;
+
+  /// Set to true once [_init] has fully completed (prefs read AND first auth
+  /// attempt launched or skipped).  Guards [_onResumed] from acting on any
+  /// [resumed] events that Android fires during [initState] before [_init]
+  /// finishes — which would race against the initial [_promptAuth] call.
+  bool _initComplete = false;
 
   // ── Concurrency guard ─────────────────────────────────────────────────────
 
@@ -192,9 +197,11 @@ class _BiometricGateState extends State<BiometricGate>
 
     if (_lockEnabled) {
       _transition(_LockState.locked);
+      _initComplete = true;
       await _promptAuth();
     } else {
       _transition(_LockState.unlocked);
+      _initComplete = true;
     }
   }
 
@@ -208,7 +215,8 @@ class _BiometricGateState extends State<BiometricGate>
   /// returns to the foreground before the timer fires (brief interruption such
   /// as a volume bar, notification shade, or permission dialog) [_onResumed]
   /// cancels the timer and the lock state is unchanged.  Only a genuine
-  /// background of [_lockDelay] or more causes the app to lock.
+  /// background of [_lockDelay] or more causes [_pendingLockFromTimer] to be
+  /// set and the app to lock.
   void _onBackground() {
     // Auth dialog is open — Android fires [paused] when the biometric Activity
     // takes focus.  Ignore completely; the dialog manages its own lifecycle.
@@ -240,6 +248,9 @@ class _BiometricGateState extends State<BiometricGate>
       if (!mounted) return;
       if (_lockEnabled && _state == _LockState.unlocked) {
         _log('lockTimer', 'fired — locking');
+        // Set the flag BEFORE transitioning so _onResumed knows this lock
+        // was triggered by a genuine background, not a post-auth event.
+        _pendingLockFromTimer = true;
         _transition(_LockState.locked);
       }
     });
@@ -248,39 +259,46 @@ class _BiometricGateState extends State<BiometricGate>
   // ── Resumed ───────────────────────────────────────────────────────────────
 
   Future<void> _onResumed() async {
+    // Ignore resumed events that fire during initState before _init() has
+    // finished reading prefs and launching the initial auth prompt.
+    if (!_initComplete) {
+      _log('resumed', 'init not complete — skipped');
+      return;
+    }
+
     // Cancel any pending lock timer and check whether it was still ticking.
     // • Timer still active  → app was backgrounded for less than [_lockDelay]
-    //                          (brief interruption — volume bar, notification
-    //                          shade, permission dialog).  Cancel it and bail
-    //                          out immediately; state stays [unlocked].
-    // • Timer already fired → app was genuinely backgrounded; state is now
-    //                          [locked]; fall through to the auth prompt.
-    // • Timer is null       → no backgrounding happened before this resumed
-    //                          (e.g. initial launch or already locked).
+    //                          (brief interruption). Cancel and stay unlocked.
+    // • Timer already fired → [_pendingLockFromTimer] was set; fall through.
+    // • Timer is null       → no backgrounding started (launch, post-auth, etc.)
     final wasTimerActive = _lockTimer?.isActive ?? false;
     _lockTimer?.cancel();
     _lockTimer = null;
 
-    // Post-prompt window: absorb the 1-2 rapid [resumed] events that Android
-    // fires when the biometric Activity closes.  The auth result is already
-    // being processed; do not re-trigger another prompt.
-    if (_lastPromptStartedAt != null &&
-        DateTime.now().difference(_lastPromptStartedAt!) < _postPromptWindow) {
-      _log('resumed', 'within post-prompt window — skipped');
-      return;
-    }
-
-    // Brief interruption — lock timer was cancelled before it fired, so the
-    // app was only away for less than [_lockDelay].  Treat as if the user
-    // never left (they were answering a permission dialog, pulling down the
-    // notification shade, etc.).
     if (wasTimerActive) {
+      // Brief interruption — timer was still counting down.
+      // The app was backgrounded for less than [_lockDelay]; stay unlocked.
       _log('resumed', 'brief interruption — lock timer cancelled, no re-lock');
       return;
     }
 
-    // Refresh cached setting — user may have toggled biometric lock in
-    // the Settings screen while the app was in background.
+    // ── KEY GATE ──────────────────────────────────────────────────────────
+    // Only proceed if [_lockTimer] actually fired.  This is the single check
+    // that prevents post-auth biometric-Activity lifecycle events, initial
+    // launch resumed events, and any other non-background resumed events from
+    // triggering an auth prompt.
+    //
+    // [_pendingLockFromTimer] is set exclusively inside the [_lockTimer]
+    // callback — meaning the app was genuinely in the background for at least
+    // [_lockDelay] seconds.  Every other code path leaves it false.
+    if (!_pendingLockFromTimer) {
+      _log('resumed', 'no genuine background lock pending — skipped');
+      return;
+    }
+    _pendingLockFromTimer = false;
+
+    // Refresh cached setting — user may have toggled biometric lock in the
+    // Settings screen while the app was backgrounded.
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
 
@@ -292,25 +310,18 @@ class _BiometricGateState extends State<BiometricGate>
 
     // Lock was disabled while app was in background — unlock immediately,
     // no auth required.
-    if (!_lockEnabled && _isLocked) {
-      _log('resumed', 'lock disabled — unlocking without prompt');
-      _transition(_LockState.unlocked);
+    if (!_lockEnabled) {
+      if (_isLocked) {
+        _log('resumed', 'lock disabled — unlocking without prompt');
+        _transition(_LockState.unlocked);
+      }
       return;
     }
 
     // Nothing to do if already unlocked or mid-authentication.
     if (!_isLocked || _state == _LockState.authenticating) return;
 
-    // Post-unlock cooldown: auth completed successfully but this [resumed]
-    // arrived after the async prefs read.  Clear the lock silently.
-    if (_lastUnlockedAt != null &&
-        DateTime.now().difference(_lastUnlockedAt!) < _unlockCooldown) {
-      _log('resumed', 'within post-unlock cooldown — clearing lock silently');
-      _transition(_LockState.unlocked);
-      return;
-    }
-
-    _log('resumed', 'locked — prompting');
+    _log('resumed', 'locked after genuine background — prompting');
     await _promptAuth();
   }
 
@@ -338,7 +349,6 @@ class _BiometricGateState extends State<BiometricGate>
     }
 
     final gen = ++_authGen;
-    _lastPromptStartedAt = DateTime.now();
     _log('auth', 'gen=$gen starting dialog');
 
     _AuthOutcome outcome = _AuthOutcome.failed;
@@ -357,10 +367,15 @@ class _BiometricGateState extends State<BiometricGate>
             ),
           )
           .timeout(
-        const Duration(seconds: 30),
+        // 90 s — must be longer than any realistic biometric scan + PIN entry.
+        // stickyAuth:true keeps the native dialog alive across brief focus losses,
+        // so the Dart timeout must not race against the system's own patience.
+        // A 30 s Dart timeout fired before the user finished typing a long PIN,
+        // discarding a valid auth result via _authGen mismatch → re-lock loop.
+        const Duration(seconds: 90),
         onTimeout: () {
           timedOut = true;
-          _log('auth', 'gen=$gen timed out after 30 s');
+          _log('auth', 'gen=$gen timed out after 90 s');
           return false;
         },
       );
@@ -426,8 +441,11 @@ class _BiometricGateState extends State<BiometricGate>
   // ── Availability ──────────────────────────────────────────────────────────
 
   Future<({bool available, String? reason})> _checkAvailability() async {
+    // ── Check 1 (hard gate): device supports ANY secure auth at all ───────────
+    // Only this failure blocks the attempt.  If the device has no screen lock
+    // of any kind, calling authenticate() will throw — better to surface a
+    // clear message now.
     try {
-      // Check 1: device supports any auth mechanism at all.
       final deviceSupported = await _localAuth.isDeviceSupported();
       _log('availability', 'deviceSupported=$deviceSupported');
       if (!deviceSupported) {
@@ -437,27 +455,33 @@ class _BiometricGateState extends State<BiometricGate>
               'Enable a PIN or biometric in Settings.',
         );
       }
-
-      // Check 2: biometric hardware is present and operational.
-      final canCheck = await _localAuth.canCheckBiometrics;
-      _log('availability', 'canCheckBiometrics=$canCheck');
-
-      // Check 3: enumerate enrolled biometrics (informational).
-      final enrolled = await _localAuth.getAvailableBiometrics();
-      _log('availability',
-          'enrolled=${enrolled.map((e) => e.name).join(", ")}');
-
-      if (!canCheck && enrolled.isEmpty) {
-        // No biometrics configured.  biometricOnly: false means local_auth will
-        // fall back to device PIN/pattern/password, so this is still usable.
-        _log('availability', 'no biometrics — will fall back to device PIN');
-      }
-
-      return (available: true, reason: null);
     } on PlatformException catch (e) {
-      _log('availability', 'check failed: ${e.code} — ${e.message}');
+      _log('availability', 'isDeviceSupported failed: ${e.code} — ${e.message}');
       return (available: false, reason: _friendlyError(e.code));
     }
+
+    // ── Checks 2 & 3 (informational only) ────────────────────────────────────
+    // canCheckBiometrics and getAvailableBiometrics tell us which flavour of
+    // auth is available, but neither is required for PIN/pattern fallback.
+    // Wrapping them in their own try-catch prevents a PlatformException on a
+    // phone with a broken fingerprint sensor or a quirky OEM HAL from blocking
+    // auth entirely — the call to authenticate() will still work via device PIN.
+    try {
+      final canCheck = await _localAuth.canCheckBiometrics;
+      final enrolled = await _localAuth.getAvailableBiometrics();
+      _log('availability',
+          'canCheck=$canCheck  enrolled=${enrolled.map((e) => e.name).join(", ")}');
+      if (!canCheck && enrolled.isEmpty) {
+        _log('availability', 'no biometrics enrolled — will fall back to device PIN');
+      }
+    } on PlatformException catch (e) {
+      // Non-fatal: log and continue.  The actual authenticate() call will show
+      // the best available UI (PIN / pattern / face) and report any real failure.
+      _log('availability',
+          'biometric info check failed (non-fatal, continuing): ${e.code} — ${e.message}');
+    }
+
+    return (available: true, reason: null);
   }
 
   // ── State transitions ─────────────────────────────────────────────────────
@@ -648,7 +672,7 @@ class _LockScreen extends StatelessWidget {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: onRetry,
-                      icon: const Icon(Icons.fingerprint_rounded, size: 20),
+                      icon: const Icon(Icons.lock_open_rounded, size: 20),
                       label: const Text('Unlock'),
                     ),
                   ),

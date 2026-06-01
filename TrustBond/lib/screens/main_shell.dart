@@ -192,7 +192,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(
-                    Icons.fingerprint_rounded,
+                    Icons.lock_rounded,
                     size: 64,
                     color: AppColors.accent,
                   ),
@@ -207,7 +207,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Use fingerprint or face ID to continue',
+                    'Unlock to continue',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
