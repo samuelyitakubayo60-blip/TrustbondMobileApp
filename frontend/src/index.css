@@ -2441,6 +2441,43 @@ textarea:focus {
   outline-offset: 0;
 }
 
+/* Map theme — uses CSS vars so dark/light mode auto-adapts */
+.map-box .leaflet-container {
+  background: var(--bg);
+}
+
+/* Leaflet tooltips — themed via CSS vars */
+.map-box .leaflet-tooltip {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+.map-box .leaflet-tooltip-top::before {
+  border-top-color: var(--surface);
+}
+.map-box .leaflet-tooltip-bottom::before {
+  border-bottom-color: var(--surface);
+}
+
+/* Leaflet controls — themed via CSS vars */
+.map-box .leaflet-control-zoom a {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+.map-box .leaflet-control-zoom a:hover {
+  background: var(--surface2);
+}
+.map-box .leaflet-control-attribution {
+  background: var(--surface) !important;
+  color: var(--muted) !important;
+  opacity: 0.8;
+}
+.map-box .leaflet-control-attribution a {
+  color: var(--text-dim) !important;
+}
+
 .cluster {
   position: absolute;
   border-radius: 50%;

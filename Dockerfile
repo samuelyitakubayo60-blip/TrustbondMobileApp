@@ -6,18 +6,19 @@ WORKDIR /app
 RUN mkdir -p /app/.ultralytics
 ENV YOLO_CONFIG_DIR=/app/.ultralytics
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    git-lfs \
+# Install only the system libraries actually needed at runtime:
+#   ffmpeg          — openai-whisper audio decoding
+#   libsm6 libxext6 libgl1 libglib2.0-0 — OpenCV headless shared libs
+#   tesseract-ocr   — pytesseract OCR binary
+# --no-install-recommends keeps the dep tree small (avoids pulling in GTK, cmake, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsm6 \
     libxext6 \
-    cmake \
-    rsync \
     libgl1 \
-    && rm -rf /var/lib/apt/lists/* \
-    && git lfs install
+    libglib2.0-0 \
+    tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
 COPY requirements.txt .

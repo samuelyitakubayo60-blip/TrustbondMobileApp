@@ -1,0 +1,1 @@
+-- Roles are managed by the postgres superuser; no extra roles needed.

@@ -66,7 +66,19 @@ DDL_STATEMENTS: tuple[str, ...] = (
       ADD COLUMN IF NOT EXISTS llm_status VARCHAR(60),
       ADD COLUMN IF NOT EXISTS llm_citizen_advisory TEXT,
       ADD COLUMN IF NOT EXISTS llm_provider VARCHAR(40),
-      ADD COLUMN IF NOT EXISTS llm_generated_at TIMESTAMPTZ;
+      ADD COLUMN IF NOT EXISTS llm_generated_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS unique_reporter_count INTEGER,
+      ADD COLUMN IF NOT EXISTS corroboration_score NUMERIC(5,4),
+      ADD COLUMN IF NOT EXISTS is_multi_crime_zone BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS multi_crime_groups TEXT,
+      ADD COLUMN IF NOT EXISTS predicted_next_state VARCHAR(30),
+      ADD COLUMN IF NOT EXISTS predicted_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS prediction_verified_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS prediction_was_accurate BOOLEAN,
+      ADD COLUMN IF NOT EXISTS explanation_json TEXT,
+      ADD COLUMN IF NOT EXISTS cache_version INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS abuse_flag BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS anomaly_score NUMERIC(5,4);
     """,
     """
     ALTER TABLE local_leaders ADD COLUMN IF NOT EXISTS role VARCHAR(32) NOT NULL DEFAULT 'executive_of_cell';

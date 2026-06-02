@@ -43,8 +43,7 @@ services:
       # Groq  (primary):  get free key at https://console.groq.com
       # Gemini (fallback): get free key at https://aistudio.google.com
       # Leave blank to use template fallback (no API call).
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Keys loaded from env_file (backend/.env) — do not override here with empty values
     volumes:
       # Persist uploaded evidence files across restarts
       - trustbond_uploads:/app/backend/uploads
@@ -58,8 +57,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Baked into the JS bundle at build time — points to the backend on the host
-        VITE_API_BASE_URL: http://localhost:8000
+        # Leave empty — nginx proxies /api and /uploads to the backend container
+        VITE_API_BASE_URL: ""
     container_name: trustbond_frontend
     ports:
       - "80:80"

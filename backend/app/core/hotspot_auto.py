@@ -1409,11 +1409,12 @@ def _create_geographic_hotspots(
     )
     # Severity override allows a single very high-severity point to be a core.
 
-    # ── 1. Group by crime category ─────────────────────────────────────────
-    groups: Dict[str, List[Dict[str, Any]]] = {}
-    for r in reports:
-        grp = _get_crime_group(r.get("incident_type_name", ""))
-        groups.setdefault(grp, []).append(r)
+    # ── 1. Cluster all incident types together ─────────────────────────────
+    # Geographic proximity — not crime type — defines a cluster.  A theft and an
+    # assault reported at the same corner belong in the same hotspot; separating
+    # them by category hid mixed-crime zones and inflated the noise rate.
+    # The dominant type is still derived from the cluster members after DBSCAN.
+    groups: Dict[str, List[Dict[str, Any]]] = {"mixed": reports}
 
     created = 0
 
@@ -1574,7 +1575,6 @@ def _create_geographic_hotspots(
                 .filter(
                     Hotspot.center_lat.between(center_lat - 0.01, center_lat + 0.01),
                     Hotspot.center_long.between(center_long - 0.01, center_long + 0.01),
-                    Hotspot.crime_group == group_name,
                     Hotspot.detected_at >= datetime.now(timezone.utc) - timedelta(hours=24),
                 )
                 .order_by(Hotspot.detected_at.desc())
@@ -1617,7 +1617,7 @@ def _create_geographic_hotspots(
                 hotspot.trend_direction        = trend
                 hotspot.cluster_confidence     = Decimal(str(conf))
                 hotspot.polygon_points         = polygon_json
-                hotspot.crime_group            = group_name
+                hotspot.crime_group            = _get_crime_group(dominant_type_name)
                 # Improvements 1 & 11
                 hotspot.unique_reporter_count  = unique_reporters
                 hotspot.corroboration_score    = Decimal(str(corroboration))
@@ -1707,7 +1707,7 @@ def _create_geographic_hotspots(
                     trend_direction        = trend,
                     cluster_confidence     = Decimal(str(conf)),
                     polygon_points         = polygon_json,
-                    crime_group            = group_name,
+                    crime_group            = _get_crime_group(dominant_type_name),
                     # Improvements 1 & 11
                     unique_reporter_count  = unique_reporters,
                     corroboration_score    = Decimal(str(corroboration)),

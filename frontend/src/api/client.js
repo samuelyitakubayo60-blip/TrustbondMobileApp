@@ -10,7 +10,7 @@
  */
 const BASE =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
-  "/api";
+  "";
 
 // ── In-memory GET response cache ─────────────────────────────────────────────
 // Avoids re-fetching unchanged data when the user navigates between screens.

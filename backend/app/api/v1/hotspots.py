@@ -3,6 +3,7 @@ from typing import Annotated, List, Optional, Dict, Any
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException, status, Request
+from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload, selectinload
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
@@ -634,12 +635,25 @@ def list_hotspots(
                 llm_skip_logged = True
             cached_narr = (getattr(h, "llm_narrative", None) or "").strip()
             cached_rec = (getattr(h, "llm_recommendation", None) or "").strip()
-            if cached_narr or cached_rec:
+            _map_gen_at = getattr(h, "llm_generated_at", None)
+            if _map_gen_at is not None and _map_gen_at.tzinfo is None:
+                _map_gen_at = _map_gen_at.replace(tzinfo=timezone.utc)
+            _map_fresh = (
+                bool(cached_narr or cached_rec)
+                and _map_gen_at is not None
+                and (datetime.now(timezone.utc) - _map_gen_at).total_seconds() < 24 * 3600
+            )
+            if _map_fresh:
+                # Return cached briefing only when still within 24 h — so the React
+                # dashboard's hasStoredBriefing() check stays true and no extra API
+                # call is triggered for this hotspot.
                 prediction["narrative"] = cached_narr or None
                 prediction["recommendation"] = cached_rec or None
                 prediction["status"] = (getattr(h, "llm_status", None) or "").strip() or prediction.get("status")
                 prediction["citizen_advisory"] = (getattr(h, "llm_citizen_advisory", None) or "").strip() or None
             else:
+                # Briefing absent or stale — omit narrative/recommendation so the
+                # React client knows to trigger the for_map=false enrichment call.
                 prediction["citizen_advisory"] = generate_citizen_advisory(
                     classification=classification,
                     incident_count=incident_count,
@@ -648,13 +662,24 @@ def list_hotspots(
                     incident_mix=incident_mix,
                 )
         else:
-            # Use persisted LLM briefing if already generated (avoid repeated API calls).
+            # Use persisted LLM briefing if already generated and still fresh (<24 h).
+            # Regenerate when stale so the briefing reflects current incident counts,
+            # trend direction, and lifecycle state rather than an outdated snapshot.
             cached_narr = (getattr(h, "llm_narrative", None) or "").strip()
             cached_rec = (getattr(h, "llm_recommendation", None) or "").strip()
             cached_status = (getattr(h, "llm_status", None) or "").strip()
             cached_adv = (getattr(h, "llm_citizen_advisory", None) or "").strip()
 
-            if cached_narr or cached_rec:
+            _gen_at = getattr(h, "llm_generated_at", None)
+            if _gen_at is not None and _gen_at.tzinfo is None:
+                _gen_at = _gen_at.replace(tzinfo=timezone.utc)
+            briefing_fresh = (
+                bool(cached_narr or cached_rec)
+                and _gen_at is not None
+                and (datetime.now(timezone.utc) - _gen_at).total_seconds() < 24 * 3600
+            )
+
+            if briefing_fresh:
                 prediction["narrative"] = cached_narr or None
                 prediction["recommendation"] = cached_rec or None
                 prediction["status"] = cached_status or prediction.get("status")
@@ -698,67 +723,67 @@ def list_hotspots(
                     nearby_clusters = 0
                 cluster_evolution["nearby_clusters"] = nearby_clusters
 
-            try:
-                llm = generate_recommendation(
-                    classification=classification,
-                    incident_count=incident_count,
-                    dominant_crime=dominant_crime,
-                    cluster_kind=cluster_kind,
-                    area_label=area_label,
-                    incident_mix=incident_mix,
-                    peak_time=peak_time,
-                    verified_report_count=verified_count,
-                    recommended_unit=incident_unit_hint,
-                    deployment_units=deployment_units,
-                    cluster_case_context=cluster_case_context,
-                    cluster_evolution=cluster_evolution,
-                )
-            except Exception:
-                logger.exception(
-                    "Hotspot LLM recommendation failed hotspot_id=%s cluster_kind=%s incident_count=%s",
-                    h.hotspot_id,
-                    cluster_kind,
-                    incident_count,
-                )
-                llm = {}
+                try:
+                    llm = generate_recommendation(
+                        classification=classification,
+                        incident_count=incident_count,
+                        dominant_crime=dominant_crime,
+                        cluster_kind=cluster_kind,
+                        area_label=area_label,
+                        incident_mix=incident_mix,
+                        peak_time=peak_time,
+                        verified_report_count=verified_count,
+                        recommended_unit=incident_unit_hint,
+                        deployment_units=deployment_units,
+                        cluster_case_context=cluster_case_context,
+                        cluster_evolution=cluster_evolution,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Hotspot LLM recommendation failed hotspot_id=%s cluster_kind=%s incident_count=%s",
+                        h.hotspot_id,
+                        cluster_kind,
+                        incident_count,
+                    )
+                    llm = {}
 
-            prediction["recommendation"] = llm.get("recommendation")
-            prediction["narrative"] = llm.get("narrative")
-            prediction["status"] = llm.get("status")
-            prediction["recommended_unit"] = llm.get("recommended_unit")
-            prediction["recommended_unit_name"] = llm.get("recommended_unit_name")
-            prediction["recommended_units"] = llm.get("recommended_units")
-            prediction["citizen_advisory"] = llm.get("citizen_advisory")
-            prediction["operation_hours"] = llm.get("operation_hours")
-            prediction["concentrate_window"] = llm.get("concentrate_window")
+                prediction["recommendation"] = llm.get("recommendation")
+                prediction["narrative"] = llm.get("narrative")
+                prediction["status"] = llm.get("status")
+                prediction["recommended_unit"] = llm.get("recommended_unit")
+                prediction["recommended_unit_name"] = llm.get("recommended_unit_name")
+                prediction["recommended_units"] = llm.get("recommended_units")
+                prediction["citizen_advisory"] = llm.get("citizen_advisory")
+                prediction["operation_hours"] = llm.get("operation_hours")
+                prediction["concentrate_window"] = llm.get("concentrate_window")
 
-            # Persist for future requests (one-time generation).
-            # NOTE: llm_citizen_advisory is generated via the dedicated citizen prompt
-            # (generate_citizen_advisory), NOT from the law-enforcement briefing JSON.
-            # This keeps civilian advice fully separate from police tactical content.
-            try:
-                if llm.get("narrative") or llm.get("recommendation"):
-                    h.llm_narrative = llm.get("narrative")
-                    h.llm_recommendation = llm.get("recommendation")
-                    h.llm_status = llm.get("status")
-                    # Generate a proper citizen advisory via the civilian-facing prompt.
-                    try:
-                        citizen_adv = generate_citizen_advisory(
-                            classification=classification,
-                            incident_count=incident_count,
-                            dominant_crime=dominant_crime,
-                            area_label=area_label,
-                            incident_mix=incident_mix,
-                            time_window_hours=int(h.time_window_hours or 24),
-                        )
-                    except Exception:
-                        citizen_adv = llm.get("citizen_advisory") or ""
-                    h.llm_citizen_advisory = citizen_adv or None
-                    h.llm_provider = "llm"
-                    h.llm_generated_at = datetime.now(timezone.utc)
-                    db.add(h)
-            except Exception:
-                logger.exception("Failed to persist hotspot LLM briefing hotspot_id=%s", h.hotspot_id)
+                # Persist for future requests (one-time generation).
+                # NOTE: llm_citizen_advisory is generated via the dedicated citizen prompt
+                # (generate_citizen_advisory), NOT from the law-enforcement briefing JSON.
+                # This keeps civilian advice fully separate from police tactical content.
+                try:
+                    if llm.get("narrative") or llm.get("recommendation"):
+                        h.llm_narrative = llm.get("narrative")
+                        h.llm_recommendation = llm.get("recommendation")
+                        h.llm_status = llm.get("status")
+                        # Generate a proper citizen advisory via the civilian-facing prompt.
+                        try:
+                            citizen_adv = generate_citizen_advisory(
+                                classification=classification,
+                                incident_count=incident_count,
+                                dominant_crime=dominant_crime,
+                                area_label=area_label,
+                                incident_mix=incident_mix,
+                                time_window_hours=int(h.time_window_hours or 24),
+                            )
+                        except Exception:
+                            citizen_adv = llm.get("citizen_advisory") or ""
+                        h.llm_citizen_advisory = citizen_adv or None
+                        h.llm_provider = "llm"
+                        h.llm_generated_at = datetime.now(timezone.utc)
+                        db.add(h)
+                except Exception:
+                    logger.exception("Failed to persist hotspot LLM briefing hotspot_id=%s", h.hotspot_id)
             evidence_payload = [
                 {
                     "evidence_id": str(e.evidence_id),
@@ -975,6 +1000,144 @@ def get_daily_emergencies(
         ))
     
     return responses
+
+
+@router.get("/noise-reports")
+def get_noise_reports(
+    hours_back: int = Query(72, ge=1, le=336),
+    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Return recent eligible reports that are NOT assigned to any active hotspot.
+    These are the 'noise' points from clustering — shown as standalone incident
+    dots on the map so officers can see every report, not just clustered ones.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
+
+    # Collect all report IDs currently linked to a hotspot.
+    assigned_ids: set = set()
+    try:
+        rows = db.execute(text("SELECT report_id FROM hotspot_reports")).fetchall()
+        assigned_ids = {str(r[0]) for r in rows}
+    except Exception:
+        pass
+
+    reports = (
+        db.query(Report)
+        .options(joinedload(Report.incident_type))
+        .filter(
+            Report.reported_at >= cutoff,
+            Report.verification_status != "rejected",
+            Report.rule_status != "rejected",
+            Report.latitude.isnot(None),
+            Report.longitude.isnot(None),
+        )
+        .order_by(Report.reported_at.desc())
+        .limit(800)
+        .all()
+    )
+
+    result = []
+    for r in reports:
+        if str(r.report_id) in assigned_ids:
+            continue
+        try:
+            lat = float(r.latitude)
+            lng = float(r.longitude)
+        except (TypeError, ValueError):
+            continue
+        if not (lat and lng):
+            continue
+        result.append({
+            "report_id": str(r.report_id),
+            "latitude": lat,
+            "longitude": lng,
+            "incident_type_name": r.incident_type.type_name if r.incident_type else None,
+            "reported_at": r.reported_at.isoformat() if r.reported_at else None,
+            "village_name": getattr(r, "village_name", None),
+            "cell_name": getattr(r, "cell_name", None),
+            "sector_name": getattr(r, "sector_name", None),
+            "trust_score": float(r.trust_score) if getattr(r, "trust_score", None) else None,
+        })
+    return result
+
+
+@router.get("/all-incidents")
+def get_all_verified_incidents(
+    hours_back: Optional[int] = Query(
+        None, ge=1, le=87600,
+        description="Limit to last N hours. Omit for all-time.",
+    ),
+    limit: int = Query(2000, ge=1, le=5000),
+    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Return ALL verified incidents in the database for the Safety Map.
+
+    Each incident includes a `hotspot_id` (null when not part of any cluster)
+    so the frontend can distinguish clustered vs standalone dots without a
+    second request.  Recommendations stay on the cluster level — this endpoint
+    only provides the dot-layer data.
+    """
+    # Build report → hotspot_id lookup from the association table.
+    report_hotspot: Dict[str, int] = {}
+    try:
+        rows = db.execute(
+            text("SELECT report_id, hotspot_id FROM hotspot_reports")
+        ).fetchall()
+        report_hotspot = {str(r[0]): r[1] for r in rows}
+    except Exception:
+        pass
+
+    query = (
+        db.query(Report)
+        .options(
+            joinedload(Report.incident_type),
+            joinedload(Report.village_location),
+        )
+        .filter(
+            Report.verification_status != "rejected",
+            Report.rule_status != "rejected",
+            Report.latitude.isnot(None),
+            Report.longitude.isnot(None),
+        )
+    )
+    if hours_back is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
+        query = query.filter(Report.reported_at >= cutoff)
+
+    reports = query.order_by(Report.reported_at.desc()).limit(limit).all()
+
+    result = []
+    for r in reports:
+        try:
+            lat = float(r.latitude)
+            lng = float(r.longitude)
+        except (TypeError, ValueError):
+            continue
+        if not (lat and lng):
+            continue
+
+        rid = str(r.report_id)
+        hid = report_hotspot.get(rid)
+
+        village = r.village_location
+        result.append({
+            "report_id": rid,
+            "latitude": lat,
+            "longitude": lng,
+            "incident_type_name": r.incident_type.type_name if r.incident_type else None,
+            "reported_at": r.reported_at.isoformat() if r.reported_at else None,
+            "village_name": village.location_name if village else None,
+            "cell_name": None,
+            "sector_name": None,
+            "trust_score": float(r.trust_score) if getattr(r, "trust_score", None) else None,
+            "hotspot_id": hid,
+            "in_cluster": hid is not None,
+        })
+    return result
 
 
 @router.get("/params")

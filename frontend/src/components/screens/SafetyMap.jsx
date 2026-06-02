@@ -18,7 +18,7 @@ import { canDeployHotspotUnits } from "../../utils/roleMapping";
 const MUSANZE_CENTER = [-1.5042, 29.638]; // Musanze district center
 const MUSANZE_ZOOM = 12;
 const MUSANZE_BUFFER_KM = 0.5;
-const DEFAULT_TIME_PERIOD = "week"; // 7-day view (clustering window is set in System Configuration)
+const DEFAULT_TIME_PERIOD = ""; // All-time view by default for police dashboard
 
 /** Derive sidebar stats from persisted hotspot rows (same source as map polygons). */
 /**
@@ -349,9 +349,38 @@ const ZoomTracker = ({ onZoom }) => {
 // ── Module-level cache ─────────────────────────────────────────────────────
 const _mapHotCache = {}; // { [timePeriod_customHours]: hotspots[] }
 
+/** Sector → distinct color (deterministic palette for up to ~20 sectors). */
+const SECTOR_COLORS = [
+  "#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6",
+  "#ec4899", "#06b6d4", "#f97316", "#14b8a6", "#a855f7",
+  "#84cc16", "#e11d48", "#0ea5e9", "#d946ef", "#22d3ee",
+  "#facc15", "#4ade80", "#fb7185", "#38bdf8", "#a78bfa",
+];
+const _sectorColorMap = {};
+let _sectorIdx = 0;
+const getSectorColor = (sectorName) => {
+  if (!sectorName) return "#64748b";
+  if (!_sectorColorMap[sectorName]) {
+    _sectorColorMap[sectorName] = SECTOR_COLORS[_sectorIdx % SECTOR_COLORS.length];
+    _sectorIdx++;
+  }
+  return _sectorColorMap[sectorName];
+};
+
 const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
   const _defaultKey = `${DEFAULT_TIME_PERIOD}_`;
   const [loading, setLoading] = useState(!_mapHotCache[`${DEFAULT_TIME_PERIOD}_`]);
+  // Dark mode detection — syncs with body.dark-mode class toggle
+  const [isDarkMode, setIsDarkMode] = useState(() =>
+    typeof document !== "undefined" && document.body.classList.contains("dark-mode"),
+  );
+  useEffect(() => {
+    const obs = new MutationObserver(() => {
+      setIsDarkMode(document.body.classList.contains("dark-mode"));
+    });
+    obs.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [typeFilter, setTypeFilter] = useState("all"); // 'all' | incident_type_name
   const [timePeriod, setTimePeriod] = useState(DEFAULT_TIME_PERIOD); // '', 'day', 'week', 'month', 'quarter', 'year' — default 30 days
@@ -376,7 +405,8 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
   const [mapFocusId, setMapFocusId] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [showSinglesOnMap, setShowSinglesOnMap] = useState(true);
-  const [showVillageBoundaries, setShowVillageBoundaries] = useState(false);
+  const [showVillageBoundaries, setShowVillageBoundaries] = useState(true);
+  const [allIncidents, setAllIncidents] = useState([]);
   const [legendOpen, setLegendOpen] = useState(false);
   /** Read-only defaults from system config (DBSCAN lives under System Configuration). */
   const [clusterDefaults, setClusterDefaults] = useState({
@@ -396,6 +426,22 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
       .catch(() => setAssignmentUnits([]));
   }, []);
 
+  // Fetch ALL verified incidents — both clustered and standalone.
+  // Police dashboard defaults to all-time; the time filter is applied server-side
+  // only when the user explicitly selects a period.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.set("limit", "3000");
+    const filterHours = getSelectedFilterHours(timePeriod, customHours);
+    if (filterHours != null) {
+      params.set("hours_back", String(filterHours));
+    }
+    api
+      .get(`/api/v1/hotspots/all-incidents?${params}`)
+      .then((res) => setAllIncidents(Array.isArray(res) ? res : []))
+      .catch(() => setAllIncidents([]));
+  }, [wsRefreshKey, timePeriod, customHours]);
+
   const focusClusterOnMap = (h) => {
     if (!h) {
       setSelectedCluster(null);
@@ -403,13 +449,8 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
       setMapFocusId(null);
       return;
     }
-    const lat = Number(h.lat ?? h.center_lat);
-    const lng = Number(h.lng ?? h.center_long);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    setSelectedCluster(h);
-    setSelectedHotspotId(h.hotspot_id);
-    setMapFocusId(h.hotspot_id);
-    setFocusNonce((n) => n + 1);
+    // Navigate to hotspot details screen on click
+    goToScreen("hotspot-details", 0, { hotspotId: h.hotspot_id });
   };
 
   const singlesDefaultApplied = useRef(false);
@@ -572,11 +613,28 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
 
   const filteredHotspots = useMemo(() => {
     if (typeFilter === "all") return timeFilteredHotspots;
-    return timeFilteredHotspots.filter(
-      (h) =>
-        (h.incident_type_name || "").toLowerCase() === typeFilter.toLowerCase(),
-    );
+    const tf = typeFilter.toLowerCase();
+    return timeFilteredHotspots.filter((h) => {
+      // Show cluster if it CONTAINS the selected incident type
+      // (mixed clusters have multiple types in incident_mix)
+      const mix = h.incident_mix || h.composition || {};
+      if (typeof mix === "object" && Object.keys(mix).some(
+        (k) => k.toLowerCase() === tf
+      )) return true;
+      if ((h.incident_type_name || "").toLowerCase() === tf) return true;
+      if ((h.dominant_crime_type || "").toLowerCase() === tf) return true;
+      return false;
+    });
   }, [timeFilteredHotspots, typeFilter]);
+
+  // Filter all-incidents dots by type when a specific type is selected
+  const filteredIncidents = useMemo(() => {
+    if (typeFilter === "all") return allIncidents;
+    const tf = typeFilter.toLowerCase();
+    return allIncidents.filter(
+      (p) => (p.incident_type_name || "").toLowerCase() === tf,
+    );
+  }, [allIncidents, typeFilter]);
 
   const plottedHotspots = useMemo(
     () =>
@@ -720,120 +778,82 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
 
   return (
     <>
-      {/* ── Page header ── */}
-      <div className="card" style={{ marginBottom: 16, padding: '16px 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+      {/* ── Page header + unified stats ── */}
+      <div className="card" style={{ marginBottom: 16, padding: '18px 20px 16px' }}>
+
+        {/* Title row */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-              <h2 style={{ margin: 0, fontSize: 22 }}>Community Safety Map</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 3 }}>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Community Safety Map</h2>
               {backgroundRefreshing && (
                 <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>refreshing…</span>
               )}
             </div>
-            <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
-              Musanze District hotspot clusters — polygons show cluster boundaries, colored dots show individual incidents.
+            <p style={{ margin: 0, color: 'var(--muted)', fontSize: 12 }}>
+              Musanze District · {formatFilterPeriodLabel(timePeriod, customHours)} · polygons show cluster boundaries, dots show individual incidents
             </p>
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-          {[
-            { label: 'Active Clusters',   value: hotspotStats.total_clusters,        cls: 'sb-blue'  },
-            { label: 'Reports on Map',    value: hotspotStats.unique_reports ?? hotspotStats.total_incidents, cls: 'sb-blue'  },
-            { label: 'High Risk',         value: hotspotStats.risk_counts.critical,  cls: 'sb-red'   },
-            { label: 'Emerging',          value: hotspotStats.risk_counts.warning,   cls: 'sb-orange'},
-          ].map((s) => (
-            <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
-              <div className="stat-btn-label">{s.label}</div>
-              <div className="stat-btn-value">{loading ? '...' : s.value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="card smx-hotspot-summary">
-        <div className="card-header" style={{ flexWrap: "wrap", gap: 8 }}>
-          <div>
-            <div className="card-title">Hotspot Summary</div>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
-              {formatFilterPeriodLabel(timePeriod, customHours)} · clustering parameters are managed in System Configuration
-            </div>
           </div>
           <button
             type="button"
             className="btn btn-outline btn-sm"
+            style={{ flexShrink: 0 }}
             onClick={() => {
               const mapElement = document.querySelector(".leaflet-container");
-              if (!mapElement) {
-                alert("Map not found. Please try again.");
-                return;
-              }
+              if (!mapElement) { alert("Map not found. Please try again."); return; }
               const printWindow = window.open("", "_blank");
-              if (!printWindow) {
-                alert("Please allow popups for this website to export the map.");
-                return;
-              }
+              if (!printWindow) { alert("Please allow popups for this website to export the map."); return; }
               const exportScript = document.createElement("script");
-              exportScript.src =
-                "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+              exportScript.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
               document.head.appendChild(exportScript);
               exportScript.onload = () => {
-                if (typeof window.html2canvas !== "function") {
-                  alert("Export library failed to load.");
-                  return;
-                }
-                window.html2canvas(mapElement, {
-                  useCORS: true,
-                  allowTaint: true,
-                  backgroundColor: "#ffffff",
-                  scale: 2,
-                  logging: false,
-                }).then((captureCanvas) => {
-                  const imageData = captureCanvas.toDataURL("image/png");
-                  printWindow.document.write(`
-                    <!DOCTYPE html><html><head><title>Safety Map Export</title></head>
-                    <body style="margin:0;padding:20px;font-family:Arial,sans-serif">
-                    <h1>Trustbond Safety Map</h1>
-                    <p>${new Date().toLocaleString()} · ${formatFilterPeriodLabel(timePeriod, customHours)}</p>
-                    <img src="${imageData}" style="width:100%;max-width:1200px;border:1px solid #ccc" />
-                    <script>window.onload=function(){setTimeout(function(){window.print();},800);};</script>
-                    </body></html>`);
-                  printWindow.document.close();
-                }).catch(() => alert("Could not capture map image."));
+                if (typeof window.html2canvas !== "function") { alert("Export library failed to load."); return; }
+                window.html2canvas(mapElement, { useCORS: true, allowTaint: true, backgroundColor: null, scale: 2, logging: false })
+                  .then((captureCanvas) => {
+                    const imageData = captureCanvas.toDataURL("image/png");
+                    printWindow.document.write(`<!DOCTYPE html><html><head><title>Safety Map Export</title></head><body style="margin:0;padding:20px;font-family:Arial,sans-serif"><h1>TrustBond Safety Map</h1><p>${new Date().toLocaleString()} · ${formatFilterPeriodLabel(timePeriod, customHours)}</p><img src="${imageData}" style="width:100%;max-width:1200px;border:1px solid #ccc" /><script>window.onload=function(){setTimeout(function(){window.print();},800);};<\/script></body></html>`);
+                    printWindow.document.close();
+                  }).catch(() => alert("Could not capture map image."));
               };
             }}
           >
             Export Map PDF
           </button>
         </div>
-        <div className="smx-summary-grid">
+
+        {/* Primary stats — 4 large cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
           {[
-            { label: "Clusters", value: hotspotStats.total_clusters },
-            { label: "Unique reports", value: hotspotStats.unique_reports ?? hotspotStats.reports_in_clusters },
-            { label: "Map dots", value: hotspotStats.reports_in_clusters },
-            { label: "High risk", value: hotspotStats.risk_counts.critical, color: "var(--danger)" },
-            { label: "Medium risk", value: hotspotStats.risk_counts.warning, color: "var(--warning)" },
-            { label: "Low risk", value: hotspotStats.risk_counts.normal, color: "var(--success)" },
-            {
-              label: "Avg trust",
-              value:
-                hotspotStats.avg_cluster_trust != null
-                  ? `${hotspotStats.avg_cluster_trust} / 100`
-                  : "—",
-            },
-            {
-              label: "Emerging / Active / Intense",
-              value: `${hotspotStats.stage_counts.emerging} / ${hotspotStats.stage_counts.active} / ${hotspotStats.stage_counts.intense}`,
-            },
-            { label: "Last run", value: hotspotStats.latest_cluster_run },
-          ].map((item) => (
-            <div key={item.label} className="smx-summary-item">
-              <span>{item.label}</span>
-              <strong style={item.color ? { color: item.color } : undefined}>
-                {loading ? "…" : item.value}
-              </strong>
+            { label: 'Total Clusters',  value: hotspotStats.total_clusters,                         cls: 'sb-blue'   },
+            { label: 'High Risk',       value: hotspotStats.risk_counts.critical,                   cls: 'sb-red'    },
+            { label: 'Medium Risk',     value: hotspotStats.risk_counts.warning,                    cls: 'sb-orange' },
+            { label: 'Low Risk',        value: hotspotStats.risk_counts.normal,                     cls: 'sb-green'  },
+          ].map((s) => (
+            <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
+              <div className="stat-btn-label">{s.label}</div>
+              <div className="stat-btn-value">{loading ? '—' : (s.value ?? '0')}</div>
             </div>
           ))}
         </div>
+
+        {/* Secondary stats — thin row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 0, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+          {[
+            { label: 'Reports on map',  value: filteredIncidents.length || '—' },
+            { label: 'Emerging / Active / Intense', value: `${hotspotStats.stage_counts.emerging} / ${hotspotStats.stage_counts.active} / ${hotspotStats.stage_counts.intense}` },
+            { label: 'Avg trust score', value: hotspotStats.avg_cluster_trust != null ? `${hotspotStats.avg_cluster_trust} / 100` : '—' },
+            { label: 'Last cluster run', value: hotspotStats.latest_cluster_run ?? '—' },
+            { label: 'Cluster params',  value: 'System Configuration', isLink: true },
+          ].map((item) => (
+            <div key={item.label} style={{ padding: '4px 12px', borderRight: '1px solid var(--border)', lastChild: { borderRight: 'none' } }}>
+              <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 3 }}>{item.label}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: item.isLink ? 'var(--accent)' : 'var(--text)' }}>
+                {loading ? '…' : item.value}
+              </div>
+            </div>
+          ))}
+        </div>
+
       </div>
 
       <div className="smx-filter-row">
@@ -867,8 +887,8 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
             color: "var(--muted)",
           }}
         >
-          Map: {mapRenderableHotspots.length} shown / {plottedHotspots.length} clusters ·{" "}
-          {formatFilterPeriodLabel(timePeriod, customHours)}
+          {filteredIncidents.length} incidents · {mapRenderableHotspots.length} clusters ·{" "}
+          {typeFilter !== "all" ? `${typeFilter} · ` : ""}{formatFilterPeriodLabel(timePeriod, customHours)}
         </span>
         <label
           style={{
@@ -952,310 +972,178 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                 />
               )}
               <TileLayer
-                attribution="&copy; OpenStreetMap contributors"
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution="&copy; OpenStreetMap &amp; CartoDB"
+                url={isDarkMode
+                  ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                  : "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"}
+                opacity={0.35}
               />
               <ZoomControl position="topright" />
               <RelocatorControl maxBounds={musanzeBounds} />
 
-              {showVillageBoundaries && polygons.map((p) => (
-                <Polygon
-                  key={p.id}
-                  positions={p.positions}
-                  pathOptions={{
-                    color: "#475569",
-                    weight: 1,
-                    opacity: 0.45,
-                    fillColor: "transparent",
-                    fillOpacity: 0,
-                  }}
-                >
-                  <Tooltip
-                    direction="top"
-                    offset={[0, -2]}
-                    opacity={0.9}
-                    interactive={false}
-                  >
-                    <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
-                      <strong>
-                        {p.village || p.cell || p.sector || "Location"}
-                      </strong>
-                      <br />
-                      Sector: {p.sector || "N/A"} · Cell: {p.cell || "N/A"}
-                    </div>
-                  </Tooltip>
-                </Polygon>
-              ))}
-
-              {/* ── Backend hotspots: one dot per cluster (size by report count) ── */}
-              {mapRenderableHotspots.map((h) => {
-                const zoneColor = getHotspotDotColor(h);
-                const zoneBorder = getReportRiskBorder(zoneColor);
-                const pts = Array.isArray(h.incident_points) ? h.incident_points : [];
-                const reportCount = Math.max(
-                  Number(h.incident_count) || 0,
-                  pts.length,
-                );
-                const isMultiCluster = reportCount >= 2;
-                const isSelected = selectedCluster?.hotspot_id === h.hotspot_id;
-
+              {showVillageBoundaries && polygons.map((p) => {
+                const sColor = getSectorColor(p.sector);
                 return (
-                  <React.Fragment key={`hs-${h.hotspot_id}`}>
-                    {/* Multi-report cluster: one grouped marker; singles show per report */}
-                    {isMultiCluster ? (
-                      <CircleMarker
-                        key={`cluster-${h.hotspot_id}`}
-                        center={[h.lat, h.lng]}
-                        radius={
-                          isSelected
-                            ? Math.min(18, 8 + reportCount * 1.5)
-                            : Math.min(14, 6 + reportCount * 1.2)
-                        }
-                        eventHandlers={{ click: () => focusClusterOnMap(h) }}
-                        pathOptions={{
-                          color: zoneBorder,
-                          weight: 3,
-                          opacity: 1,
-                          fillColor: zoneColor,
-                          fillOpacity: 0.92,
-                        }}
-                      >
-                        <Tooltip direction="top" offset={[0, -8]} opacity={0.97} interactive={false}>
-                          <div style={{ fontSize: "12px", lineHeight: 1.5, minWidth: 140 }}>
-                            <strong>{h.area_label || `Cluster #${h.hotspot_id}`}</strong>
-                            <br />
-                            <strong>{reportCount} reports</strong> · {getReportRiskLabel(zoneColor)}
-                            <br />
+                  <Polygon
+                    key={p.id}
+                    positions={p.positions}
+                    pathOptions={{
+                      color: sColor,
+                      weight: 1.2,
+                      opacity: 0.5,
+                      fillColor: sColor,
+                      fillOpacity: 0.04,
+                    }}
+                  >
+                    <Tooltip
+                      direction="top"
+                      offset={[0, -2]}
+                      opacity={0.95}
+                      interactive={false}
+                    >
+                      <div style={{
+                        fontSize: "12px", lineHeight: 1.5, minWidth: 140,
+                        borderLeft: `3px solid ${sColor}`,
+                      }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>
+                          {p.village || "Unknown Village"}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                          Cell: {p.cell || "N/A"}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                          Sector: {p.sector || "N/A"}
+                        </div>
+                      </div>
+                    </Tooltip>
+                  </Polygon>
+                );
+              })}
+
+              {/* ── Cluster boundary polygons — RED alert zones ── */}
+              {mapRenderableHotspots
+                .filter((h) => {
+                  const rl = (h.risk_level || "").toLowerCase();
+                  return (
+                    rl !== "low" && rl !== "low_activity" &&
+                    Array.isArray(h.boundary_points) && h.boundary_points.length >= 3
+                  );
+                })
+                .map((h) => {
+                  const isSelected = selectedCluster?.hotspot_id === h.hotspot_id;
+                  return (
+                    <Polygon
+                      key={`poly-${h.hotspot_id}`}
+                      positions={h.boundary_points}
+                      pathOptions={{
+                        color: "#dc2626",
+                        weight: isSelected ? 4 : 3,
+                        opacity: 1,
+                        fillColor: "#dc2626",
+                        fillOpacity: isSelected ? 0.35 : 0.22,
+                      }}
+                      eventHandlers={{ click: () => focusClusterOnMap(h) }}
+                    >
+                      <Tooltip direction="top" offset={[0, -4]} opacity={0.97} interactive={false}>
+                        <div style={{ fontSize: 12, lineHeight: 1.5, minWidth: 140 }}>
+                          <div style={{ fontWeight: 700, color: "var(--danger)" }}>
+                            Cluster · {(h.risk_level || "").toUpperCase()}
+                          </div>
+                          <div>{h.incident_count} incidents · {h.area_label || "Unknown area"}</div>
+                          <div style={{ fontSize: 11, color: "var(--muted)" }}>
                             {h.dominant_crime_type || h.incident_type_name || "Mixed types"}
                           </div>
-                        </Tooltip>
-                      </CircleMarker>
-                    ) : pts.length > 0 ? pts.map((p, pIdx) => {
-                      const lat = Number(p.latitude);
-                      const lng = Number(p.longitude);
-                      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-                      const dotRadius = isSelected
-                        ? (mapZoom >= 14 ? 8 : mapZoom >= 12 ? 6 : 5)
-                        : (mapZoom >= 14 ? 6 : mapZoom >= 12 ? 5 : 4);
-                      const loc = [p.village_name, p.cell_name, p.sector_name].filter(Boolean).join(", ");
-                      return (
-                        <CircleMarker
-                          key={`pt-${h.hotspot_id}-${pIdx}`}
-                          center={[lat, lng]}
-                          radius={dotRadius}
-                          eventHandlers={{ click: () => focusClusterOnMap(h) }}
-                          pathOptions={{
-                            color: zoneBorder,
-                            weight: 2,
-                            opacity: 1,
-                            fillColor: zoneColor,
-                            fillOpacity: 0.92,
-                          }}
-                        >
-                          <Tooltip direction="top" offset={[0, -6]} opacity={0.97} interactive={false}>
-                            <div style={{ fontSize: "12px", lineHeight: 1.6, minWidth: 160 }}>
-                              <div style={{ fontWeight: 700, marginBottom: 2 }}>
-                                {p.incident_type_name || "Incident"}
-                              </div>
-                              <div style={{ fontSize: 11, color: "#64748b" }}>
-                                {getReportRiskLabel(zoneColor)} · 1 report
-                              </div>
-                              <div style={{ color: "#64748b", fontSize: 11 }}>
-                                Report #{String(p.report_id || "").slice(-6)}
-                              </div>
-                              {p.reported_at && (
-                                <div style={{ fontSize: 11 }}>
-                                  {new Date(p.reported_at).toLocaleString(undefined, {
-                                    month: "short", day: "numeric",
-                                    hour: "2-digit", minute: "2-digit",
-                                  })}
-                                </div>
-                              )}
-                              {loc && <div style={{ fontSize: 11, color: "#64748b" }}>{loc}</div>}
-                            </div>
-                          </Tooltip>
-                        </CircleMarker>
-                      );
-                    }) : (
-                      <CircleMarker
-                        key={`hs-center-${h.hotspot_id}`}
-                        center={[h.lat, h.lng]}
-                        radius={mapZoom >= 14 ? 6 : mapZoom >= 12 ? 5 : 4}
-                        eventHandlers={{ click: () => focusClusterOnMap(isSelected ? null : h) }}
-                        pathOptions={{
-                          color: zoneBorder,
-                          weight: 2,
-                          opacity: 1,
-                          fillColor: zoneColor,
-                          fillOpacity: 0.92,
-                        }}
-                      >
-                        <Tooltip direction="top" offset={[0, -6]} opacity={0.97} interactive={false}>
-                          <div style={{ fontSize: "12px", lineHeight: 1.6 }}>
-                            <strong>{h.area_label || `Cluster #${h.hotspot_id}`}</strong>
-                            <br />
-                            1 report · {getReportRiskLabel(zoneColor)}
-                            <br />
-                            {h.incident_type_name || h.crime_group || "unknown"}
+                        </div>
+                      </Tooltip>
+                    </Polygon>
+                  );
+                })}
+
+              {/* ── All verified incidents — unified dot layer (filtered by type) ── */}
+              {filteredIncidents.map((p, i) => {
+                const lat = Number(p.latitude);
+                const lng = Number(p.longitude);
+                if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+                const typeColor = getIncidentTypeColor(p.incident_type_name);
+                const inCluster = p.in_cluster;
+                const parentCluster = inCluster
+                  ? mapRenderableHotspots.find((h) => h.hotspot_id === p.hotspot_id)
+                  : null;
+                const isSelected = parentCluster && selectedCluster?.hotspot_id === parentCluster.hotspot_id;
+
+                const dotRadius = inCluster
+                  ? (isSelected ? (mapZoom >= 14 ? 10 : 8) : (mapZoom >= 14 ? 8 : 6))
+                  : (mapZoom >= 14 ? 6 : mapZoom >= 12 ? 5 : 4);
+                const loc = [p.village_name, p.cell_name, p.sector_name].filter(Boolean).join(", ");
+
+                return (
+                  <CircleMarker
+                    key={`inc-${p.report_id || i}`}
+                    center={[lat, lng]}
+                    radius={dotRadius}
+                    eventHandlers={parentCluster ? { click: () => focusClusterOnMap(parentCluster) } : {}}
+                    pathOptions={inCluster ? {
+                      color: "#1e293b",
+                      weight: 2,
+                      opacity: 1,
+                      fillColor: typeColor,
+                      fillOpacity: 0.95,
+                    } : {
+                      color: "#475569",
+                      weight: 1.5,
+                      opacity: 0.8,
+                      fillColor: typeColor,
+                      fillOpacity: 0.75,
+                      dashArray: "3 2",
+                    }}
+                  >
+                    <Tooltip direction="top" offset={[0, -6]} opacity={0.97} interactive={false}>
+                      <div style={{ fontSize: "12px", lineHeight: 1.6, minWidth: 160 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 2, color: typeColor }}>
+                          {p.incident_type_name || "Incident"}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                          {inCluster
+                            ? `Part of cluster · ${(parentCluster?.risk_level || "").toUpperCase()}`
+                            : "Standalone · not yet clustered"}
+                        </div>
+                        <div style={{ color: "var(--text-dim)", fontSize: 11 }}>
+                          #{String(p.report_id || "").slice(-6)}
+                        </div>
+                        {p.reported_at && (
+                          <div style={{ fontSize: 11 }}>
+                            {new Date(p.reported_at).toLocaleString(undefined, {
+                              month: "short", day: "numeric",
+                              hour: "2-digit", minute: "2-digit",
+                            })}
                           </div>
-                        </Tooltip>
-                      </CircleMarker>
-                    )}
-                  </React.Fragment>
+                        )}
+                        {loc && <div style={{ fontSize: 11, color: "var(--muted)" }}>{loc}</div>}
+                      </div>
+                    </Tooltip>
+                  </CircleMarker>
                 );
               })}
 
             </MapContainer>
 
-            {/* ── Cluster detail panel — appears when a cluster/incident is clicked ── */}
-            {selectedCluster && (() => {
-              const sc = selectedCluster;
-              const scPts = Array.isArray(sc.incident_points) ? sc.incident_points : [];
-              const scColor = getMapRiskColor(sc);
-              const incidentMix = sc.incident_mix || {};
-              return (
-                <div style={{
-                  position: "absolute", top: 10, right: 10, zIndex: 600,
-                  background: "rgba(15,23,42,0.97)", border: `1.5px solid ${scColor}`,
-                  borderRadius: 12, padding: "14px 16px", width: 280,
-                  backdropFilter: "blur(6px)", boxShadow: "0 4px 20px rgba(0,0,0,0.6)",
-                  maxHeight: "calc(100% - 20px)", overflowY: "auto",
-                }}>
-                  {/* Header */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>
-                        {sc.area_label || `Cluster #${sc.hotspot_id}`}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-                        {sc.incident_count} confirmed incidents · {(sc.risk_level || "").toUpperCase()}
-                      </div>
-                      {(sc.lifecycle_state || sc.crime_group || sc.trend_direction) && (
-                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>
-                          {sc.lifecycle_state && (
-                            <span style={{
-                              fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 99,
-                              background: sc.lifecycle_state === "escalating" ? "#ef444433" : sc.lifecycle_state === "emerging" ? "#3b82f633" : "#22c55e33",
-                              color: sc.lifecycle_state === "escalating" ? "#ef4444" : sc.lifecycle_state === "emerging" ? "#3b82f6" : "#22c55e",
-                              textTransform: "uppercase", letterSpacing: "0.05em",
-                            }}>
-                              {sc.lifecycle_state}
-                            </span>
-                          )}
-                          {sc.crime_group && (
-                            <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 99, background: "rgba(255,255,255,0.08)", color: "#94a3b8", textTransform: "uppercase" }}>
-                              {sc.crime_group}
-                            </span>
-                          )}
-                          {sc.trend_direction && sc.trend_direction !== "stable" && (
-                            <span style={{
-                              fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 99,
-                              color: sc.trend_direction === "rising" ? "#ef4444" : "#22c55e",
-                            }}>
-                              {sc.trend_direction === "rising" ? "↑ Rising" : "↓ Falling"}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => setSelectedCluster(null)}
-                      style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0, marginLeft: 8 }}
-                    >&#x2715;</button>
-                  </div>
-
-                  {/* Incident type breakdown */}
-                  {Object.keys(incidentMix).length > 0 && (
-                    <div style={{ marginBottom: 10 }}>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>
-                        Incident Types
-                      </div>
-                      {Object.entries(incidentMix)
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([name, count]) => (
-                          <div key={name} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: getIncidentTypeColor(name), flexShrink: 0 }} />
-                            <div style={{ flex: 1, fontSize: 11, color: "#e2e8f0" }}>{name}</div>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: "#f1f5f9" }}>{count}</span>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-
-                  {/* Individual incident list */}
-                  {scPts.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>
-                        Incidents in this cluster
-                      </div>
-                      {scPts.map((p, i) => {
-                        const ptColor = getIncidentTypeColor(p.incident_type_name);
-                        const loc = [p.village_name, p.cell_name].filter(Boolean).join(", ");
-                        return (
-                          <div key={i} style={{
-                            display: "flex", gap: 8, alignItems: "flex-start",
-                            padding: "6px 0", borderBottom: i < scPts.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none",
-                          }}>
-                            <div style={{ width: 9, height: 9, borderRadius: "50%", background: ptColor, flexShrink: 0, marginTop: 3 }} />
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 12, fontWeight: 600, color: "#f1f5f9" }}>
-                                {p.incident_type_name || "Incident"}
-                              </div>
-                              <div style={{ fontSize: 10, color: "#94a3b8" }}>
-                                #{String(p.report_id || "").slice(-6)}
-                                {p.reported_at ? " · " + new Date(p.reported_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}
-                              </div>
-                              {loc && <div style={{ fontSize: 10, color: "#64748b" }}>{loc}</div>}
-                            </div>
-                            {p.trust_score != null && (
-                              <div style={{ fontSize: 10, color: "#94a3b8", flexShrink: 0 }}>
-                                {Math.round(Number(p.trust_score))}%
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {scPts.length === 0 && (
-                    <div style={{ fontSize: 11, color: "#64748b", textAlign: "center", padding: "8px 0" }}>
-                      {sc.incident_count} incidents · click map row for details
-                    </div>
-                  )}
-
-                  {/* Footer stats */}
-                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", gap: 12, fontSize: 11, color: "#94a3b8", flexWrap: "wrap" }}>
-                    <span>Score: <strong style={{ color: "#f1f5f9" }}>{sc.hotspot_score != null ? Math.round(sc.hotspot_score) : "—"}</strong></span>
-                    <span>Trust: <strong style={{ color: "#f1f5f9" }}>{sc.avg_trust_score != null ? Math.round(Number(sc.avg_trust_score)) + "%" : "—"}</strong></span>
-                    {sc.severity_score != null && (
-                      <span>Severity: <strong style={{ color: "#f1f5f9" }}>{Number(sc.severity_score).toFixed(1)}/10</strong></span>
-                    )}
-                    {sc.temporal_intensity != null && (
-                      <span>Rate: <strong style={{ color: "#f1f5f9" }}>{Number(sc.temporal_intensity).toFixed(1)}/h</strong></span>
-                    )}
-                    {sc.area_label && <span style={{ color: "#64748b" }}>{sc.area_label}</span>}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* ── Incident type legend — collapsed pill, expands on hover ── */}
+            {/* ── Map legend — hover to expand ── */}
             <div
               onMouseEnter={() => setLegendOpen(true)}
               onMouseLeave={() => setLegendOpen(false)}
-              style={{ position: "absolute", bottom: 10, left: 10, zIndex: 500, cursor: "default" }}
+              style={{ position: "absolute", bottom: 10, right: 10, zIndex: 500, cursor: "default" }}
             >
               {/* Collapsed pill */}
               <div style={{
-                background: "rgba(15,23,42,0.92)",
-                border: "1px solid rgba(255,255,255,0.15)",
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
                 borderRadius: 8,
                 padding: "5px 11px",
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
                 backdropFilter: "blur(4px)",
+                boxShadow: "0 1px 6px rgba(0,0,0,0.1)",
                 userSelect: "none",
               }}>
                 <div style={{ display: "flex", gap: 3 }}>
@@ -1264,7 +1152,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                     return <div key={name} style={{ width: 8, height: 8, borderRadius: "50%", background: getIncidentTypeColor(name) }} />;
                   })}
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 600, color: "#e2e8f0" }}>Legend</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text)" }}>Legend</span>
               </div>
 
               {/* Expanded panel */}
@@ -1272,37 +1160,50 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                 <div style={{
                   position: "absolute",
                   bottom: "calc(100% + 6px)",
-                  left: 0,
-                  background: "rgba(15,23,42,0.95)",
-                  border: "1px solid rgba(255,255,255,0.12)",
+                  right: 0,
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
                   borderRadius: 10,
-                  padding: "9px 12px",
-                  minWidth: 175,
-                  backdropFilter: "blur(4px)",
-                  pointerEvents: "none",
+                  padding: "10px 14px",
+                  minWidth: 180,
+                  backdropFilter: "blur(6px)",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
                 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 7 }}>
-                    Risk zones (Musanze)
+                  <div style={{
+                    fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em",
+                    color: "var(--muted)", marginBottom: 7,
+                  }}>
+                    Incident Types
                   </div>
-                  {[
-                    { color: MAP_RISK_COLORS.critical, label: "High risk (critical / active)" },
-                    { color: MAP_RISK_COLORS.medium, label: "Medium (emerging)" },
-                    { color: MAP_RISK_COLORS.low, label: "Low activity" },
-                  ].map((row) => (
-                    <div key={row.label} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
-                      <div style={{
-                        width: 12,
-                        height: 12,
-                        background: row.color,
-                        borderRadius: "50%",
-                        border: "1.5px solid rgba(255,255,255,0.35)",
-                        flexShrink: 0,
-                      }} />
-                      <span style={{ fontSize: 11, color: "#e2e8f0" }}>{row.label}</span>
-                    </div>
-                  ))}
-                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", marginTop: 6, paddingTop: 6, fontSize: 10, color: "#94a3b8" }}>
-                    Dot colour = cluster risk level (green / yellow / red). Time and type filters apply together.
+                  {(() => {
+                    const typesOnMap = new Set();
+                    filteredIncidents.forEach((p) => { if (p.incident_type_name) typesOnMap.add(p.incident_type_name); });
+                    incidentTypes.forEach((t) => { if (t.type_name) typesOnMap.add(t.type_name); });
+                    return [...typesOnMap].sort().map((name) => (
+                      <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5, cursor: "pointer" }}
+                        onClick={() => setTypeFilter(name)}
+                        title={`Filter to ${name}`}
+                      >
+                        <div style={{
+                          width: 12, height: 12, borderRadius: "50%",
+                          background: getIncidentTypeColor(name),
+                          border: "1.5px solid var(--border2)",
+                          flexShrink: 0,
+                        }} />
+                        <span style={{ fontSize: 11, color: "var(--text)", fontWeight: 500 }}>
+                          {name}
+                        </span>
+                      </div>
+                    ));
+                  })()}
+
+                  <div style={{
+                    borderTop: "1px solid var(--border)",
+                    marginTop: 8, paddingTop: 7, fontSize: 10, lineHeight: 1.5,
+                    color: "var(--muted)",
+                  }}>
+                    Highlighted points on the map are clusters.
+                    <br />Dashed dots are standalone incidents.
                   </div>
                 </div>
               )}
@@ -1456,10 +1357,11 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                       cursor: "pointer",
                       background:
                         selectedCluster?.hotspot_id === h.hotspot_id
-                          ? "rgba(59, 130, 246, 0.08)"
+                          ? "var(--c-accent-dim)"
                           : undefined,
                     }}
                     onClick={() => focusClusterOnMap(h)}
+                    onMouseEnter={() => setSelectedCluster(h)}
                   >
                     <td className="smx-cell-id smx-cell-muted">
                       HS-{String(h.hotspot_id).padStart(3, "0")}
@@ -2031,68 +1933,68 @@ const SecurityRecommendations = ({
               </div>
 
               {/* Body */}
-              <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: "7px" }}>
-                {/* Top meta row: alarm index + prediction status + classification */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
-                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+
+                {/* Classification + cluster type — compact single line, only if data exists */}
+                {(h.classification || h.cluster_kind || hFull.prediction?.status) && (
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
                     {h.classification && (
                       <span style={{
-                        fontSize: "9px", fontWeight: 700, padding: "1px 6px",
-                        borderRadius: "99px", border: `1px solid ${color}88`,
+                        fontSize: "9px", fontWeight: 700, padding: "1px 7px",
+                        borderRadius: "99px", border: `1px solid ${color}66`,
                         color, textTransform: "uppercase", letterSpacing: "0.05em",
                       }}>
                         {h.classification}
                       </span>
                     )}
+                    {h.cluster_kind && (
+                      <span style={{ fontSize: "9px", color: "var(--muted)" }}>
+                        {h.cluster_kind === "mixed_hotspot" ? "mixed cluster" : "single-type cluster"}
+                      </span>
+                    )}
                     {hFull.prediction?.status && (
-                      <span style={{
-                        fontSize: "9px", fontWeight: 600, padding: "1px 6px",
-                        borderRadius: "99px", backgroundColor: "var(--border)",
-                        color: "var(--text)", letterSpacing: "0.04em",
-                      }}>
+                      <span style={{ fontSize: "9px", color: "var(--muted)", marginLeft: "auto" }}>
                         {String(hFull.prediction.status).replace(/_/g, " ")}
                       </span>
                     )}
-                    {h.cluster_kind && (
-                      <span style={{ fontSize: "9px", color: "var(--muted)" }}>
-                        {h.cluster_kind === "mixed_hotspot" ? "mixed" : "single-type"}
-                      </span>
-                    )}
                   </div>
-                  <div style={{ fontSize: "9px", color: "var(--muted)" }}>
-                    alarm <strong style={{ color }}>{Math.round(alarm)}/100</strong>
-                    {h.classification_confidence != null && (
-                      <span> · conf {Math.round(Number(h.classification_confidence) * 100)}%</span>
-                    )}
-                    {h.hotspot_score != null && (
-                      <span> · score {Math.round(Number(h.hotspot_score))}</span>
-                    )}
-                  </div>
-                </div>
+                )}
 
-                {/* Situation — narrative from LLM */}
-                <div style={{
-                  fontSize: "11px", color: "var(--text)", lineHeight: 1.5,
-                  padding: "7px 10px", borderRadius: "6px",
-                  backgroundColor: "var(--background)",
-                  border: "1px solid var(--border)",
-                }}>
+                {/* Situation — narrative from LLM (hidden while loading if no cached text) */}
+                {(hFull.prediction?.narrative || !aiLoading) && (
                   <div style={{
-                    fontSize: "9px", fontWeight: 700, color: "var(--muted)",
-                    letterSpacing: "0.07em", marginBottom: "3px",
-                  }}>
-                    SITUATION
-                  </div>
-                  {narrative}
-                </div>
-
-                {/* Incident mix — show per-crime breakdown when more than one type */}
-                {h.incident_mix && Object.keys(h.incident_mix).length > 1 && (
-                  <div style={{
-                    display: "flex", gap: "5px", flexWrap: "wrap",
-                    padding: "5px 8px", borderRadius: "6px",
+                    fontSize: "11px", color: "var(--text)", lineHeight: 1.6,
+                    padding: "8px 10px", borderRadius: "6px",
                     backgroundColor: "var(--background)",
                     border: "1px solid var(--border)",
+                  }}>
+                    <div style={{
+                      fontSize: "9px", fontWeight: 700, color: "var(--muted)",
+                      letterSpacing: "0.07em", marginBottom: "4px",
+                    }}>
+                      SITUATION
+                    </div>
+                    {narrative}
+                  </div>
+                )}
+                {aiLoading && !hFull.prediction?.narrative && (
+                  <div style={{
+                    fontSize: "11px", lineHeight: 1.6, padding: "8px 10px", borderRadius: "6px",
+                    backgroundColor: "var(--background)", border: "1px solid var(--border)",
+                  }}>
+                    <div style={{ fontSize: "9px", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.07em", marginBottom: "4px" }}>
+                      SITUATION
+                    </div>
+                    <span style={{ color: "var(--muted)", fontStyle: "italic" }}>Generating AI briefing…</span>
+                  </div>
+                )}
+
+                {/* Incident mix — only for mixed clusters with more than one type */}
+                {h.incident_mix && Object.keys(h.incident_mix).length > 1 && (
+                  <div style={{
+                    display: "flex", gap: "5px", flexWrap: "wrap", alignItems: "center",
+                    padding: "5px 8px", borderRadius: "6px",
+                    backgroundColor: "var(--background)", border: "1px solid var(--border)",
                   }}>
                     <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.07em", marginRight: "2px" }}>
                       MIX:
@@ -2110,26 +2012,54 @@ const SecurityRecommendations = ({
                   </div>
                 )}
 
+                {/* Recommended action — colored left border distinguishes it from SITUATION */}
+                {(hFull.prediction?.recommendation || !aiLoading) && (
+                  <div style={{
+                    fontSize: "11px", color: "var(--text)", lineHeight: 1.6,
+                    padding: "8px 10px", borderRadius: "6px",
+                    backgroundColor: "var(--background)",
+                    border: "1px solid var(--border)",
+                    borderLeft: `3px solid ${color}`,
+                  }}>
+                    <div style={{
+                      fontSize: "9px", fontWeight: 700, color,
+                      letterSpacing: "0.07em", marginBottom: "4px",
+                    }}>
+                      RECOMMENDED ACTION
+                    </div>
+                    {action}
+                  </div>
+                )}
+                {aiLoading && !hFull.prediction?.recommendation && (
+                  <div style={{
+                    fontSize: "11px", lineHeight: 1.6, padding: "8px 10px", borderRadius: "6px",
+                    backgroundColor: "var(--background)",
+                    border: "1px solid var(--border)", borderLeft: `3px solid ${color}`,
+                  }}>
+                    <div style={{ fontSize: "9px", fontWeight: 700, color, letterSpacing: "0.07em", marginBottom: "4px" }}>
+                      RECOMMENDED ACTION
+                    </div>
+                    <span style={{ color: "var(--muted)", fontStyle: "italic" }}>Generating AI recommendation…</span>
+                  </div>
+                )}
+
+                {/* AI-recommended unit chips — only when LLM has returned units */}
                 {unitChips.length > 0 && (
                   <div style={{
                     display: "flex", gap: "5px", flexWrap: "wrap", alignItems: "center",
                     padding: "5px 8px", borderRadius: "6px",
-                    backgroundColor: "var(--background)",
-                    border: "1px solid var(--border)",
+                    backgroundColor: "var(--background)", border: "1px solid var(--border)",
                   }}>
                     <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.07em" }}>
-                      DEPLOY:
+                      UNITS:
                     </span>
                     {unitChips.map((u) => (
-                      <span
-                        key={u.unit_code || u.unit_name}
-                        style={{
-                          fontSize: "9px", fontWeight: 600, padding: "2px 7px", borderRadius: "99px",
-                          backgroundColor: u.role === "primary" ? `${color}22` : "var(--border)",
-                          border: `1px solid ${u.role === "primary" ? color : "var(--border)"}`,
-                          color: "var(--text)",
-                        }}
-                      >
+                      <span key={u.unit_code || u.unit_name} style={{
+                        fontSize: "9px", fontWeight: 600, padding: "2px 7px", borderRadius: "99px",
+                        backgroundColor: u.role === "primary" ? `${color}22` : "var(--border)",
+                        border: `1px solid ${u.role === "primary" ? color : "var(--border)"}`,
+                        color: "var(--text)",
+                      }}>
                         {u.unit_name || HOTSPOT_UNIT_LABELS[u.unit_code] || u.unit_code}
                         {u.role === "support" ? " (support)" : ""}
                       </span>
@@ -2137,84 +2067,52 @@ const SecurityRecommendations = ({
                   </div>
                 )}
 
-                {/* Recommended action — deployment */}
-                <div style={{
-                  fontSize: "11px", color: "var(--text)", lineHeight: 1.5,
-                  padding: "7px 10px", borderRadius: "6px",
-                  backgroundColor: "var(--background)",
-                  border: "1px solid var(--border)",
-                  borderLeft: `3px solid ${color}`,
-                }}>
-                  <div style={{
-                    fontSize: "9px", fontWeight: 700, color,
-                    letterSpacing: "0.07em", marginBottom: "3px",
-                  }}>
-                    RECOMMENDED ACTION
-                  </div>
-                  {action}
-                </div>
-
-
-                {/* Operation window — always show when available */}
+                {/* Operation window */}
                 {(hFull.prediction?.operation_hours || hFull.prediction?.concentrate_window) && (
                   <div style={{
-                    display: "flex", gap: "10px", flexWrap: "wrap",
+                    display: "flex", gap: "12px", flexWrap: "wrap",
                     padding: "5px 10px", borderRadius: "6px",
-                    backgroundColor: `${color}0d`,
-                    border: `1px solid ${color}33`,
+                    backgroundColor: `${color}0d`, border: `1px solid ${color}33`,
                     fontSize: "10px", color: "var(--text)",
                   }}>
                     {hFull.prediction?.operation_hours && (
-                      <span>
-                        <span style={{ color: "var(--muted)" }}>Duration: </span>
-                        <strong>{hFull.prediction.operation_hours} h</strong>
-                      </span>
+                      <span><span style={{ color: "var(--muted)" }}>Duration: </span><strong>{hFull.prediction.operation_hours} h</strong></span>
                     )}
                     {hFull.prediction?.concentrate_window && (
-                      <span>
-                        <span style={{ color: "var(--muted)" }}>Concentrate: </span>
-                        <strong>{hFull.prediction.concentrate_window}</strong>
-                      </span>
+                      <span><span style={{ color: "var(--muted)" }}>Window: </span><strong>{hFull.prediction.concentrate_window}</strong></span>
                     )}
                     {hFull.prediction?.peak_time && (
-                      <span>
-                        <span style={{ color: "var(--muted)" }}>Peak: </span>
-                        <strong>{hFull.prediction.peak_time}</strong>
-                      </span>
+                      <span><span style={{ color: "var(--muted)" }}>Peak: </span><strong>{hFull.prediction.peak_time}</strong></span>
                     )}
                   </div>
                 )}
 
+                {/* Current deployment status */}
                 {(h.assigned_unit_code || h.controlled_by_name || h.deployed_at) && (
                   <div style={{
-                    fontSize: "10px", color: "var(--text)", padding: "6px 10px",
+                    fontSize: "10px", color: "var(--text)", padding: "5px 10px",
                     borderRadius: "6px", backgroundColor: "var(--background)",
                     border: "1px solid var(--border)",
+                    display: "flex", gap: "10px", flexWrap: "wrap",
                   }}>
                     {h.controlled_by_name && (
-                      <span style={{ marginRight: 10 }}>
-                        Control: <strong>{h.controlled_by_name}</strong>
-                      </span>
+                      <span>Control: <strong>{h.controlled_by_name}</strong></span>
                     )}
                     {h.assigned_unit_name && (
-                      <span style={{ marginRight: 10 }}>
-                        Deployed: <strong>{h.assigned_unit_name}</strong>
-                      </span>
+                      <span>Deployed: <strong>{h.assigned_unit_name}</strong></span>
                     )}
                     {h.deployed_at && (
-                      <span style={{ color: "var(--muted)" }}>
-                        {new Date(h.deployed_at).toLocaleString()}
-                      </span>
+                      <span style={{ color: "var(--muted)" }}>{new Date(h.deployed_at).toLocaleString()}</span>
                     )}
                   </div>
                 )}
 
+                {/* Deploy controls — only visible to IO/DPC */}
                 {canDeploy && (
                   <div style={{
                     display: "flex", flexDirection: "column", gap: 8,
                     padding: "8px 10px", borderRadius: "6px",
-                    border: "1px dashed var(--border)",
-                    backgroundColor: "var(--background)",
+                    border: "1px dashed var(--border)", backgroundColor: "var(--background)",
                   }}>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button
@@ -2263,14 +2161,15 @@ const SecurityRecommendations = ({
                   </div>
                 )}
 
-                {/* Metadata strip */}
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", fontSize: "10px", color: "var(--muted)" }}>
+                {/* Footer: trust score + trend */}
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", fontSize: "10px", color: "var(--muted)", paddingTop: "2px" }}>
                   <span>Trust: <strong style={{ color: "var(--text)" }}>{Math.round(h.avg_trust_score || 0)}%</strong></span>
                   {h.prediction?.predicted_increase_pct > 0 && (
-                    <span>Growth: <strong style={{ color }}>{h.prediction.predicted_increase_pct}%</strong></span>
+                    <span>Trend: <strong style={{ color }}>+{h.prediction.predicted_increase_pct}%</strong></span>
                   )}
-                  <span>Radius: <strong style={{ color: "var(--text)" }}>{Math.round(Number(h.radius_meters || 0))} m</strong></span>
-                  <span>State: <strong style={{ color: "var(--text)" }}>{h.lifecycle_state || "—"}</strong></span>
+                  {h.lifecycle_state && (
+                    <span>State: <strong style={{ color: "var(--text)" }}>{h.lifecycle_state}</strong></span>
+                  )}
                 </div>
               </div>
             </div>

@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import List, Optional, Tuple
 from datetime import datetime, timezone, timedelta
@@ -137,8 +138,8 @@ def list_public_hotspots(
     # clustering runs.  Instead we always look back at least 7 days so the map
     # continues to show the most-recently-detected clusters even when the user
     # selects a short reporting window (e.g. "last 24 h").
-    effective_hours = int(time_window_hours) if time_window_hours is not None else 24
-    lookback_hours = max(effective_hours, 7 * 24)   # never blank the map between runs
+    effective_hours = int(time_window_hours) if time_window_hours is not None else 72
+    lookback_hours = max(effective_hours, 3 * 24)   # never blank the map between runs (min 3-day floor)
     period_cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
 
     logger.info(
@@ -204,20 +205,37 @@ def list_public_hotspots(
         incident_type_name = h.incident_type.type_name if h.incident_type else None
 
         # Use the persisted advisory when available — avoids calling the LLM/template
-        # on every mobile request.  Only generate (and then save) when missing.
+        # on every mobile request.  Regenerate when missing or stale (>12 h) so
+        # advisories stay current as incident counts and compositions evolve.
         advisory = h.llm_citizen_advisory
-        if not advisory:
+        now_utc = datetime.now(timezone.utc)
+        gen_at = h.llm_generated_at
+        if gen_at is not None and gen_at.tzinfo is None:
+            gen_at = gen_at.replace(tzinfo=timezone.utc)
+        advisory_stale = (
+            not advisory
+            or gen_at is None
+            or (now_utc - gen_at).total_seconds() > 12 * 3600
+        )
+        if advisory_stale:
+            incident_mix: Optional[dict] = None
+            if getattr(h, "composition", None):
+                try:
+                    incident_mix = json.loads(h.composition)
+                except Exception:
+                    pass
             advisory = generate_citizen_advisory(
                 classification=classification,
                 incident_count=int(h.incident_count or 0),
                 dominant_crime=incident_type_name,
                 time_window_hours=int(h.time_window_hours or effective_hours),
-                hotspot_id=h.hotspot_id,  # Improvement 10: targeted cache invalidation
+                hotspot_id=h.hotspot_id,
+                incident_mix=incident_mix,
             )
             # Mark for persistence so future requests can use the cached text.
             h.llm_citizen_advisory = advisory
             h.llm_provider = "api_generated"
-            h.llm_generated_at = datetime.now(timezone.utc)
+            h.llm_generated_at = now_utc
             hotspots_needing_advisory.append(h)
 
         responses.append(

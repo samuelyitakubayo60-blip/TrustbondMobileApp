@@ -498,36 +498,56 @@ def _build_citizen_advisory(
         )
 
     if is_theft_cluster:
+        if cls in ("critical", "active") and n >= 5:
+            return (
+                f"{n} theft incidents have been reported near {area} {t} — this is an elevated-risk zone right now. "
+                f"Keep phones and bags out of sight, avoid walking alone especially after dark, and lock your property. "
+                f"Report any suspicious activity or attempted theft through TrustBond immediately."
+            )
         urgency = "There is elevated risk" if cls in ("critical", "active") else "There have been reports"
         return (
             f"{urgency} of theft near {area} — {count_phrase} {t}. "
-            f"Secure your valuables, stay aware of your surroundings, and avoid isolated spots especially after dark. "
-            f"Report any suspicious activity through TrustBond immediately."
+            f"Secure your valuables, keep your phone and bag close, and avoid isolated spots especially at night. "
+            f"Report any suspicious behaviour through TrustBond right away."
         )
 
     if re.search(r"traffic|accident|road|vehicle", crime, re.I):
+        if n >= 3:
+            return (
+                f"{count_phrase} of traffic incidents near {area} {t} — drive with extra caution in this area. "
+                f"Slow down, watch for pedestrians, and report dangerous driving or road hazards through TrustBond."
+            )
         return (
-            f"Traffic-related incidents have been reported near {area} {t} ({count_phrase}). "
-            f"Drive carefully, stay cautious on the road, and report dangerous driving or serious accidents through TrustBond."
+            f"A traffic incident was reported near {area} {t}. "
+            f"Drive carefully in this area, stay alert, and report any dangerous driving through TrustBond."
         )
 
     if re.search(r"assault|fight|violence|attack", crime, re.I):
+        if cls in ("critical", "active"):
+            return (
+                f"{count_phrase} of violent incidents near {area} {t} — avoid this area if possible, especially at night. "
+                f"Stay in well-lit and populated places, move in groups, and report anything alarming through TrustBond."
+            )
         return (
-            f"There is a heightened risk of violent incidents near {area} — {count_phrase} reported {t}. "
-            f"Avoid confrontations, stay in well-lit and populated areas, and report anything alarming through TrustBond."
+            f"Reports of violent incidents near {area} — {count_phrase} {t}. "
+            f"Avoid confrontations, stay in well-lit areas, and report anything that feels unsafe through TrustBond."
         )
 
     if cls in {"critical"} or (cls == "active" and n >= 3):
         return (
             f"There is high risk of incidents near {area} — {count_phrase} of {crime} reported {t}. "
-            f"Be attentive, avoid unnecessary movement in the area, look out for neighbours, "
+            f"Be attentive, avoid unnecessary movement in the area, look out for your neighbours, "
             f"and report any unusual behaviour or incident immediately through TrustBond."
         )
 
     if cls in {"active", "high"} or cluster_kind == "mixed_hotspot":
+        mix_note = ""
+        if incident_mix and len(incident_mix) > 1:
+            top_types = sorted(incident_mix.items(), key=lambda x: x[1], reverse=True)[:2]
+            mix_note = f" ({' and '.join(k for k, _ in top_types)})"
         return (
-            f"Multiple suspicious cases were reported near {area} {t} ({count_phrase}). "
-            f"Stay alert and ready to report any incident or unusual behaviour you detect through TrustBond."
+            f"Multiple suspicious cases{mix_note} were reported near {area} {t} ({count_phrase}). "
+            f"Stay alert and report any incident or unusual behaviour through TrustBond."
         )
 
     if verified_report_count >= max(2, n // 2) and n >= 2:
@@ -1377,7 +1397,9 @@ def generate_citizen_advisory(
     Falls back to the template when no LLM key is configured.
     """
     mix_tuple = tuple(sorted((incident_mix or {}).items()))
-    cache_key = (classification, incident_count, dominant_crime, area_label, mix_tuple, time_window_hours)
+    # Include hotspot_id so distinct hotspots never share the same cached advisory
+    # even when their aggregate parameters happen to match.
+    cache_key = (hotspot_id, classification, incident_count, dominant_crime, area_label, mix_tuple, time_window_hours)
     if cache_key in _citizen_advisory_cache:
         return _citizen_advisory_cache[cache_key]
 
