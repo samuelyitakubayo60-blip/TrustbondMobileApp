@@ -330,21 +330,22 @@ def verify_report(
     if decision == "confirmed":
         if existing_ml:
             current_score = float(existing_ml.trust_score or 50.0)
-            new_score = max(90.0, current_score)  # must reach ≥ 90
+            new_score = max(85.0, min(100.0, current_score + 52))  # leader confirm → at least 85, capped at 100
             existing_ml.trust_score = Decimal(str(round(new_score, 2)))
             existing_ml.prediction_label = "likely_real"
-            existing_ml.confidence = Decimal("0.90")
+            existing_ml.confidence = Decimal("0.95")
             existing_ml.model_type = "leader_override"
-            existing_ml.is_final = False
+            existing_ml.is_final = True  # lock score — no background job should override leader decision
+            existing_ml.evaluated_at = now
         else:
             db.add(MLPrediction(
                 prediction_id=uuid4(),
                 report_id=r.report_id,
                 trust_score=Decimal("90.0"),
                 prediction_label="likely_real",
-                confidence=Decimal("0.90"),
+                confidence=Decimal("0.95"),
                 model_type="leader_override",
-                is_final=False,
+                is_final=True,
                 evaluated_at=now,
             ))
         # Reward reporting device — increment counter then recalculate full score

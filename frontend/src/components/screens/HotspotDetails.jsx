@@ -38,8 +38,9 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
         setLoading(true);
         setError(null);
 
-        const allHotspotsResponse = await api.get('/api/v1/hotspots/');
-        const hotspots = Array.isArray(allHotspotsResponse) ? allHotspotsResponse : [];
+        // Fetch only the specific hotspot (with LLM enrichment) instead of all
+        const singleResponse = await api.get(`/api/v1/hotspots/?hotspot_ids=${hotspotId}`);
+        const hotspots = Array.isArray(singleResponse) ? singleResponse : [];
         const foundHotspot = hotspots.find(h => h.hotspot_id == hotspotId);
 
         if (foundHotspot && (!foundHotspot.evidence_files || foundHotspot.evidence_files.length === 0)) {
@@ -140,7 +141,9 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
   const incidentMix = hotspot.incident_mix || {};
   const mixEntries = Object.entries(incidentMix).sort((a, b) => b[1] - a[1]);
   const totalMixCount = mixEntries.reduce((sum, [, c]) => sum + c, 0) || hotspot.incident_count || 0;
-  const advisory = hotspot.prediction?.citizen_advisory || hotspot.llm_citizen_advisory;
+  const narrative = hotspot.prediction?.narrative || hotspot.llm_narrative;
+  const recommendation = hotspot.prediction?.recommendation || hotspot.llm_recommendation;
+  const policeAdvisory = narrative || recommendation;
   const evidenceFiles = hotspot.evidence_files || [];
 
   return (
@@ -348,23 +351,21 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
                   alignItems: "center", justifyContent: "center", gap: 6,
                 }}
               >
-                Navigate Here
+                Navigate
               </button>
-              <button
-                onClick={() => {
-                  const lat = Number(hotspot.center_lat || 0);
-                  const lng = Number(hotspot.center_long || 0);
-                  window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
-                }}
-                style={{
-                  flex: 1, padding: "10px 14px", fontSize: 12, fontWeight: 600,
-                  background: "var(--surface2, rgba(0,0,0,0.05))", color: "var(--text)",
-                  border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                }}
-              >
-                View on Google Maps
-              </button>
+              {goToScreen && (
+                <button
+                  onClick={() => goToScreen("safety-map", 0, { focusHotspotId: hotspot.hotspot_id })}
+                  style={{
+                    flex: 1, padding: "10px 14px", fontSize: 12, fontWeight: 600,
+                    background: "var(--surface2, rgba(0,0,0,0.05))", color: "var(--text)",
+                    border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  }}
+                >
+                  View on Map
+                </button>
+              )}
             </div>
 
             {/* Risk assessment compact */}
@@ -397,45 +398,61 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      </div>
 
-      {/* ── Advisory ── */}
-      {advisory && (
-        <div className="card" style={{ marginTop: 14, overflow: "hidden" }}>
-          <div className="card-header" style={{ padding: "12px 16px" }}>
-            <div className="card-title" style={{ fontSize: 13 }}>Safety Advisory</div>
-          </div>
-          <div style={{ padding: 16 }}>
-            <div style={{
-              fontSize: 13, lineHeight: 1.7, color: "var(--text)",
-              maxHeight: expandedAdvisory ? "none" : 100, overflow: "hidden",
-              position: "relative",
-            }}>
-              {advisory}
-              {!expandedAdvisory && advisory.length > 200 && (
-                <div style={{
-                  position: "absolute", bottom: 0, left: 0, right: 0, height: 40,
-                  background: "linear-gradient(transparent, var(--surface))",
-                }} />
-              )}
-            </div>
-            {advisory.length > 200 && (
-              <button
-                onClick={() => setExpandedAdvisory(!expandedAdvisory)}
-                style={{
-                  marginTop: 8, background: "none", border: "none",
-                  color: "var(--accent)", fontSize: 12, fontWeight: 600,
-                  cursor: "pointer", padding: 0,
-                }}
-              >
-                {expandedAdvisory ? "Show less" : "Read more"}
-              </button>
+            {/* Operational Briefing — inline in Location card */}
+            {policeAdvisory && (
+              <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                  Operational Briefing
+                </div>
+                {narrative && (
+                  <div style={{
+                    fontSize: 12, lineHeight: 1.7, color: "var(--text)", marginBottom: recommendation ? 10 : 0,
+                    maxHeight: expandedAdvisory ? "none" : 80, overflow: "hidden", position: "relative",
+                  }}>
+                    {narrative}
+                    {!expandedAdvisory && narrative.length > 180 && (
+                      <div style={{
+                        position: "absolute", bottom: 0, left: 0, right: 0, height: 30,
+                        background: "linear-gradient(transparent, var(--surface))",
+                      }} />
+                    )}
+                  </div>
+                )}
+                {recommendation && (
+                  <div style={{
+                    fontSize: 12, lineHeight: 1.6, color: "var(--text)",
+                    padding: "10px 12px", borderRadius: 8, borderLeft: `3px solid ${risk.color}`,
+                    background: "var(--surface2, rgba(0,0,0,0.03))",
+                    maxHeight: expandedAdvisory ? "none" : (narrative ? 60 : 80), overflow: "hidden", position: "relative",
+                  }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: risk.color, marginBottom: 4, textTransform: "uppercase" }}>Recommendation</div>
+                    {recommendation}
+                    {!expandedAdvisory && recommendation.length > 150 && (
+                      <div style={{
+                        position: "absolute", bottom: 0, left: 0, right: 0, height: 30,
+                        background: "linear-gradient(transparent, var(--surface))",
+                      }} />
+                    )}
+                  </div>
+                )}
+                {(narrative?.length > 180 || recommendation?.length > 150) && (
+                  <button
+                    onClick={() => setExpandedAdvisory(!expandedAdvisory)}
+                    style={{
+                      marginTop: 6, background: "none", border: "none",
+                      color: "var(--accent)", fontSize: 11, fontWeight: 600,
+                      cursor: "pointer", padding: 0,
+                    }}
+                  >
+                    {expandedAdvisory ? "Show less" : "Read full briefing"}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
-      )}
+      </div>
 
       {/* ── Related Reports ── */}
       <div className="card" style={{ marginTop: 14, overflow: "hidden" }}>

@@ -3,7 +3,7 @@ from typing import Annotated, List, Optional, Dict, Any
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException, status, Request
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload, selectinload
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
@@ -14,6 +14,7 @@ from app.core.audit import log_action
 from app.core.cluster_classifier import predict_cluster_classification
 from app.database import get_db
 from app.models.hotspot import Hotspot, hotspot_reports_table
+from app.models.location import Location
 from app.models.report import Report
 from app.api.v1.auth import get_current_user, get_current_admin_or_supervisor
 from app.models.police_user import PoliceUser
@@ -109,6 +110,93 @@ def _station_covered_village_ids(db: Session, station_id: int) -> List[int]:
         .all()
     )
     return sorted({int(r[0]) for r in village_rows if r and r[0] is not None})
+
+
+def _compute_area_label(db: Session, incident_points: List[Dict[str, Any]]) -> Optional[str]:
+    """Generate a human-readable geographic scope label for a hotspot cluster.
+
+    Hierarchy (smallest → largest):
+      - Single village  → "Nyabigoma Village"
+      - Single cell     → "Muhoza Cell"
+      - Single sector   → "Muhoza Sector"
+      - Single station  → "Musanze Station area"
+      - Multi-station   → "Covers Musanze, Kinigi Stations"
+      - District-wide   → "District-wide security concern"
+    """
+    from app.models.station_coverage import StationCoverageCell
+    from app.models.station import Station
+    from app.models.location import Location
+
+    villages = set()
+    cells = set()
+    sectors = set()
+    cell_ids = set()  # numeric IDs for station lookup
+
+    for pt in incident_points:
+        v = (pt.get("village_name") or "").strip()
+        c = (pt.get("cell_name") or "").strip()
+        s = (pt.get("sector_name") or "").strip()
+        if v:
+            villages.add(v)
+        if c:
+            cells.add(c)
+        if s:
+            sectors.add(s)
+        cid = pt.get("cell_location_id")
+        if cid is not None:
+            cell_ids.add(int(cid))
+
+    if not villages and not cells and not sectors:
+        return None
+
+    # Single village
+    if len(villages) == 1:
+        return f"{list(villages)[0]} Village"
+
+    # Single cell
+    if len(cells) == 1:
+        return f"{list(cells)[0]} Cell"
+
+    # Single sector
+    if len(sectors) == 1:
+        return f"{list(sectors)[0]} Sector"
+
+    # Multiple sectors → look up stations
+    if cell_ids:
+        try:
+            station_rows = (
+                db.query(Station.station_name)
+                .join(StationCoverageCell, StationCoverageCell.station_id == Station.station_id)
+                .filter(StationCoverageCell.cell_location_id.in_(list(cell_ids)))
+                .distinct()
+                .all()
+            )
+            station_names = sorted({r[0] for r in station_rows if r and r[0]})
+        except Exception:
+            station_names = []
+
+        if station_names:
+            # Count total stations in district for district-wide check
+            try:
+                total_stations = db.query(func.count(Station.station_id)).filter(
+                    Station.is_active.is_(True)
+                ).scalar() or 0
+            except Exception:
+                total_stations = 0
+
+            if total_stations > 0 and len(station_names) >= total_stations * 0.8:
+                return "District-wide security concern — all stations affected"
+            elif len(station_names) == 1:
+                return f"{station_names[0]} Station area"
+            elif len(station_names) <= 3:
+                return f"Covers {', '.join(station_names)} Stations"
+            else:
+                return f"Covers {len(station_names)} stations across multiple sectors"
+
+    # Fallback: multiple sectors, no station mapping
+    if len(sectors) <= 3:
+        return f"Across {', '.join(sorted(sectors))} Sectors"
+    return f"Across {len(sectors)} sectors — widespread activity"
 
 
 def _apply_officer_hotspot_scope(query, db: Session, current_user: PoliceUser):
@@ -334,12 +422,12 @@ def list_hotspots(
         joinedload(Hotspot.incident_type),
         joinedload(Hotspot.controlled_by),
         selectinload(Hotspot.reports).selectinload(Report.ml_predictions),
-        selectinload(Hotspot.reports).joinedload(Report.village_location),
+        selectinload(Hotspot.reports).joinedload(Report.village_location).joinedload(Location.parent).joinedload(Location.parent),
         selectinload(Hotspot.reports).joinedload(Report.incident_type),
         selectinload(Hotspot.reports).selectinload(Report.evidence_files),
     )
 
-    # Map time period → report window (filter incidents by reported_at, not only cluster run time).
+    # Map time period → report window (filter by actual report dates, not cluster creation time).
     report_window_hours: Optional[int] = None
     if time_period or hours_back:
         time_filter_hours = None
@@ -356,13 +444,19 @@ def list_hotspots(
             time_filter_hours = time_mapping.get(time_period.lower())
             if time_filter_hours is None:
                 raise HTTPException(
-                    status_code=400, 
+                    status_code=400,
                     detail=f"Invalid time_period. Use: {', '.join(time_mapping.keys())}"
                 )
         if time_filter_hours:
             report_window_hours = int(time_filter_hours)
             cutoff_time = datetime.now(timezone.utc) - timedelta(hours=report_window_hours)
-            query = query.filter(Hotspot.detected_at >= cutoff_time)
+            # Filter by actual report dates: only show clusters that have
+            # at least one report filed within the selected time window.
+            query = (
+                query.join(Hotspot.reports)
+                .filter(Report.reported_at >= cutoff_time)
+                .distinct()
+            )
     report_window_cutoff = (
         datetime.now(timezone.utc) - timedelta(hours=report_window_hours)
         if report_window_hours
@@ -392,12 +486,31 @@ def list_hotspots(
         allowed_levels = aliases.get(rl, [rl])
         query = query.filter(Hotspot.risk_level.in_(allowed_levels))
     if time_window_hours is not None:
-        # Inclusive period semantics: selecting a larger window should include
-        # hotspots created in smaller DBSCAN windows as long as they were
-        # detected within the selected period.
+        # Filter by report dates: show clusters with reports in this window.
         period_cutoff = datetime.now(timezone.utc) - timedelta(hours=int(time_window_hours))
-        query = query.filter(Hotspot.detected_at >= period_cutoff)
+        if not (time_period or hours_back):
+            # Only add the join if we haven't already joined via time_period
+            query = (
+                query.join(Hotspot.reports)
+                .filter(Report.reported_at >= period_cutoff)
+                .distinct()
+            )
     hotspots = query.limit(limit).all()
+
+    # Batch-load is_core flags for all hotspots at once (avoids N per-hotspot queries)
+    hotspot_id_list = [h.hotspot_id for h in hotspots]
+    all_core_report_ids: Dict[int, set] = {hid: set() for hid in hotspot_id_list}
+    if hotspot_id_list:
+        try:
+            core_rows = db.execute(
+                text("SELECT hotspot_id, report_id FROM hotspot_reports WHERE hotspot_id = ANY(:ids) AND is_core = true"),
+                {"ids": hotspot_id_list},
+            ).fetchall()
+            for row in core_rows:
+                all_core_report_ids.setdefault(row[0], set()).add(str(row[1]))
+        except Exception:
+            pass
+
     deployment_units = load_hotspot_deployment_units(db)
 
     responses = []
@@ -445,16 +558,8 @@ def list_hotspots(
             )
             continue
 
-        # Load is_core flag per report from the junction table
-        core_report_ids: set = set()
-        try:
-            rows = db.execute(
-                text("SELECT report_id FROM hotspot_reports WHERE hotspot_id = :hid AND is_core = true"),
-                {"hid": h.hotspot_id},
-            ).fetchall()
-            core_report_ids = {str(row[0]) for row in rows}
-        except Exception:
-            pass
+        # Use batch-loaded is_core flags
+        core_report_ids = all_core_report_ids.get(h.hotspot_id, set())
 
         incident_count = len(reports_in_cluster)
 
@@ -532,14 +637,19 @@ def list_hotspots(
             if src_preds and getattr(src_preds[0], "trust_score", None) is not None:
                 report_trust = float(src_preds[0].trust_score)
 
-            location_info = None
-            if r.latitude is not None and r.longitude is not None:
-                try:
-                    location_info = get_village_location_info(
-                        db, float(r.latitude), float(r.longitude)
-                    )
-                except Exception:
-                    location_info = None
+            # Use the already-loaded village_location relationship (with
+            # eagerly-loaded parent chain) instead of per-report PostGIS queries.
+            village_loc = getattr(r, "village_location", None)
+            village_name = village_loc.location_name if village_loc else None
+            cell_name = None
+            cell_location_id = None
+            sector_name = None
+            if village_loc and getattr(village_loc, "parent", None):
+                cell = village_loc.parent
+                cell_name = cell.location_name
+                cell_location_id = cell.location_id
+                if getattr(cell, "parent", None):
+                    sector_name = cell.parent.location_name
 
             incident_points.append(
                 {
@@ -551,9 +661,10 @@ def list_hotspots(
                     "longitude": float(r.longitude),
                     "reported_at": r.reported_at.isoformat() if r.reported_at else None,
                     "trust_score": report_trust,
-                    "village_name": location_info.get("village_name") if location_info else None,
-                    "cell_name": location_info.get("cell_name") if location_info else None,
-                    "sector_name": location_info.get("sector_name") if location_info else None,
+                    "village_name": village_name,
+                    "cell_name": cell_name,
+                    "sector_name": sector_name,
+                    "cell_location_id": cell_location_id,
                     "evidence_files": [
                         {
                             "evidence_id": str(e.evidence_id),
@@ -585,9 +696,20 @@ def list_hotspots(
             boundary_points = _expand_hull(_convex_hull(cluster_points)) if cluster_points else []
 
         dominant_crime = h.incident_type.type_name if h.incident_type else None
-        area_label = None
-        if area_counts:
-            area_label = sorted(area_counts.items(), key=lambda x: x[1], reverse=True)[0][0]
+        # Use stored area_label when available; only recompute if missing
+        area_label = getattr(h, "area_label", None)
+        if not area_label:
+            area_label = _compute_area_label(db, incident_points)
+            if not area_label and area_counts:
+                area_label = sorted(area_counts.items(), key=lambda x: x[1], reverse=True)[0][0]
+
+        # Persist area_label on the hotspot for use by public/citizen endpoints
+        if area_label and getattr(h, "area_label", None) != area_label:
+            try:
+                h.area_label = area_label
+                db.add(h)
+            except Exception:
+                pass
 
         cluster_kind = "trend_cluster" if len(incident_mix) <= 1 else "mixed_hotspot"
 
@@ -812,6 +934,31 @@ def list_hotspots(
         except Exception:
             pass
 
+        # ── Recent activity indicator ──────────────────────────────────────
+        now_utc = datetime.now(timezone.utc)
+        week_cutoff = now_utc - timedelta(days=7)
+        _tz_reports = []
+        for t in report_times:
+            if t is not None:
+                _t = t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+                _tz_reports.append(_t)
+        latest_incident_at = max(_tz_reports) if _tz_reports else None
+        recent_incident_count = sum(1 for t in _tz_reports if t >= week_cutoff)
+        if latest_incident_at:
+            days_ago = (now_utc - latest_incident_at).days
+            if days_ago == 0:
+                recency_label = f"Active today — {recent_incident_count} incident(s) this week"
+            elif days_ago <= 1:
+                recency_label = f"Active yesterday — {recent_incident_count} incident(s) this week"
+            elif days_ago <= 7:
+                recency_label = f"Active this week — {recent_incident_count} incident(s) in last 7 days"
+            elif days_ago <= 30:
+                recency_label = f"Last activity {days_ago} days ago"
+            else:
+                recency_label = f"Inactive — last activity {days_ago} days ago"
+        else:
+            recency_label = None
+
         responses.append(HotspotResponse(
             hotspot_id=h.hotspot_id,
             center_lat=h.center_lat,
@@ -862,6 +1009,10 @@ def list_hotspots(
             # Improvement 11
             anomaly_score=float(h.anomaly_score) if getattr(h, "anomaly_score", None) else None,
             abuse_flag=getattr(h, "abuse_flag", None),
+            # Recent activity
+            recent_incident_count=recent_incident_count,
+            latest_incident_at=latest_incident_at,
+            recency_label=recency_label,
         ))
         
     # Commit any persisted LLM briefings generated during this request.
@@ -1098,7 +1249,7 @@ def get_all_verified_incidents(
             joinedload(Report.village_location),
         )
         .filter(
-            Report.verification_status != "rejected",
+            Report.verification_status == "verified",
             Report.rule_status != "rejected",
             Report.latitude.isnot(None),
             Report.longitude.isnot(None),
@@ -1241,6 +1392,32 @@ def recompute_hotspots(
             detail="Could not clear existing hotspots before recompute.",
         )
 
+    # Check how many reports exist in the requested window so we can give
+    # the user actionable feedback when the window misses all data.
+    reports_in_window = (
+        db.query(func.count(Report.report_id))
+        .filter(
+            Report.status != "rejected",
+            Report.verification_status != "rejected",
+            Report.rule_status != "rejected",
+            Report.reported_at >= window_start,
+            Report.reported_at <= window_end,
+        )
+        .scalar()
+    ) or 0
+
+    # Also find the actual date range of verified reports for hint purposes.
+    date_range = db.query(
+        func.min(Report.reported_at),
+        func.max(Report.reported_at),
+    ).filter(
+        Report.status != "rejected",
+        Report.verification_status != "rejected",
+        Report.rule_status != "rejected",
+    ).first()
+    oldest_report = date_range[0] if date_range else None
+    newest_report = date_range[1] if date_range else None
+
     try:
         created = create_hotspots_from_reports(
             db,
@@ -1293,9 +1470,10 @@ def recompute_hotspots(
 
     # Broadcast hotspot update to all connected clients for real-time Safety Map updates
     background_tasks.add_task(manager.broadcast, {"type": "refresh_data", "entity": "hotspot", "action": "recomputed"})
-    
+
     return {
         "created": created,
+        "reports_in_window": reports_in_window,
         "params": {
             "time_window_hours": eff_tw,
             "min_incidents": eff_min,
@@ -1304,6 +1482,10 @@ def recompute_hotspots(
             "incident_type_id": eff_incident_type_id,
             "from_date": window_start.isoformat(),
             "to_date": window_end.isoformat(),
+        },
+        "data_range": {
+            "oldest_report": oldest_report.isoformat() if oldest_report else None,
+            "newest_report": newest_report.isoformat() if newest_report else None,
         },
     }
 
@@ -1564,6 +1746,29 @@ def deploy_unit_to_hotspot(
     from app.core.hotspot_deployment import deploy_hotspot_unit
 
     h = _load_hotspot_for_ops(db, hotspot_id)
+
+    # Compute area_label from the hotspot's reports for the deploy email
+    deploy_area_label = None
+    try:
+        deploy_reports = list(getattr(h, "reports", None) or [])
+        deploy_incident_points = []
+        for r in deploy_reports:
+            loc_info = None
+            if r.latitude is not None and r.longitude is not None:
+                try:
+                    loc_info = get_village_location_info(db, float(r.latitude), float(r.longitude))
+                except Exception:
+                    pass
+            deploy_incident_points.append({
+                "village_name": loc_info.get("village_name") if loc_info else None,
+                "cell_name": loc_info.get("cell_name") if loc_info else None,
+                "sector_name": loc_info.get("sector_name") if loc_info else None,
+                "cell_location_id": loc_info.get("cell_location_id") if loc_info else None,
+            })
+        deploy_area_label = _compute_area_label(db, deploy_incident_points)
+    except Exception:
+        logger.exception("Failed to compute area_label for deploy email hotspot_id=%s", hotspot_id)
+
     try:
         _, unit, meta = deploy_hotspot_unit(
             db,
@@ -1571,6 +1776,7 @@ def deploy_unit_to_hotspot(
             unit_code=payload.unit_code,
             decided_by=current_user,
             note=payload.note,
+            area_label=deploy_area_label,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

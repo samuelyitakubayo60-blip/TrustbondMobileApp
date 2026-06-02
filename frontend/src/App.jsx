@@ -523,6 +523,7 @@ function App() {
         return (
           <HotspotDetails
             hotspotId={currentScreen.props?.hotspotId || selectedHotspotId}
+            goToScreen={goToScreen}
             wsRefreshKey={wsRefreshKey}
           />
         );
@@ -532,6 +533,7 @@ function App() {
             goToScreen={goToScreen}
             openModal={openModal}
             wsRefreshKey={wsRefreshKey}
+            focusHotspotId={currentScreen.props?.focusHotspotId}
           />
         );
       case "device-trust":

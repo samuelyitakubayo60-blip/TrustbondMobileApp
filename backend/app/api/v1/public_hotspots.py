@@ -132,24 +132,23 @@ def list_public_hotspots(
     Returns recent hotspots with center coordinates, radius, incident count,
     risk level, and incident_type_name for labeling.
     """
-    # `time_window_hours` tells us which reporting period the caller is interested
-    # in, but hotspot clustering runs periodically (not in real-time).  Using the
-    # requested window as a hard detection-time cutoff would blank the map between
-    # clustering runs.  Instead we always look back at least 7 days so the map
-    # continues to show the most-recently-detected clusters even when the user
-    # selects a short reporting window (e.g. "last 24 h").
+    # Filter clusters by actual report dates — only show clusters whose
+    # underlying reports fall within the requested time window.
     effective_hours = int(time_window_hours) if time_window_hours is not None else 72
-    lookback_hours = max(effective_hours, 3 * 24)   # never blank the map between runs (min 3-day floor)
-    period_cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
 
     logger.info(
-        "[public_hotspots] request — time_window=%dh, lookback=%dh, "
+        "[public_hotspots] request — time_window=%dh, "
         "lat=%s, lon=%s, radius_m=%d",
-        effective_hours, lookback_hours, lat, lon, radius_meters,
+        effective_hours, lat, lon, radius_meters,
     )
 
+    period_cutoff = datetime.now(timezone.utc) - timedelta(hours=effective_hours)
     query = db.query(Hotspot).options(joinedload(Hotspot.incident_type))
-    query = query.filter(Hotspot.detected_at >= period_cutoff)
+    query = (
+        query.join(Hotspot.reports)
+        .filter(Report.reported_at >= period_cutoff)
+        .distinct()
+    )
     query = query.order_by(Hotspot.detected_at.desc())
 
     if risk_level:
@@ -224,10 +223,32 @@ def list_public_hotspots(
                     incident_mix = json.loads(h.composition)
                 except Exception:
                     pass
+            # Use stored area_label for geographic context; fallback to generic
+            hotspot_area = getattr(h, "area_label", None) or None
+            # Add distance context for citizen when GPS filtering is active
+            dist = distance_by_id.get(h.hotspot_id)
+            if dist is not None and hotspot_area:
+                if dist < 500:
+                    citizen_area = f"{hotspot_area} (very close to you)"
+                elif dist < 1000:
+                    citizen_area = f"{hotspot_area} ({int(dist)}m from you)"
+                else:
+                    citizen_area = f"{hotspot_area} ({round(dist / 1000, 1)}km away)"
+            elif dist is not None:
+                if dist < 500:
+                    citizen_area = "very close to your location"
+                elif dist < 1000:
+                    citizen_area = f"about {int(dist)}m from your location"
+                else:
+                    citizen_area = f"about {round(dist / 1000, 1)}km from your location"
+            else:
+                citizen_area = hotspot_area
+
             advisory = generate_citizen_advisory(
                 classification=classification,
                 incident_count=int(h.incident_count or 0),
                 dominant_crime=incident_type_name,
+                area_label=citizen_area,
                 time_window_hours=int(h.time_window_hours or effective_hours),
                 hotspot_id=h.hotspot_id,
                 incident_mix=incident_mix,

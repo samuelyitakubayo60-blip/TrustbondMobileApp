@@ -58,7 +58,7 @@ const SystemConfig = ({ wsRefreshKey }) => {
   const [effectiveFormula, setEffectiveFormula] = useState(null);
   const [saveSuccess, setSaveSuccess]       = useState('');
   const [recomputingHotspots, setRecomputingHotspots] = useState(false);
-  const [recomputeHours, setRecomputeHours] = useState(168);
+  const [recomputeHours, setRecomputeHours] = useState(8760);
   const [recomputeMessage, setRecomputeMessage] = useState('');
 
   const mountedRef = useRef(true);
@@ -186,16 +186,35 @@ const SystemConfig = ({ wsRefreshKey }) => {
     setRecomputingHotspots(true);
     try {
       const params = await api.get('/api/v1/hotspots/params');
-      await api.post('/api/v1/hotspots/recompute', {
+      const result = await api.post('/api/v1/hotspots/recompute', {
         time_window_hours: Number(recomputeHours || params?.time_window_hours || 168),
         radius_meters: Number(params?.radius_meters || 500),
         min_incidents: Number(params?.min_incidents || 2),
         trust_min: Number(params?.trust_min || 0),
       });
       cacheBust('/api/v1/hotspots');
-      setRecomputeMessage(
-        `Hotspot recompute started for the last ${recomputeHours}h using saved DBSCAN settings.`,
-      );
+
+      const created = result?.created ?? 0;
+      const reportsFound = result?.reports_in_window ?? '?';
+      const dataRange = result?.data_range;
+
+      if (created > 0) {
+        setRecomputeMessage(
+          `Recompute complete: ${created} cluster(s) created from ${reportsFound} reports in the last ${recomputeHours}h.`,
+        );
+      } else if (reportsFound === 0 && dataRange?.newest_report) {
+        const newest = new Date(dataRange.newest_report);
+        const hoursSince = Math.round((Date.now() - newest.getTime()) / 3600000);
+        setRecomputeMessage(
+          `No reports found in the last ${recomputeHours}h. ` +
+          `Most recent report is ${hoursSince}h old (${newest.toLocaleDateString()}). ` +
+          `Try increasing the time window to at least ${hoursSince + 1}h.`,
+        );
+      } else {
+        setRecomputeMessage(
+          `Recompute complete: ${created} clusters created (${reportsFound} reports found in window).`,
+        );
+      }
     } catch (e) {
       setError(e?.message || 'Hotspot recompute failed.');
     } finally {

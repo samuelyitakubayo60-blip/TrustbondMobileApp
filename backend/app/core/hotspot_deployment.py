@@ -32,6 +32,7 @@ def deploy_hotspot_unit(
     unit_code: str,
     decided_by: PoliceUser,
     note: str | None = None,
+    area_label: str | None = None,
 ) -> tuple[Hotspot, SpecialAssignmentUnit, dict]:
     """
     Assign unit to hotspot, record deployment on linked reports, email unit commander.
@@ -91,9 +92,14 @@ def deploy_hotspot_unit(
     email_error = None
     commander = getattr(unit, "commander", None)
     if commander and commander.email and is_smtp_configured():
-        area = "cluster area"
-        if reports and getattr(reports[0], "village_location", None):
-            area = reports[0].village_location.location_name or area
+        # Use computed area_label (geographic scope) if provided
+        area = (area_label or "").strip()
+        if not area:
+            # Fallback: first report's village
+            if reports and getattr(reports[0], "village_location", None):
+                area = reports[0].village_location.location_name or "cluster area"
+            else:
+                area = "cluster area"
         ok, err = send_unit_commander_hotspot_deployment_email(
             commander.email,
             commander_name=_commander_label(commander),

@@ -539,15 +539,17 @@ def _adaptive_radius_meters(
 ) -> float:
     """
     Derive a clustering radius suited to the geographic density of the input
-    points rather than using the global fixed value.
+    points.  The user-provided base_radius is always respected as a floor —
+    adaptive logic can only *widen* beyond the user's explicit choice, never
+    shrink below it.
 
     Heuristic:
       - Sample pairwise distances across up to 25 points.
-      - If the median pair-distance < 200 m  → dense urban grid → shrink to 200–350 m.
-      - If the median pair-distance > 800 m  → sparse rural    → widen to 750–1 500 m.
+      - If the median pair-distance < 200 m  → dense; use base_radius (user floor).
+      - If the median pair-distance > 800 m  → sparse; widen proportionally.
       - Otherwise                            → keep base_radius.
 
-    The result is clamped to [200 m, 1 500 m] regardless.
+    The result is clamped to [base_radius, 10 000 m].
     """
     n = len(pts)
     if n < 3:
@@ -566,12 +568,17 @@ def _adaptive_radius_meters(
     dists.sort()
     median_d = dists[len(dists) // 2]
 
-    if median_d < 200:
-        adaptive = max(200.0, min(350.0, median_d * 1.5))
-    elif median_d > 800:
-        adaptive = min(1500.0, median_d * 1.2)
+    if median_d > 800:
+        # Sparse points — widen slightly but cap at 1.25x base to prevent
+        # district-wide mega-clusters when points are uniformly scattered.
+        adaptive = max(base_radius, min(base_radius * 1.25, median_d * 0.8))
     else:
         adaptive = base_radius
+
+    # Never go below the user's requested radius
+    adaptive = max(base_radius, adaptive)
+    # Upper safety cap at 10 km
+    adaptive = min(10000.0, adaptive)
 
     return round(adaptive, 0)
 
@@ -1352,6 +1359,89 @@ def _try_append_report_to_nearby_hotspot(
     return False
 
 
+def _merge_overlapping_hotspots(db: Session, eps_m: float) -> int:
+    """Merge hotspots whose centroids are within eps_m of each other.
+
+    Keeps the larger cluster and absorbs the smaller one's reports.
+    Returns the number of hotspots removed by merging.
+    """
+    all_hotspots = (
+        db.query(Hotspot)
+        .filter(Hotspot.detected_at >= datetime.now(timezone.utc) - timedelta(hours=1))
+        .order_by(Hotspot.incident_count.desc())
+        .all()
+    )
+    if len(all_hotspots) < 2:
+        return 0
+
+    removed_ids: set = set()
+    merged = 0
+
+    for i, primary in enumerate(all_hotspots):
+        if primary.hotspot_id in removed_ids:
+            continue
+        for j in range(i + 1, len(all_hotspots)):
+            secondary = all_hotspots[j]
+            if secondary.hotspot_id in removed_ids:
+                continue
+            dist = _haversine_meters(
+                float(primary.center_lat), float(primary.center_long),
+                float(secondary.center_lat), float(secondary.center_long),
+            )
+            if dist > eps_m:
+                continue
+
+            # Merge: move secondary's reports to primary
+            db.execute(
+                text(
+                    "UPDATE hotspot_reports SET hotspot_id = :pid "
+                    "WHERE hotspot_id = :sid AND report_id NOT IN "
+                    "(SELECT report_id FROM hotspot_reports WHERE hotspot_id = :pid)"
+                ),
+                {"pid": primary.hotspot_id, "sid": secondary.hotspot_id},
+            )
+            db.execute(
+                text("DELETE FROM hotspot_reports WHERE hotspot_id = :sid"),
+                {"sid": secondary.hotspot_id},
+            )
+
+            # Update primary's incident count and composition
+            sec_composition = {}
+            try:
+                sec_composition = json.loads(secondary.composition) if secondary.composition else {}
+            except Exception:
+                pass
+            pri_composition = {}
+            try:
+                pri_composition = json.loads(primary.composition) if primary.composition else {}
+            except Exception:
+                pass
+            for k, v in sec_composition.items():
+                pri_composition[k] = pri_composition.get(k, 0) + v
+
+            new_count = (
+                db.execute(
+                    text("SELECT COUNT(*) FROM hotspot_reports WHERE hotspot_id = :hid"),
+                    {"hid": primary.hotspot_id},
+                ).scalar() or 0
+            )
+            primary.incident_count = new_count
+            primary.composition = json.dumps(pri_composition)
+
+            # Delete secondary
+            db.delete(secondary)
+            removed_ids.add(secondary.hotspot_id)
+            merged += 1
+            logger.info(
+                "[hotspot] merged hotspot #%d into #%d (dist=%.0fm, eps=%.0fm)",
+                secondary.hotspot_id, primary.hotspot_id, dist, eps_m,
+            )
+
+    if merged:
+        db.flush()
+    return merged
+
+
 def _create_geographic_hotspots(
     db: Session,
     reports: List[Dict[str, Any]],
@@ -1570,11 +1660,12 @@ def _create_geographic_hotspots(
             risk_level = classification_to_risk_level(classification_result["classification"])
 
             # ── 4. Persist ────────────────────────────────────────────────
+            _dedup_deg = max(0.001, eps_m / 111000.0)
             existing = (
                 db.query(Hotspot)
                 .filter(
-                    Hotspot.center_lat.between(center_lat - 0.01, center_lat + 0.01),
-                    Hotspot.center_long.between(center_long - 0.01, center_long + 0.01),
+                    Hotspot.center_lat.between(center_lat - _dedup_deg, center_lat + _dedup_deg),
+                    Hotspot.center_long.between(center_long - _dedup_deg, center_long + _dedup_deg),
                     Hotspot.detected_at >= datetime.now(timezone.utc) - timedelta(hours=24),
                 )
                 .order_by(Hotspot.detected_at.desc())
@@ -1799,7 +1890,6 @@ def _create_geographic_hotspots(
                     .filter(
                         Hotspot.center_lat.between(center_lat - _deg_tol, center_lat + _deg_tol),
                         Hotspot.center_long.between(center_long - _deg_tol, center_long + _deg_tol),
-                        Hotspot.crime_group == group_name,
                         Hotspot.detected_at >= datetime.now(timezone.utc) - timedelta(hours=24),
                     )
                     .order_by(Hotspot.detected_at.desc())
@@ -1864,7 +1954,7 @@ def _create_geographic_hotspots(
                     trend_direction=_trend_direction(cluster_pts),
                     cluster_confidence=Decimal(str(conf_n)),
                     polygon_points=polygon_json,
-                    crime_group=group_name,
+                    crime_group=_get_crime_group(max(noise_composition, key=noise_composition.get) if noise_composition else ""),
                 )
                 db.add(hotspot)
                 db.flush()
@@ -1920,6 +2010,15 @@ def _create_geographic_hotspots(
                 discarded_ids[:5],   # log up to 5 for brevity
             )
 
+    # ── Post-processing: merge overlapping clusters ──────────────────────────
+    # Clusters whose centroids are within eps_m of each other should be merged
+    # into one to prevent visual overlap on the map.
+    merged = 0
+    try:
+        merged = _merge_overlapping_hotspots(db, eps_m)
+    except Exception as _merge_err:
+        logger.warning("[hotspot] overlapping merge failed: %s", _merge_err)
+
     # ── Improvement 2: multi-crime zone post-processing ─────────────────────
     # After all crime groups are processed, mark hotspots whose geographic
     # footprint overlaps with hotspots of a different crime group.
@@ -1930,8 +2029,8 @@ def _create_geographic_hotspots(
         flagged_multi = 0
 
     logger.info(
-        "[hotspot] _create_geographic_hotspots done — created=%d, "
+        "[hotspot] _create_geographic_hotspots done — created=%d, merged=%d, "
         "total_raw_clusters=%d, total_noise_pts=%d, multi_crime_zones=%d",
-        created, total_clusters, total_noise, flagged_multi,
+        created, merged, total_clusters, total_noise, flagged_multi,
     )
-    return created
+    return created - merged

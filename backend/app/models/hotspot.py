@@ -88,6 +88,9 @@ class Hotspot(Base):
     abuse_flag = Column(Boolean, nullable=True, default=False)
     anomaly_score = Column(Numeric(5, 4), nullable=True)
 
+    # Computed geographic scope label (e.g. "Muhoza Cell", "Covers Musanze, Kinigi Stations")
+    area_label = Column(String(300), nullable=True)
+
     controlled_by = relationship("PoliceUser", foreign_keys=[controlled_by_user_id])
     reports = relationship(
         "Report",

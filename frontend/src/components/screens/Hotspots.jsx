@@ -80,12 +80,13 @@ const Hotspots = ({ wsRefreshKey }) => {
   const [bgRefreshing, setBgRefreshing] = useState(false);
   const [riskFilter, setRiskFilter] = useState("all");
   const [params, setParams] = useState({
-    time_window_hours: 24,
+    time_window_hours: 8760,
     min_incidents: 2,
     radius_meters: 500,
     trust_min: 50,
   });
   const [recomputing, setRecomputing] = useState(false);
+  const [recomputeMsg, setRecomputeMsg] = useState("");
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -716,14 +717,31 @@ const Hotspots = ({ wsRefreshKey }) => {
               disabled={recomputing}
               onClick={async () => {
                 setRecomputing(true);
+                setRecomputeMsg("");
                 try {
-                  await api.post("/api/v1/hotspots/recompute", params);
+                  const result = await api.post("/api/v1/hotspots/recompute", params);
                   // Bust the entire cache — recompute changes underlying data.
                   _hotCache = {};
                   _hotCacheKey = null;
                   loadHotspots(params, riskFilter, { silent: false });
-                } catch {
-                  // ignore
+
+                  const created = result?.created ?? 0;
+                  const reportsFound = result?.reports_in_window ?? "?";
+                  const dataRange = result?.data_range;
+                  if (created > 0) {
+                    setRecomputeMsg(`${created} cluster(s) from ${reportsFound} reports.`);
+                  } else if (reportsFound === 0 && dataRange?.newest_report) {
+                    const newest = new Date(dataRange.newest_report);
+                    const hoursSince = Math.round((Date.now() - newest.getTime()) / 3600000);
+                    setRecomputeMsg(
+                      `No reports in the last ${params.time_window_hours}h. ` +
+                      `Newest report is ${hoursSince}h old. Try ${hoursSince + 1}h+.`
+                    );
+                  } else {
+                    setRecomputeMsg(`${created} clusters (${reportsFound} reports in window).`);
+                  }
+                } catch (e) {
+                  setRecomputeMsg(e?.message || "Recompute failed.");
                 } finally {
                   setRecomputing(false);
                 }
@@ -731,6 +749,9 @@ const Hotspots = ({ wsRefreshKey }) => {
             >
               {recomputing ? "Recomputing…" : "Recompute Clusters"}
             </button>
+            {recomputeMsg && (
+              <span style={{ fontSize: 11, color: "var(--muted)", marginLeft: 8 }}>{recomputeMsg}</span>
+            )}
           </div>
 
           <div

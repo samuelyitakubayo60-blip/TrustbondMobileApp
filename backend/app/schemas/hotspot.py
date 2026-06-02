@@ -71,6 +71,11 @@ class HotspotResponse(BaseModel):
     anomaly_score: Optional[float] = None
     abuse_flag: Optional[bool] = None
 
+    # ── Recent activity indicator ───────────────────────────────────────────
+    recent_incident_count: Optional[int] = None       # incidents in last 7 days
+    latest_incident_at: Optional[datetime] = None     # most recent report date
+    recency_label: Optional[str] = None               # e.g. "Active this week", "Last activity 12 days ago"
+
     class Config:
         from_attributes = True
 

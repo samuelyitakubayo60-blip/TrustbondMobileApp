@@ -367,7 +367,7 @@ const getSectorColor = (sectorName) => {
   return _sectorColorMap[sectorName];
 };
 
-const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
+const SafetyMap = ({ goToScreen, wsRefreshKey, focusHotspotId }) => {
   const _defaultKey = `${DEFAULT_TIME_PERIOD}_`;
   const [loading, setLoading] = useState(!_mapHotCache[`${DEFAULT_TIME_PERIOD}_`]);
   // Dark mode detection — syncs with body.dark-mode class toggle
@@ -532,6 +532,18 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-focus hotspot when navigated from hotspot-details "View on Map"
+  useEffect(() => {
+    if (!focusHotspotId || !historicalHotspots.length) return;
+    const target = historicalHotspots.find(h => h.hotspot_id == focusHotspotId);
+    if (target) {
+      setSelectedCluster(target);
+      setSelectedHotspotId(target.hotspot_id);
+      setMapFocusId(target.hotspot_id);
+      setFocusNonce((n) => n + 1);
+    }
+  }, [focusHotspotId, historicalHotspots]);
+
   // Load incident types from backend so filters match DB
   useEffect(() => {
     let mounted = true;
@@ -689,6 +701,17 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
 
   // filteredHistoricalHotspots = plottedHotspots so table count always matches map circles
   const filteredHistoricalHotspots = plottedHotspots;
+
+  // Pagination for hotspot table
+  const [clusterPage, setClusterPage] = useState(1);
+  const CLUSTERS_PER_PAGE = 10;
+  const totalClusterPages = Math.max(1, Math.ceil(filteredHistoricalHotspots.length / CLUSTERS_PER_PAGE));
+  const pagedHotspots = filteredHistoricalHotspots.slice(
+    (clusterPage - 1) * CLUSTERS_PER_PAGE,
+    clusterPage * CLUSTERS_PER_PAGE
+  );
+  // Reset to page 1 when filters change
+  useEffect(() => { setClusterPage(1); }, [filteredHistoricalHotspots.length]);
 
   useEffect(() => {
     if (!selectedHotspotId && plottedHotspots.length) {
@@ -1259,7 +1282,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
               Time Period (report dates on map):
             </div>
             <p style={{ fontSize: 11, color: "var(--muted)", margin: "0 0 8px" }}>
-              Filters which reports appear on the map. To change how clusters are built, use System Configuration and recompute hotspots there.
+              Filters clusters by report dates — only clusters with incidents in the selected period are shown.
             </p>
             <div
               style={{
@@ -1337,12 +1360,12 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                   <th>Score</th>
                   <th>Classification</th>
                   <th>Risk Level</th>
-                  <th>Detected</th>
+                  <th>Recent Activity</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredHistoricalHotspots.map((h) => {
+                {pagedHotspots.map((h) => {
                   // Add missing fields for historical hotspots
                   const hotspotWithStage = {
                     ...h,
@@ -1423,8 +1446,10 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                         );
                       })()}
                     </td>
-                    <td className="smx-cell-muted smx-cell-compact">
-                      {formatClusterTimestamp(h.detected_at)}
+                    <td className="smx-cell-muted smx-cell-compact" title={h.recency_label || ""}>
+                      {h.recency_label
+                        ? h.recency_label.split("—")[0].trim()
+                        : formatClusterTimestamp(h.detected_at)}
                     </td>
                     <td>
                       <div className="smx-actions-cell">
@@ -1443,7 +1468,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
                     </td>
                   </tr>
                 )})}
-                {!filteredHistoricalHotspots.length && !loading && (
+                {!pagedHotspots.length && !loading && (
                   <tr>
                     <td
                       colSpan={11}
@@ -1474,33 +1499,43 @@ const SafetyMap = ({ goToScreen, wsRefreshKey }) => {
               </tbody>
             </table>
           </div>
+          {/* Pagination controls */}
+          {totalClusterPages > 1 && (
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "8px 12px", fontSize: "12px", borderTop: "1px solid var(--border)",
+            }}>
+              <span style={{ color: "var(--muted)" }}>
+                Showing {(clusterPage - 1) * CLUSTERS_PER_PAGE + 1}–
+                {Math.min(clusterPage * CLUSTERS_PER_PAGE, filteredHistoricalHotspots.length)} of{" "}
+                {filteredHistoricalHotspots.length} hotspots
+              </span>
+              <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                <button
+                  className="btn btn-sm btn-outline-secondary"
+                  disabled={clusterPage <= 1}
+                  onClick={() => setClusterPage((p) => Math.max(1, p - 1))}
+                  style={{ fontSize: "11px", padding: "2px 8px" }}
+                >
+                  ← Prev
+                </button>
+                <span style={{ margin: "0 6px", color: "var(--muted)" }}>
+                  Page {clusterPage} / {totalClusterPages}
+                </span>
+                <button
+                  className="btn btn-sm btn-outline-secondary"
+                  disabled={clusterPage >= totalClusterPages}
+                  onClick={() => setClusterPage((p) => Math.min(totalClusterPages, p + 1))}
+                  style={{ fontSize: "11px", padding: "2px 8px" }}
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Security Recommendations Card */}
-        <div className="card" style={{ marginTop: "16px" }}>
-          <div className="card-header">
-            <div className="card-title">Security Recommendations</div>
-          </div>
-          <div style={{ padding: "16px" }}>
-            {loading ? (
-              <div style={{ textAlign: "center", padding: "20px" }}>
-                <div style={{ fontSize: "12px", color: "var(--muted)" }}>
-                  Analyzing security recommendations...
-                </div>
-              </div>
-            ) : (
-              <SecurityRecommendations
-                hotspots={filteredHistoricalHotspots}
-                assignmentUnits={assignmentUnits}
-                canDeploy={canDeployHotspot}
-                onReload={loadHistoricalHotspots}
-                timePeriod={timePeriod}
-                customHours={customHours}
-                timeWindowHours={aiTimeWindowHours}
-              />
-            )}
-          </div>
-        </div>
+        {/* Recommendations moved to Hotspot Details page */}
       </div>
     </>
   );

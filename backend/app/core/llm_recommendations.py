@@ -665,7 +665,7 @@ Write a UNIQUE operational briefing for this specific cluster — do not reuse g
 ── HOTSPOT DATA ──────────────────────────────────────────────────
 - Classification       : {classification}
 - Cluster type         : {cluster_kind}
-- Location             : {area}
+- Area coverage        : {area}
 - Total incidents      : {incident_count}
 - Dominant crime       : {dominant_crime or "mixed"}
 - Incident mix         :
@@ -694,8 +694,8 @@ Allowed deployment units (pick from this list only; do NOT use RIB/CID/LIB):
 
 Return JSON only:
 {{
-  "recommendation": "<20-40 words: name primary unit, tactic, duration, concentration window — reference the trend and lifecycle state>",
-  "narrative": "<60-90 words: describe the cluster evolution in {area}, reference the trend direction, severity, nearby clusters if any, and why the chosen units fit this specific crime mix>",
+  "recommendation": "<20-40 words: name primary unit, tactic, duration, concentration window — reference the full area coverage ({area}) and the trend/lifecycle state>",
+  "narrative": "<60-90 words: describe the cluster evolution across {area} (the full geographic range, not just one village), reference the trend direction, severity, nearby clusters if any, and why the chosen units fit this specific crime mix>",
   "status": "<escalation_likely | monitor_growth | emerging_trend | security_alert>",
   "citizen_advisory": "<Internal hint only — 1-2 sentences a community liaison officer could relay to residents; plain language, no unit codes, no tactical details>"
 }}
@@ -721,12 +721,12 @@ def _call_groq(prompt: str) -> Optional[Dict[str, Any]]:
     try:
         from groq import Groq
 
-        client = Groq(api_key=api_key)
+        client = Groq(api_key=api_key, timeout=15.0)
         resp = client.chat.completions.create(
             model=os.getenv("GROQ_HOTSPOT_MODEL", "llama-3.3-70b-versatile"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.45,
-            max_tokens=700,
+            max_tokens=500,
             response_format={"type": "json_object"},
         )
         return json.loads(resp.choices[0].message.content)
@@ -781,7 +781,7 @@ def gemini_generate_json(
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 temperature=temperature,
-                max_output_tokens=max_tokens,
+                max_output_tokens=500,
             ),
         )
         text = (getattr(resp, "text", None) or "").strip()
@@ -1336,19 +1336,20 @@ def _build_citizen_advisory_prompt(
     return f"""You are writing a PUBLIC SAFETY NOTICE for ordinary citizens (residents, commuters, and members of the public) in Musanze, Rwanda.
 
 IMPORTANT: This is NOT a police briefing. Your reader is a civilian — not a law enforcement officer, not a security professional.
-Write as if you are informing a neighbour, not briefing a patrol unit.
+Write as if you are informing a neighbour, not briefing a patrol unit. This message appears on the TrustBond mobile app for citizens.
 
 Situation:
-- Area              : {area}
-- Time period       : {time_label}
-- Security level    : {classification}
-- Incident type     : {crime}
-- Incident count    : {incident_count} reports
-- Incident breakdown: {mix_lines or crime}
+- Area / proximity   : {area}
+- Time period        : {time_label}
+- Security level     : {classification}
+- Incident type      : {crime}
+- Incident count     : {incident_count} reports
+- Incident breakdown : {mix_lines or crime}
 {urgency_note}
 
 Write 2–3 plain sentences in calm, everyday English that any adult can understand.
 You MUST mention the time period ("{time_label}") naturally in the advisory.
+If the area includes distance information (e.g. "500m from you", "close to your location"), naturally reference how close the incidents are to the reader.
 Tell them:
 1. What kind of incidents have been reported nearby and when (use the time period naturally).
 2. Simple, practical steps they can take to stay safe (tailored to the incident type — e.g. secure valuables for theft, stay off the road for traffic, stay in groups for assault).
@@ -1358,6 +1359,7 @@ Tone guidelines:
 - Empowering, not alarming — help people feel informed and able to act, not frightened.
 - Simple language — no jargon, no acronyms, no technical terms.
 - Community-focused — use "you", "your neighbours", "your area" to make it feel personal.
+- This is for the PUBLIC, not for police officers. Never use police operational language.
 
 Example tone (adapt the content — do NOT copy verbatim):
 "Several theft incidents were reported near {area} {time_label}. Secure your valuables, avoid isolated spots especially after dark, and look out for your neighbours. If you see anything suspicious, report it through TrustBond right away."
