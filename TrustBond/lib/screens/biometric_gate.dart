@@ -3,11 +3,11 @@ import 'dart:developer' as dev;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:local_auth/error_codes.dart' as auth_error;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/theme.dart';
+import '../services/app_lock_auth.dart';
 
 // ── State machine ─────────────────────────────────────────────────────────────
 
@@ -134,9 +134,12 @@ class _BiometricGateState extends State<BiometricGate>
   /// result is from a superseded attempt and is silently discarded.
   int _authGen = 0;
 
-  // ── Auth backend ──────────────────────────────────────────────────────────
+  final _appLock = AppLockAuth.instance;
 
-  final _localAuth = LocalAuthentication();
+  /// Cached after [_init] for lock-screen copy (face / fingerprint / PIN).
+  DeviceAuthCapabilities _authCaps = const DeviceAuthCapabilities(
+    deviceSupported: true,
+  );
 
   // ── Derived predicates ────────────────────────────────────────────────────
 
@@ -193,7 +196,8 @@ class _BiometricGateState extends State<BiometricGate>
     if (!mounted) return;
 
     _lockEnabled = prefs.getBool('biometric_auth') ?? false;
-    _log('init', 'lockEnabled=$_lockEnabled');
+    _authCaps = await _appLock.probe();
+    _log('init', 'lockEnabled=$_lockEnabled caps=${_authCaps.methodsShortLabel}');
 
     if (_lockEnabled) {
       _transition(_LockState.locked);
@@ -355,17 +359,11 @@ class _BiometricGateState extends State<BiometricGate>
     String? errorMessage;
     bool timedOut = false;
 
+    final reason = _authCaps.localizedReason(action: 'Unlock TrustBond');
+
     try {
-      final result = await _localAuth
-          .authenticate(
-            localizedReason: 'Unlock TrustBond to continue',
-            options: const AuthenticationOptions(
-              biometricOnly: false,
-              // stickyAuth: true keeps the dialog alive if the app loses focus
-              // momentarily (Android focus events during fingerprint scan).
-              stickyAuth: true,
-            ),
-          )
+      final result = await _appLock
+          .authenticate(localizedReason: reason)
           .timeout(
         // 90 s — must be longer than any realistic biometric scan + PIN entry.
         // stickyAuth:true keeps the native dialog alive across brief focus losses,
@@ -393,7 +391,7 @@ class _BiometricGateState extends State<BiometricGate>
     } on PlatformException catch (e) {
       _log('auth', 'gen=$gen PlatformException code=${e.code} msg=${e.message}');
       outcome = _outcomeFromCode(e.code);
-      errorMessage = _friendlyError(e.code);
+      errorMessage = AppLockAuth.friendlyError(e.code);
     } catch (e) {
       _log('auth', 'gen=$gen unexpected error: $e');
       outcome = _AuthOutcome.failed;
@@ -441,46 +439,18 @@ class _BiometricGateState extends State<BiometricGate>
   // ── Availability ──────────────────────────────────────────────────────────
 
   Future<({bool available, String? reason})> _checkAvailability() async {
-    // ── Check 1 (hard gate): device supports ANY secure auth at all ───────────
-    // Only this failure blocks the attempt.  If the device has no screen lock
-    // of any kind, calling authenticate() will throw — better to surface a
-    // clear message now.
-    try {
-      final deviceSupported = await _localAuth.isDeviceSupported();
-      _log('availability', 'deviceSupported=$deviceSupported');
-      if (!deviceSupported) {
-        return (
-          available: false,
-          reason: 'This device does not support secure authentication. '
-              'Enable a PIN or biometric in Settings.',
-        );
-      }
-    } on PlatformException catch (e) {
-      _log('availability', 'isDeviceSupported failed: ${e.code} — ${e.message}');
-      return (available: false, reason: _friendlyError(e.code));
+    _authCaps = await _appLock.probe();
+    _log(
+      'availability',
+      'supported=${_authCaps.deviceSupported} methods=${_authCaps.methodsShortLabel}',
+    );
+    if (!_authCaps.canAuthenticate) {
+      return (
+        available: false,
+        reason: _authCaps.probeError ??
+            'Enable Face ID, fingerprint, or a device PIN in Settings.',
+      );
     }
-
-    // ── Checks 2 & 3 (informational only) ────────────────────────────────────
-    // canCheckBiometrics and getAvailableBiometrics tell us which flavour of
-    // auth is available, but neither is required for PIN/pattern fallback.
-    // Wrapping them in their own try-catch prevents a PlatformException on a
-    // phone with a broken fingerprint sensor or a quirky OEM HAL from blocking
-    // auth entirely — the call to authenticate() will still work via device PIN.
-    try {
-      final canCheck = await _localAuth.canCheckBiometrics;
-      final enrolled = await _localAuth.getAvailableBiometrics();
-      _log('availability',
-          'canCheck=$canCheck  enrolled=${enrolled.map((e) => e.name).join(", ")}');
-      if (!canCheck && enrolled.isEmpty) {
-        _log('availability', 'no biometrics enrolled — will fall back to device PIN');
-      }
-    } on PlatformException catch (e) {
-      // Non-fatal: log and continue.  The actual authenticate() call will show
-      // the best available UI (PIN / pattern / face) and report any real failure.
-      _log('availability',
-          'biometric info check failed (non-fatal, continuing): ${e.code} — ${e.message}');
-    }
-
     return (available: true, reason: null);
   }
 
@@ -526,25 +496,6 @@ class _BiometricGateState extends State<BiometricGate>
     }
   }
 
-  String _friendlyError(String code) {
-    switch (code) {
-      case auth_error.notAvailable:
-        return 'Biometric authentication is not available on this device.';
-      case auth_error.notEnrolled:
-        return 'No biometrics enrolled. Add a fingerprint or face in Settings → Security.';
-      case auth_error.lockedOut:
-        return 'Too many failed attempts. Please wait a moment and try again.';
-      case auth_error.permanentlyLockedOut:
-        return 'Biometrics locked out. Please unlock using your device PIN.';
-      case auth_error.passcodeNotSet:
-        return 'No screen lock set. Enable a PIN or biometric in device Settings.';
-      case auth_error.otherOperatingSystem:
-        return 'Authentication is not supported on this platform.';
-      default:
-        return 'Authentication failed. Tap Unlock to try again.';
-    }
-  }
-
   // ── Logging ───────────────────────────────────────────────────────────────
 
   void _log(String tag, String message) =>
@@ -568,6 +519,7 @@ class _BiometricGateState extends State<BiometricGate>
         return _LockScreen(
           state: _state,
           errorMessage: _errorMessage,
+          authCaps: _authCaps,
           onRetry: _promptAuth,
         );
     }
@@ -579,11 +531,13 @@ class _BiometricGateState extends State<BiometricGate>
 class _LockScreen extends StatelessWidget {
   final _LockState state;
   final String? errorMessage;
+  final DeviceAuthCapabilities authCaps;
   final VoidCallback onRetry;
 
   const _LockScreen({
     required this.state,
     this.errorMessage,
+    required this.authCaps,
     required this.onRetry,
   });
 
@@ -626,8 +580,8 @@ class _LockScreen extends StatelessWidget {
                           color: AppColors.accent.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(22),
                         ),
-                        child: const Icon(
-                          Icons.shield_rounded,
+                        child: Icon(
+                          authCaps.lockIcon,
                           size: 44,
                           color: AppColors.accent,
                         ),
@@ -641,9 +595,10 @@ class _LockScreen extends StatelessWidget {
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'App is locked',
-                  style: TextStyle(fontSize: 13, color: AppColors.muted),
+                Text(
+                  authCaps.unlockSubtitle,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, color: AppColors.muted),
                 ),
                 const SizedBox(height: 44),
                 if (isAuthenticating)

@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-import 'package:local_auth/local_auth.dart';
 
+import 'app_lock_auth.dart';
 import 'platform_service.dart';
 
 /// Secure storage and biometric helpers (mobile only for biometrics).
@@ -10,7 +9,7 @@ class StorageService {
   factory StorageService() => _instance;
   StorageService._internal();
 
-  final LocalAuthentication _localAuth = LocalAuthentication();
+  final _appLock = AppLockAuth.instance;
 
   void _log(String message) {
     if (kDebugMode) {
@@ -31,52 +30,26 @@ class StorageService {
   /// Returns true if the device has any lock set (biometric, PIN, pattern, or password).
   Future<bool> isDeviceLockAvailable() async {
     if (!PlatformService.isMobile) return false;
-    try {
-      return await _localAuth.isDeviceSupported();
-    } on PlatformException catch (e) {
-      _log('Storage: device lock check failed: $e');
-      return false;
-    }
+    final caps = await _appLock.probe();
+    return caps.deviceSupported;
   }
 
-  /// Check if biometric authentication is available on this device.
+  /// True when the device reports enrolled biometrics (face, fingerprint, iris, …).
   Future<bool> isBiometricAvailable() async {
     if (!PlatformService.isMobile) return false;
-    try {
-      final supported = await _localAuth.isDeviceSupported();
-      if (!supported) return false;
-      final types = await _localAuth.getAvailableBiometrics();
-      return types.isNotEmpty;
-    } on PlatformException catch (e) {
-      _log('Storage: biometric availability check failed: $e');
-      return false;
-    }
+    final caps = await _appLock.probe();
+    return caps.deviceSupported && caps.hasExplicitBiometric;
   }
 
-  /// Authenticate using the device lock (fingerprint, face, PIN, pattern, password).
-  /// Falls back to PIN/pattern/password if biometrics are not enrolled.
+  /// Device auth summary for settings / lock screen copy.
+  Future<DeviceAuthCapabilities> deviceAuthCapabilities() => _appLock.probe();
+
+  /// Authenticate with Face ID, Touch ID, fingerprint, iris, or device PIN.
   Future<bool> authenticateWithBiometrics({
     String reason = 'Unlock TrustBond to continue',
   }) async {
     if (!PlatformService.isMobile) return false;
-    try {
-      final supported = await _localAuth.isDeviceSupported();
-      if (!supported) return false;
-
-      return await _localAuth.authenticate(
-        localizedReason: reason,
-        options: const AuthenticationOptions(
-          biometricOnly: false,
-          stickyAuth: true,
-        ),
-      );
-    } on PlatformException catch (e) {
-      _log('Storage: authentication failed: $e');
-      return false;
-    } catch (e) {
-      _log('Storage: authentication failed: $e');
-      return false;
-    }
+    return _appLock.authenticate(localizedReason: reason);
   }
 
   /// Enable secure storage

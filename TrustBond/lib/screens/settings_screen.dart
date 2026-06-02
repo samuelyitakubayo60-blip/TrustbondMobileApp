@@ -139,13 +139,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Check device supports any lock method (fingerprint, face, PIN, pattern).
         final available = await _storageService.isDeviceLockAvailable();
         if (!available) {
-          _showError('No device lock found. Set up a PIN or pattern in your device settings first, then come back to enable App Lock.');
+          _showError(
+            'No device lock found. Set up Face ID, fingerprint, or a PIN in your device settings, then enable App Lock.',
+          );
           return;
         }
-        // Just save the setting — BiometricGate will enforce auth at next app launch.
+        final caps = await _storageService.deviceAuthCapabilities();
         setState(() => _biometricAuth = true);
         await _saveSetting('biometric_auth', true);
-        _showSuccess('App lock enabled. You will be asked to authenticate next time you open the app.');
+        _showSuccess(
+          caps.hasExplicitBiometric
+              ? 'App lock enabled. Next time you open TrustBond you can use ${caps.methodsShortLabel} or your device PIN.'
+              : 'App lock enabled. Next time you open TrustBond you will use your device PIN.',
+        );
       } else {
         // Require authentication before allowing the lock to be turned OFF
         // (prevents someone from quickly disabling app lock on an unattended phone).
@@ -306,8 +312,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               _locationSharing, _onLocationSharingChanged),
                           _toggle('Data Encryption', 'End-to-end encrypt report data',
                               _dataEncryption, _onDataEncryptionChanged),
-                          _toggle('App Lock', 'Require a device lock to open the app',
-                              _biometricAuth, _onBiometricAuthChanged),
+                          _toggle(
+                            'App Lock',
+                            'Face ID, fingerprint, or device PIN to open the app',
+                            _biometricAuth,
+                            _onBiometricAuthChanged,
+                          ),
                           _toggle('Secure Storage', 'Store sensitive data in encrypted local storage',
                               _secureStorage, _onSecureStorageChanged),
                           _toggle('Auto Backup', 'Automatically backup encrypted reports to secure cloud',

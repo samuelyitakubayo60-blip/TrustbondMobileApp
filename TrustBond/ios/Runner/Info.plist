@@ -77,7 +77,7 @@
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>TrustBond needs your location while using the app to determine the correct village and improve report credibility.</string>
 		<key>NSFaceIDUsageDescription</key>
-		<string>TrustBond uses Face ID to unlock the app when biometric authentication is enabled.</string>
+		<string>TrustBond uses Face ID, Touch ID, or fingerprint to unlock the app when App Lock is enabled.</string>
 		<!-- Network access: iOS does not require an INTERNET permission, but ATS can block non-HTTPS (e.g. local dev). -->
 		<key>NSAppTransportSecurity</key>
 		<dict>
