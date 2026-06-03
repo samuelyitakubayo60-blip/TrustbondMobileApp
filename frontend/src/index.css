@@ -2833,52 +2833,6 @@ textarea:focus {
   }
 }
 
-/* Account Settings — Profile card */
-.acct-profile-card { padding: 16px 20px !important; }
-.acct-profile-row {
-  display: flex; align-items: center; gap: 14;
-}
-.acct-avatar {
-  width: 46px; height: 46px; border-radius: 12px; flex-shrink: 0;
-  background: linear-gradient(135deg, var(--accent), rgba(59,130,246,.6));
-  color: #fff; font-weight: 700; font-size: 16; letter-spacing: 0.04em;
-  display: flex; align-items: center; justify-content: center;
-}
-.acct-profile-name {
-  font-size: 15px; font-weight: 700; color: var(--text);
-}
-.acct-profile-email {
-  font-size: 12px; color: var(--muted); margin-top: 2px;
-}
-.acct-badge {
-  font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 8px;
-  letter-spacing: 0.04em; line-height: 1.4;
-}
-.acct-badge--on {
-  background: rgba(52,211,153,.10); color: var(--success);
-  border: 1px solid rgba(52,211,153,.25);
-}
-.acct-badge--off {
-  background: rgba(248,113,113,.06); color: var(--muted);
-  border: 1px solid var(--border);
-}
-.acct-profile-details {
-  display: flex; gap: 8; margin-top: 12; flex-wrap: wrap;
-}
-.acct-detail-chip {
-  display: flex; align-items: center; gap: 6;
-  padding: 5px 12px; border-radius: 8px;
-  background: var(--surface2, rgba(0,0,0,0.03));
-  border: 1px solid var(--border);
-  font-size: 12px;
-}
-.acct-detail-label {
-  color: var(--muted); font-weight: 500;
-}
-.acct-detail-value {
-  color: var(--text); font-weight: 600;
-}
-
 /* Account Settings spinner */
 .acct-spinner {
   width: 22px; height: 22px; border-radius: 50%;

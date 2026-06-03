@@ -309,35 +309,32 @@ const AccountSettings = () => {
       </div>
 
       {/* ── Profile Overview ──────────────────────────────────────── */}
-      <div className="card acct-profile-card" style={{ marginBottom: 14 }}>
-        <div className="acct-profile-row">
-          {/* Avatar */}
-          <div className="acct-avatar">
-            {profile ? (profile.first_name?.[0] || '').toUpperCase() + (profile.last_name?.[0] || '').toUpperCase() : '??'}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-header">
+          <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <IconUser /> Profile Information
           </div>
-          {/* Name + role line */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span className="acct-profile-name">
-                {profile ? `${profile.first_name} ${profile.last_name}` : '—'}
-              </span>
-              <span className={`acct-badge ${mfaEnabled ? 'acct-badge--on' : 'acct-badge--off'}`}>
-                {mfaEnabled ? '2FA ACTIVE' : '2FA OFF'}
-              </span>
-            </div>
-            <div className="acct-profile-email">{profile?.email || '—'}</div>
-          </div>
+          <span style={{
+            fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 10,
+            background: mfaEnabled ? 'rgba(52,211,153,.10)' : 'rgba(248,113,113,.06)',
+            color: mfaEnabled ? 'var(--success)' : 'var(--muted)',
+            border: `1px solid ${mfaEnabled ? 'rgba(52,211,153,.25)' : 'var(--border)'}`,
+            transition: 'all 0.3s ease',
+          }}>
+            {mfaEnabled ? '2FA ACTIVE' : '2FA OFF'}
+          </span>
         </div>
-        {/* Compact detail chips */}
-        <div className="acct-profile-details">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
           {[
-            { label: 'Role', value: profile?.role, capitalize: true },
-            { label: 'Rank', value: profile?.rank },
-            { label: 'Badge', value: profile?.badge_number },
-          ].filter(d => d.value).map(({ label, value, capitalize }) => (
-            <div key={label} className="acct-detail-chip">
-              <span className="acct-detail-label">{label}</span>
-              <span className="acct-detail-value" style={capitalize ? { textTransform: 'capitalize' } : undefined}>{value}</span>
+            { label: 'Full Name', value: profile ? `${profile.first_name} ${profile.last_name}` : '—', bold: true },
+            { label: 'Email', value: profile?.email || '—' },
+            { label: 'Role', value: profile?.role || '—', capitalize: true },
+            { label: 'Rank', value: profile?.rank || '—' },
+            { label: 'Badge Number', value: profile?.badge_number || '—' },
+          ].map(({ label, value, bold, capitalize }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', marginBottom: 4 }}>{label}</div>
+              <div style={{ fontSize: 14, fontWeight: bold ? 600 : 400, color: 'var(--text)', textTransform: capitalize ? 'capitalize' : 'none' }}>{value}</div>
             </div>
           ))}
         </div>
