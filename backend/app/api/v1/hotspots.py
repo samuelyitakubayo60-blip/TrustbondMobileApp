@@ -776,13 +776,9 @@ def list_hotspots(
             else:
                 # Briefing absent or stale — omit narrative/recommendation so the
                 # React client knows to trigger the for_map=false enrichment call.
-                prediction["citizen_advisory"] = generate_citizen_advisory(
-                    classification=classification,
-                    incident_count=incident_count,
-                    dominant_crime=dominant_crime,
-                    area_label=area_label,
-                    incident_mix=incident_mix,
-                )
+                # Skip LLM citizen_advisory here — it's not shown on the map and
+                # will be generated when HotspotDetails fetches with for_map=false.
+                pass
         else:
             # Use persisted LLM briefing if already generated and still fresh (<24 h).
             # Regenerate when stale so the briefing reflects current incident counts,
