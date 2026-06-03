@@ -708,3 +708,74 @@ TrustBond
         footer="TrustBond — Local Leader Access",
     )
     return send_email(to_email, subject, body_plain, body_html)
+
+
+def send_mfa_login_code(to_email: str, code: str, user_name: str = "") -> tuple[bool, str | None]:
+    """Send 2FA login verification code to the user's email."""
+    subject = "TrustBond - Your login verification code"
+    greeting = f"Hello {user_name}," if user_name else "Hello,"
+    body_plain = f"""{greeting}
+
+A login attempt was made on your TrustBond Police Dashboard account.
+
+Your verification code is: {code}
+
+This code expires in 10 minutes. If you did not attempt to log in, change your password immediately.
+
+TrustBond
+"""
+    body_html = _email_html(
+        header_title="Login verification code",
+        body_html=f"""
+      <p style="margin:0 0 16px;font-size:15px;color:#0c447c;">{escape(greeting)}</p>
+      <p style="margin:0 0 22px;font-size:15px;color:#334155;line-height:1.6;">
+        A login attempt was made on your TrustBond Police Dashboard account.
+        Enter the code below to complete sign-in.
+      </p>
+      <div style="margin:0 0 22px;padding:18px 20px;background:#e6f1fb;border:1px solid #b5d4f4;text-align:center;">
+        <p style="margin:0 0 8px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#185fa5;font-weight:600;">
+          Verification code
+        </p>
+        <p style="margin:0;font-size:30px;letter-spacing:6px;color:#0c447c;font-family:Consolas,Menlo,monospace;font-weight:700;">
+          {escape(code)}
+        </p>
+      </div>
+      <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6;">
+        This code expires in <strong>10 minutes</strong>.
+        If you did not attempt to log in, please change your password immediately as your credentials may be compromised.
+      </p>""",
+        footer="TrustBond — Secure Login Verification",
+    )
+    return send_email(to_email, subject, body_plain, body_html)
+
+
+def send_mfa_enabled_confirmation(to_email: str, user_name: str = "") -> tuple[bool, str | None]:
+    """Confirm that 2FA has been enabled on the account."""
+    subject = "TrustBond - Two-factor authentication enabled"
+    greeting = f"Hello {user_name}," if user_name else "Hello,"
+    body_plain = f"""{greeting}
+
+Two-factor authentication has been successfully enabled on your TrustBond Police Dashboard account.
+
+From now on, you will receive a verification code via email each time you log in.
+
+If you did not enable this, contact your administrator immediately.
+
+TrustBond
+"""
+    body_html = _email_html(
+        header_title="Two-factor authentication enabled",
+        body_html=f"""
+      <p style="margin:0 0 16px;font-size:15px;color:#0c447c;">{escape(greeting)}</p>
+      <p style="margin:0 0 22px;font-size:15px;color:#334155;line-height:1.6;">
+        Two-factor authentication has been <strong>successfully enabled</strong> on your
+        TrustBond Police Dashboard account.
+      </p>
+      <p style="margin:0 0 22px;font-size:15px;color:#334155;line-height:1.6;">
+        From now on, you will receive a verification code via email each time you log in.
+      </p>
+      <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6;">
+        If you did not enable this, contact your administrator immediately.
+      </p>""",
+        footer="TrustBond — Account Security",
+    )

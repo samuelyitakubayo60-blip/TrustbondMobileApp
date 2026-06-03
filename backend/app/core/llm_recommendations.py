@@ -685,8 +685,7 @@ Write a UNIQUE operational briefing for this specific cluster — do not reuse g
 ── RESPONSE PLAN ─────────────────────────────────────────────────
 - Deploy units         : {units_line}
 - Primary tactic       : {tactic}
-- Operation duration   : {operation_hours} hours
-- Concentration window : {conc_note}
+- Peak concentration   : {conc_note}
 - Citizen message hint : {citizen_advisory}
 
 Allowed deployment units (pick from this list only; do NOT use RIB/CID/LIB):
@@ -694,8 +693,8 @@ Allowed deployment units (pick from this list only; do NOT use RIB/CID/LIB):
 
 Return JSON only:
 {{
-  "recommendation": "<20-40 words: name primary unit, tactic, duration, concentration window — reference the full area coverage ({area}) and the trend/lifecycle state>",
-  "narrative": "<60-90 words: describe the cluster evolution across {area} (the full geographic range, not just one village), reference the trend direction, severity, nearby clusters if any, and why the chosen units fit this specific crime mix>",
+  "recommendation": "<20-40 words: name primary unit, tactic, and peak hours to concentrate attention — reference the full area coverage ({area}), the exact total of {incident_count} reports, the trend/lifecycle state, and the concentration of each incident type. Do NOT specify a fixed operation duration (e.g. 'deploy for 48 hours'); instead specify the time window when officers should be most vigilant (e.g. 'concentrate patrols between 18:00-22:00')>",
+  "narrative": "<80-100 words: describe the cluster of exactly {incident_count} incident reports across {area} (full geographic range, not just one village). State the total count ({incident_count} reports) explicitly. Break down the concentration of each incident type using the exact numbers from the incident mix above (e.g. 'Theft leads with 9 cases, followed by Vandalism 5, Assault 4'). Reference the trend direction, severity, temporal intensity, nearby clusters if any, and explain why the chosen units and tactics fit this specific crime mix. Cover lifecycle state and predicted evolution. Do NOT suggest fixed operation durations>",
   "status": "<escalation_likely | monitor_growth | emerging_trend | security_alert>",
   "citizen_advisory": "<Internal hint only — 1-2 sentences a community liaison officer could relay to residents; plain language, no unit codes, no tactical details>"
 }}
@@ -704,9 +703,11 @@ Rules:
 - recommendation and narrative are LAW ENFORCEMENT content — tactical language, unit names, and operational details are appropriate here.
 - citizen_advisory is an INTERNAL COMMUNITY MESSAGE HINT for officers — plain language, no unit codes, no classified tactics. It is NOT published directly to the public; the public receives a separately generated civilian advisory.
 - recommendation MUST name "{primary}" (and "{support}" if support).
+- NEVER specify fixed operation durations like "deploy for 48 hours" or "operate for 24 hours". Instead, specify the peak TIME WINDOW when officers should concentrate attention (e.g. "focus patrols 18:00-22:00" based on the peak activity data).
 - If trend is "rising" or lifecycle is "escalating", reflect urgency in the recommendation.
 - If nearby_clusters > 1, suggest coordinated multi-location response.
-- Use real numbers and place names. No markdown.
+- Use the EXACT incident count ({incident_count}) and type breakdown numbers from the data above. Never invent or round numbers.
+- Use real place names from the area coverage. No markdown.
 """
 
 
@@ -726,7 +727,7 @@ def _call_groq(prompt: str) -> Optional[Dict[str, Any]]:
             model=os.getenv("GROQ_HOTSPOT_MODEL", "llama-3.3-70b-versatile"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.45,
-            max_tokens=500,
+            max_tokens=600,
             response_format={"type": "json_object"},
         )
         return json.loads(resp.choices[0].message.content)
@@ -781,7 +782,7 @@ def gemini_generate_json(
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 temperature=temperature,
-                max_output_tokens=500,
+                max_output_tokens=600,
             ),
         )
         text = (getattr(resp, "text", None) or "").strip()
@@ -1348,6 +1349,7 @@ Situation:
 {urgency_note}
 
 Write 2–3 plain sentences in calm, everyday English that any adult can understand.
+Mention the most common incident types and their counts so citizens know what to watch for.
 You MUST mention the time period ("{time_label}") naturally in the advisory.
 If the area includes distance information (e.g. "500m from you", "close to your location"), naturally reference how close the incidents are to the reader.
 Tell them:

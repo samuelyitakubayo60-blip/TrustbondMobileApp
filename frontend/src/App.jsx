@@ -328,7 +328,7 @@ function App() {
     "local-leaders": "Local Leaders",
     "audit-log": "Audit Log",
     "system-config": "System Configuration",
-    "change-password": "Change Password",
+    "change-password": "Account Settings",
     notifications: "Notifications",
     "active-sessions": "Active Sessions",
   };

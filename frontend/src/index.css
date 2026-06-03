@@ -337,6 +337,227 @@ body {
   }
 }
 
+/* ── Auth form logo (top of form card) ──────────────────────────── */
+.auth-form-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.auth-form-logo-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+.auth-form-logo-text {
+  display: flex;
+  flex-direction: column;
+}
+.auth-form-logo-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.3px;
+  line-height: 1.1;
+}
+.auth-form-logo-sub {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+/* ── Auth form transition animations ────────────────────────────── */
+.auth-card--form {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.auth-form-exit {
+  opacity: 0;
+  transform: translateX(-30px) scale(0.97);
+}
+.auth-form-enter {
+  animation: authSlideIn 0.4s ease forwards;
+}
+@keyframes authSlideIn {
+  from { opacity: 0; transform: translateX(30px) scale(0.97); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+/* ── Auth submit button ─────────────────────────────────────────── */
+.auth-submit-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s, transform 0.1s, box-shadow 0.2s;
+}
+.auth-submit-btn:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(59,130,246,.25);
+  transform: translateY(-1px);
+}
+.auth-submit-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+.auth-submit-btn:disabled {
+  cursor: not-allowed;
+}
+.auth-btn-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.auth-btn-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: acctSpin 0.6s linear infinite;
+}
+
+/* ── Auth alerts ────────────────────────────────────────────────── */
+.auth-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  margin-bottom: 14px;
+  animation: authAlertIn 0.3s ease;
+}
+.auth-alert--error {
+  background: rgba(248,113,113,.07);
+  border: 1px solid rgba(248,113,113,.22);
+  color: var(--danger);
+}
+@keyframes authAlertIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── MFA shield icon ────────────────────────────────────────────── */
+.auth-mfa-shield {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  margin: 0 auto 14px;
+  background: rgba(59,130,246,.08);
+  border: 2px solid rgba(59,130,246,.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: authShieldPulse 2s ease-in-out infinite;
+}
+@keyframes authShieldPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,.15); }
+  50%      { box-shadow: 0 0 0 10px rgba(59,130,246,0); }
+}
+
+/* ── MFA code input ─────────────────────────────────────────────── */
+.auth-mfa-code-wrap {
+  position: relative;
+  margin-bottom: 4px;
+}
+.auth-mfa-input {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  font-size: 24px;
+  letter-spacing: 8px;
+  z-index: 2;
+  cursor: text;
+}
+.auth-mfa-cells {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.auth-mfa-cell {
+  width: 48px;
+  height: 56px;
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  background: var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: var(--text);
+  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+}
+.auth-mfa-cell.active {
+  border-color: var(--accent);
+  background: rgba(59,130,246,.04);
+  animation: authCellBlink 1s ease-in-out infinite;
+}
+.auth-mfa-cell.filled {
+  border-color: var(--accent);
+  background: rgba(59,130,246,.06);
+  transform: scale(1.03);
+}
+@keyframes authCellBlink {
+  0%, 100% { border-color: var(--accent); }
+  50%      { border-color: rgba(59,130,246,.3); }
+}
+
+/* ── MFA footer links ───────────────────────────────────────────── */
+.auth-mfa-link {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.15s;
+}
+.auth-mfa-link:hover {
+  color: var(--accent);
+}
+.auth-mfa-hint {
+  margin-top: 18px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--surface2);
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* ── MFA responsive adjustments ─────────────────────────────────── */
+@media (max-width: 420px) {
+  .auth-mfa-cell {
+    width: 40px;
+    height: 48px;
+    font-size: 20px;
+  }
+  .auth-mfa-cells { gap: 5px; }
+}
+
 #root {
   height: 100vh;
   width: 100vw;
@@ -2498,6 +2719,15 @@ textarea:focus {
     transform: scale(1.1);
   }
 }
+
+/* Account Settings spinner */
+.acct-spinner {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  animation: acctSpin 0.7s linear infinite;
+}
+@keyframes acctSpin { to { transform: rotate(360deg); } }
 .cl-crit {
   background: var(--danger);
   color: #fff;
@@ -2534,9 +2764,9 @@ textarea:focus {
   grid-column: 1 / -1;
 }
 .smx-cluster-table-wrap {
-  max-height: min(46vh, 460px);
+  max-height: none;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: visible;
 }
 .smx-cluster-table {
   width: 100%;
@@ -2550,12 +2780,12 @@ textarea:focus {
 }
 .smx-cluster-table th,
 .smx-cluster-table td {
-  padding: 8px 6px;
+  padding: 5px 5px;
   white-space: normal;
   word-break: break-word;
   overflow-wrap: anywhere;
   font-size: 10.5px;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 .smx-cluster-table th {
   font-size: 9.5px;
@@ -3387,7 +3617,7 @@ body.dark-mode .incident-intel-trust.med {
 
   .map-side .smx-cluster-table-wrap {
     overflow-x: auto;
-    max-height: 300px;
+    max-height: none;
     border: 1px solid var(--border);
     border-radius: 8px;
   }
@@ -3502,7 +3732,7 @@ body.dark-mode .incident-intel-trust.med {
     margin-bottom: 0 !important;
   }
   .map-side .smx-cluster-table-wrap {
-    max-height: 250px;
+    max-height: none;
   }
   .map-side .smx-cluster-table {
     min-width: 500px;

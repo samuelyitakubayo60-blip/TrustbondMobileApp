@@ -16,7 +16,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
   const [loading, setLoading] = useState(_dashCache === null);
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [sectorData, setSectorData] = useState(null);
-  const [selectedTimeWindow, setSelectedTimeWindow] = useState(24);
+  const [selectedTimeWindow, setSelectedTimeWindow] = useState(8760);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -392,6 +392,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
               value={selectedTimeWindow}
               onChange={(e) => setSelectedTimeWindow(Number(e.target.value))}
             >
+              <option value={8760}>All Time</option>
               <option value={0.5}>Last 30 minutes</option>
               <option value={1}>Last 1 hour</option>
               <option value={6}>Last 6 hours</option>

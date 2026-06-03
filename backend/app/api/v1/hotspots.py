@@ -603,6 +603,23 @@ def list_hotspots(
             time_window_hours=cluster_time_window_hours,
         )
         hotspot_score = float(classification_result["hotspot_score"])
+
+        # Override risk/classification with incident-count-based criteria:
+        #   HIGH: >4 new in last 7 days, OR 12+ in last 7 days, OR 15+ total
+        #   MEDIUM: everything else
+        _week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        _recent_count = sum(
+            1 for r in reports_in_cluster
+            if _as_utc(r.reported_at) is not None and _as_utc(r.reported_at) >= _week_ago
+        )
+        if incident_count >= 15 or _recent_count >= 12 or _recent_count > 4:
+            _override_risk = "critical" if _recent_count >= 12 or incident_count >= 15 else "high"
+            _override_class = "critical" if _override_risk == "critical" else "active"
+        else:
+            _override_risk = "medium"
+            _override_class = "emerging"
+        classification_result["classification"] = _override_class
+
         classification = str(classification_result["classification"])
         classification_confidence = classification_result.get("confidence")
         classification_source = str(classification_result.get("source") or "dbscan_fallback")
@@ -961,7 +978,7 @@ def list_hotspots(
             center_long=h.center_long,
             radius_meters=h.radius_meters,
             incident_count=incident_count,
-            risk_level=h.risk_level,
+            risk_level=_override_risk,
             time_window_hours=h.time_window_hours,
             detected_at=h.detected_at,
             incident_type_id=h.incident_type_id,

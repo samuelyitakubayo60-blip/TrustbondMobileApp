@@ -22,6 +22,9 @@ class PoliceUser(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_login_at = Column(DateTime(timezone=True))
+    last_password_change = Column(DateTime(timezone=True))
+    mfa_enabled = Column(Boolean, default=False, server_default="false")
+    mfa_method = Column(String(20), server_default="email")  # email
 
     assigned_location = relationship("Location", backref="police_users")
     station = relationship("Station", backref="officers")

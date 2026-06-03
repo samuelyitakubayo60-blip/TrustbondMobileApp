@@ -10,7 +10,13 @@ from app.core.websocket import manager
 import asyncio
 
 from app.config import settings
-from app.core.email import is_smtp_configured, send_password_reset_code
+from app.core.email import (
+    is_smtp_configured,
+    is_email_configured,
+    send_password_reset_code,
+    send_mfa_login_code,
+    send_mfa_enabled_confirmation,
+)
 from app.core.security import (
     ALGORITHM,
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -20,10 +26,21 @@ from app.core.security import (
 )
 from app.database import get_db
 from app.models.password_reset_code import PasswordResetCode
+from app.models.mfa_code import MfaCode
 from app.core.audit import log_action
 from app.models.police_user import PoliceUser
 from app.models.user_session import UserSession
-from app.schemas.auth import ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, MeResponse, ResetPasswordRequest, Token
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    LoginRequest,
+    MeResponse,
+    MfaVerifyRequest,
+    ResetPasswordRequest,
+    Token,
+)
+
+MFA_CODE_EXPIRE_MINUTES = 10
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -157,24 +174,14 @@ async def get_current_admin_or_station_staff(
     )
 
 
-@router.post("/login", response_model=Token)
-def login(data: LoginRequest, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db)):
-    user = _authenticate_user(db, data.email, data.password)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
-
-    # Update last_login_at
+def _complete_login(user: PoliceUser, db: Session, request: Request, background_tasks: BackgroundTasks) -> Token:
+    """Finish login: create session, log action, return token."""
     now = datetime.now(timezone.utc)
     user.last_login_at = now
     access_token = create_access_token(subject=str(user.police_user_id), role=user.role)
-
-    # Create / record a session tied to this access token
     expires_at = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
-    # Get client IP address and user agent from request
-    client_ip = request.client.host if hasattr(request, 'client') else None
+    client_ip = request.client.host if hasattr(request, "client") else None
     user_agent_str = request.headers.get("user-agent")
-    
     session_row = UserSession(
         police_user_id=user.police_user_id,
         refresh_token=access_token,
@@ -204,8 +211,55 @@ def login(data: LoginRequest, background_tasks: BackgroundTasks, request: Reques
         except RuntimeError:
             asyncio.run(manager.broadcast({"type": "refresh_data", "entity": "session"}))
     background_tasks.add_task(notify)
-
     return Token(access_token=access_token)
+
+
+@router.post("/login", response_model=Token)
+def login(data: LoginRequest, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db)):
+    user = _authenticate_user(db, data.email, data.password)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
+
+    # Check if MFA is enabled for this user
+    if getattr(user, "mfa_enabled", False):
+        # Generate MFA code and send via email
+        code = "".join(secrets.choice("0123456789") for _ in range(6))
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=MFA_CODE_EXPIRE_MINUTES)
+
+        # Clear old login codes for this user
+        db.query(MfaCode).filter(
+            MfaCode.police_user_id == user.police_user_id,
+            MfaCode.purpose == "login",
+        ).delete()
+
+        mfa_row = MfaCode(
+            police_user_id=user.police_user_id,
+            code=code,
+            purpose="login",
+            expires_at=expires_at,
+        )
+        db.add(mfa_row)
+        db.commit()
+
+        # Send email with the code
+        user_name = f"{user.first_name} {user.last_name}".strip()
+        send_mfa_login_code(user.email, code, user_name)
+
+        # Create a short-lived MFA token (not a full access token)
+        mfa_token = create_access_token(
+            subject=str(user.police_user_id),
+            role="mfa_pending",
+            expires_delta=timedelta(minutes=MFA_CODE_EXPIRE_MINUTES),
+        )
+
+        return Token(
+            access_token="",
+            mfa_required=True,
+            mfa_token=mfa_token,
+        )
+
+    # No MFA — complete login directly
+    return _complete_login(user, db, request, background_tasks)
 
 
 @router.get("/me", response_model=MeResponse)
@@ -224,6 +278,7 @@ def change_password(
     if not verify_password(payload.current_password, current_user.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
     current_user.password_hash = get_password_hash(payload.new_password)
+    current_user.last_password_change = datetime.now(timezone.utc)
     db.add(current_user)
     db.commit()
 
@@ -270,6 +325,142 @@ def revoke_other_sessions(
     background_tasks.add_task(notify)
 
     return {"message": "Other sessions revoked"}
+
+
+@router.post("/verify-mfa", response_model=Token)
+def verify_mfa(
+    data: MfaVerifyRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Verify the MFA code sent to the user's email during login."""
+    # Decode the mfa_token to get the user
+    try:
+        payload = jwt.decode(data.mfa_token, settings.secret_key, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        role = payload.get("role")
+        if not user_id or role != "mfa_pending":
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid MFA token")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired MFA token")
+
+    user = db.query(PoliceUser).filter(PoliceUser.police_user_id == int(user_id)).first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    # Verify the code
+    code_row = (
+        db.query(MfaCode)
+        .filter(
+            MfaCode.police_user_id == user.police_user_id,
+            MfaCode.purpose == "login",
+            MfaCode.code == data.code.strip(),
+            MfaCode.expires_at > datetime.now(timezone.utc),
+            MfaCode.used_at.is_(None),
+        )
+        .first()
+    )
+    if not code_row:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
+
+    # Mark code as used
+    code_row.used_at = datetime.now(timezone.utc)
+    db.add(code_row)
+
+    # Complete the login
+    return _complete_login(user, db, request, background_tasks)
+
+
+@router.post("/enable-2fa")
+def enable_2fa(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
+):
+    """Send a verification code to the user's email to enable 2FA."""
+    if getattr(current_user, "mfa_enabled", False):
+        return {"message": "Two-factor authentication is already enabled."}
+
+    if not is_email_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email is not configured. Contact an administrator.",
+        )
+
+    # Generate and store verification code
+    code = "".join(secrets.choice("0123456789") for _ in range(6))
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=MFA_CODE_EXPIRE_MINUTES)
+
+    db.query(MfaCode).filter(
+        MfaCode.police_user_id == current_user.police_user_id,
+        MfaCode.purpose == "enable",
+    ).delete()
+
+    mfa_row = MfaCode(
+        police_user_id=current_user.police_user_id,
+        code=code,
+        purpose="enable",
+        expires_at=expires_at,
+    )
+    db.add(mfa_row)
+    db.commit()
+
+    user_name = f"{current_user.first_name} {current_user.last_name}".strip()
+    send_mfa_login_code(current_user.email, code, user_name)
+
+    return {"message": "Verification code sent to your email."}
+
+
+@router.post("/confirm-enable-2fa")
+def confirm_enable_2fa(
+    payload: MfaVerifyRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
+):
+    """Confirm the verification code to enable 2FA."""
+    code_row = (
+        db.query(MfaCode)
+        .filter(
+            MfaCode.police_user_id == current_user.police_user_id,
+            MfaCode.purpose == "enable",
+            MfaCode.code == payload.code.strip(),
+            MfaCode.expires_at > datetime.now(timezone.utc),
+            MfaCode.used_at.is_(None),
+        )
+        .first()
+    )
+    if not code_row:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
+
+    code_row.used_at = datetime.now(timezone.utc)
+    current_user.mfa_enabled = True
+    current_user.mfa_method = "email"
+    db.add_all([code_row, current_user])
+    db.commit()
+
+    user_name = f"{current_user.first_name} {current_user.last_name}".strip()
+    send_mfa_enabled_confirmation(current_user.email, user_name)
+
+    return {"message": "Two-factor authentication has been enabled."}
+
+
+@router.post("/disable-2fa")
+def disable_2fa(
+    payload: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: Annotated[PoliceUser, Depends(get_current_user)] = None,
+):
+    """Disable 2FA. Requires current password for security."""
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect password")
+
+    current_user.mfa_enabled = False
+    db.add(current_user)
+    db.commit()
+
+    return {"message": "Two-factor authentication has been disabled."}
 
 
 RESET_CODE_EXPIRE_MINUTES = 15

@@ -1074,7 +1074,13 @@ const SafetyMap = ({ goToScreen, wsRefreshKey, focusHotspotId }) => {
                           </div>
                           <div>{h.incident_count} incidents · {h.area_label || "Unknown area"}</div>
                           <div style={{ fontSize: 11, color: "var(--muted)" }}>
-                            {h.dominant_crime_type || h.incident_type_name || "Mixed types"}
+                            {(() => {
+                              const mix = h.incident_mix || h.composition || {};
+                              const types = Object.keys(mix);
+                              if (types.length <= 1) return h.dominant_crime_type || h.incident_type_name || "—";
+                              const sorted = Object.entries(mix).sort((a,b) => b[1]-a[1]).slice(0, 3);
+                              return sorted.map(([k,v]) => `${k}(${v})`).join(", ") + (types.length > 3 ? ` +${types.length-3}` : "");
+                            })()}
                           </div>
                         </div>
                       </Tooltip>
@@ -1392,8 +1398,17 @@ const SafetyMap = ({ goToScreen, wsRefreshKey, focusHotspotId }) => {
                     <td className="smx-cell-strong">
                       <strong>{h.area_label || h.incident_type_name || "—"}</strong>
                     </td>
-                    <td className="smx-cell-compact">
-                      {h.dominant_crime_type || h.incident_type_name || "—"}
+                    <td className="smx-cell-compact" title={(() => {
+                      const mix = h.incident_mix || h.composition || {};
+                      return Object.entries(mix).sort((a,b) => b[1]-a[1]).map(([k,v]) => `${k}: ${v}`).join(", ");
+                    })()}>
+                      {(() => {
+                        const mix = h.incident_mix || h.composition || {};
+                        const types = Object.keys(mix);
+                        if (types.length <= 1) return h.dominant_crime_type || h.incident_type_name || "—";
+                        const sorted = Object.entries(mix).sort((a,b) => b[1]-a[1]);
+                        return `${sorted[0][0]} +${types.length - 1} more`;
+                      })()}
                     </td>
                     <td className="smx-cell-strong smx-cell-center">
                       {h.incident_count}

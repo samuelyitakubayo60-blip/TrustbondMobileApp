@@ -27,7 +27,7 @@ from app.core.websocket import refresh_entity
 
 
 DEFAULT_TIME_WINDOW_HOURS = 720   # 30 days — wide enough to include sparse report data
-DEFAULT_MIN_INCIDENTS = 2         # 2 nearby incidents form a cluster
+DEFAULT_MIN_INCIDENTS = 4         # minimum 4 incidents to form a cluster
 # 500 m is realistic for Rwandan village-level reporting where homes and farms
 # spread across several hundred metres. 300 m was too tight, causing many
 # geographically co-located incidents to scatter into separate noise points.
@@ -321,6 +321,22 @@ def _st_dbscan(
             elif labels[j] == -1:
                 labels[j] = cluster_id
         cluster_id += 1
+
+    # ── Step 3: absorb noise points near any cluster member ───────────────
+    # Standard DBSCAN only absorbs border points near core points.
+    # This pass catches points that are within eps of border points
+    # (transitively reachable but missed because border points don't expand).
+    changed = True
+    while changed:
+        changed = False
+        for i in range(n):
+            if labels[i] != -1:
+                continue  # already in a cluster
+            for j in neighborhoods[i]:
+                if labels[j] != -1:
+                    labels[i] = labels[j]
+                    changed = True
+                    break
 
     return labels, is_core
 
@@ -1489,7 +1505,7 @@ def _create_geographic_hotspots(
     else:
         raw_eps_t = float(time_window_hours) * 3600 / 4
         eps_t = max(6 * 3600, min(72 * 3600, raw_eps_t))
-    dbscan_min_pts = max(2, int(min_incidents))
+    dbscan_min_pts = max(4, int(min_incidents))
 
     logger.info(
         "[hotspot] DBSCAN params — eps_m=%.0fm, eps_t=%.1fh, min_pts=%d, "
@@ -1657,7 +1673,25 @@ def _create_geographic_hotspots(
                 cluster_density=cluster_density,
                 time_window_hours=time_window_hours,
             )
-            risk_level = classification_to_risk_level(classification_result["classification"])
+            # Override risk level with incident-count-based criteria:
+            #   HIGH: >4 new incidents in last 7 days, OR 12+ in last 7 days, OR 15+ total
+            #   MEDIUM: everything else (cluster already has ≥4 incidents from min_pts)
+            _week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+            _recent_count = 0
+            for p in cluster_pts:
+                _rat = p.get("reported_at")
+                if _rat is None:
+                    continue
+                if _rat.tzinfo is None:
+                    _rat = _rat.replace(tzinfo=timezone.utc)
+                if _rat >= _week_ago:
+                    _recent_count += 1
+            if incident_count >= 15 or _recent_count >= 12 or _recent_count > 4:
+                risk_level = "critical" if _recent_count >= 12 or incident_count >= 15 else "high"
+                classification_result["classification"] = "critical" if risk_level == "critical" else "active"
+            else:
+                risk_level = "medium"
+                classification_result["classification"] = "emerging"
 
             # ── 4. Persist ────────────────────────────────────────────────
             _dedup_deg = max(0.001, eps_m / 111000.0)

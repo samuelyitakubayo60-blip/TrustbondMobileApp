@@ -63,11 +63,20 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (email, password, remember = true) => {
-    const { access_token } = await api.post(
+    const resp = await api.post(
       "/api/v1/auth/login",
       { email, password },
       { token: null },
     );
+
+    // If MFA is required, throw a special error the Login screen can catch
+    if (resp.mfa_required && resp.mfa_token) {
+      const mfaErr = new Error("MFA_REQUIRED");
+      mfaErr.mfa_token = resp.mfa_token;
+      throw mfaErr;
+    }
+
+    const { access_token } = resp;
     setToken(access_token, { remember });
     try {
       localStorage.setItem("tb_remember_preference", remember ? "1" : "0");
@@ -85,6 +94,24 @@ export function AuthProvider({ children }) {
     return u;
   };
 
+  const verifyMfa = async (mfaToken, code, remember = true) => {
+    const resp = await api.post(
+      "/api/v1/auth/verify-mfa",
+      { mfa_token: mfaToken, code },
+      { token: null },
+    );
+    const { access_token } = resp;
+    setToken(access_token, { remember });
+    try {
+      localStorage.setItem("tb_remember_preference", remember ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+    const u = await api.get("/api/v1/auth/me");
+    setUser(u);
+    return u;
+  };
+
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -92,7 +119,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, logout, isAuthenticated: !!user }}
+      value={{ user, loading, login, verifyMfa, logout, isAuthenticated: !!user }}
     >
       {children}
     </AuthContext.Provider>

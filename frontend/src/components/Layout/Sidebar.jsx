@@ -249,7 +249,7 @@ const Sidebar = ({
         {
           id: "change-password",
           idx: 13,
-          label: "Change Password",
+          label: "Account Settings",
           icon: "ni-cp",
         },
         {
