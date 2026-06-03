@@ -38,24 +38,13 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
         setLoading(true);
         setError(null);
 
-        // Fetch only the specific hotspot (with LLM enrichment) instead of all
-        const singleResponse = await api.get(`/api/v1/hotspots/?hotspot_ids=${hotspotId}`);
-        const hotspots = Array.isArray(singleResponse) ? singleResponse : [];
-        const foundHotspot = hotspots.find(h => h.hotspot_id == hotspotId);
-
-        if (foundHotspot && (!foundHotspot.evidence_files || foundHotspot.evidence_files.length === 0)) {
-          try {
-            const publicResponse = await api.get(`/api/v1/public/hotspots/${hotspotId}`);
-            if (publicResponse?.evidence_files && publicResponse.evidence_files.length > 0) {
-              foundHotspot.evidence_files = publicResponse.evidence_files;
-            }
-            if (publicResponse?.prediction?.citizen_advisory && !foundHotspot.prediction?.citizen_advisory) {
-              foundHotspot.prediction = publicResponse.prediction;
-            }
-          } catch (_e) { /* continue with admin data */ }
-        }
+        // Phase 1: Fast load with for_map=true (skips LLM generation)
+        const fastResponse = await api.get(`/api/v1/hotspots/?hotspot_ids=${hotspotId}&for_map=true`);
+        const fastHotspots = Array.isArray(fastResponse) ? fastResponse : [];
+        const foundHotspot = fastHotspots.find(h => h.hotspot_id == hotspotId);
 
         if (foundHotspot) {
+          // Show data immediately
           setHotspot(foundHotspot);
           setImgErrors({});
           setCurrentEvidenceIndex(0);
@@ -74,6 +63,37 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
               setRelatedReports([]);
             }
           }
+
+          setLoading(false);
+          setReportsLoading(false);
+
+          // Phase 2: Background enrichment — fetch LLM briefing + evidence
+          const hasBriefing = foundHotspot.prediction?.narrative || foundHotspot.prediction?.recommendation;
+          const hasEvidence = foundHotspot.evidence_files?.length > 0;
+          if (!hasBriefing || !hasEvidence) {
+            try {
+              const fullResponse = await api.get(`/api/v1/hotspots/?hotspot_ids=${hotspotId}`);
+              const fullHotspots = Array.isArray(fullResponse) ? fullResponse : [];
+              const enriched = fullHotspots.find(h => h.hotspot_id == hotspotId);
+              if (enriched) {
+                setHotspot(enriched);
+                if (enriched.incident_points?.length > 0) {
+                  setRelatedReports(enriched.incident_points);
+                }
+              }
+            } catch (_e) { /* fast data is already displayed */ }
+
+            // Try public endpoint for evidence/citizen advisory
+            if (!hasEvidence) {
+              try {
+                const publicResponse = await api.get(`/api/v1/public/hotspots/${hotspotId}`);
+                if (publicResponse?.evidence_files?.length > 0) {
+                  setHotspot(prev => ({ ...prev, evidence_files: publicResponse.evidence_files }));
+                }
+              } catch (_e) { /* continue with existing data */ }
+            }
+          }
+          return; // skip the finally block's setLoading
         } else {
           setError(`Hotspot #${hotspotId} not found`);
           setRelatedReports([]);
@@ -325,7 +345,7 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
               {[
                 { label: "Coordinates", value: `${Number(hotspot.center_lat || 0).toFixed(5)}, ${Number(hotspot.center_long || 0).toFixed(5)}` },
                 { label: "Coverage Radius", value: `${Math.round(hotspot.radius_meters || 0)} meters` },
-                { label: "Incident Type", value: hotspot.incident_type_name || "Mixed" },
+                { label: "Incident Types", value: mixEntries.length > 1 ? mixEntries.map(([name, count]) => `${name} (${count})`).join(", ") : (hotspot.incident_type_name || "Mixed") },
                 { label: "Detected", value: hotspot.detected_at ? new Date(hotspot.detected_at).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Unknown" },
                 { label: "Time Window", value: hotspot.time_window_hours ? `${hotspot.time_window_hours} hours` : "Unknown" },
               ].map((item, i) => (
@@ -399,60 +419,63 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
               )}
             </div>
 
-            {/* Operational Briefing — inline in Location card */}
-            {policeAdvisory && (
-              <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
-                  Operational Briefing
-                </div>
-                {narrative && (
-                  <div style={{
-                    fontSize: 12, lineHeight: 1.7, color: "var(--text)", marginBottom: recommendation ? 10 : 0,
-                    maxHeight: expandedAdvisory ? "none" : 80, overflow: "hidden", position: "relative",
-                  }}>
-                    {narrative}
-                    {!expandedAdvisory && narrative.length > 180 && (
-                      <div style={{
-                        position: "absolute", bottom: 0, left: 0, right: 0, height: 30,
-                        background: "linear-gradient(transparent, var(--surface))",
-                      }} />
-                    )}
-                  </div>
-                )}
-                {recommendation && (
-                  <div style={{
-                    fontSize: 12, lineHeight: 1.6, color: "var(--text)",
-                    padding: "10px 12px", borderRadius: 8, borderLeft: `3px solid ${risk.color}`,
-                    background: "var(--surface2, rgba(0,0,0,0.03))",
-                    maxHeight: expandedAdvisory ? "none" : (narrative ? 60 : 80), overflow: "hidden", position: "relative",
-                  }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: risk.color, marginBottom: 4, textTransform: "uppercase" }}>Recommendation</div>
-                    {recommendation}
-                    {!expandedAdvisory && recommendation.length > 150 && (
-                      <div style={{
-                        position: "absolute", bottom: 0, left: 0, right: 0, height: 30,
-                        background: "linear-gradient(transparent, var(--surface))",
-                      }} />
-                    )}
-                  </div>
-                )}
-                {(narrative?.length > 180 || recommendation?.length > 150) && (
-                  <button
-                    onClick={() => setExpandedAdvisory(!expandedAdvisory)}
-                    style={{
-                      marginTop: 6, background: "none", border: "none",
-                      color: "var(--accent)", fontSize: 11, fontWeight: 600,
-                      cursor: "pointer", padding: 0,
-                    }}
-                  >
-                    {expandedAdvisory ? "Show less" : "Read full briefing"}
-                  </button>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
+
+      {/* ── Operational Briefing (full-width, between columns and table) ── */}
+      {policeAdvisory && (
+        <div className="card" style={{ marginTop: 14, overflow: "hidden" }}>
+          <div className="card-header" style={{ padding: "12px 16px" }}>
+            <div className="card-title" style={{ fontSize: 13 }}>Operational Briefing</div>
+          </div>
+          <div style={{ padding: 16 }}>
+            {narrative && (
+              <div style={{
+                fontSize: 12, lineHeight: 1.7, color: "var(--text)", marginBottom: recommendation ? 12 : 0,
+                maxHeight: expandedAdvisory ? "none" : 100, overflow: "hidden", position: "relative",
+              }}>
+                {narrative}
+                {!expandedAdvisory && narrative.length > 250 && (
+                  <div style={{
+                    position: "absolute", bottom: 0, left: 0, right: 0, height: 30,
+                    background: "linear-gradient(transparent, var(--surface))",
+                  }} />
+                )}
+              </div>
+            )}
+            {recommendation && (
+              <div style={{
+                fontSize: 12, lineHeight: 1.6, color: "var(--text)",
+                padding: "12px 14px", borderRadius: 8, borderLeft: `3px solid ${risk.color}`,
+                background: "var(--surface2, rgba(0,0,0,0.03))",
+                maxHeight: expandedAdvisory ? "none" : 80, overflow: "hidden", position: "relative",
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: risk.color, marginBottom: 4, textTransform: "uppercase" }}>Recommendation</div>
+                {recommendation}
+                {!expandedAdvisory && recommendation.length > 200 && (
+                  <div style={{
+                    position: "absolute", bottom: 0, left: 0, right: 0, height: 30,
+                    background: "linear-gradient(transparent, var(--surface))",
+                  }} />
+                )}
+              </div>
+            )}
+            {(narrative?.length > 250 || recommendation?.length > 200) && (
+              <button
+                onClick={() => setExpandedAdvisory(!expandedAdvisory)}
+                style={{
+                  marginTop: 8, background: "none", border: "none",
+                  color: "var(--accent)", fontSize: 11, fontWeight: 600,
+                  cursor: "pointer", padding: 0,
+                }}
+              >
+                {expandedAdvisory ? "Show less" : "Read full briefing"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Related Reports ── */}
       <div className="card" style={{ marginTop: 14, overflow: "hidden" }}>

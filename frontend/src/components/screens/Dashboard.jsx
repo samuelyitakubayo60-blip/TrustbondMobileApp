@@ -421,35 +421,6 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
         </div>
       </div>
 
-      {(role === "supervisor" || role === "admin" || role === "officer") && (
-        <div className="card" style={{ marginBottom: "20px" }}>
-          <div className="card-header">
-            <div className="card-title">Cases & assignment units</div>
-          </div>
-          <p style={{ padding: "0 16px 16px", margin: 0, fontSize: 13, color: "var(--muted)" }}>
-            Special assignment units are set on <strong>cases</strong> (when created or in Case
-            Management), not on individual reports. Review pending reports, then open cases to assign
-            units and officers.
-          </p>
-          <div style={{ padding: "0 16px 16px", display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => goToScreen("security-situation", 3)}
-            >
-              Open case management
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              onClick={() => goToScreen("reports", 1, { initialStatusFilter: "pending" })}
-            >
-              Review pending reports
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="main-row">
         <div className="card">
           <div className="card-header">
@@ -553,6 +524,53 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
               })}
             </svg>
           </div>
+
+          {/* ── Weekly insights ──────────────────────────────────── */}
+          {(() => {
+            const validWeeks = chartWeeks.filter(w => typeof w.count === 'number');
+            if (validWeeks.length < 2) return null;
+            const totalAll = validWeeks.reduce((s, w) => s + w.count, 0);
+            const avgPerWeek = Math.round(totalAll / validWeeks.length);
+            const latest = validWeeks[validWeeks.length - 1]?.count ?? 0;
+            const prev = validWeeks[validWeeks.length - 2]?.count ?? 0;
+            const diff = prev > 0 ? Math.round(((latest - prev) / prev) * 100) : 0;
+            const trending = diff > 5 ? 'up' : diff < -5 ? 'down' : 'stable';
+            const peakWeek = validWeeks.reduce((best, w) => w.count > best.count ? w : best, validWeeks[0]);
+            return (
+              <div className="dash-weekly-insights">
+                <div className="dash-insight-row">
+                  <div className="dash-insight-item">
+                    <span className="dash-insight-label">4-Week Total</span>
+                    <span className="dash-insight-val">{totalAll}</span>
+                  </div>
+                  <div className="dash-insight-item">
+                    <span className="dash-insight-label">Avg / Week</span>
+                    <span className="dash-insight-val">{avgPerWeek}</span>
+                  </div>
+                  <div className="dash-insight-item">
+                    <span className="dash-insight-label">Peak Week</span>
+                    <span className="dash-insight-val">{peakWeek.label} ({peakWeek.count})</span>
+                  </div>
+                </div>
+                <div className="dash-trend-row">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    {trending === 'up' ? (
+                      <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>
+                    ) : trending === 'down' ? (
+                      <><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></>
+                    ) : (
+                      <><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>
+                    )}
+                  </svg>
+                  <span className={`dash-trend-text ${trending}`}>
+                    {trending === 'up' ? `Up ${diff}% from previous week` :
+                     trending === 'down' ? `Down ${Math.abs(diff)}% from previous week` :
+                     'Stable compared to previous week'}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <div className="card">

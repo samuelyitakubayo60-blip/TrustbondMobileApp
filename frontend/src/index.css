@@ -74,6 +74,29 @@ body {
   --c-purple-ring:  rgba(124, 58, 237, 0.28);
   --c-muted-dim:    rgba(148, 163, 184, 0.12);
   --c-muted-ring:   rgba(148, 163, 184, 0.30);
+
+  /* ── Chart.js theme tokens (light) ── */
+  --chart-text:         #1e293b;
+  --chart-text-dim:     #475569;
+  --chart-grid:         rgba(71,85,105,0.10);
+  --chart-tooltip-bg:   rgba(255,255,255,0.96);
+  --chart-tooltip-border: rgba(203,213,225,0.5);
+  --chart-blue:         rgba(37,99,235,0.75);
+  --chart-blue-solid:   rgba(37,99,235,1);
+  --chart-blue-fill:    rgba(37,99,235,0.15);
+  --chart-pink:         rgba(219,39,119,0.75);
+  --chart-pink-solid:   rgba(219,39,119,1);
+  --chart-pink-fill:    rgba(219,39,119,0.15);
+  --chart-teal:         rgba(13,148,136,0.75);
+  --chart-teal-solid:   rgba(13,148,136,1);
+  --chart-teal-fill:    rgba(13,148,136,0.15);
+  --chart-yellow:       rgba(202,138,4,0.75);
+  --chart-yellow-solid: rgba(202,138,4,1);
+  --chart-purple:       rgba(124,58,237,0.75);
+  --chart-purple-solid: rgba(124,58,237,1);
+  --chart-orange:       rgba(234,88,12,0.75);
+  --chart-orange-solid: rgba(234,88,12,1);
+  --chart-point-border: #ffffff;
 }
 
 body.light-mode {
@@ -138,6 +161,29 @@ body.dark-mode {
   --c-purple-ring:  rgba(167, 139, 250, 0.32);
   --c-muted-dim:    rgba(100, 116, 139, 0.14);
   --c-muted-ring:   rgba(100, 116, 139, 0.28);
+
+  /* ── Chart.js theme tokens (dark) ── */
+  --chart-text:         #cbd5e1;
+  --chart-text-dim:     #94a3b8;
+  --chart-grid:         rgba(148,163,184,0.08);
+  --chart-tooltip-bg:   rgba(15,23,42,0.95);
+  --chart-tooltip-border: rgba(148,163,184,0.2);
+  --chart-blue:         rgba(54,162,235,0.8);
+  --chart-blue-solid:   rgba(54,162,235,1);
+  --chart-blue-fill:    rgba(54,162,235,0.2);
+  --chart-pink:         rgba(255,99,132,0.8);
+  --chart-pink-solid:   rgba(255,99,132,1);
+  --chart-pink-fill:    rgba(255,99,132,0.2);
+  --chart-teal:         rgba(75,192,192,0.8);
+  --chart-teal-solid:   rgba(75,192,192,1);
+  --chart-teal-fill:    rgba(75,192,192,0.2);
+  --chart-yellow:       rgba(255,205,86,0.8);
+  --chart-yellow-solid: rgba(255,205,86,1);
+  --chart-purple:       rgba(153,102,255,0.8);
+  --chart-purple-solid: rgba(153,102,255,1);
+  --chart-orange:       rgba(255,159,64,0.8);
+  --chart-orange-solid: rgba(255,159,64,1);
+  --chart-point-border: #1e293b;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -835,6 +881,73 @@ body.dark-mode .dashboard-police .alert-banner {
   fill: var(--db-text3);
   font-family: "DM Sans", sans-serif;
   font-size: 11px;
+}
+
+/* ── Weekly insights (below chart) ────────────────────────────── */
+.dash-weekly-insights {
+  padding: 14px 18px 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+.dash-insight-row {
+  display: flex;
+  gap: 12px;
+}
+.dash-insight-item {
+  flex: 1;
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dash-insight-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.dash-insight-val {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.dash-trend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 2px 4px;
+  color: var(--muted);
+}
+.dash-trend-text {
+  font-size: 12px;
+}
+.dash-trend-text.up   { color: var(--danger); }
+.dash-trend-text.down { color: var(--success); }
+.dash-trend-text.stable { color: var(--muted); }
+.dash-trend-row .up   { color: var(--danger); }
+.dash-trend-row .down { color: var(--success); }
+
+/* ── Geographic chart container (Chart.js) ────────────────────── */
+.geo-chart-container {
+  height: 400px;
+  width: 100%;
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 15px;
+  border: 1px solid var(--border);
+}
+.geo-chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 0 24px;
 }
 
 .dashboard-police .donut-wrap {
@@ -2718,6 +2831,52 @@ textarea:focus {
   50% {
     transform: scale(1.1);
   }
+}
+
+/* Account Settings — Profile card */
+.acct-profile-card { padding: 16px 20px !important; }
+.acct-profile-row {
+  display: flex; align-items: center; gap: 14;
+}
+.acct-avatar {
+  width: 46px; height: 46px; border-radius: 12px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent), rgba(59,130,246,.6));
+  color: #fff; font-weight: 700; font-size: 16; letter-spacing: 0.04em;
+  display: flex; align-items: center; justify-content: center;
+}
+.acct-profile-name {
+  font-size: 15px; font-weight: 700; color: var(--text);
+}
+.acct-profile-email {
+  font-size: 12px; color: var(--muted); margin-top: 2px;
+}
+.acct-badge {
+  font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 8px;
+  letter-spacing: 0.04em; line-height: 1.4;
+}
+.acct-badge--on {
+  background: rgba(52,211,153,.10); color: var(--success);
+  border: 1px solid rgba(52,211,153,.25);
+}
+.acct-badge--off {
+  background: rgba(248,113,113,.06); color: var(--muted);
+  border: 1px solid var(--border);
+}
+.acct-profile-details {
+  display: flex; gap: 8; margin-top: 12; flex-wrap: wrap;
+}
+.acct-detail-chip {
+  display: flex; align-items: center; gap: 6;
+  padding: 5px 12px; border-radius: 8px;
+  background: var(--surface2, rgba(0,0,0,0.03));
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+.acct-detail-label {
+  color: var(--muted); font-weight: 500;
+}
+.acct-detail-value {
+  color: var(--text); font-weight: 600;
 }
 
 /* Account Settings spinner */
