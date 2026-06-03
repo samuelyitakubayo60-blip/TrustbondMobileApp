@@ -324,7 +324,7 @@ const AccountSettings = () => {
             {mfaEnabled ? '2FA ACTIVE' : '2FA OFF'}
           </span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
           {[
             { label: 'Full Name', value: profile ? `${profile.first_name} ${profile.last_name}` : '—', bold: true },
             { label: 'Email', value: profile?.email || '—' },
