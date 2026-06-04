@@ -534,6 +534,7 @@ function App() {
             openModal={openModal}
             wsRefreshKey={wsRefreshKey}
             focusHotspotId={currentScreen.props?.focusHotspotId}
+            focusCoords={currentScreen.props?.focusCoords}
           />
         );
       case "device-trust":

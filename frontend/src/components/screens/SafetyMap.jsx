@@ -105,6 +105,45 @@ const buildStatsFromHotspots = (hotspots) => {
   };
 };
 
+/**
+ * Compare this-week vs previous-week hotspot counts to detect rising trends.
+ * Returns { totalTrend, highTrend, mediumTrend, lowTrend } each: 'rising' | 'falling' | 'stable'
+ */
+const computeWeekTrends = (hotspots) => {
+  const list = Array.isArray(hotspots) ? hotspots : [];
+  const now = Date.now();
+  const oneWeek = 7 * 24 * 60 * 60 * 1000;
+  const thisWeekCutoff = now - oneWeek;
+  const prevWeekCutoff = now - 2 * oneWeek;
+
+  const bucket = { thisWeek: { total: 0, high: 0, medium: 0, low: 0 }, prevWeek: { total: 0, high: 0, medium: 0, low: 0 } };
+  for (const h of list) {
+    const t = h.detected_at ? new Date(h.detected_at).getTime() : 0;
+    if (!Number.isFinite(t)) continue;
+    const tier = resolveHotspotRiskTier(h);
+    const isHigh = tier === 'critical' || tier === 'high';
+    const isMed = tier === 'medium';
+    if (t >= thisWeekCutoff) {
+      bucket.thisWeek.total++;
+      if (isHigh) bucket.thisWeek.high++;
+      else if (isMed) bucket.thisWeek.medium++;
+      else bucket.thisWeek.low++;
+    } else if (t >= prevWeekCutoff) {
+      bucket.prevWeek.total++;
+      if (isHigh) bucket.prevWeek.high++;
+      else if (isMed) bucket.prevWeek.medium++;
+      else bucket.prevWeek.low++;
+    }
+  }
+  const trend = (curr, prev) => curr > prev ? 'rising' : curr < prev ? 'falling' : 'stable';
+  return {
+    totalTrend:  trend(bucket.thisWeek.total, bucket.prevWeek.total),
+    highTrend:   trend(bucket.thisWeek.high, bucket.prevWeek.high),
+    mediumTrend: trend(bucket.thisWeek.medium, bucket.prevWeek.medium),
+    lowTrend:    trend(bucket.thisWeek.low, bucket.prevWeek.low),
+  };
+};
+
 const TIME_PERIOD_HOURS = {
   day: 24,
   week: 168,
@@ -367,7 +406,7 @@ const getSectorColor = (sectorName) => {
   return _sectorColorMap[sectorName];
 };
 
-const SafetyMap = ({ goToScreen, wsRefreshKey, focusHotspotId }) => {
+const SafetyMap = ({ goToScreen, wsRefreshKey, focusHotspotId, focusCoords }) => {
   const _defaultKey = `${DEFAULT_TIME_PERIOD}_`;
   const [loading, setLoading] = useState(!_mapHotCache[`${DEFAULT_TIME_PERIOD}_`]);
   // Dark mode detection — syncs with body.dark-mode class toggle
@@ -398,11 +437,13 @@ const SafetyMap = ({ goToScreen, wsRefreshKey, focusHotspotId }) => {
     avg_cluster_trust: null,
     latest_cluster_run: "Never"
   });
+  const [weekTrends, setWeekTrends] = useState({ totalTrend: 'stable', highTrend: 'stable', mediumTrend: 'stable', lowTrend: 'stable' });
   const [polygons, setPolygons] = useState([]);
   const [incidentTypes, setIncidentTypes] = useState([]);
   const [selectedHotspotId, setSelectedHotspotId] = useState(null);
   const [focusNonce, setFocusNonce] = useState(0);
   const [mapFocusId, setMapFocusId] = useState(null);
+  const [directFocusCoords, setDirectFocusCoords] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [showSinglesOnMap, setShowSinglesOnMap] = useState(true);
   const [showVillageBoundaries, setShowVillageBoundaries] = useState(true);
@@ -544,6 +585,15 @@ const SafetyMap = ({ goToScreen, wsRefreshKey, focusHotspotId }) => {
     }
   }, [focusHotspotId, historicalHotspots]);
 
+  // Auto-focus coordinates when navigated from case "View on Map"
+  useEffect(() => {
+    if (!focusCoords) return;
+    const { lat, lon } = focusCoords;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    setDirectFocusCoords({ lat, lng: lon });
+    setFocusNonce((n) => n + 1);
+  }, [focusCoords]);
+
   // Load incident types from backend so filters match DB
   useEffect(() => {
     let mounted = true;
@@ -621,6 +671,7 @@ const SafetyMap = ({ goToScreen, wsRefreshKey, focusHotspotId }) => {
 
   useEffect(() => {
     setHotspotStats(buildStatsFromHotspots(timeFilteredHotspots));
+    setWeekTrends(computeWeekTrends(timeFilteredHotspots));
   }, [timeFilteredHotspots]);
 
   const filteredHotspots = useMemo(() => {
@@ -691,13 +742,16 @@ const SafetyMap = ({ goToScreen, wsRefreshKey, focusHotspotId }) => {
   }, [plottedHotspots, showSinglesOnMap, selectedCluster?.hotspot_id]);
 
   const mapFocusTarget = useMemo(() => {
+    if (directFocusCoords) {
+      return { lat: directFocusCoords.lat, lng: directFocusCoords.lng, id: "coords" };
+    }
     const h =
       selectedCluster ||
       plottedHotspots.find((x) => x.hotspot_id === mapFocusId) ||
       null;
     if (!h) return null;
     return { lat: h.lat, lng: h.lng, id: h.hotspot_id };
-  }, [selectedCluster, plottedHotspots, mapFocusId]);
+  }, [selectedCluster, plottedHotspots, mapFocusId, directFocusCoords]);
 
   // filteredHistoricalHotspots = plottedHotspots so table count always matches map circles
   const filteredHistoricalHotspots = plottedHotspots;
@@ -847,14 +901,41 @@ const SafetyMap = ({ goToScreen, wsRefreshKey, focusHotspotId }) => {
         {/* Primary stats — 4 large cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
           {[
-            { label: 'Total Clusters',  value: hotspotStats.total_clusters,                         cls: 'sb-blue'   },
-            { label: 'High Risk',       value: hotspotStats.risk_counts.critical,                   cls: 'sb-red'    },
-            { label: 'Medium Risk',     value: hotspotStats.risk_counts.warning,                    cls: 'sb-orange' },
-            { label: 'Low Risk',        value: hotspotStats.risk_counts.normal,                     cls: 'sb-green'  },
+            { label: 'Total Clusters',  value: hotspotStats.total_clusters, cls: 'sb-blue',   trend: weekTrends.totalTrend  },
+            { label: 'High Risk',       value: hotspotStats.risk_counts.critical, cls: 'sb-red',    trend: weekTrends.highTrend   },
+            { label: 'Medium Risk',     value: hotspotStats.risk_counts.warning, cls: 'sb-orange', trend: weekTrends.mediumTrend },
+            { label: 'Low Risk',        value: hotspotStats.risk_counts.normal, cls: 'sb-green',  trend: weekTrends.lowTrend    },
           ].map((s) => (
-            <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default' }}>
+            <div key={s.label} className={`stat-btn ${s.cls}`} style={{ cursor: 'default', position: 'relative' }}>
               <div className="stat-btn-label">{s.label}</div>
-              <div className="stat-btn-value">{loading ? '—' : (s.value ?? '0')}</div>
+              <div className="stat-btn-value" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                {loading ? '—' : (s.value ?? '0')}
+                {!loading && s.trend !== 'stable' && (
+                  <span
+                    title={s.trend === 'rising' ? 'Rising vs last week' : 'Falling vs last week'}
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: s.trend === 'rising' ? '#ef4444' : '#22c55e',
+                    }}
+                  >
+                    {s.trend === 'rising' ? '\u2191' : '\u2193'}
+                  </span>
+                )}
+              </div>
+              {!loading && s.trend !== 'stable' && (
+                <div style={{
+                  fontSize: 9,
+                  fontWeight: 600,
+                  textAlign: 'center',
+                  marginTop: 2,
+                  color: s.trend === 'rising' ? '#ef4444' : '#22c55e',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}>
+                  {s.trend === 'rising' ? 'Rising' : 'Falling'} vs last week
+                </div>
+              )}
             </div>
           ))}
         </div>

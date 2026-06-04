@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import api from "../../api/client";
 import ViewCaseModal from "../Modals/ViewCaseModal";
+import EditCaseModal from "../Modals/EditCaseModal";
 
 /**
  * Cases for one station — GET /stations/{id}/cases grouped by incident type.
@@ -11,6 +12,8 @@ const StationSecurityDetail = ({ goToScreen, stationId, stationName, wsRefreshKe
   const [error, setError] = useState("");
   const [viewCase, setViewCase] = useState(null);
   const [viewOpen, setViewOpen] = useState(false);
+  const [editCase, setEditCase] = useState(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   const sid = stationId != null ? Number(stationId) : null;
 
@@ -143,7 +146,25 @@ const StationSecurityDetail = ({ goToScreen, stationId, stationName, wsRefreshKe
           setViewCase(null);
         }}
         caseItem={viewCase}
-        onUpdated={load}
+        goToScreen={goToScreen}
+        onEdit={(c) => {
+          setViewOpen(false);
+          setEditCase(c);
+          setEditOpen(true);
+        }}
+      />
+      <EditCaseModal
+        isOpen={editOpen}
+        onClose={() => {
+          setEditOpen(false);
+          setEditCase(null);
+        }}
+        caseItem={editCase}
+        onSaved={() => {
+          setEditOpen(false);
+          setEditCase(null);
+          load();
+        }}
       />
     </>
   );

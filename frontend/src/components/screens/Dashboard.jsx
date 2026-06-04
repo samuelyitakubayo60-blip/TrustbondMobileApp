@@ -540,7 +540,7 @@ const Dashboard = ({ goToScreen, onOpenReport, wsRefreshKey }) => {
               <div className="dash-weekly-insights">
                 <div className="dash-insight-row">
                   <div className="dash-insight-item">
-                    <span className="dash-insight-label">4-Week Total</span>
+                    <span className="dash-insight-label">4-Weeks Total</span>
                     <span className="dash-insight-val">{totalAll}</span>
                   </div>
                   <div className="dash-insight-item">

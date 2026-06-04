@@ -2838,10 +2838,10 @@ def run_hotspot_auto():
             
             # Create notifications for admins and supervisors about new hotspots
             from app.api.v1.notifications import create_role_notifications
-            
+
             # Get the most recently created hotspot for notification
             latest_hotspot = db.query(Hotspot).order_by(Hotspot.detected_at.desc()).first() if created > 0 else None
-            
+
             create_role_notifications(
                 db,
                 title="New Hotspots Detected",
@@ -2852,6 +2852,33 @@ def run_hotspot_auto():
                 target_roles=["admin", "supervisor"],
                 send_email=True  # Enable email notifications for hotspots
             )
+
+            # Notify officers at stations covering hotspot areas
+            try:
+                from app.core.station_assignment import resolve_station_id
+                recent_hotspots = db.query(Hotspot).order_by(Hotspot.detected_at.desc()).limit(created).all()
+                notified_stations = set()
+                for hs in recent_hotspots:
+                    lat = float(hs.center_lat) if hs.center_lat else None
+                    lon = float(hs.center_long) if hs.center_long else None
+                    if lat is None or lon is None:
+                        continue
+                    sid = resolve_station_id(db, latitude=lat, longitude=lon)
+                    if sid and sid not in notified_stations:
+                        notified_stations.add(sid)
+                        create_role_notifications(
+                            db,
+                            title="New Cluster Detected in Your Area",
+                            message=f"A new incident cluster with {hs.incident_count} reports has been detected near your station area. Please review the Safety Map.",
+                            notif_type="hotspot",
+                            related_entity_type="hotspot",
+                            related_entity_id=str(hs.hotspot_id),
+                            target_roles=["officer"],
+                            target_station_id=sid,
+                            send_email=True,
+                        )
+            except Exception as e:
+                print(f"Failed to notify station officers about hotspots: {e}")
         db.commit()
     except Exception as e:
         print(f"Error in background hotspot creation: {e}")

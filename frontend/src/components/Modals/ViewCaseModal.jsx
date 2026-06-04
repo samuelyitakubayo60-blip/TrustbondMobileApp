@@ -24,7 +24,7 @@ const formatAIStatus = (report) => {
 const PRIORITY_BADGE = { urgent: 'b-red', high: 'b-orange', medium: 'b-yellow', low: 'b-blue' };
 const STATUS_BADGE   = { open: 'b-green', closed: 'b-gray', archived: 'b-gray' };
 
-const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
+const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit, goToScreen }) => {
   const [reports, setReports]               = useState([]);
   const [loading, setLoading]               = useState(false);
   const [error, setError]                   = useState('');
@@ -36,6 +36,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
   const [caseSearch, setCaseSearch]         = useState('');
   const [movingReport, setMovingReport]     = useState(false);
   const [unitLabels, setUnitLabels]         = useState({});
+  const [timeFilter, setTimeFilter]         = useState('all');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -152,6 +153,24 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
     } finally { setMovingReport(false); }
   };
 
+  const filteredReports = (() => {
+    if (timeFilter === 'all') return reports;
+    const now = new Date();
+    let cutoff;
+    switch (timeFilter) {
+      case '7d':   cutoff = new Date(now - 7 * 86400000); break;
+      case '30d':  cutoff = new Date(now - 30 * 86400000); break;
+      case '90d':  cutoff = new Date(now - 90 * 86400000); break;
+      case '6m':   cutoff = new Date(now); cutoff.setMonth(cutoff.getMonth() - 6); break;
+      case '1y':   cutoff = new Date(now); cutoff.setFullYear(cutoff.getFullYear() - 1); break;
+      default:     return reports;
+    }
+    return reports.filter((r) => {
+      const d = parseApiDate(r.reported_at);
+      return d && d >= cutoff;
+    });
+  })();
+
   const hasRib = caseItem.special_assignment_unit || caseItem.rib_handed_over_at || caseItem.rib_handover_summary;
 
   return (
@@ -210,7 +229,14 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                 </button>
                 <button
                   className="btn btn-outline btn-sm"
-                  onClick={() => window.open(`https://www.google.com/maps?q=${navLat},${navLon}`, '_blank')}
+                  onClick={() => {
+                    if (goToScreen) {
+                      onClose?.();
+                      goToScreen("safety-map", 0, { focusCoords: { lat: navLat, lon: navLon } });
+                    } else {
+                      window.open(`https://www.google.com/maps?q=${navLat},${navLon}`, '_blank');
+                    }
+                  }}
                 >
                   View on Map
                 </button>
@@ -266,13 +292,34 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
 
           {/* ── Linked Reports ── */}
           <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Linked Reports
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Linked Reports
+                </div>
+                <span className="badge b-blue" style={{ fontSize: 10 }}>
+                  {loading ? '…' : `${filteredReports.length}${timeFilter !== 'all' ? ` / ${reports.length}` : ''}`}
+                </span>
               </div>
-              <span className="badge b-blue" style={{ fontSize: 10 }}>
-                {loading ? '…' : reports.length}
-              </span>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {[
+                  { key: 'all', label: 'All' },
+                  { key: '7d', label: '7 Days' },
+                  { key: '30d', label: '30 Days' },
+                  { key: '90d', label: '3 Months' },
+                  { key: '6m', label: '6 Months' },
+                  { key: '1y', label: '1 Year' },
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    className={`btn btn-sm ${timeFilter === opt.key ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ fontSize: 10, padding: '2px 8px' }}
+                    onClick={() => setTimeFilter(opt.key)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {error && (
@@ -300,7 +347,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {reports.map((r) => (
+                    {filteredReports.map((r) => (
                       <tr key={r.report_id}>
                         <td style={{ fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap' }}>
                           {r.report_number || String(r.report_id).slice(0, 8)}
@@ -330,10 +377,12 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit }) => {
                         </td>
                       </tr>
                     ))}
-                    {!reports.length && (
+                    {!filteredReports.length && (
                       <tr>
                         <td colSpan={7} style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', padding: '28px 0' }}>
-                          No reports linked to this case.
+                          {timeFilter !== 'all' && reports.length > 0
+                            ? 'No reports match the selected time filter.'
+                            : 'No reports linked to this case.'}
                         </td>
                       </tr>
                     )}

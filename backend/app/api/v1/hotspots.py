@@ -530,10 +530,56 @@ def list_hotspots(
     llm_skip_logged = False
 
     skipped_no_reports = 0
+    # Build set of all report IDs already linked to ANY hotspot (for absorption).
+    all_linked_report_ids: set = set()
+    if hotspot_id_list:
+        try:
+            _all_linked = db.execute(
+                text("SELECT report_id FROM hotspot_reports")
+            ).fetchall()
+            all_linked_report_ids = {r[0] for r in _all_linked}
+        except Exception:
+            pass
+
     for h in hotspots:
         # Include all clustered reports; some legacy rows may miss village linkage
         # but still have valid coordinates required for map/hotspot analytics.
         reports_in_cluster = list(getattr(h, "reports", None) or [])
+
+        # Absorb nearby verified reports within this hotspot's radius that
+        # aren't linked to any hotspot (noise points from DBSCAN).
+        try:
+            h_lat = float(h.center_lat)
+            h_lng = float(h.center_long)
+            h_radius = float(h.radius_meters or 500)
+            radius_deg = h_radius / 111000.0  # approx degrees
+            linked_ids = {r.report_id for r in reports_in_cluster}
+            nearby_q = (
+                db.query(Report)
+                .options(
+                    selectinload(Report.ml_predictions),
+                    joinedload(Report.village_location).joinedload(Location.parent).joinedload(Location.parent),
+                    joinedload(Report.incident_type),
+                    selectinload(Report.evidence_files),
+                )
+                .filter(
+                    Report.verification_status == "verified",
+                    Report.rule_status != "rejected",
+                    Report.latitude.between(h_lat - radius_deg, h_lat + radius_deg),
+                    Report.longitude.between(h_lng - radius_deg, h_lng + radius_deg),
+                    ~Report.report_id.in_(linked_ids) if linked_ids else True,
+                )
+            )
+            if report_window_cutoff is not None:
+                nearby_q = nearby_q.filter(Report.reported_at >= report_window_cutoff)
+            nearby_reports = nearby_q.limit(50).all()
+            # Only absorb reports not already linked to another hotspot
+            for nr in nearby_reports:
+                if nr.report_id not in all_linked_report_ids and nr.report_id not in linked_ids:
+                    reports_in_cluster.append(nr)
+        except Exception:
+            logger.debug("Hotspot %d: nearby report absorption failed", h.hotspot_id)
+
         if report_window_cutoff is not None:
             reports_in_cluster = [
                 r
@@ -542,20 +588,18 @@ def list_hotspots(
                 and _as_utc(r.reported_at) >= report_window_cutoff
             ]
         if not reports_in_cluster:
-            # The hotspot exists but none of its linked reports fall within the
-            # requested time window.  This is expected when a narrow window
-            # (e.g. "last 24 h") is applied to a cluster built from 30-day data.
             skipped_no_reports += 1
-            logger.debug(
-                "Hotspot hotspot_id=%d hidden — all %d linked report(s) are outside "
-                "report_window_cutoff=%s (time_period=%s, hours_back=%s). "
-                "Widen the time period to see this cluster.",
-                h.hotspot_id,
-                len(list(getattr(h, "reports", None) or [])),
-                report_window_cutoff,
-                time_period,
-                hours_back,
-            )
+            continue
+
+        # Enforce minimum incident thresholds to qualify as a hotspot:
+        # < 24 hours filter: 1 incident is enough (emergency/real-time view)
+        # >= 24 hours filter OR all-time: need at least 4 incidents (otherwise noise)
+        if report_window_hours is not None and report_window_hours <= 24:
+            min_for_cluster = 1
+        else:
+            min_for_cluster = 4
+        if len(reports_in_cluster) < min_for_cluster:
+            skipped_no_reports += 1
             continue
 
         # Use batch-loaded is_core flags
