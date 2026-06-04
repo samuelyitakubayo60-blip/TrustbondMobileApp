@@ -394,7 +394,7 @@ const DeviceTrust = ({ wsRefreshKey }) => {
   };
 
   return (
-    <>
+    <div className="device-trust-page">
       {banDialog.open && (
         <div
           role="dialog"
@@ -850,12 +850,12 @@ const DeviceTrust = ({ wsRefreshKey }) => {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-              <h2 style={{ margin: 0, fontSize: 22 }}>Device Trust Management</h2>
+              <h2 className="device-trust-title">Device Trust Management</h2>
               {backgroundRefreshing && (
                 <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>refreshing…</span>
               )}
             </div>
-            <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
+            <p className="device-trust-desc">
               Pseudonymous device profiles — track reporting patterns, trust scores, and spam behavior without exposing user identity.
             </p>
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)', background: 'var(--c-accent-dim)', border: '1px solid var(--c-accent-ring)', borderRadius: 6, padding: '5px 10px', width: 'fit-content' }}>
@@ -1060,15 +1060,10 @@ const DeviceTrust = ({ wsRefreshKey }) => {
 
                     return (
                       <tr key={d.device_id}>
-                        <td style={{ fontSize: "12px", color: "var(--muted)", textAlign: "center" }}>
+                        <td className="dt-cell-muted dt-cell-center">
                           {index + 1}
                         </td>
-                        <td
-                          style={{
-                            fontFamily: 'monospace',
-                            fontSize: '10px',
-                          }}
-                        >
+                        <td className="dt-hash">
                           {shortHash}
                         </td>
                         <td>
@@ -1100,37 +1095,33 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                           {d.flagged_reports ?? d.rejected_reports ?? 0}
                         </td>
                         <td>{d.spam_flags ?? d.spam_count ?? 0}</td>
-                        <td style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                        <td className="dt-cell-muted">
                           {d.ml_avg_trust != null ? Math.round(d.ml_avg_trust) : 
                            d.ml_stats?.avg_trust_score != null ? Math.round(d.ml_stats.avg_trust_score) : '—'}
                         </td>
-                        <td style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                        <td className="dt-cell-muted">
                           {normalizePercentValue(d.ml_fake_rate) != null
                             ? `${Math.round(normalizePercentValue(d.ml_fake_rate))}%`
                             : normalizePercentValue(d.ml_stats?.fake_rate) != null
                               ? `${Math.round(normalizePercentValue(d.ml_stats?.fake_rate))}%`
                               : '—'}
                         </td>
-                        <td style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                        <td className="dt-cell-muted">
                           {normalizePercentValue(d.ml_last_confidence) != null
                             ? `${Math.round(normalizePercentValue(d.ml_last_confidence))}%`
                             : normalizePercentValue(d.ml_stats?.last_confidence) != null
                               ? `${Math.round(normalizePercentValue(d.ml_stats?.last_confidence))}%`
                               : '—'}
                         </td>
-                        <td style={{ fontSize: '10px', color: 'var(--muted)' }}>
+                        <td className="dt-cell-muted">
                           {formatShortDate(d.ml_last_prediction_at || d.ml_stats?.last_prediction_at)}
                         </td>
-                        <td
-                          style={{
-                            fontSize: '10px',
-                            color: 'var(--muted)',
-                          }}
-                        >
+                        <td className="dt-cell-muted">
                           {formatShortDate(d.last_active_at)}
                         </td>
-                        <td style={{ fontSize: '10px', color: 'var(--muted)', maxWidth: 120 }}>
+                        <td className="dt-location-cell">
                           <div
+                            className="dt-location-coords"
                             title={
                               locationView.coords || locationView.hierarchy
                                 ? [locationView.coords, locationView.hierarchy]
@@ -1142,12 +1133,12 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                             {locationView.coords || '—'}
                           </div>
                           {locationView.hierarchy && (
-                            <div style={{ fontSize: '8px', color: 'var(--muted)', marginTop: 2 }}>
+                            <div className="dt-location-sub">
                               {locationView.hierarchy}
                             </div>
                           )}
                           {(d.metadata_json?.last_location_timestamp || d.metadata?.last_location_timestamp) && (
-                            <div style={{ fontSize: '8px', color: 'var(--muted)', marginTop: 2 }}>
+                            <div className="dt-location-meta">
                               {formatTimestamp(d.metadata_json?.last_location_timestamp || d.metadata?.last_location_timestamp).split(',')[0]}
                             </div>
                           )}
@@ -1157,16 +1148,16 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                             {locationAnalysis.consistency_score === null ? 'No Data' : locationAnalysis.consistency_score}
                           </span>
                           {locationAnalysis.suspicious_jumps > 0 && (
-                            <div style={{ fontSize: '8px', color: 'var(--danger)', marginTop: 2 }}>
+                            <div className="dt-jump-warn">
                               <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 2, verticalAlign: 'middle' }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
               {locationAnalysis.suspicious_jumps} jumps
                             </div>
                           )}
                         </td>
-                        <td style={{ fontSize: '10px', color: 'var(--muted)' }}>
+                        <td className="dt-cell-muted">
                           {locationAnalysis.movement_radius_km} km
                           {locationAnalysis.avg_gps_accuracy && (
-                            <div style={{ fontSize: '8px', color: 'var(--muted)', marginTop: 2 }}>
+                            <div className="dt-location-meta">
                               GPS: ±{locationAnalysis.avg_gps_accuracy}m
                             </div>
                           )}
@@ -1176,7 +1167,7 @@ const DeviceTrust = ({ wsRefreshKey }) => {
                             {statusLabel}
                           </span>
                         </td>
-                        <td style={{ maxWidth: 220, color: 'var(--muted)' }}>
+                        <td className="dt-cell-muted" style={{ maxWidth: 220 }}>
                           <span title={d.blacklist_reason || ''}>
                             {d.blacklist_reason || '—'}
                           </span>
@@ -1280,7 +1271,7 @@ const DeviceTrust = ({ wsRefreshKey }) => {
         </div>
 
       </div>
-    </>
+    </div>
   );
 };
 
