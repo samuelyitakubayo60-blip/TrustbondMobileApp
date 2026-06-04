@@ -163,8 +163,8 @@ body.dark-mode {
   --c-muted-ring:   rgba(100, 116, 139, 0.28);
 
   /* ── Chart.js theme tokens (dark) ── */
-  --chart-text:         #cbd5e1;
-  --chart-text-dim:     #94a3b8;
+  --chart-text:         #e2e8f0;
+  --chart-text-dim:     #b8c5d6;
   --chart-grid:         rgba(148,163,184,0.08);
   --chart-tooltip-bg:   rgba(15,23,42,0.95);
   --chart-tooltip-border: rgba(148,163,184,0.2);
@@ -673,6 +673,12 @@ body {
   color: var(--db-text2);
   margin-top: 2px;
 }
+body.dark-mode .dashboard-police .page-sub {
+  font-size: 14px;
+}
+body.dark-mode .dashboard-police .card-title {
+  font-size: 14px;
+}
 
 .dashboard-police .alert-banner {
   display: flex;
@@ -770,6 +776,12 @@ body.dark-mode .dashboard-police .alert-banner {
   flex-shrink: 0;
 }
 
+body.dark-mode .dashboard-police .stat-label {
+  font-size: 12px;
+}
+body.dark-mode .dashboard-police .stat-meta {
+  font-size: 13px;
+}
 .dashboard-police .stat-label {
   font-size: 11px;
   font-weight: 600;
@@ -868,19 +880,19 @@ body.dark-mode .dashboard-police .alert-banner {
   cursor: pointer;
 }
 .dashboard-police .chart-label {
-  fill: var(--db-text3);
+  fill: var(--db-text2);
   font-family: "DM Mono", monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 .dashboard-police .chart-value {
   fill: var(--db-text2);
   font-family: "DM Mono", monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 .dashboard-police .chart-week {
-  fill: var(--db-text3);
+  fill: var(--db-text2);
   font-family: "DM Sans", sans-serif;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* ── Weekly insights (below chart) ────────────────────────────── */
@@ -903,10 +915,10 @@ body.dark-mode .dashboard-police .alert-banner {
   gap: 4px;
 }
 .dash-insight-label {
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--muted);
+  color: var(--text-dim);
 }
 .dash-insight-val {
   font-size: 15px;

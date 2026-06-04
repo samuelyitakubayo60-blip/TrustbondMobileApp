@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Chart } from 'chart.js/auto';
 import 'chartjs-adapter-date-fns';
 import zoomPlugin from 'chartjs-plugin-zoom';
@@ -9,9 +9,9 @@ Chart.register(zoomPlugin, ChartDataLabels);
 const EMPTY_MESSAGE =
   'No data available for this time range. Adjust the window or try again later.';
 
-/* ── Read CSS custom properties at runtime ─────────────────────────── */
+/* Chart tokens are defined on body (incl. body.dark-mode), not on <html>. */
 function getThemeColors() {
-  const s = getComputedStyle(document.documentElement);
+  const s = getComputedStyle(document.body);
   const v = (name, fallback) => s.getPropertyValue(name).trim() || fallback;
   return {
     text:       v('--chart-text',       '#cbd5e1'),
@@ -39,17 +39,24 @@ function getThemeColors() {
 }
 
 /* ── Shared option builders ────────────────────────────────────────── */
+const CHART_FONT = {
+  title: 16,
+  legend: 13,
+  tick: 13,
+  axisTitle: 13,
+};
+
 function darkPlugins(c, title) {
   return {
     title: {
       display: !!title,
       text: title || '',
       color: c.text,
-      font: { size: 14, weight: '600' }
+      font: { size: CHART_FONT.title, weight: '600' },
     },
     legend: {
       display: true,
-      labels: { color: c.textDim, font: { size: 12 } }
+      labels: { color: c.text, font: { size: CHART_FONT.legend } },
     },
     tooltip: {
       backgroundColor: c.tooltipBg,
@@ -64,8 +71,17 @@ function darkPlugins(c, title) {
 function darkScale(c, label) {
   return {
     grid: { color: c.grid },
-    ticks: { color: c.textDim },
-    ...(label ? { title: { display: true, text: label, color: c.textDim } } : {})
+    ticks: { color: c.text, font: { size: CHART_FONT.tick } },
+    ...(label
+      ? {
+          title: {
+            display: true,
+            text: label,
+            color: c.text,
+            font: { size: CHART_FONT.axisTitle, weight: '500' },
+          },
+        }
+      : {}),
   };
 }
 
@@ -105,6 +121,16 @@ const AdvancedGeographicCharts = ({ data, type, timeWindow }) => {
   const chartInstance = useRef(null);
   const chartData = data || {};
   const showChart = hasChartData(type, chartData);
+  const [themeRevision, setThemeRevision] = useState(0);
+
+  useEffect(() => {
+    const body = document.body;
+    const observer = new MutationObserver(() => {
+      setThemeRevision((n) => n + 1);
+    });
+    observer.observe(body, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!chartRef.current || !showChart) {
@@ -171,7 +197,7 @@ const AdvancedGeographicCharts = ({ data, type, timeWindow }) => {
         chartInstance.current = null;
       }
     };
-  }, [data, type, timeWindow, showChart]);
+  }, [data, type, timeWindow, showChart, themeRevision]);
 
   const createTimeSeriesChart = (payload, c) => {
     const reportsByTime = payload.reportsByTime || [];
@@ -241,7 +267,19 @@ const AdvancedGeographicCharts = ({ data, type, timeWindow }) => {
         scales: {
           x: darkScale(c),
           y:  { type: 'linear', display: true, position: 'left',  ...darkScale(c, 'Reports Processed') },
-          y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { color: c.textDim }, title: { display: true, text: 'Response Time (min)', color: c.textDim } }
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            grid: { drawOnChartArea: false },
+            ticks: { color: c.text, font: { size: CHART_FONT.tick } },
+            title: {
+              display: true,
+              text: 'Response Time (min)',
+              color: c.text,
+              font: { size: CHART_FONT.axisTitle, weight: '500' },
+            },
+          },
         }
       }
     };
@@ -305,10 +343,15 @@ const AdvancedGeographicCharts = ({ data, type, timeWindow }) => {
           r: {
             beginAtZero: true,
             max: 100,
-            ticks: { stepSize: 20, color: c.textDim, backdropColor: 'transparent' },
+            ticks: {
+              stepSize: 20,
+              color: c.text,
+              font: { size: CHART_FONT.tick },
+              backdropColor: 'transparent',
+            },
             grid: { color: c.grid },
             angleLines: { color: c.grid },
-            pointLabels: { color: c.textDim }
+            pointLabels: { color: c.text, font: { size: CHART_FONT.tick } },
           }
         }
       }
@@ -335,7 +378,7 @@ const AdvancedGeographicCharts = ({ data, type, timeWindow }) => {
         maintainAspectRatio: false,
         plugins: {
           ...darkPlugins(c, 'Incident Type Distribution'),
-          legend: { position: 'right', labels: { color: c.textDim, font: { size: 12 } } }
+          legend: { position: 'right', labels: { color: c.text, font: { size: CHART_FONT.legend } } },
         }
       }
     };
