@@ -78,7 +78,7 @@ const SecuritySituation = ({ goToScreen, wsRefreshKey }) => {
   const totalIncidents = stations.reduce((n, s) => n + (s.total_incident_count || 0), 0);
 
   return (
-    <>
+    <div className="security-situation-page">
       <div className="card" style={{ marginBottom: 20, padding: "20px 24px 16px" }}>
         <div
           style={{
@@ -92,14 +92,14 @@ const SecuritySituation = ({ goToScreen, wsRefreshKey }) => {
         >
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-              <h2 style={{ margin: 0, fontSize: 22 }}>Security Situation</h2>
+              <h2 className="security-situation-title">Security Situation</h2>
               {bgRefreshing && (
                 <span style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>
                   refreshing…
                 </span>
               )}
             </div>
-            <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
+            <p className="security-situation-desc">
               Cases are grouped by station based on incident location.{" "}
               {role === "officer"
                 ? `You see ${stations[0]?.station_name || "your station"} only — cases and linked incidents for your area.`
@@ -160,20 +160,13 @@ const SecuritySituation = ({ goToScreen, wsRefreshKey }) => {
             <button
               key={st.station_id}
               type="button"
-              className="card"
-              style={{
-                textAlign: "left",
-                cursor: "pointer",
-                padding: "18px 20px",
-                border: "1px solid var(--border)",
-                background: "var(--surface)",
-              }}
+              className="card security-station-card"
               onClick={() =>
                 goToScreen?.("station-security", 3, { stationId: st.station_id, stationName: st.station_name })
               }
             >
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>{st.station_name}</div>
-              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 10 }}>
+              <div className="security-station-name">{st.station_name}</div>
+              <div className="security-station-meta">
                 {st.station_code}
                 {st.covered_cell_names?.length
                   ? ` · ${st.covered_cell_names.slice(0, 2).join(", ")}${st.covered_cell_names.length > 2 ? "…" : ""}`
@@ -191,7 +184,7 @@ const SecuritySituation = ({ goToScreen, wsRefreshKey }) => {
           ))}
         </div>
       )}
-    </>
+    </div>
   );
 };
 
