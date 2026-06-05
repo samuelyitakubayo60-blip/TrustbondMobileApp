@@ -12,7 +12,6 @@ import '../services/location_service.dart';
 import '../services/api_service.dart';
 import '../services/hotspot_service.dart';
 import '../services/hotspot_prefs_service.dart';
-import '../services/proximity_alert_service.dart';
 import '../widgets/musanze_map_painter.dart' show sectorColor;
 
 class SafetyMapScreen extends StatefulWidget {
@@ -59,9 +58,9 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   bool _loadingAlerts = false;
   /// Reads from shared singleton — always in sync with Home tab.
   int get _hotspotTimeWindowHours => HotspotPrefsService.instance.timeWindowHours;
-  int _nearbyHotspotRadiusMeters = 1500;
+  int get _nearbyHotspotRadiusMeters => HotspotPrefsService.instance.radiusMeters;
   final TextEditingController _distanceController =
-      TextEditingController(text: '1.5');
+      TextEditingController(text: '3.0');
   bool _distanceInKm = true;
   static const _distanceCalc = Distance();
 
@@ -88,7 +87,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   void initState() {
     super.initState();
     _showDetailedView = widget.showDetailedView;
-    _loadSavedRadius();
+    _syncDistanceController();
     _loadMap();
     _loadSectorsFromBackend();
     _getUserLocation();
@@ -214,17 +213,11 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     );
   }
 
-  double get _alertsRadiusKm =>
-      (_nearbyHotspotRadiusMeters / 1000.0).clamp(0.5, 3.0);
 
-  Future<void> _loadSavedRadius() async {
-    final meters = await ProximityAlertService.loadSavedRadius();
-    if (!mounted) return;
-    setState(() {
-      _nearbyHotspotRadiusMeters = meters.toInt();
-      _distanceController.text =
-          _distanceInKm ? (meters / 1000).toStringAsFixed(1) : meters.toStringAsFixed(0);
-    });
+  void _syncDistanceController() {
+    final m = _nearbyHotspotRadiusMeters;
+    _distanceController.text =
+        _distanceInKm ? (m / 1000).toStringAsFixed(1) : m.toStringAsFixed(0);
   }
 
   Future<void> _getUserLocation() async {
@@ -354,6 +347,7 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
   /// Called whenever the shared time window changes (e.g. user changed it on the Home tab).
   void _onHotspotPrefsChanged() {
     if (!mounted) return;
+    _syncDistanceController();
     setState(() {}); // rebuild chips + header
     _loadHotspots();
     _loadPublicAlerts();
@@ -1138,13 +1132,8 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
                 ? null
                 : () {
                     if (selected) return;
-                    setState(() {
-                      _nearbyHotspotRadiusMeters = meters;
-                      _distanceController.text = _distanceInKm
-                          ? (meters / 1000).toStringAsFixed(1)
-                          : meters.toStringAsFixed(0);
-                    });
-                    unawaited(ProximityAlertService().updateRadius(meters.toDouble()));
+                    HotspotPrefsService.instance.setRadiusMeters(meters);
+                    _syncDistanceController();
                     _loadHotspots();
                     _loadPublicAlerts();
                   },
@@ -1275,10 +1264,8 @@ class _SafetyMapScreenState extends State<SafetyMapScreen> {
     final meters = _distanceInKm ? (raw * 1000).round() : raw.round();
     final clamped = meters.clamp(100, 20000);
     if (clamped == _nearbyHotspotRadiusMeters) return;
-    setState(() => _nearbyHotspotRadiusMeters = clamped);
-    // Keep the proximity alert service in sync with the map radius so alerts
-    // fire for the same distance the user has selected on the map.
-    unawaited(ProximityAlertService().updateRadius(clamped.toDouble()));
+    // Write to shared singleton — Home tab will react via its listener.
+    HotspotPrefsService.instance.setRadiusMeters(clamped);
     if (_userLat != null && _userLng != null) {
       _loadHotspots();
       _loadPublicAlerts();

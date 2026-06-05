@@ -61,6 +61,9 @@ class AppColors {
   // ── Structural ─────────────────────────────────────────────────────────────
   /// Subtle border — rgba(255,255,255,0.08) approximated as solid.
   static const Color border = Color(0xFF1E2530);
+
+  /// Dark text for use on bright accent backgrounds (buttons, badges).
+  static const Color onAccent = Color(0xFF0F172A);
 }
 
 ThemeData buildAppTheme() {
@@ -74,8 +77,8 @@ ThemeData buildAppTheme() {
       surface: AppColors.surface,
       error: AppColors.danger,
       // blue-400 accent is light enough that dark text reads better on it
-      onPrimary: Color(0xFF0F172A),
-      onSecondary: Color(0xFF0F172A),
+      onPrimary: AppColors.onAccent,
+      onSecondary: AppColors.onAccent,
       onSurface: AppColors.text,
       onError: Colors.white,
     ),
@@ -109,7 +112,7 @@ ThemeData buildAppTheme() {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.accent,
-        foregroundColor: const Color(0xFF0F172A),  // dark text on blue
+        foregroundColor: AppColors.onAccent,
         padding: const EdgeInsets.symmetric(vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         textStyle: const TextStyle(

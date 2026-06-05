@@ -194,26 +194,26 @@ class ReportItemCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
-        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(10),
+        margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
           color: AppColors.card,
           border: Border.all(color: AppColors.border),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           children: [
             Container(
-              width: 42,
-              height: 42,
+              width: 34,
+              height: 34,
               decoration: BoxDecoration(
                 color: iconBg,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
               alignment: Alignment.center,
-              child: Icon(icon, size: 22, color: AppColors.muted),
+              child: Icon(icon, size: 18, color: AppColors.muted),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,7 +221,7 @@ class ReportItemCard extends StatelessWidget {
                   Text(
                     typeName,
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: AppColors.text,
                     ),
@@ -240,12 +240,12 @@ class ReportItemCard extends StatelessWidget {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     description,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                    style: const TextStyle(fontSize: 10, color: AppColors.muted),
                   ),
                   if ((decisionPatterns.isEmpty) &&
                       aiSnippet != null &&

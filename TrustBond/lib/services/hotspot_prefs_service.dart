@@ -1,19 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
-/// Global singleton that keeps the hotspot time-window preference in sync
-/// between the Home tab and the Map tab.
+import 'proximity_alert_service.dart';
+
+/// Global singleton that keeps the hotspot time-window and radius preferences
+/// in sync between the Home tab and the Map tab.
 ///
-/// Any screen that reads [timeWindowHours] should call [addListener] in
-/// initState and [removeListener] in dispose so it rebuilds automatically
-/// whenever the value changes from another tab.
+/// Any screen that reads [timeWindowHours] or [radiusMeters] should call
+/// [addListener] in initState and [removeListener] in dispose so it rebuilds
+/// automatically whenever the value changes from another tab.
 class HotspotPrefsService extends ChangeNotifier {
   static final HotspotPrefsService _instance = HotspotPrefsService._();
   static HotspotPrefsService get instance => _instance;
   HotspotPrefsService._();
 
-  // Default to 3 days (72 h) — shows recent activity without overwhelming new users.
-  // The backend lookback floor ensures the map never goes blank between clustering runs.
-  int _timeWindowHours = 72;
+  // ── Time window ────────────────────────────────────────────────────────────
+
+  // Default to 1 week (168 h) — broad enough to show meaningful safety trends.
+  int _timeWindowHours = 168;
 
   int get timeWindowHours => _timeWindowHours;
 
@@ -38,4 +43,37 @@ class HotspotPrefsService extends ChangeNotifier {
     final years = days ~/ 365;
     return '${years}yr';
   }
+
+  // ── Radius ─────────────────────────────────────────────────────────────────
+
+  // Default 3 km — matches ProximityAlertService default (3000 m).
+  int _radiusMeters = 3000;
+
+  int get radiusMeters => _radiusMeters;
+  double get radiusKm => _radiusMeters / 1000.0;
+
+  /// Initialise from the persisted SharedPreferences value.
+  /// Call once at app startup (e.g. from MainShell._bootstrap).
+  Future<void> loadSavedRadius() async {
+    final m = await ProximityAlertService.loadSavedRadius();
+    _radiusMeters = m.toInt();
+  }
+
+  /// Update the global radius (in metres), persist it, keep
+  /// ProximityAlertService in sync, and notify all listeners.
+  void setRadiusMeters(int meters) {
+    final clamped = meters.clamp(100, 20000);
+    if (_radiusMeters == clamped) return;
+    _radiusMeters = clamped;
+    unawaited(ProximityAlertService().updateRadius(clamped.toDouble()));
+    notifyListeners();
+  }
+
+  /// Convenience — accepts km, converts internally.
+  void setRadiusKm(double km) => setRadiusMeters((km * 1000).round());
+
+  /// Human-readable short label for a radius in km.
+  static String radiusLabel(double km) => km < 1.0
+      ? '${(km * 1000).toInt()}m'
+      : '${km.toStringAsFixed(km == km.toInt() ? 0 : 1)}km';
 }

@@ -36,21 +36,26 @@ class ProximityAlertService {
   bool _started = false;
   Position? _lastKnownPosition;
 
+  /// Stream that broadcasts the latest position whenever it changes.
+  /// HomeScreen listens to this to auto-refresh nearby hotspots.
+  final _positionController = StreamController<Position>.broadcast();
+  Stream<Position> get positionStream => _positionController.stream;
+
   // Per-hotspot cooldown map: key → next-alert-allowed time
   final Map<String, DateTime> _alerted = {};
   static const _alertCooldown = Duration(minutes: 15);
 
   // Alert radius in metres — updated via [updateRadius] and persisted
-  double _radiusMeters = 1500;
+  double _radiusMeters = 3000;
   double get radiusMeters => _radiusMeters;
 
   static const _radiusPrefKey = 'alert_radius_meters';
 
   /// Reads the user's last saved radius from SharedPreferences.
-  /// Returns 1500 (default) if nothing was saved yet.
+  /// Returns 3000 (default) if nothing was saved yet.
   static Future<double> loadSavedRadius() async {
     final prefs = await SharedPreferences.getInstance();
-    return (prefs.getDouble(_radiusPrefKey) ?? 1500).clamp(100, 20000);
+    return (prefs.getDouble(_radiusPrefKey) ?? 3000).clamp(100, 20000);
   }
 
   static Future<void> _saveRadius(double meters) async {
@@ -198,6 +203,7 @@ class ProximityAlertService {
           .listen(
         (pos) {
           _lastKnownPosition = pos;
+          _positionController.add(pos);
           _checkHotspots(pos.latitude, pos.longitude);
         },
         onError: (e) => debugPrint('[ProximityAlert] stream error: $e'),
@@ -239,7 +245,7 @@ class ProximityAlertService {
 
       for (final h in hotspots) {
         final risk = h.riskLevel.toLowerCase();
-        if (risk != 'high' && risk != 'critical' && risk != 'active') continue;
+        if (risk == 'low' || risk == 'low_activity') continue;
 
         final dist = _haversineMeters(lat, lng, h.centerLat, h.centerLong);
         if (dist > _radiusMeters) continue;
@@ -250,16 +256,19 @@ class ProximityAlertService {
 
         _alerted[key] = now.add(_alertCooldown);
 
-        final distKm = (dist / 1000).toStringAsFixed(1);
+        final distLabel = dist < 1000
+            ? '${dist.toInt()}m'
+            : '${(dist / 1000).toStringAsFixed(1)}km';
+        final location = h.areaLabel ?? '';
         final title = risk == 'critical'
-            ? 'Critical security area nearby'
-            : 'High-risk area nearby';
+            ? 'Critical security area $distLabel away'
+            : 'High-risk area $distLabel away';
         final body = h.incidentTypeName != null
-            ? '${h.incidentTypeName} activity ${distKm} km from you. Stay alert.'
-            : 'Security hotspot ${distKm} km from your location. Stay alert.';
+            ? '${h.incidentTypeName} activity $distLabel from you${location.isNotEmpty ? ' in $location' : ''}. Stay alert.'
+            : 'Security hotspot $distLabel from your location${location.isNotEmpty ? ' in $location' : ''}. Stay alert.';
 
         await _showNotification(title, body, key.hashCode);
-        debugPrint('[ProximityAlert] fired: $title ($distKm km)');
+        debugPrint('[ProximityAlert] fired: $title ($distLabel)');
       }
     } catch (e) {
       debugPrint('[ProximityAlert] checkHotspots error: $e');

@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:geolocator/geolocator.dart';
 import '../config/theme.dart';
 import '../widgets/shared_widgets.dart';
 import '../widgets/musanze_map_painter.dart';
@@ -36,16 +37,16 @@ double _haversineKm(double lat1, double lon1, double lat2, double lon2) {
 Color _riskColor(String level) {
   switch (level.toLowerCase()) {
     case 'critical':
-      return const Color(0xFFFF3B5C);
+      return AppColors.danger;
     case 'active':
     case 'high':
-      return const Color(0xFFFF6B35);
+      return AppColors.warn;
     case 'emerging':
     case 'medium':
-      return const Color(0xFFFFBB00);
+      return AppColors.warn;
     case 'low_activity':
     case 'low':
-      return const Color(0xFF00C896);
+      return AppColors.ok;
     default:
       return AppColors.muted;
   }
@@ -106,6 +107,7 @@ class _HomeScreenState extends State<HomeScreen>
   final _hotspotService = HotspotService();
   StreamSubscription<String>? _refreshSub;
   StreamSubscription<int>? _unreadSub;
+  StreamSubscription<Position>? _positionSub;
   int _unreadCount = 0;
 
   // Data
@@ -123,9 +125,8 @@ class _HomeScreenState extends State<HomeScreen>
   double? _userLng;
   VillageLocation? _userVillage;
 
-  // Safety / Nearby
-  double _selectedRadiusKm = 1.5; // default matches ProximityAlertService default (1500m)
-  /// Reads from shared singleton — always in sync with Map tab.
+  // Safety / Nearby — reads from shared singleton, always in sync with Map tab.
+  double get _selectedRadiusKm => HotspotPrefsService.instance.radiusKm;
   int get _selectedTimeHours => HotspotPrefsService.instance.timeWindowHours;
   List<Hotspot> _nearbyHotspots = [];
   bool _loadingHotspots = false;
@@ -147,7 +148,6 @@ class _HomeScreenState extends State<HomeScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    _loadSavedRadius();
     _loadData();
     _loadCurrentLocation();
     _refreshSub = AppRefreshBus.stream.listen((_) => _loadData());
@@ -156,6 +156,19 @@ class _HomeScreenState extends State<HomeScreen>
       if (mounted) setState(() => _unreadCount = count);
     });
     HotspotPrefsService.instance.addListener(_onHotspotPrefsChanged);
+
+    // Listen to real-time position changes from the background proximity service
+    _positionSub = ProximityAlertService().positionStream.listen((pos) {
+      if (!mounted) return;
+      final moved = _userLat == null ||
+          _haversineKm(_userLat!, _userLng!, pos.latitude, pos.longitude) > 0.05;
+      setState(() {
+        _userLat = pos.latitude;
+        _userLng = pos.longitude;
+      });
+      // Only reload hotspots if the user moved more than ~50m
+      if (moved) _loadAllHotspots();
+    });
   }
 
   @override
@@ -164,6 +177,7 @@ class _HomeScreenState extends State<HomeScreen>
     _pulseController.dispose();
     _refreshSub?.cancel();
     _unreadSub?.cancel();
+    _positionSub?.cancel();
     super.dispose();
   }
 
@@ -322,19 +336,10 @@ class _HomeScreenState extends State<HomeScreen>
     } catch (_) {}
   }
 
-  Future<void> _loadSavedRadius() async {
-    final meters = await ProximityAlertService.loadSavedRadius();
-    if (!mounted) return;
-    setState(() => _selectedRadiusKm = meters / 1000.0);
-  }
-
   Future<void> _onRadiusChanged(double km) async {
-    setState(() {
-      _selectedRadiusKm = km;
-      _loadingHotspots = true;
-    });
-    // Keep ProximityAlertService in sync so actual notifications use this radius.
-    unawaited(ProximityAlertService().updateRadius(km * 1000));
+    setState(() => _loadingHotspots = true);
+    // Write to shared singleton — both Home and Map tabs will react via their listeners.
+    HotspotPrefsService.instance.setRadiusKm(km);
     try {
       final all = await _hotspotService.getAllHotspots(timeWindowHours: _selectedTimeHours);
       _updateNearbyHotspots(all);
@@ -476,7 +481,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (result != null) _onTimeWindowChanged(result);
   }
 
-  Widget _quickChip(String label, int value, TextEditingController ctrl,
+  Widget _quickChip(String label, num value, TextEditingController ctrl,
       StateSetter setLocal, VoidCallback setUnit) {
     return GestureDetector(
       onTap: () => setLocal(() {
@@ -510,21 +515,19 @@ class _HomeScreenState extends State<HomeScreen>
             slivers: [
               SliverToBoxAdapter(child: _buildHeader()),
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
                     _buildTrustScoreCard(),
                     const SizedBox(height: 6),
-                    _buildStatsGrid(),
-                    const SizedBox(height: 18),
+                    _buildSafetyTicker(),
+                    const SizedBox(height: 6),
                     _buildSafetyAlertSection(),
-                    const SizedBox(height: 18),
-                    _buildSafetyTips(),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 10),
                     _buildMapSection(),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 10),
                     _buildRecentSection(),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 16),
                   ]),
                 ),
               ),
@@ -539,7 +542,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -552,17 +555,16 @@ class _HomeScreenState extends State<HomeScreen>
       ),
       child: Row(
         children: [
-          // TrustBond logo
           ClipRRect(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             child: Image.asset(
               'assets/images/logo.jpeg',
-              width: 38,
-              height: 38,
+              width: 32,
+              height: 32,
               fit: BoxFit.cover,
             ),
           ),
-          const SizedBox(width: 11),
+          const SizedBox(width: 9),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -572,12 +574,12 @@ class _HomeScreenState extends State<HomeScreen>
                       ? '${_userVillage!.village}, ${_userVillage!.cell}'
                       : 'Musanze District',
                   style: const TextStyle(
-                      fontSize: 11, color: AppColors.muted),
+                      fontSize: 9, color: AppColors.muted),
                 ),
                 const Text(
                   'TrustBond Safety',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: AppColors.text,
                   ),
@@ -592,23 +594,23 @@ class _HomeScreenState extends State<HomeScreen>
             child: Stack(
               children: [
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: 34,
+                  height: 34,
                   decoration: BoxDecoration(
                     color: AppColors.surface2,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: AppColors.border),
                   ),
                   child: const Icon(Icons.notifications_outlined,
-                      size: 20, color: AppColors.text),
+                      size: 17, color: AppColors.text),
                 ),
                 if (_unreadCount > 0)
                   Positioned(
-                    top: 8,
-                    right: 8,
+                    top: 6,
+                    right: 6,
                     child: Container(
-                      width: 8,
-                      height: 8,
+                      width: 7,
+                      height: 7,
                       decoration: BoxDecoration(
                         color: AppColors.danger,
                         shape: BoxShape.circle,
@@ -634,24 +636,24 @@ class _HomeScreenState extends State<HomeScreen>
             : AppColors.danger;
 
     return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      margin: const EdgeInsets.only(bottom: 2),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            scoreColor.withValues(alpha: 0.12),
+            AppColors.accent.withValues(alpha: 0.10),
             AppColors.surface2.withValues(alpha: 0.9),
           ],
         ),
-        border: Border.all(color: scoreColor.withValues(alpha: 0.30)),
-        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.accent.withValues(alpha: 0.25)),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
-          TrustScoreRing(score: _trustScore, color: scoreColor),
-          const SizedBox(width: 14),
+          TrustScoreRing(score: _trustScore, color: scoreColor, size: 40),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -659,28 +661,27 @@ class _HomeScreenState extends State<HomeScreen>
                 const Text(
                   'TRUST SCORE',
                   style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 8,
                       color: AppColors.muted,
                       letterSpacing: 1.0),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
                   _trustScore >= 70
                       ? 'Good Standing'
                       : _trustScore >= 40
                           ? 'Moderate'
                           : 'Needs Improvement',
-                  style: TextStyle(
-                    fontSize: 15,
+                  style: const TextStyle(
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: scoreColor,
+                    color: AppColors.accent,
                   ),
                 ),
-                const SizedBox(height: 2),
                 Text(
                   '${_trustScore.toStringAsFixed(1)} / 100 · $_totalReports reports · $_verifiedReports verified',
                   style: const TextStyle(
-                      fontSize: 10, color: AppColors.muted),
+                      fontSize: 9, color: AppColors.muted),
                 ),
               ],
             ),
@@ -691,8 +692,8 @@ class _HomeScreenState extends State<HomeScreen>
                 : _trustScore >= 40
                     ? Icons.trending_flat_rounded
                     : Icons.trending_down_rounded,
-            color: scoreColor,
-            size: 22,
+            color: AppColors.accent,
+            size: 18,
           ),
         ],
       ),
@@ -701,56 +702,22 @@ class _HomeScreenState extends State<HomeScreen>
 
   // ── Stats Grid ──────────────────────────────────────────────────────────────
 
-  Widget _buildStatsGrid() {
-    return Row(
-      children: [
-        Expanded(
-          child: _StatCard(
-            value: '$_totalReports',
-            label: 'My Reports',
-            icon: Icons.article_outlined,
-            color: AppColors.accent,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _StatCard(
-            value: '$_verifiedReports',
-            label: 'Verified',
-            icon: Icons.verified_outlined,
-            color: AppColors.ok,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _StatCard(
-            value: '${_nearbyHotspots.length}',
-            label: 'Nearby Alerts',
-            icon: Icons.warning_amber_rounded,
-            color: _nearbyHotspots.isEmpty
-                ? AppColors.muted
-                : _riskColor(_nearbyHotspots.first.riskLevel),
-          ),
-        ),
-      ],
-    );
-  }
-
   // ── Safety Alert Section ────────────────────────────────────────────────────
 
   Widget _buildSafetyAlertSection() {
+    final timeLabel = _timeWindowLabel(_selectedTimeHours);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             const Icon(Icons.location_on_rounded,
-                size: 15, color: AppColors.accent),
-            const SizedBox(width: 6),
+                size: 13, color: AppColors.accent),
+            const SizedBox(width: 5),
             const Text(
               'SAFETY NEAR YOU',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 9,
                 fontWeight: FontWeight.w700,
                 color: AppColors.muted,
                 letterSpacing: 0.9,
@@ -759,63 +726,201 @@ class _HomeScreenState extends State<HomeScreen>
             const Spacer(),
             if (_loadingHotspots)
               const SizedBox(
-                width: 12,
-                height: 12,
+                width: 10,
+                height: 10,
                 child: CircularProgressIndicator(
                     strokeWidth: 1.5, color: AppColors.accent),
+              )
+            else ...[
+              _buildDistanceSelector(),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: _pickTimeWindow,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.schedule_rounded, size: 12, color: AppColors.accent),
+                      const SizedBox(width: 4),
+                      Text(
+                        timeLabel,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.accent,
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      const Icon(Icons.expand_more_rounded, size: 12, color: AppColors.accent),
+                    ],
+                  ),
+                ),
               ),
+            ],
           ],
         ),
-        const SizedBox(height: 10),
-        // Distance selector
-        _buildDistanceSelector(),
-        const SizedBox(height: 12),
-        // Alert card
+        const SizedBox(height: 6),
         _buildAlertCard(),
       ],
     );
   }
 
-  Widget _buildDistanceSelector() {
-    const radii = [0.5, 1.5, 3.0, 5.0];
-    return Row(
-      children: radii.map((km) {
-        final selected = (_selectedRadiusKm - km).abs() < 0.01;
-        final label = km < 1.0
-            ? '${(km * 1000).toInt()}m'
-            : '${km.toStringAsFixed(km == km.toInt() ? 0 : 1)}km';
-        return Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: GestureDetector(
-            onTap: () => _onRadiusChanged(km),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: selected
-                    ? AppColors.accent.withValues(alpha: 0.18)
-                    : AppColors.surface2,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: selected
-                      ? AppColors.accent
-                      : AppColors.border,
-                  width: selected ? 1.5 : 1,
-                ),
+  String _radiusLabel(double km) => HotspotPrefsService.radiusLabel(km);
+
+  Future<void> _pickRadius() async {
+    final controller = TextEditingController();
+    String selectedUnit = 'km';
+    const units = ['m', 'km'];
+
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text(
+            'Set Alert Radius',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Show safety alerts for hotspots within:',
+                style: TextStyle(fontSize: 12, color: AppColors.muted, height: 1.5),
               ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: selected ? AppColors.accent : AppColors.muted,
-                ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: controller,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      autofocus: true,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                      decoration: InputDecoration(
+                        hintText: '1.5',
+                        hintStyle: TextStyle(color: AppColors.muted.withValues(alpha: 0.5)),
+                        filled: true,
+                        fillColor: AppColors.surface2,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: AppColors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface2,
+                        border: Border.all(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: selectedUnit,
+                          dropdownColor: AppColors.surface,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.text,
+                          ),
+                          items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                          onChanged: (v) {
+                            if (v != null) setLocal(() => selectedUnit = v);
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 7,
+                runSpacing: 6,
+                children: [
+                  _quickChip('500m', 500, controller, setLocal, () => selectedUnit = 'm'),
+                  _quickChip('1km', 1, controller, setLocal, () => selectedUnit = 'km'),
+                  _quickChip('1.5km', 1.5, controller, setLocal, () => selectedUnit = 'km'),
+                  _quickChip('3km', 3, controller, setLocal, () => selectedUnit = 'km'),
+                  _quickChip('5km', 5, controller, setLocal, () => selectedUnit = 'km'),
+                  _quickChip('10km', 10, controller, setLocal, () => selectedUnit = 'km'),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel', style: TextStyle(color: AppColors.muted)),
+            ),
+            TextButton(
+              onPressed: () {
+                final n = double.tryParse(controller.text.trim()) ?? 0;
+                if (n <= 0) return;
+                final km = selectedUnit == 'm' ? n / 1000.0 : n;
+                Navigator.of(ctx).pop(km.clamp(0.1, 50.0));
+              },
+              child: const Text('Apply', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result != null) _onRadiusChanged(result);
+  }
+
+  Widget _buildDistanceSelector() {
+    return GestureDetector(
+      onTap: _pickRadius,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppColors.accent.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.radar_rounded, size: 12, color: AppColors.accent),
+            const SizedBox(width: 5),
+            Text(
+              _radiusLabel(_selectedRadiusKm),
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppColors.accent,
               ),
             ),
-          ),
-        );
-      }).toList(),
+            const SizedBox(width: 4),
+            const Icon(Icons.expand_more_rounded, size: 12, color: AppColors.accent),
+          ],
+        ),
+      ),
     );
   }
 
@@ -828,165 +933,119 @@ class _HomeScreenState extends State<HomeScreen>
       return _SafeCard(radiusKm: _selectedRadiusKm);
     }
 
-    final top = _nearbyHotspots.first;
-    final dist = _haversineKm(
-        _userLat!, _userLng!, top.centerLat, top.centerLong);
-    final color = _riskColor(top.riskLevel);
+    // Show up to 3 alerts inline
+    final shown = _nearbyHotspots.take(3).toList();
 
-    return AnimatedBuilder(
-      animation: _pulseAnim,
-      builder: (_, child) => Transform.scale(
-        scale: top.riskLevel == 'critical' ? _pulseAnim.value : 1.0,
-        child: child,
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              color.withValues(alpha: 0.15),
-              AppColors.surface2.withValues(alpha: 0.85),
-            ],
-          ),
-          border: Border.all(color: color.withValues(alpha: 0.45)),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Column(
+      children: [
+        ...shown.map((h) {
+          final dist = _haversineKm(_userLat!, _userLng!, h.centerLat, h.centerLong);
+          final riskColor = _riskColor(h.riskLevel);
+          final distLabel = dist < 1.0 ? '${(dist * 1000).toInt()}m' : '${dist.toStringAsFixed(1)}km';
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            margin: const EdgeInsets.only(bottom: 6),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppColors.accent.withValues(alpha: 0.08), AppColors.surface2.withValues(alpha: 0.85)],
+              ),
+              border: Border.all(color: AppColors.accent.withValues(alpha: 0.25)),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
               children: [
-                Icon(_riskIcon(top.riskLevel), size: 20, color: color),
-                const SizedBox(width: 10),
+                Icon(_riskIcon(h.riskLevel), size: 16, color: riskColor),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        _riskLabel(top.riskLevel),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: color,
-                          letterSpacing: 0.6,
-                        ),
+                      Text.rich(
+                        TextSpan(children: [
+                          TextSpan(
+                            text: _riskLabel(h.riskLevel),
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: riskColor),
+                          ),
+                          TextSpan(
+                            text: ' · $distLabel away${h.areaLabel != null && h.areaLabel!.isNotEmpty ? ' · ${h.areaLabel}' : ''}',
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.accent),
+                          ),
+                        ]),
                       ),
                       Text(
-                        '${top.incidentTypeName ?? 'Incident'} · ${dist < 1.0 ? '${(dist * 1000).toInt()}m away' : '${dist.toStringAsFixed(1)}km away'}',
-                        style: const TextStyle(
-                            fontSize: 11, color: AppColors.muted),
+                        '${h.incidentTypeName ?? 'Incident'} · ${h.incidentCount} reports',
+                        style: const TextStyle(fontSize: 9, color: AppColors.muted),
                       ),
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 9, vertical: 4),
+              ],
+            ),
+          );
+        }),
+        if (_nearbyHotspots.length > 3)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              '+${_nearbyHotspots.length - 3} more alert${_nearbyHotspots.length > 4 ? 's' : ''} nearby',
+              style: TextStyle(fontSize: 9, color: AppColors.accent.withValues(alpha: 0.7)),
+            ),
+          ),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ReportStep1Screen()),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 7),
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: color.withValues(alpha: 0.4)),
+                    color: AppColors.accent,
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text(
-                    '${top.incidentCount} reports',
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: color),
+                  alignment: Alignment.center,
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.report_rounded, size: 12, color: AppColors.onAccent),
+                      SizedBox(width: 5),
+                      Text('Report Incident', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.onAccent)),
+                    ],
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              _safetyMessage(top.riskLevel, top.incidentTypeName),
-              style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.text,
-                  height: 1.5),
-            ),
-            if (_nearbyHotspots.length > 1) ...[
-              const SizedBox(height: 8),
-              Text(
-                '+${_nearbyHotspots.length - 1} more hotspot${_nearbyHotspots.length > 2 ? 's' : ''} within ${_selectedRadiusKm < 1 ? '${(_selectedRadiusKm * 1000).toInt()}m' : '${_selectedRadiusKm.toStringAsFixed(_selectedRadiusKm == _selectedRadiusKm.toInt() ? 0 : 1)}km'}',
-                style: TextStyle(
-                    fontSize: 10,
-                    color: color.withValues(alpha: 0.8)),
               ),
-            ],
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) => const ReportStep1Screen()),
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: color,
-                        borderRadius: BorderRadius.circular(12),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: GestureDetector(
+                onTap: widget.onOpenMapTab,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.accent.withValues(alpha: 0.4)),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.map_rounded, size: 12, color: AppColors.accent),
+                      SizedBox(width: 5),
+                      Text(
+                        'View All Alerts',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.accent),
                       ),
-                      alignment: Alignment.center,
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.report_rounded,
-                              size: 14, color: Colors.black),
-                          SizedBox(width: 6),
-                          Text(
-                            'Report Incident',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: widget.onOpenMapTab,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                        border:
-                            Border.all(color: color.withValues(alpha: 0.4)),
-                      ),
-                      alignment: Alignment.center,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.map_rounded, size: 14, color: color),
-                          const SizedBox(width: 6),
-                          Text(
-                            'View on Map',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: color,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 
@@ -999,134 +1058,207 @@ class _HomeScreenState extends State<HomeScreen>
     (Icons.location_on_outlined, 'Share Location', 'Let trusted contacts know where you are.'),
   ];
 
-  Widget _buildSafetyTips() {
-    // Build tip cards from nearby hotspot citizen advisories (LLM-generated).
-    // Each advisory is split on ". " so long sentences become separate cards.
+  /// Build a single combined recommendation covering all nearby risk areas,
+  /// including exact distance and area/village names per hotspot.
+  String _buildCombinedRecommendation() {
+    if (_nearbyHotspots.isEmpty) {
+      return 'Your area is currently safe. Stay alert and report any suspicious activity to help keep Musanze safe.';
+    }
+
+    if (_userLat == null || _userLng == null) {
+      return 'Enable location to receive personalised safety recommendations.';
+    }
+
+    // Build per-hotspot fragments like "200m away in Mpenge there is an increase in assault"
+    final fragments = <String>[];
+    for (final h in _nearbyHotspots) {
+      final distKm = _haversineKm(_userLat!, _userLng!, h.centerLat, h.centerLong);
+      final distLabel = distKm < 1.0
+          ? '${(distKm * 1000).toInt()}m'
+          : '${distKm.toStringAsFixed(1)}km';
+      final area = h.areaLabel ?? '';
+      final crime = h.incidentTypeName ?? 'incident';
+      final areaStr = area.isNotEmpty ? ' in $area' : '';
+      fragments.add('$distLabel away$areaStr there is ${_riskVerb(h.riskLevel)} $crime activity');
+      if (fragments.length >= 4) break; // keep ticker readable
+    }
+
+    final intro = 'Stay alert: ';
+    final tail = '. Report any suspicious activity.';
+    return '$intro${fragments.join('; ')}$tail';
+  }
+
+  /// Verb phrase matching risk severity for recommendation text.
+  String _riskVerb(String riskLevel) {
+    switch (riskLevel.toLowerCase()) {
+      case 'critical':
+        return 'critical';
+      case 'active':
+      case 'high':
+        return 'high';
+      case 'emerging':
+      case 'medium':
+        return 'emerging';
+      default:
+        return 'some';
+    }
+  }
+
+  /// Detailed per-hotspot tips for the bottom sheet, with distance and area.
+  List<(IconData, String, String)> _buildDetailedTips() {
     final liveTips = <(IconData, String, String)>[];
     for (final h in _nearbyHotspots) {
+      // Distance label
+      String distLabel = '';
+      if (_userLat != null && _userLng != null) {
+        final d = _haversineKm(_userLat!, _userLng!, h.centerLat, h.centerLong);
+        distLabel = d < 1.0 ? '${(d * 1000).toInt()}m' : '${d.toStringAsFixed(1)}km';
+      }
+      final area = h.areaLabel ?? '';
+      final locationTag = [
+        if (distLabel.isNotEmpty) distLabel,
+        if (area.isNotEmpty) area,
+      ].join(' · ');
+      final title = '${h.incidentTypeName ?? 'Alert'} · ${h.incidentCount} reports${locationTag.isNotEmpty ? ' · $locationTag' : ''}';
+
       final advisory = h.citizenAdvisory?.trim() ?? '';
-      if (advisory.isEmpty) continue;
-      final sentences = advisory
-          .split(RegExp(r'\.\s+'))
-          .map((s) => s.trim())
-          .where((s) => s.length > 10)
-          .toList();
-      for (final sentence in sentences) {
-        final text = sentence.endsWith('.') ? sentence : '$sentence.';
-        liveTips.add((_riskIcon(h.riskLevel), h.incidentTypeName ?? 'Advisory', text));
-        if (liveTips.length >= 6) break;
+      if (advisory.isNotEmpty) {
+        final text = advisory.length > 120 ? '${advisory.substring(0, 120)}...' : advisory;
+        liveTips.add((_riskIcon(h.riskLevel), title, text));
+      } else {
+        liveTips.add((_riskIcon(h.riskLevel), title,
+            _safetyMessage(h.riskLevel, h.incidentTypeName)));
       }
       if (liveTips.length >= 6) break;
     }
+    return liveTips.isNotEmpty ? liveTips : _fallbackTips;
+  }
 
-    final tips = liveTips.isNotEmpty ? liveTips : _fallbackTips;
-    final timeLabel = _timeWindowLabel(_selectedTimeHours);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.shield_outlined, size: 13, color: AppColors.muted),
-            const SizedBox(width: 5),
-            Text(
-              'SAFETY RECOMMENDATIONS · $timeLabel',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: AppColors.muted,
-                letterSpacing: 0.9,
-              ),
-            ),
-            const Spacer(),
-            if (_loadingHotspots)
-              const SizedBox(
-                width: 11,
-                height: 11,
-                child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.accent),
-              )
-            else
-              GestureDetector(
-                onTap: _pickTimeWindow,
+  void _showRecommendationsSheet() {
+    final tips = _buildDetailedTips();
+    final combined = _buildCombinedRecommendation();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (ctx, scrollCtrl) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: ListView(
+            controller: scrollCtrl,
+            children: [
+              Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  width: 36, height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
+                    color: AppColors.muted.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
                   ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  const Icon(Icons.shield_outlined, size: 16, color: AppColors.accent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Safety Recommendations · ${_timeWindowLabel(_selectedTimeHours)}',
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () { Navigator.pop(ctx); _pickTimeWindow(); },
+                    child: const Icon(Icons.tune_rounded, size: 18, color: AppColors.accent),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Combined summary
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
+                ),
+                child: Text(
+                  combined,
+                  style: const TextStyle(fontSize: 12, color: AppColors.text, height: 1.5),
+                ),
+              ),
+              if (tips.length > 1) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'DETAILS BY AREA',
+                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.muted, letterSpacing: 0.9),
+                ),
+                const SizedBox(height: 8),
+              ],
+              ...tips.map((tip) {
+                final (icon, title, desc) = tip;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        timeLabel,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.accent,
+                      Icon(icon, size: 16, color: AppColors.accent),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.text)),
+                            const SizedBox(height: 2),
+                            Text(desc, style: const TextStyle(fontSize: 11, color: AppColors.muted, height: 1.4)),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.expand_more_rounded, size: 13, color: AppColors.accent),
                     ],
                   ),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 100,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: tips.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 10),
-            itemBuilder: (_, i) {
-              final (icon, title, desc) = tips[i];
-              return Container(
-                width: 160,
-                padding: const EdgeInsets.all(13),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppColors.surface2,
-                      AppColors.surface3.withValues(alpha: 0.6),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: AppColors.accent.withValues(alpha: 0.15)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(icon, size: 20, color: AppColors.accent),
-                    const SizedBox(height: 6),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.text,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      desc,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 10, color: AppColors.muted, height: 1.4),
-                    ),
-                  ],
-                ),
-              );
-            },
+                );
+              }),
+            ],
           ),
         ),
-      ],
+      ),
+    );
+  }
+
+  Widget _buildSafetyTicker() {
+    final tickerText = _buildCombinedRecommendation();
+
+    return GestureDetector(
+      onTap: _showRecommendationsSheet,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.accent.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.shield_outlined, size: 12, color: AppColors.accent),
+            const SizedBox(width: 6),
+            Expanded(
+              child: SizedBox(
+                height: 16,
+                child: _MarqueeText(text: tickerText),
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: AppColors.accent),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1152,11 +1284,11 @@ class _HomeScreenState extends State<HomeScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionLabel('SAFETY OVERVIEW'),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         GestureDetector(
           onTap: widget.onOpenMapTab,
           child: Container(
-            height: 180,
+            height: 130,
             decoration: BoxDecoration(
               color: AppColors.surface2,
               border: Border.all(
@@ -1251,7 +1383,7 @@ class _HomeScreenState extends State<HomeScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionLabel('RECENT REPORTS'),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         if (_loading)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 40),
@@ -1292,34 +1424,34 @@ class _HomeScreenState extends State<HomeScreen>
 
   Widget _buildEmptyState() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 36),
+      padding: const EdgeInsets.symmetric(vertical: 20),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: AppColors.surface2.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
         children: [
           Container(
-            width: 56,
-            height: 56,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               color: AppColors.accent.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(Icons.shield_outlined,
-                size: 28, color: AppColors.accent),
+                size: 20, color: AppColors.accent),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
           const Text('No reports yet',
               style: TextStyle(
                   color: AppColors.text,
-                  fontSize: 15,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           const Text('Tap + below to submit your first report',
-              style: TextStyle(color: AppColors.muted, fontSize: 11)),
+              style: TextStyle(color: AppColors.muted, fontSize: 10)),
         ],
       ),
     );
@@ -1337,66 +1469,10 @@ class _SectionLabel extends StatelessWidget {
     return Text(
       text,
       style: const TextStyle(
-        fontSize: 11,
+        fontSize: 9,
         fontWeight: FontWeight.w700,
         color: AppColors.muted,
         letterSpacing: 0.9,
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String value;
-  final String label;
-  final IconData icon;
-  final Color color;
-
-  const _StatCard({
-    required this.value,
-    required this.label,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            color.withValues(alpha: 0.12),
-            AppColors.surface2.withValues(alpha: 0.9),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: color,
-              fontFamily: 'monospace',
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 10, color: AppColors.muted),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
       ),
     );
   }
@@ -1412,31 +1488,31 @@ class _SafeCard extends StatelessWidget {
         ? '${(radiusKm * 1000).toInt()}m'
         : '${radiusKm.toStringAsFixed(radiusKm == radiusKm.toInt() ? 0 : 1)}km';
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            AppColors.ok.withValues(alpha: 0.10),
+            AppColors.accent.withValues(alpha: 0.08),
             AppColors.surface2.withValues(alpha: 0.85),
           ],
         ),
         border:
-            Border.all(color: AppColors.ok.withValues(alpha: 0.35)),
-        borderRadius: BorderRadius.circular(18),
+            Border.all(color: AppColors.accent.withValues(alpha: 0.25)),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
           Container(
-            width: 46,
-            height: 46,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: AppColors.ok.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.verified_user_rounded,
-                color: AppColors.ok, size: 22),
+                color: AppColors.ok, size: 18),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1444,19 +1520,19 @@ class _SafeCard extends StatelessWidget {
                 const Text(
                   'AREA CLEAR',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 10,
                     fontWeight: FontWeight.w800,
                     color: AppColors.ok,
                     letterSpacing: 0.6,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
-                  'No active hotspots within $label of your location. Stay alert and report any suspicious activity.',
+                  'No active hotspots within $label. Stay alert and report any suspicious activity.',
                   style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 9,
                       color: AppColors.muted,
-                      height: 1.45),
+                      height: 1.4),
                 ),
               ],
             ),
@@ -1476,18 +1552,18 @@ class _NoLocationCard extends StatelessWidget {
     return GestureDetector(
       onTap: onOpenMap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: AppColors.surface2,
           border: Border.all(
-              color: AppColors.accent2.withValues(alpha: 0.3)),
-          borderRadius: BorderRadius.circular(18),
+              color: AppColors.accent.withValues(alpha: 0.25)),
+          borderRadius: BorderRadius.circular(14),
         ),
         child: const Row(
           children: [
             Icon(Icons.location_off_outlined,
-                color: AppColors.accent2, size: 22),
-            SizedBox(width: 14),
+                color: AppColors.accent, size: 18),
+            SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1495,26 +1571,91 @@ class _NoLocationCard extends StatelessWidget {
                   Text(
                     'Location needed',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: AppColors.text,
                     ),
                   ),
-                  SizedBox(height: 3),
+                  SizedBox(height: 2),
                   Text(
-                    'Enable location to see nearby safety alerts and hotspot recommendations.',
+                    'Enable location to see nearby safety alerts.',
                     style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 9,
                         color: AppColors.muted,
-                        height: 1.4),
+                        height: 1.3),
                   ),
                 ],
               ),
             ),
             Icon(Icons.arrow_forward_ios_rounded,
-                size: 13, color: AppColors.muted),
+                size: 11, color: AppColors.muted),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MarqueeText extends StatefulWidget {
+  final String text;
+  const _MarqueeText({required this.text});
+
+  @override
+  State<_MarqueeText> createState() => _MarqueeTextState();
+}
+
+class _MarqueeTextState extends State<_MarqueeText>
+    with SingleTickerProviderStateMixin {
+  late final ScrollController _scrollController;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startScroll());
+  }
+
+  void _startScroll() {
+    if (!mounted || !_scrollController.hasClients) return;
+    final maxExtent = _scrollController.position.maxScrollExtent;
+    if (maxExtent <= 0) return;
+    final duration = Duration(milliseconds: (maxExtent * 40).toInt());
+    _scrollController.animateTo(
+      maxExtent,
+      duration: duration,
+      curve: Curves.linear,
+    ).then((_) {
+      if (!mounted) return;
+      _timer = Timer(const Duration(seconds: 1), () {
+        if (!mounted || !_scrollController.hasClients) return;
+        _scrollController.jumpTo(0);
+        _startScroll();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      controller: _scrollController,
+      scrollDirection: Axis.horizontal,
+      physics: const NeverScrollableScrollPhysics(),
+      child: Text(
+        widget.text,
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: AppColors.accent,
+        ),
+        maxLines: 1,
       ),
     );
   }
