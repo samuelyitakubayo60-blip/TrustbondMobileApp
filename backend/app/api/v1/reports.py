@@ -4998,14 +4998,9 @@ def _try_add_to_existing_case(db: Session, report: Report, cluster_radius_km: fl
             Case.incident_type_id == report.incident_type_id,
             Case.status.in_(["open", "assigned", "in_progress"]),
         )
-        # Narrow to same station when the report carries a station assignment.
+        # Narrow to same station so reports don't leak into another station's case.
         if report.handling_station_id:
-            # Match cases whose assigned officer belongs to the same station,
-            # or whose location_id originates from a report in that station.
-            # Simplest proxy: cases created from the same station's reports
-            # already share the same incident_type; just filter by it and
-            # pick the earliest open one.
-            pass  # station scoping handled by _create_auto_cases grouping
+            query = query.filter(Case.station_id == report.handling_station_id)
 
         case = query.order_by(Case.created_at.asc()).first()
 
@@ -5086,61 +5081,52 @@ def _create_new_case_for_report(db: Session, report: Report, cluster_radius_km: 
                     min_reports_threshold,
                 )
         
-        # Strategy 2: Geographic clustering using GPS coordinates (fallback)
-        from math import radians, cos, sin, asin, sqrt
-        
-        def calculate_distance(lat1, lon1, lat2, lon2):
-            lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-            dlat = lat2 - lat1
-            dlon = lon2 - lon1
-            a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-            c = 2 * asin(sqrt(a))
-            return 6371 * c  # Returns distance in kilometers
-        
-        # Find nearby reports using GPS coordinates
-        nq = db.query(Report).filter(
-            Report.incident_type_id == report.incident_type_id,
-            Report.verification_status == "verified",
-            Report.report_id != report.report_id,
-            ~Report.report_id.in_(
-                db.query(case_reports_table.c.report_id).distinct()
-            ),
-        )
-        from app.core.leader_workflow import leader_gate_enabled
-
-        if leader_gate_enabled():
-            nq = nq.filter(Report.leader_verification_status == "confirmed")
-        nearby_reports = nq.all()
-        
-        # Filter by geographic proximity
-        clustered_reports = [report]
-        for other_report in nearby_reports:
-            distance = calculate_distance(
-                report.latitude, report.longitude,
-                other_report.latitude, other_report.longitude
+        # Strategy 2: Station + incident type grouping (fallback)
+        # Cases are formed by same incident type within the same station,
+        # NOT by geographic proximity / clustering.
+        station_id = report.handling_station_id
+        if station_id:
+            sq = db.query(Report).filter(
+                Report.incident_type_id == report.incident_type_id,
+                Report.verification_status == "verified",
+                Report.handling_station_id == station_id,
+                Report.report_id != report.report_id,
+                ~Report.report_id.in_(
+                    db.query(case_reports_table.c.report_id).distinct()
+                ),
             )
-            if distance <= cluster_radius_km:  # Use configured radius
-                clustered_reports.append(other_report)
+            from app.core.leader_workflow import leader_gate_enabled
 
-        logger.info(
-            "[AUTO_CASE] Geo candidate report=%s count=%s threshold=%s radius_km=%.3f",
-            report.report_id,
-            len(clustered_reports),
-            min_reports_threshold,
-            cluster_radius_km,
-        )
-        
-        # Create case if enough reports geographically clustered
-        if len(clustered_reports) >= min_reports_threshold:
-            case_stats = _create_case_from_reports(db, clustered_reports)
-            if case_stats['cases_created'] > 0:
-                pass
+            if leader_gate_enabled():
+                sq = sq.filter(Report.leader_verification_status == "confirmed")
+            station_reports = sq.all()
+
+            # Add the current report
+            station_reports.insert(0, report)
+            logger.info(
+                "[AUTO_CASE] Station candidate report=%s count=%s threshold=%s station=%s",
+                report.report_id,
+                len(station_reports),
+                min_reports_threshold,
+                station_id,
+            )
+
+            # Create case if enough reports at the same station
+            if len(station_reports) >= min_reports_threshold:
+                case_stats = _create_case_from_reports(db, station_reports)
+                if case_stats['cases_created'] > 0:
+                    pass
+            else:
+                logger.info(
+                    "[AUTO_CASE] Station threshold not met report=%s %s/%s",
+                    report.report_id,
+                    len(station_reports),
+                    min_reports_threshold,
+                )
         else:
             logger.info(
-                "[AUTO_CASE] Geo threshold not met report=%s %s/%s",
+                "[AUTO_CASE] No station assigned for report=%s, skipping case creation",
                 report.report_id,
-                len(clustered_reports),
-                min_reports_threshold,
             )
     
     except Exception as e:
@@ -5846,62 +5832,6 @@ def _create_auto_cases(db: Session) -> Dict[str, int]:
                     f"Created ONE station-based case for {len(reports)} reports "
                     f"(station={station_id}, incident_type={incident_type_id})"
                 )
-        
-        # Strategy 2: Geographic clustering for reports without village assignment
-        unassigned_reports = [r for r in reports_for_new_case_eval if not r.village_location_id]
-        if len(unassigned_reports) >= min_reports_threshold:
-            # Group by incident type for geographic clustering
-            by_incident_type = {}
-            for report in unassigned_reports:
-                incident_type_id = report.incident_type_id
-                if incident_type_id not in by_incident_type:
-                    by_incident_type[incident_type_id] = []
-                by_incident_type[incident_type_id].append(report)
-            
-            # Apply geographic clustering
-            from math import radians, cos, sin, asin, sqrt
-            
-            def calculate_distance(lat1, lon1, lat2, lon2):
-                lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-                dlat = lat2 - lat1
-                dlon = lon2 - lon1
-                a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-                c = 2 * asin(sqrt(a))
-                return 6371 * c
-            
-            for incident_type_id, type_reports in by_incident_type.items():
-                if len(type_reports) < min_reports_threshold:
-                    continue
-                
-                # Find geographic clusters
-                processed = set()
-                for report in type_reports:
-                    if report.report_id in processed:
-                        continue
-                        
-                    cluster = [report]
-                    processed.add(report.report_id)
-                    
-                    for other_report in type_reports:
-                        if other_report.report_id in processed:
-                            continue
-                            
-                        distance = calculate_distance(
-                            report.latitude, report.longitude,
-                            other_report.latitude, other_report.longitude
-                        )
-                        
-                        if distance <= cluster_radius_km:  # Use configured radius
-                            cluster.append(other_report)
-                            processed.add(other_report.report_id)
-                    
-                    # Create case if cluster has enough reports
-                    if len(cluster) >= min_reports_threshold:
-                        case_stats = _create_case_from_reports(db, cluster)
-                        stats['cases_created'] += case_stats['cases_created']
-                        logger.info(
-                            f"Created ONE geo-clustered case for {len(cluster)} reports of incident type {incident_type_id} within {cluster_radius_meters}m"
-                        )
         
         if stats["cases_created"] > 0:
             try:
