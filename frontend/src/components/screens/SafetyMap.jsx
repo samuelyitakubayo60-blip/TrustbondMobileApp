@@ -14,6 +14,7 @@ import "leaflet/dist/leaflet.css";
 import api, { cacheBust } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { canDeployHotspotUnits } from "../../utils/roleMapping";
+import { showToast } from "../../utils/toast";
 
 const MUSANZE_CENTER = [-1.5042, 29.638]; // Musanze district center
 const MUSANZE_ZOOM = 12;
@@ -1798,7 +1799,7 @@ const SecurityRecommendations = ({
         unit_code: code,
         note: deployNote[hotspotId] || null,
       });
-      window.alert(res?.message || "Unit deployed.");
+      showToast(res?.message || "Unit deployed.", "success");
       onReload?.();
     } catch (e) {
       setActionError(e?.message || "Deployment failed");

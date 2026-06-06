@@ -16,13 +16,23 @@ from app.models.ml_prediction import MLPrediction
 from app.models.police_user import PoliceUser
 from app.api.v1.auth import get_current_admin_or_supervisor, get_current_user
 from app.core.audit import log_action
-from app.schemas.case import CaseCreate, CaseUpdate, CaseResponse, CaseListResponse, CaseAddReports
+from app.core.case_workflow import (
+    ACTIVE_CASE_STATUSES,
+    apply_rib_handover,
+    normalize_case_status,
+    should_auto_close_for_rib_patch,
+)
+from app.schemas.case import (
+    CaseCreate,
+    CaseUpdate,
+    CaseResponse,
+    CaseListResponse,
+    CaseAddReports,
+    CaseRibHandoverRequest,
+)
 from app.schemas.report import ReportResponse
 
 router = APIRouter(prefix="/cases", tags=["cases"])
-
-# Matches Security Situation station cards and sidebar "Security Situation" badge.
-ACTIVE_CASE_STATUSES = ("open", "assigned", "in_progress")
 
 
 def _require_supervisor_station_id(current_user: PoliceUser) -> int:
@@ -160,6 +170,43 @@ def count_active_cases_for_sidebar(db: Session, current_user: PoliceUser) -> int
         .scalar()
         or 0
     )
+
+
+def _get_case_for_user(db: Session, case_id: UUID, current_user: PoliceUser) -> Case | None:
+    """Load a case if the current user may view/edit it."""
+    case = (
+        db.query(Case)
+        .options(
+            joinedload(Case.location),
+            joinedload(Case.incident_type),
+            joinedload(Case.assigned_to),
+            joinedload(Case.station),
+        )
+        .filter(Case.case_id == case_id)
+        .first()
+    )
+    if not case:
+        return None
+    role = getattr(current_user, "role", None)
+    if role == "admin":
+        return case
+    if role == "supervisor":
+        scoped = _apply_case_list_scope(
+            db.query(Case.case_id).filter(Case.case_id == case_id),
+            current_user,
+            db,
+        ).first()
+        return case if scoped else None
+    if role == "officer":
+        station_id = getattr(current_user, "station_id", None)
+        if station_id is None:
+            return None
+        if case.station_id == int(station_id):
+            return case
+        if case.assigned_to_id == current_user.police_user_id:
+            return case
+        return None
+    return None
 
 
 def _incident_case_title(type_name: str) -> str:
@@ -822,24 +869,13 @@ def update_case(
         cid = UUID(case_id)
     except ValueError:
         raise HTTPException(404, "Case not found")
-    query = db.query(Case).filter(Case.case_id == cid)
-    if _role_uses_station_scope(current_user.role):
-        station_id, location_ids = _supervisor_scope(current_user, db)
-        if location_ids:
-            query = query.filter(
-                or_(
-                    Case.assigned_to.has(PoliceUser.station_id == station_id),
-                    Case.location_id.in_(location_ids),
-                )
-            )
-        else:
-            query = query.filter(Case.assigned_to.has(PoliceUser.station_id == station_id))
-    case = query.first()
+    case = _get_case_for_user(db, cid, current_user)
     if not case:
         raise HTTPException(404, "Case not found")
     if payload.status is not None:
-        case.status = payload.status
-        if payload.status == "closed":
+        normalized = normalize_case_status(payload.status)
+        case.status = normalized
+        if normalized == "closed":
             case.closed_at = datetime.now(timezone.utc)
     if payload.priority is not None:
         case.priority = payload.priority
@@ -876,6 +912,21 @@ def update_case(
         case.rib_handover_prerequisites_acknowledged = bool(
             payload.rib_handover_prerequisites_acknowledged
         )
+
+    if should_auto_close_for_rib_patch(
+        special_assignment_unit=case.special_assignment_unit,
+        rib_handed_over_at=case.rib_handed_over_at,
+        rib_handover_summary=case.rib_handover_summary,
+    ) and case.status != "closed":
+        apply_rib_handover(
+            case,
+            summary=case.rib_handover_summary or "",
+            prerequisites_acknowledged=bool(
+                case.rib_handover_prerequisites_acknowledged
+            ),
+            handed_over_at=case.rib_handed_over_at,
+        )
+
     db.add(case)
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
@@ -905,6 +956,102 @@ def update_case(
         joinedload(Case.incident_type),
         joinedload(Case.assigned_to),
     ).filter(Case.case_id == cid).first()
+    return _case_to_response(case)
+
+
+@router.post("/{case_id}/handover-to-rib", response_model=CaseResponse)
+def handover_case_to_rib(
+    case_id: str,
+    payload: CaseRibHandoverRequest,
+    request: Request,
+    current_user: Annotated[PoliceUser, Depends(get_current_user)],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    One-click RIB handover: record handover, close case, remove from active Security Situation lists.
+    Admin, IO (supervisor), and station officers (same station) may use this.
+    """
+    from datetime import datetime, timezone
+
+    summary = (payload.rib_handover_summary or "").strip()
+    if not summary:
+        raise HTTPException(status_code=400, detail="RIB handover summary is required")
+    if not payload.rib_handover_prerequisites_acknowledged:
+        raise HTTPException(
+            status_code=400,
+            detail="Confirm handover prerequisites before handing to RIB",
+        )
+
+    try:
+        cid = UUID(case_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    case = _get_case_for_user(db, cid, current_user)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    if case.status == "closed" and case.rib_handed_over_at:
+        raise HTTPException(status_code=400, detail="Case already handed to RIB")
+
+    apply_rib_handover(
+        case,
+        summary=summary,
+        prerequisites_acknowledged=True,
+        handed_over_at=datetime.now(timezone.utc),
+    )
+    db.add(case)
+
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    log_action(
+        db,
+        "case_rib_handover",
+        actor_type="police_user",
+        actor_id=current_user.police_user_id,
+        entity_type="case",
+        entity_id=str(case.case_id),
+        action_details={
+            "case_number": case.case_number,
+            "outcome": case.outcome,
+            "station_id": case.station_id,
+        },
+        ip_address=client_ip,
+        user_agent=user_agent,
+        success=True,
+    )
+    db.commit()
+    db.refresh(case)
+
+    try:
+        from app.api.v1.notifications import create_role_notifications
+
+        station_id = getattr(case, "station_id", None)
+        title = f"Case handed to RIB — {case.case_number or str(case.case_id)[:8]}"
+        message = (
+            f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()
+            or "A commander"
+        ) + f" handed case {case.case_number or ''} to RIB. It is now closed."
+        create_role_notifications(
+            db,
+            title=title,
+            message=message.strip(),
+            notif_type="case",
+            related_entity_type="case",
+            related_entity_id=str(case.case_id),
+            target_roles=["admin", "supervisor"],
+            target_station_id=int(station_id) if station_id else None,
+            exclude_user_id=current_user.police_user_id,
+            send_email=False,
+        )
+    except Exception:
+        pass
+
+    background_tasks.add_task(
+        manager.broadcast,
+        {"type": "refresh_data", "entity": "case", "action": "rib_handover"},
+    )
     return _case_to_response(case)
 
 

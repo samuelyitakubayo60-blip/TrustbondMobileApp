@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import { formatLocalDate, formatLocalDateTime, parseApiDate } from '../../utils/dateTime';
 import {
   formatCommunityConfirmation,
   communityBadgeClass,
 } from '../../utils/reportOperationalLabels';
 import { caseDisplayName, caseDisplayRef } from '../../utils/caseDisplay';
+import { canHandoverToRib } from '../../utils/roleMapping';
+import { showToast } from '../../utils/toast';
+import HandoverToRibModal from './HandoverToRibModal';
 
 // AI-only status — AI threshold result
 const formatAIStatus = (report) => {
@@ -22,9 +26,42 @@ const formatAIStatus = (report) => {
 };
 
 const PRIORITY_BADGE = { urgent: 'b-red', high: 'b-orange', medium: 'b-yellow', low: 'b-blue' };
-const STATUS_BADGE   = { open: 'b-green', closed: 'b-gray', archived: 'b-gray' };
+const STATUS_BADGE   = { open: 'b-green', assigned: 'b-blue', in_progress: 'b-orange', closed: 'b-gray', archived: 'b-gray', investigating: 'b-orange' };
 
-const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit, goToScreen }) => {
+function displayCaseStatus(caseItem) {
+  if (!caseItem) return 'unknown';
+  if (caseItem.outcome === 'handed_to_rib' || caseItem.rib_handed_over_at) {
+    return 'handed to RIB';
+  }
+  const s = (caseItem.status || '').toLowerCase();
+  if (s === 'investigating') return 'in progress';
+  return s || 'unknown';
+}
+
+function caseStatusBadgeClass(caseItem) {
+  const label = displayCaseStatus(caseItem);
+  const map = {
+    open: 'b-green',
+    assigned: 'b-blue',
+    'in progress': 'b-orange',
+    closed: 'b-gray',
+    'handed to RIB': 'b-gray',
+    archived: 'b-gray',
+  };
+  return map[label] || STATUS_BADGE[(caseItem?.status || '').toLowerCase()] || 'b-gray';
+}
+
+function isActiveCase(caseItem) {
+  if (!caseItem) return false;
+  if (caseItem.outcome === 'handed_to_rib' || caseItem.rib_handed_over_at) return false;
+  const s = (caseItem.status || '').toLowerCase();
+  return !['closed', 'archived'].includes(s);
+}
+
+const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit, goToScreen, onCaseUpdated }) => {
+  const { user: me } = useAuth();
+  const role = me?.role || 'officer';
+  const canRibHandover = canHandoverToRib(role);
   const [reports, setReports]               = useState([]);
   const [loading, setLoading]               = useState(false);
   const [error, setError]                   = useState('');
@@ -37,9 +74,15 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit, goToScreen }) => {
   const [movingReport, setMovingReport]     = useState(false);
   const [unitLabels, setUnitLabels]         = useState({});
   const [timeFilter, setTimeFilter]         = useState('all');
+  const [ribModalOpen, setRibModalOpen]     = useState(false);
+  const [localCase, setLocalCase]           = useState(caseItem);
 
   useEffect(() => {
-    if (!isOpen) return;
+    setLocalCase(caseItem);
+  }, [caseItem]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
     let cancelled = false;
     api.get('/api/v1/special-assignment-units/')
       .then((res) => {
@@ -104,8 +147,17 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit, goToScreen }) => {
 
   if (!isOpen || !caseItem) return null;
 
-  const caseLat = Number(caseItem?.latitude);
-  const caseLon = Number(caseItem?.longitude);
+  const c = localCase || caseItem;
+
+  const handleRibHandoverSuccess = (updated) => {
+    setLocalCase(updated);
+    setRibModalOpen(false);
+    showToast('Case handed to RIB and closed.', 'success');
+    onCaseUpdated?.(updated);
+  };
+
+  const caseLat = Number(c?.latitude);
+  const caseLon = Number(c?.longitude);
   const hasCaseCoords = Number.isFinite(caseLat) && Number.isFinite(caseLon);
   const reportCoords = reports
     .map((r) => ({ lat: Number(r?.latitude), lon: Number(r?.longitude) }))
@@ -127,7 +179,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit, goToScreen }) => {
       let cases = Array.isArray(response) ? response : (response?.items || []);
       if (selectedReport?.incident_type_id)
         cases = cases.filter((c) => c.incident_type_id === selectedReport.incident_type_id);
-      cases = cases.filter((c) => c.case_id !== caseItem.case_id);
+      cases = cases.filter((row) => row.case_id !== caseItem.case_id);
       setAvailableCases(cases);
     } catch { setAvailableCases([]); }
     finally { setCasesLoading(false); }
@@ -171,7 +223,8 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit, goToScreen }) => {
     });
   })();
 
-  const hasRib = caseItem.special_assignment_unit || caseItem.rib_handed_over_at || caseItem.rib_handover_summary;
+  const hasRib = c.special_assignment_unit || c.rib_handed_over_at || c.rib_handover_summary;
+  const showRibHandoverBtn = canRibHandover && isActiveCase(c);
 
   return (
     <div className="modal-overlay open" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -180,17 +233,17 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit, goToScreen }) => {
         {/* ── Header ── */}
         <div className="modal-header" style={{ flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1 }}>
-            {caseDisplayRef(caseItem) && (
+            {caseDisplayRef(c) && (
               <span className="badge b-blue" style={{ fontFamily: 'monospace', fontSize: 11, letterSpacing: '0.05em' }}>
-                {caseDisplayRef(caseItem)}
+                {caseDisplayRef(c)}
               </span>
             )}
-            <span style={{ fontWeight: 700, fontSize: 16 }}>{caseDisplayName(caseItem)}</span>
-            <span className={`badge ${STATUS_BADGE[caseItem.status] || 'b-gray'}`} style={{ fontSize: 10 }}>
-              {caseItem.status || 'unknown'}
+            <span style={{ fontWeight: 700, fontSize: 16 }}>{caseDisplayName(c)}</span>
+            <span className={`badge ${caseStatusBadgeClass(c)}`} style={{ fontSize: 10 }}>
+              {displayCaseStatus(c)}
             </span>
-            <span className={`badge ${PRIORITY_BADGE[caseItem.priority] || 'b-gray'}`} style={{ fontSize: 10 }}>
-              {caseItem.priority || '—'} priority
+            <span className={`badge ${PRIORITY_BADGE[c.priority] || 'b-gray'}`} style={{ fontSize: 10 }}>
+              {c.priority || '—'} priority
             </span>
           </div>
           <div className="modal-close" onClick={onClose}>✕</div>
@@ -201,9 +254,9 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit, goToScreen }) => {
           {/* ── Info tiles ── */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10, marginBottom: 18 }}>
             {[
-              { label: 'Status',          value: <span className={`badge ${STATUS_BADGE[caseItem.status] || 'b-gray'}`}>{caseItem.status || '—'}</span> },
-              { label: 'Priority',        value: <span className={`badge ${PRIORITY_BADGE[caseItem.priority] || 'b-gray'}`}>{caseItem.priority || '—'}</span> },
-              { label: 'Assigned Officer',value: caseItem.assigned_to_name || <span style={{ color: 'var(--muted)' }}>Unassigned</span> },
+              { label: 'Status',          value: <span className={`badge ${caseStatusBadgeClass(c)}`}>{displayCaseStatus(c)}</span> },
+              { label: 'Priority',        value: <span className={`badge ${PRIORITY_BADGE[c.priority] || 'b-gray'}`}>{c.priority || '—'}</span> },
+              { label: 'Assigned Officer',value: c.assigned_to_name || <span style={{ color: 'var(--muted)' }}>Unassigned</span> },
               { label: 'Linked Reports',  value: loading ? '…' : reports.length },
             ].map((f) => (
               <div key={f.label} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 14px' }}>
@@ -217,7 +270,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit, goToScreen }) => {
           <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: '14px 16px', marginBottom: 14 }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Location</div>
             <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
-              {caseItem.location_name || (hasUnifiedCoords ? `${Number(navLat).toFixed(5)}, ${Number(navLon).toFixed(5)}` : <span style={{ color: 'var(--muted)', fontSize: 13 }}>Location not available</span>)}
+              {c.location_name || (hasUnifiedCoords ? `${Number(navLat).toFixed(5)}, ${Number(navLon).toFixed(5)}` : <span style={{ color: 'var(--muted)', fontSize: 13 }}>Location not available</span>)}
             </div>
             {hasUnifiedCoords && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -251,7 +304,7 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit, goToScreen }) => {
           <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: '14px 16px', marginBottom: 14 }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Description</div>
             <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6 }}>
-              {caseItem.description || <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>No description.</span>}
+              {c.description || <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>No description.</span>}
             </div>
           </div>
 
@@ -260,28 +313,28 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit, goToScreen }) => {
             <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: '14px 16px', marginBottom: 14 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>RIB / Special Assignment</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                {caseItem.special_assignment_unit && (
+                {c.special_assignment_unit && (
                   <div>
                     <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>Unit</div>
-                    <div style={{ fontSize: 13 }}>{unitLabels[caseItem.special_assignment_unit] || caseItem.special_assignment_unit}</div>
+                    <div style={{ fontSize: 13 }}>{unitLabels[c.special_assignment_unit] || c.special_assignment_unit}</div>
                   </div>
                 )}
-                {caseItem.rib_handed_over_at && (
+                {c.rib_handed_over_at && (
                   <div>
                     <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>Handed Over</div>
-                    <div style={{ fontSize: 13 }}>{formatLocalDateTime(caseItem.rib_handed_over_at)}</div>
+                    <div style={{ fontSize: 13 }}>{formatLocalDateTime(c.rib_handed_over_at)}</div>
                   </div>
                 )}
-                {caseItem.rib_handover_summary && (
+                {c.rib_handover_summary && (
                   <div style={{ gridColumn: '1 / -1' }}>
                     <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>Handover Summary</div>
-                    <div style={{ fontSize: 13, color: 'var(--text)' }}>{caseItem.rib_handover_summary}</div>
+                    <div style={{ fontSize: 13, color: 'var(--text)' }}>{c.rib_handover_summary}</div>
                   </div>
                 )}
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>IO Checklist</div>
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    {caseItem.rib_handover_prerequisites_acknowledged
+                    {c.rib_handover_prerequisites_acknowledged
                       ? 'Acknowledged — manual record only'
                       : 'Not recorded yet — confirm in Edit Case'}
                   </div>
@@ -394,10 +447,28 @@ const ViewCaseModal = ({ isOpen, onClose, caseItem, onEdit, goToScreen }) => {
         </div>
 
         {/* ── Footer actions ── */}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '16px 20px 20px' }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '16px 20px 20px', flexWrap: 'wrap' }}>
           <button className="btn btn-outline" onClick={onClose}>Close</button>
-          <button className="btn btn-primary" onClick={() => onEdit?.(caseItem)}>Update Case</button>
+          {showRibHandoverBtn && (
+            <button
+              className="btn btn-outline"
+              onClick={() => setRibModalOpen(true)}
+              title="Close case and hand over to RIB"
+            >
+              Hand over to RIB
+            </button>
+          )}
+          {isActiveCase(c) && (
+            <button className="btn btn-primary" onClick={() => onEdit?.(c)}>Update Case</button>
+          )}
         </div>
+
+        <HandoverToRibModal
+          isOpen={ribModalOpen}
+          onClose={() => setRibModalOpen(false)}
+          caseItem={c}
+          onSuccess={handleRibHandoverSuccess}
+        />
 
         {/* ── Move Report sub-modal ── */}
         {showMoveModal && (

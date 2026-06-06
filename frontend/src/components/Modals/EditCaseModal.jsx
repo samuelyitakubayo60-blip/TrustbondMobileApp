@@ -33,7 +33,8 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
 
   useEffect(() => {
     if (!isOpen || !caseItem) return;
-    setStatus(caseItem.status || 'open');
+    const raw = (caseItem.status || 'open').toLowerCase();
+    setStatus(raw === 'investigating' ? 'in_progress' : raw);
     setPriority(caseItem.priority || 'medium');
     setDescription(caseItem.description || '');
     setOutcome(caseItem.outcome || '');
@@ -165,9 +166,13 @@ const EditCaseModal = ({ isOpen, onClose, caseItem, onSaved }) => {
               onChange={(e) => setStatus(e.target.value)}
             >
               <option value="open">open</option>
-              <option value="investigating">investigating</option>
+              <option value="assigned">assigned</option>
+              <option value="in_progress">in progress</option>
               <option value="closed">closed</option>
             </select>
+            <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--muted)' }}>
+              To hand a case to RIB and remove it from active lists, use &quot;Hand over to RIB&quot; on the case view.
+            </p>
           </div>
           <div className="input-group">
             <div className="input-label">Priority</div>

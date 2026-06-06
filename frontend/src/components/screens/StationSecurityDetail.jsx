@@ -3,6 +3,22 @@ import api from "../../api/client";
 import ViewCaseModal from "../Modals/ViewCaseModal";
 import EditCaseModal from "../Modals/EditCaseModal";
 
+function stationCaseStatusLabel(c) {
+  if (!c) return "unknown";
+  if (c.outcome === "handed_to_rib" || c.rib_handed_over_at) return "handed to RIB";
+  const s = (c.status || "").toLowerCase();
+  if (s === "investigating") return "in progress";
+  return s || "unknown";
+}
+
+function stationCaseStatusBadge(c) {
+  const label = stationCaseStatusLabel(c);
+  if (label === "open") return "b-green";
+  if (label === "assigned") return "b-blue";
+  if (label === "in progress") return "b-orange";
+  return "b-gray";
+}
+
 /**
  * Cases for one station — GET /stations/{id}/cases grouped by incident type.
  */
@@ -112,7 +128,7 @@ const StationSecurityDetail = ({ goToScreen, stationId, stationName, wsRefreshKe
                         <div style={{ fontSize: 11, color: "var(--muted)" }}>{c.case_number}</div>
                       </td>
                       <td>
-                        <span className={`badge ${c.status === "open" ? "b-green" : "b-gray"}`}>{c.status}</span>
+                        <span className={`badge ${stationCaseStatusBadge(c)}`}>{stationCaseStatusLabel(c)}</span>
                       </td>
                       <td>
                         <span className={`badge ${c.priority === "urgent" ? "b-red" : c.priority === "high" ? "b-orange" : c.priority === "low" ? "b-blue" : "b-gray"}`}>
@@ -147,10 +163,19 @@ const StationSecurityDetail = ({ goToScreen, stationId, stationName, wsRefreshKe
         }}
         caseItem={viewCase}
         goToScreen={goToScreen}
-        onEdit={(c) => {
+        onEdit={(row) => {
           setViewOpen(false);
-          setEditCase(c);
+          setEditCase(row);
           setEditOpen(true);
+        }}
+        onCaseUpdated={(updated) => {
+          load();
+          if (!updated || updated.status === "closed" || updated.outcome === "handed_to_rib") {
+            setViewOpen(false);
+            setViewCase(null);
+          } else {
+            setViewCase(updated);
+          }
         }}
       />
       <EditCaseModal

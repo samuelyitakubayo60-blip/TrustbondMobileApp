@@ -20,6 +20,11 @@ class CaseCreate(BaseModel):
     assigned_to_id: Optional[int] = None
 
 
+class CaseRibHandoverRequest(BaseModel):
+    rib_handover_summary: str
+    rib_handover_prerequisites_acknowledged: bool = True
+
+
 class CaseUpdate(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None

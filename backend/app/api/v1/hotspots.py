@@ -1862,9 +1862,14 @@ def deploy_unit_to_hotspot(
 
     msg = f"Unit {unit.unit_name} ({unit.unit_code}) deployed to hotspot #{hotspot_id}."
     if meta.get("email_sent"):
-        msg += f" Commander notified at {meta.get('commander_email')}."
+        msg += f" Commander emailed at {meta.get('commander_email')}."
     elif meta.get("email_error"):
-        msg += f" Warning: commander email failed — {meta['email_error']}."
+        msg += f" Email note: {meta['email_error']}."
+    station_users = meta.get("in_app_station_users") or 0
+    if station_users:
+        msg += f" {station_users} station user(s) notified in-app."
+    if meta.get("in_app_commander"):
+        msg += " Unit commander notified in-app."
     return {
         "message": msg,
         "hotspot_id": hotspot_id,
@@ -1872,6 +1877,9 @@ def deploy_unit_to_hotspot(
         "assigned_unit_name": unit.unit_name,
         "email_sent": meta.get("email_sent", False),
         "email_error": meta.get("email_error"),
+        "in_app_commander": meta.get("in_app_commander", 0),
+        "in_app_station_users": meta.get("in_app_station_users", 0),
+        "stations_notified": meta.get("stations_notified") or [],
     }
 
 
