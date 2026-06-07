@@ -14,7 +14,6 @@ import "leaflet/dist/leaflet.css";
 import api, { cacheBust } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { canDeployHotspotUnits } from "../../utils/roleMapping";
-import { showToast } from "../../utils/toast";
 import HotspotDeployControls from "../HotspotDeployControls";
 
 const MUSANZE_CENTER = [-1.5042, 29.638]; // Musanze district center
