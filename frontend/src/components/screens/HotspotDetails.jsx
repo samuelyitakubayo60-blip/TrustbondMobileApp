@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { canDeployHotspotUnits } from "../../utils/roleMapping";
-import HotspotDeployControls from "../HotspotDeployControls";
+import HotspotSecurityRecommendations from "../HotspotSecurityRecommendations";
 
 // Strip Cloudinary transformation params to get raw upload URL
 const stripCloudinaryTransforms = (url) => {
@@ -35,7 +35,6 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
   const [relatedReports, setRelatedReports] = useState([]);
   const [reportsLoading, setReportsLoading] = useState(true);
   const [imgErrors, setImgErrors] = useState({});
-  const [expandedAdvisory, setExpandedAdvisory] = useState(false);
   const [assignmentUnits, setAssignmentUnits] = useState([]);
 
   useEffect(() => {
@@ -186,9 +185,6 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
   const incidentMix = hotspot.incident_mix || {};
   const mixEntries = Object.entries(incidentMix).sort((a, b) => b[1] - a[1]);
   const totalMixCount = mixEntries.reduce((sum, [, c]) => sum + c, 0) || hotspot.incident_count || 0;
-  const narrative = hotspot.prediction?.narrative || hotspot.llm_narrative;
-  const recommendation = hotspot.prediction?.recommendation || hotspot.llm_recommendation;
-  const policeAdvisory = narrative || recommendation;
   const evidenceFiles = hotspot.evidence_files || [];
 
   return (
@@ -448,74 +444,22 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
         </div>
       </div>
 
-      {/* ── Unit deployment ── */}
+      {/* ── Security recommendations & unit deployment ── */}
       <div className="card" style={{ marginTop: 14, overflow: 'hidden' }}>
         <div className="card-header" style={{ padding: '12px 16px' }}>
-          <div className="card-title" style={{ fontSize: 13 }}>Unit deployment</div>
+          <div className="card-title" style={{ fontSize: 13 }}>Security recommendations &amp; unit deployment</div>
         </div>
         <div style={{ padding: 16 }}>
-          <HotspotDeployControls
-            hotspot={hotspot}
+          <HotspotSecurityRecommendations
+            hotspots={[hotspot]}
             assignmentUnits={assignmentUnits}
             canDeploy={canDeploy}
-            onDeployed={reloadHotspot}
+            onReload={reloadHotspot}
+            detailPage
+            timeWindowHours={hotspot.time_window_hours || 168}
           />
         </div>
       </div>
-
-      {/* ── Operational Briefing (full-width, between columns and table) ── */}
-      {policeAdvisory && (
-        <div className="card" style={{ marginTop: 14, overflow: "hidden" }}>
-          <div className="card-header" style={{ padding: "12px 16px" }}>
-            <div className="card-title" style={{ fontSize: 13 }}>Operational Briefing</div>
-          </div>
-          <div style={{ padding: 16 }}>
-            {narrative && (
-              <div style={{
-                fontSize: 12, lineHeight: 1.7, color: "var(--text)", marginBottom: recommendation ? 12 : 0,
-                maxHeight: expandedAdvisory ? "none" : 100, overflow: "hidden", position: "relative",
-              }}>
-                {narrative}
-                {!expandedAdvisory && narrative.length > 250 && (
-                  <div style={{
-                    position: "absolute", bottom: 0, left: 0, right: 0, height: 30,
-                    background: "linear-gradient(transparent, var(--surface))",
-                  }} />
-                )}
-              </div>
-            )}
-            {recommendation && (
-              <div style={{
-                fontSize: 12, lineHeight: 1.6, color: "var(--text)",
-                padding: "12px 14px", borderRadius: 8, borderLeft: `3px solid ${risk.color}`,
-                background: "var(--surface2, rgba(0,0,0,0.03))",
-                maxHeight: expandedAdvisory ? "none" : 80, overflow: "hidden", position: "relative",
-              }}>
-                <div style={{ fontSize: 10, fontWeight: 600, color: risk.color, marginBottom: 4, textTransform: "uppercase" }}>Recommendation</div>
-                {recommendation}
-                {!expandedAdvisory && recommendation.length > 200 && (
-                  <div style={{
-                    position: "absolute", bottom: 0, left: 0, right: 0, height: 30,
-                    background: "linear-gradient(transparent, var(--surface))",
-                  }} />
-                )}
-              </div>
-            )}
-            {(narrative?.length > 250 || recommendation?.length > 200) && (
-              <button
-                onClick={() => setExpandedAdvisory(!expandedAdvisory)}
-                style={{
-                  marginTop: 8, background: "none", border: "none",
-                  color: "var(--accent)", fontSize: 11, fontWeight: 600,
-                  cursor: "pointer", padding: 0,
-                }}
-              >
-                {expandedAdvisory ? "Show less" : "Read full briefing"}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ── Related Reports ── */}
       <div className="card" style={{ marginTop: 14, overflow: "hidden" }}>
