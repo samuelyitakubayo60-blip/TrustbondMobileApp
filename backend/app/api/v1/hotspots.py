@@ -1837,27 +1837,39 @@ def deploy_unit_to_hotspot(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Hotspot deploy failed hotspot_id=%s", hotspot_id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Deployment failed: {exc}",
+        ) from exc
 
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
-    log_action(
-        db,
-        "hotspot_deployed",
-        actor_type="police_user",
-        actor_id=current_user.police_user_id,
-        entity_type="hotspot",
-        entity_id=str(hotspot_id),
-        action_details={
-            "unit_code": unit.unit_code,
-            "unit_name": unit.unit_name,
-            "note": payload.note,
-            "email_sent": meta.get("email_sent", False),
-        },
-        ip_address=client_ip,
-        user_agent=user_agent,
-        success=True,
-    )
-    db.commit()
+    try:
+        log_action(
+            db,
+            "hotspot_deployed",
+            actor_type="police_user",
+            actor_id=current_user.police_user_id,
+            entity_type="hotspot",
+            entity_id=str(hotspot_id),
+            action_details={
+                "unit_code": unit.unit_code,
+                "unit_name": unit.unit_name,
+                "note": payload.note,
+                "email_sent": meta.get("email_sent", False),
+            },
+            ip_address=client_ip,
+            user_agent=user_agent,
+            success=True,
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Audit log after hotspot deploy failed (deployment saved): %s", exc)
     refresh_entity("hotspot", action="deployed", hotspot_id=hotspot_id)
 
     msg = f"Unit {unit.unit_name} ({unit.unit_code}) deployed to hotspot #{hotspot_id}."

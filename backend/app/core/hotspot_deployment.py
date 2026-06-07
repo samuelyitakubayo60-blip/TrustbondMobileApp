@@ -192,33 +192,44 @@ def deploy_hotspot_unit(
 
     reports = list(getattr(hotspot, "reports", None) or [])
     decisions_created = 0
+    decision_errors: list[str] = []
     for report in reports:
         if report.leader_verification_status != "confirmed":
             continue
-        existing = (
-            db.query(DeploymentDecision)
-            .filter(DeploymentDecision.report_id == str(report.report_id))
-            .first()
-        )
-        if existing:
-            existing.deployment_status = "deployed"
-            existing.assigned_unit = code
-            existing.deployed_at = now
-            if note:
-                existing.decision_note = note
-        else:
-            db.add(
-                DeploymentDecision(
-                    report_id=str(report.report_id),
-                    decided_by=decided_by.police_user_id,
-                    deployment_status="deployed",
-                    assigned_unit=code,
-                    deployment_priority=report.priority or "medium",
-                    decision_note=note,
-                    deployed_at=now,
+        report_id_str = str(report.report_id)
+        try:
+            with db.begin_nested():
+                existing = (
+                    db.query(DeploymentDecision)
+                    .filter(DeploymentDecision.report_id == report_id_str)
+                    .first()
                 )
+                if existing:
+                    existing.deployment_status = "deployed"
+                    existing.assigned_unit = code
+                    existing.deployed_at = now
+                    if note:
+                        existing.decision_note = note
+                else:
+                    db.add(
+                        DeploymentDecision(
+                            report_id=report_id_str,
+                            decided_by=decided_by.police_user_id,
+                            deployment_status="deployed",
+                            assigned_unit=code,
+                            deployment_priority=report.priority or "medium",
+                            decision_note=note,
+                            deployed_at=now,
+                        )
+                    )
+                    decisions_created += 1
+        except Exception as exc:
+            decision_errors.append(f"report {report_id_str}: {exc}")
+            _log.warning(
+                "Deployment decision skipped for report %s: %s",
+                report_id_str,
+                exc,
             )
-            decisions_created += 1
 
     email_sent = False
     email_error = None
@@ -249,8 +260,13 @@ def deploy_hotspot_unit(
         email_error = "Email not configured on server"
 
     db.add(hotspot)
-    db.commit()
-    db.refresh(hotspot)
+    try:
+        db.commit()
+        db.refresh(hotspot)
+    except Exception as exc:
+        db.rollback()
+        _log.exception("Hotspot deploy commit failed hotspot_id=%s", hotspot.hotspot_id)
+        raise ValueError(f"Could not save deployment: {exc}") from exc
 
     notify_meta = _notify_deployment_stakeholders(
         db,
@@ -270,6 +286,7 @@ def deploy_hotspot_unit(
         unit,
         {
             "decisions_created": decisions_created,
+            "decision_errors": decision_errors,
             "email_sent": email_sent,
             "email_error": email_error,
             "commander_email": getattr(commander, "email", None) if commander else None,
