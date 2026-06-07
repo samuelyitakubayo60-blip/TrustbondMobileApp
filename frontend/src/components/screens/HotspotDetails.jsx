@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import api from '../../api/client';
+import api, { cacheBust } from "../../api/client";
+import { useAuth } from "../../context/AuthContext";
+import { canDeployHotspotUnits } from "../../utils/roleMapping";
+import { showToast } from "../../utils/toast";
+import HotspotDeployControls from "../HotspotDeployControls";
 
 // Strip Cloudinary transformation params to get raw upload URL
 const stripCloudinaryTransforms = (url) => {
@@ -23,6 +27,8 @@ const getTypeColor = (name, index = 0) => {
 };
 
 const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
+  const { user: me } = useAuth();
+  const canDeploy = canDeployHotspotUnits(me?.role);
   const [hotspot, setHotspot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -31,6 +37,26 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
   const [reportsLoading, setReportsLoading] = useState(true);
   const [imgErrors, setImgErrors] = useState({});
   const [expandedAdvisory, setExpandedAdvisory] = useState(false);
+  const [assignmentUnits, setAssignmentUnits] = useState([]);
+
+  useEffect(() => {
+    api
+      .get('/api/v1/special-assignment-units/')
+      .then((res) => setAssignmentUnits(Array.isArray(res) ? res : []))
+      .catch(() => setAssignmentUnits([]));
+  }, []);
+
+  const reloadHotspot = async () => {
+    if (!hotspotId) return;
+    try {
+      const res = await api.get(`/api/v1/hotspots/?hotspot_ids=${hotspotId}&for_map=true`);
+      const list = Array.isArray(res) ? res : [];
+      const found = list.find((h) => h.hotspot_id == hotspotId);
+      if (found) setHotspot(found);
+    } catch {
+      /* keep existing data */
+    }
+  };
 
   useEffect(() => {
     const loadHotspotDetails = async () => {
@@ -420,6 +446,21 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
             </div>
 
           </div>
+        </div>
+      </div>
+
+      {/* ── Unit deployment ── */}
+      <div className="card" style={{ marginTop: 14, overflow: 'hidden' }}>
+        <div className="card-header" style={{ padding: '12px 16px' }}>
+          <div className="card-title" style={{ fontSize: 13 }}>Unit deployment</div>
+        </div>
+        <div style={{ padding: 16 }}>
+          <HotspotDeployControls
+            hotspot={hotspot}
+            assignmentUnits={assignmentUnits}
+            canDeploy={canDeploy}
+            onDeployed={reloadHotspot}
+          />
         </div>
       </div>
 

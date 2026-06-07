@@ -15,6 +15,7 @@ import api, { cacheBust } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { canDeployHotspotUnits } from "../../utils/roleMapping";
 import { showToast } from "../../utils/toast";
+import HotspotDeployControls from "../HotspotDeployControls";
 
 const MUSANZE_CENTER = [-1.5042, 29.638]; // Musanze district center
 const MUSANZE_ZOOM = 12;
@@ -1632,7 +1633,22 @@ const SafetyMap = ({ goToScreen, wsRefreshKey, focusHotspotId, focusCoords }) =>
           )}
         </div>
 
-        {/* Recommendations moved to Hotspot Details page */}
+        <div className="card" style={{ gridColumn: '1 / -1' }}>
+          <div className="card-header">
+            <div className="card-title">Security recommendations &amp; unit deployment</div>
+          </div>
+          <div style={{ padding: '12px 16px 16px' }}>
+            <SecurityRecommendations
+              hotspots={filteredHistoricalHotspots}
+              assignmentUnits={assignmentUnits}
+              canDeploy={canDeployHotspot}
+              onReload={() => loadHistoricalHotspots()}
+              timePeriod={timePeriod}
+              customHours={customHours}
+              timeWindowHours={aiTimeWindowHours}
+            />
+          </div>
+        </div>
       </div>
     </>
   );
@@ -1764,49 +1780,10 @@ const SecurityRecommendations = ({
   customHours,
   timeWindowHours,
 }) => {
-  const [deployingId, setDeployingId] = useState(null);
-  const [takingId, setTakingId] = useState(null);
-  const [deployUnit, setDeployUnit] = useState({});
-  const [deployNote, setDeployNote] = useState({});
   const [actionError, setActionError] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiById, setAiById] = useState({});
   const [aiProgress, setAiProgress] = useState({ done: 0, total: 0 });
-
-  const handleTakeControl = async (hotspotId) => {
-    setTakingId(hotspotId);
-    setActionError("");
-    try {
-      await api.post(`/api/v1/hotspots/${hotspotId}/take-control`);
-      onReload?.();
-    } catch (e) {
-      setActionError(e?.message || "Failed to take control");
-    } finally {
-      setTakingId(null);
-    }
-  };
-
-  const handleDeploy = async (hotspotId) => {
-    const code = deployUnit[hotspotId];
-    if (!code) {
-      setActionError("Select a unit to deploy.");
-      return;
-    }
-    setDeployingId(hotspotId);
-    setActionError("");
-    try {
-      const res = await api.post(`/api/v1/hotspots/${hotspotId}/deploy`, {
-        unit_code: code,
-        note: deployNote[hotspotId] || null,
-      });
-      showToast(res?.message || "Unit deployed.", "success");
-      onReload?.();
-    } catch (e) {
-      setActionError(e?.message || "Deployment failed");
-    } finally {
-      setDeployingId(null);
-    }
-  };
 
   const sorted = useMemo(() => {
     if (!hotspots || hotspots.length === 0) return [];
@@ -1940,8 +1917,8 @@ const SecurityRecommendations = ({
           No active hotspots detected
         </div>
         <div style={{ fontSize: "11px", color: "var(--muted)", lineHeight: 1.5 }}>
-          No deployments are required at this time. Continue routine patrols
-          and community engagement across all sectors.
+          No active hotspot clusters match the current map filters.
+          Widen the time period or check that verified incidents exist in Musanze.
         </div>
       </div>
     );
@@ -2219,79 +2196,14 @@ const SecurityRecommendations = ({
                   </div>
                 )}
 
-                {/* Current deployment status */}
-                {(h.assigned_unit_code || h.controlled_by_name || h.deployed_at) && (
-                  <div style={{
-                    fontSize: "10px", color: "var(--text)", padding: "5px 10px",
-                    borderRadius: "6px", backgroundColor: "var(--background)",
-                    border: "1px solid var(--border)",
-                    display: "flex", gap: "10px", flexWrap: "wrap",
-                  }}>
-                    {h.controlled_by_name && (
-                      <span>Control: <strong>{h.controlled_by_name}</strong></span>
-                    )}
-                    {h.assigned_unit_name && (
-                      <span>Deployed: <strong>{h.assigned_unit_name}</strong></span>
-                    )}
-                    {h.deployed_at && (
-                      <span style={{ color: "var(--muted)" }}>{new Date(h.deployed_at).toLocaleString()}</span>
-                    )}
-                  </div>
-                )}
-
-                {/* Deploy controls — only visible to IO/DPC */}
-                {canDeploy && (
-                  <div style={{
-                    display: "flex", flexDirection: "column", gap: 8,
-                    padding: "8px 10px", borderRadius: "6px",
-                    border: "1px dashed var(--border)", backgroundColor: "var(--background)",
-                  }}>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        className="btn btn-outline btn-sm"
-                        disabled={takingId === h.hotspot_id}
-                        onClick={() => handleTakeControl(h.hotspot_id)}
-                      >
-                        {takingId === h.hotspot_id ? "…" : "Take control"}
-                      </button>
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                      <select
-                        className="select"
-                        style={{ flex: 1, minWidth: 140, fontSize: 11 }}
-                        value={deployUnit[h.hotspot_id] || ""}
-                        onChange={(e) =>
-                          setDeployUnit((prev) => ({ ...prev, [h.hotspot_id]: e.target.value }))
-                        }
-                      >
-                        <option value="">Select unit to deploy…</option>
-                        {(assignmentUnits || []).filter((u) => u.is_active !== false).map((u) => (
-                          <option key={u.unit_code} value={u.unit_code}>
-                            {u.unit_name} ({u.unit_code})
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        disabled={deployingId === h.hotspot_id}
-                        onClick={() => handleDeploy(h.hotspot_id)}
-                      >
-                        {deployingId === h.hotspot_id ? "Deploying…" : "Deploy unit"}
-                      </button>
-                    </div>
-                    <input
-                      className="input"
-                      style={{ fontSize: 11 }}
-                      placeholder="Optional deployment note for commander"
-                      value={deployNote[h.hotspot_id] || ""}
-                      onChange={(e) =>
-                        setDeployNote((prev) => ({ ...prev, [h.hotspot_id]: e.target.value }))
-                      }
-                    />
-                  </div>
-                )}
+                {/* Deploy controls — IO/DPC only (reassign allowed when already deployed) */}
+                <HotspotDeployControls
+                  hotspot={h}
+                  assignmentUnits={assignmentUnits}
+                  canDeploy={canDeploy}
+                  compact
+                  onDeployed={onReload}
+                />
 
                 {/* Footer: trust score + trend */}
                 <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", fontSize: "10px", color: "var(--muted)", paddingTop: "2px" }}>
