@@ -289,9 +289,9 @@ def _st_dbscan(
         nbs: List[int] = []
         for j, q in enumerate(points):
             if _haversine_meters(p["lat"], p["lon"], q["lat"], q["lon"]) > eps_meters:
-                continue
+            continue
             if eps_seconds > 0 and abs(ts[i] - ts[j]) > eps_seconds:
-                continue
+            continue
             nbs.append(j)
         neighborhoods.append(nbs)
         nb_weight = sum(weights[j] for j in nbs)
@@ -316,8 +316,8 @@ def _st_dbscan(
                 labels[j] = cluster_id
                 if is_core[j]:
                     for cand in neighborhoods[j]:
-                        if cand not in queue:
-                            queue.append(cand)
+                    if cand not in queue:
+                        queue.append(cand)
             elif labels[j] == -1:
                 labels[j] = cluster_id
         cluster_id += 1
@@ -1088,15 +1088,15 @@ def ensure_hotspots_materialized(
         )
         if created > 0:
             db.commit()
-        return created
+    return created
     finally:
         db.execute(_text("SELECT pg_advisory_unlock(7654321)"))
 
 
 def _create_village_based_hotspots(
-    db: Session,
-    reports: List[Dict[str, Any]],
-    min_incidents: int,
+    db: Session, 
+    reports: List[Dict[str, Any]], 
+    min_incidents: int, 
     time_window_hours: int,
     radius_meters: float = DEFAULT_RADIUS_METERS,
 ) -> int:
@@ -1460,9 +1460,9 @@ def _merge_overlapping_hotspots(db: Session, eps_m: float) -> int:
 
 def _create_geographic_hotspots(
     db: Session,
-    reports: List[Dict[str, Any]],
-    radius_meters: float,
-    min_incidents: int,
+    reports: List[Dict[str, Any]], 
+    radius_meters: float, 
+    min_incidents: int, 
     time_window_hours: int,
     *,
     enforce_time_span: bool = True,
@@ -1560,20 +1560,20 @@ def _create_geographic_hotspots(
         )
 
         raw_clusters: Dict[int, List[Dict[str, Any]]] = {}
-        for idx, label in enumerate(labels):
-            if label < 0:
-                continue
+    for idx, label in enumerate(labels):
+        if label < 0:
+            continue
             tagged = {**group_pts[idx], "is_core": is_core_flags[idx]}
             raw_clusters.setdefault(label, []).append(tagged)
 
         for cluster_pts in raw_clusters.values():
             incident_count = len(cluster_pts)
-            if incident_count < int(min_incidents):
+        if incident_count < int(min_incidents):
                 # Under-sized DBSCAN cluster — try to attach each point to an
                 # existing nearby hotspot; never create a new single-point hotspot.
                 for p in cluster_pts:
                     _try_attach_isolated(p)
-                continue
+            continue
 
             # Time-span guard
             cluster_pts_sorted = sorted(
@@ -1606,7 +1606,7 @@ def _create_geographic_hotspots(
                 )
                 for p in cluster_pts:
                     _try_attach_isolated(p)
-                continue
+            continue
 
             corroboration = _corroboration_score(cluster_pts, MIN_UNIQUE_REPORTERS)
 
@@ -1665,14 +1665,14 @@ def _create_geographic_hotspots(
                 polygon_json = None
 
             # Risk classification
-            area_sqkm = max(0.001, 3.14159 * (float(radius_meters) / 1000.0) ** 2)
-            cluster_density = incident_count / area_sqkm
-            classification_result = predict_cluster_classification(
-                incident_count=incident_count,
-                avg_trust=avg_trust,
-                cluster_density=cluster_density,
-                time_window_hours=time_window_hours,
-            )
+        area_sqkm = max(0.001, 3.14159 * (float(radius_meters) / 1000.0) ** 2)
+        cluster_density = incident_count / area_sqkm
+        classification_result = predict_cluster_classification(
+            incident_count=incident_count,
+            avg_trust=avg_trust,
+            cluster_density=cluster_density,
+            time_window_hours=time_window_hours,
+        )
             # Override risk level with incident-count-based criteria:
             #   HIGH: >4 new incidents in last 7 days, OR 12+ in last 7 days, OR 15+ total
             #   MEDIUM: everything else (cluster already has ≥4 incidents from min_pts)
@@ -1726,7 +1726,7 @@ def _create_geographic_hotspots(
 
             if existing:
                 prev_lifecycle = existing.lifecycle_state
-                hotspot = existing
+        hotspot = existing
                 hotspot.center_lat             = Decimal(str(center_lat))
                 hotspot.center_long            = Decimal(str(center_long))
                 hotspot.radius_meters          = Decimal(str(eps_m))
@@ -1972,15 +1972,15 @@ def _create_geographic_hotspots(
                     for pt in cluster_pts
                 ) / incident_count
                 conf_n = _cluster_confidence(cluster_pts)
-                hotspot = Hotspot(
-                    center_lat=Decimal(str(center_lat)),
-                    center_long=Decimal(str(center_long)),
-                    radius_meters=Decimal(str(radius_meters)),
-                    incident_count=incident_count,
-                    risk_level=risk_level,
-                    time_window_hours=time_window_hours,
+            hotspot = Hotspot(
+                center_lat=Decimal(str(center_lat)),
+                center_long=Decimal(str(center_long)),
+                radius_meters=Decimal(str(radius_meters)),
+                incident_count=incident_count,
+                risk_level=risk_level,
+                time_window_hours=time_window_hours,
                     incident_type_id=noise_dominant_type_id,
-                    detected_at=datetime.now(timezone.utc),
+                detected_at=datetime.now(timezone.utc),
                     lifecycle_state=classification_result["classification"],
                     composition=json.dumps(noise_composition),
                     temporal_intensity=Decimal(str(round(t_intensity_n, 4))),
@@ -1989,14 +1989,14 @@ def _create_geographic_hotspots(
                     cluster_confidence=Decimal(str(conf_n)),
                     polygon_points=polygon_json,
                     crime_group=_get_crime_group(max(noise_composition, key=noise_composition.get) if noise_composition else ""),
-                )
-                db.add(hotspot)
-                db.flush()
-                created += 1
+            )
+            db.add(hotspot)
+            db.flush()
+            created += 1
                 noise_clusters_created += 1
                 for pt in cluster_pts:
-                    db.execute(
-                        text(
+            db.execute(
+                text(
                             "INSERT INTO hotspot_reports (hotspot_id, report_id, is_core) "
                             "VALUES (:hid, :rid, true) "
                             "ON CONFLICT (hotspot_id, report_id) DO UPDATE SET is_core = true"
