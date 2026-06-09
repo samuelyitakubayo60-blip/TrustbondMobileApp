@@ -18,35 +18,41 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
+-- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: pg_database_owner
 --
 
 COMMENT ON SCHEMA public IS '';
 
 
 --
--- Name: tiger; Type: SCHEMA; Schema: -; Owner: -
+-- Name: tiger; Type: SCHEMA; Schema: -; Owner: postgres
 --
 
 CREATE SCHEMA tiger;
 
 
+ALTER SCHEMA tiger OWNER TO postgres;
+
 --
--- Name: tiger_data; Type: SCHEMA; Schema: -; Owner: -
+-- Name: tiger_data; Type: SCHEMA; Schema: -; Owner: postgres
 --
 
 CREATE SCHEMA tiger_data;
 
 
+ALTER SCHEMA tiger_data OWNER TO postgres;
+
 --
--- Name: topology; Type: SCHEMA; Schema: -; Owner: -
+-- Name: topology; Type: SCHEMA; Schema: -; Owner: postgres
 --
 
 CREATE SCHEMA topology;
 
 
+ALTER SCHEMA topology OWNER TO postgres;
+
 --
--- Name: SCHEMA topology; Type: COMMENT; Schema: -; Owner: -
+-- Name: SCHEMA topology; Type: COMMENT; Schema: -; Owner: postgres
 --
 
 COMMENT ON SCHEMA topology IS 'PostGIS Topology schema';
@@ -60,7 +66,7 @@ CREATE EXTENSION IF NOT EXISTS fuzzystrmatch WITH SCHEMA public;
 
 
 --
--- Name: EXTENSION fuzzystrmatch; Type: COMMENT; Schema: -; Owner: -
+-- Name: EXTENSION fuzzystrmatch; Type: COMMENT; Schema: -; Owner: 
 --
 
 COMMENT ON EXTENSION fuzzystrmatch IS 'determine similarities and distance between strings';
@@ -74,7 +80,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 
 
 --
--- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: -
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: 
 --
 
 COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
@@ -88,7 +94,7 @@ CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
 
 
 --
--- Name: EXTENSION postgis; Type: COMMENT; Schema: -; Owner: -
+-- Name: EXTENSION postgis; Type: COMMENT; Schema: -; Owner: 
 --
 
 COMMENT ON EXTENSION postgis IS 'PostGIS geometry and geography spatial types and functions';
@@ -102,7 +108,7 @@ CREATE EXTENSION IF NOT EXISTS postgis_tiger_geocoder WITH SCHEMA tiger;
 
 
 --
--- Name: EXTENSION postgis_tiger_geocoder; Type: COMMENT; Schema: -; Owner: -
+-- Name: EXTENSION postgis_tiger_geocoder; Type: COMMENT; Schema: -; Owner: 
 --
 
 COMMENT ON EXTENSION postgis_tiger_geocoder IS 'PostGIS tiger geocoder and reverse geocoder';
@@ -116,14 +122,14 @@ CREATE EXTENSION IF NOT EXISTS postgis_topology WITH SCHEMA topology;
 
 
 --
--- Name: EXTENSION postgis_topology; Type: COMMENT; Schema: -; Owner: -
+-- Name: EXTENSION postgis_topology; Type: COMMENT; Schema: -; Owner: 
 --
 
 COMMENT ON EXTENSION postgis_topology IS 'PostGIS topology spatial types and functions';
 
 
 --
--- Name: assignment_status; Type: TYPE; Schema: public; Owner: -
+-- Name: assignment_status; Type: TYPE; Schema: public; Owner: postgres
 --
 
 CREATE TYPE public.assignment_status AS ENUM (
@@ -134,8 +140,10 @@ CREATE TYPE public.assignment_status AS ENUM (
 );
 
 
+ALTER TYPE public.assignment_status OWNER TO postgres;
+
 --
--- Name: evidence_quality; Type: TYPE; Schema: public; Owner: -
+-- Name: evidence_quality; Type: TYPE; Schema: public; Owner: postgres
 --
 
 CREATE TYPE public.evidence_quality AS ENUM (
@@ -146,8 +154,10 @@ CREATE TYPE public.evidence_quality AS ENUM (
 );
 
 
+ALTER TYPE public.evidence_quality OWNER TO postgres;
+
 --
--- Name: hotspot_risk; Type: TYPE; Schema: public; Owner: -
+-- Name: hotspot_risk; Type: TYPE; Schema: public; Owner: postgres
 --
 
 CREATE TYPE public.hotspot_risk AS ENUM (
@@ -158,8 +168,10 @@ CREATE TYPE public.hotspot_risk AS ENUM (
 );
 
 
+ALTER TYPE public.hotspot_risk OWNER TO postgres;
+
 --
--- Name: notification_type; Type: TYPE; Schema: public; Owner: -
+-- Name: notification_type; Type: TYPE; Schema: public; Owner: postgres
 --
 
 CREATE TYPE public.notification_type AS ENUM (
@@ -171,8 +183,10 @@ CREATE TYPE public.notification_type AS ENUM (
 );
 
 
+ALTER TYPE public.notification_type OWNER TO postgres;
+
 --
--- Name: report_priority; Type: TYPE; Schema: public; Owner: -
+-- Name: report_priority; Type: TYPE; Schema: public; Owner: postgres
 --
 
 CREATE TYPE public.report_priority AS ENUM (
@@ -183,8 +197,10 @@ CREATE TYPE public.report_priority AS ENUM (
 );
 
 
+ALTER TYPE public.report_priority OWNER TO postgres;
+
 --
--- Name: report_status; Type: TYPE; Schema: public; Owner: -
+-- Name: report_status; Type: TYPE; Schema: public; Owner: postgres
 --
 
 CREATE TYPE public.report_status AS ENUM (
@@ -195,8 +211,10 @@ CREATE TYPE public.report_status AS ENUM (
 );
 
 
+ALTER TYPE public.report_status OWNER TO postgres;
+
 --
--- Name: user_role; Type: TYPE; Schema: public; Owner: -
+-- Name: user_role; Type: TYPE; Schema: public; Owner: postgres
 --
 
 CREATE TYPE public.user_role AS ENUM (
@@ -207,8 +225,10 @@ CREATE TYPE public.user_role AS ENUM (
 );
 
 
+ALTER TYPE public.user_role OWNER TO postgres;
+
 --
--- Name: verification_status; Type: TYPE; Schema: public; Owner: -
+-- Name: verification_status; Type: TYPE; Schema: public; Owner: postgres
 --
 
 CREATE TYPE public.verification_status AS ENUM (
@@ -219,8 +239,10 @@ CREATE TYPE public.verification_status AS ENUM (
 );
 
 
+ALTER TYPE public.verification_status OWNER TO postgres;
+
 --
--- Name: update_device_trust(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: update_device_trust(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
 CREATE FUNCTION public.update_device_trust() RETURNS trigger
@@ -255,8 +277,10 @@ END;
 $$;
 
 
+ALTER FUNCTION public.update_device_trust() OWNER TO postgres;
+
 --
--- Name: update_updated_at_column(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: update_updated_at_column(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
 CREATE FUNCTION public.update_updated_at_column() RETURNS trigger
@@ -269,12 +293,14 @@ END;
 $$;
 
 
+ALTER FUNCTION public.update_updated_at_column() OWNER TO postgres;
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
 
 --
--- Name: alembic_version; Type: TABLE; Schema: public; Owner: -
+-- Name: alembic_version; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.alembic_version (
@@ -282,8 +308,10 @@ CREATE TABLE public.alembic_version (
 );
 
 
+ALTER TABLE public.alembic_version OWNER TO postgres;
+
 --
--- Name: audit_logs; Type: TABLE; Schema: public; Owner: -
+-- Name: audit_logs; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.audit_logs (
@@ -305,8 +333,10 @@ CREATE TABLE public.audit_logs (
 );
 
 
+ALTER TABLE public.audit_logs OWNER TO postgres;
+
 --
--- Name: audit_logs_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: audit_logs_log_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 ALTER TABLE public.audit_logs ALTER COLUMN log_id ADD GENERATED ALWAYS AS IDENTITY (
@@ -320,7 +350,7 @@ ALTER TABLE public.audit_logs ALTER COLUMN log_id ADD GENERATED ALWAYS AS IDENTI
 
 
 --
--- Name: case_reports; Type: TABLE; Schema: public; Owner: -
+-- Name: case_reports; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.case_reports (
@@ -331,8 +361,10 @@ CREATE TABLE public.case_reports (
 );
 
 
+ALTER TABLE public.case_reports OWNER TO postgres;
+
 --
--- Name: cases; Type: TABLE; Schema: public; Owner: -
+-- Name: cases; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.cases (
@@ -366,8 +398,58 @@ CREATE TABLE public.cases (
 );
 
 
+ALTER TABLE public.cases OWNER TO postgres;
+
 --
--- Name: devices; Type: TABLE; Schema: public; Owner: -
+-- Name: deployment_decisions; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.deployment_decisions (
+    decision_id integer NOT NULL,
+    report_id uuid NOT NULL,
+    case_id uuid,
+    decided_by integer NOT NULL,
+    deployment_status character varying(20) DEFAULT 'pending'::character varying,
+    assigned_unit character varying(80),
+    deployment_priority character varying(20) DEFAULT 'medium'::character varying,
+    decision_note text,
+    leader_confirmation_weight integer DEFAULT 0,
+    deployed_at timestamp with time zone,
+    estimated_arrival timestamp with time zone,
+    actual_arrival timestamp with time zone,
+    deployment_outcome character varying(50),
+    outcome_note text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.deployment_decisions OWNER TO postgres;
+
+--
+-- Name: deployment_decisions_decision_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.deployment_decisions_decision_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.deployment_decisions_decision_id_seq OWNER TO postgres;
+
+--
+-- Name: deployment_decisions_decision_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.deployment_decisions_decision_id_seq OWNED BY public.deployment_decisions.decision_id;
+
+
+--
+-- Name: devices; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.devices (
@@ -389,8 +471,10 @@ CREATE TABLE public.devices (
 );
 
 
+ALTER TABLE public.devices OWNER TO postgres;
+
 --
--- Name: evidence_files; Type: TABLE; Schema: public; Owner: -
+-- Name: evidence_files; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.evidence_files (
@@ -421,8 +505,10 @@ CREATE TABLE public.evidence_files (
 );
 
 
+ALTER TABLE public.evidence_files OWNER TO postgres;
+
 --
--- Name: hotspot_events; Type: TABLE; Schema: public; Owner: -
+-- Name: hotspot_events; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.hotspot_events (
@@ -438,8 +524,10 @@ CREATE TABLE public.hotspot_events (
 );
 
 
+ALTER TABLE public.hotspot_events OWNER TO postgres;
+
 --
--- Name: hotspot_events_event_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: hotspot_events_event_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 CREATE SEQUENCE public.hotspot_events_event_id_seq
@@ -451,15 +539,17 @@ CREATE SEQUENCE public.hotspot_events_event_id_seq
     CACHE 1;
 
 
+ALTER SEQUENCE public.hotspot_events_event_id_seq OWNER TO postgres;
+
 --
--- Name: hotspot_events_event_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: hotspot_events_event_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
 --
 
 ALTER SEQUENCE public.hotspot_events_event_id_seq OWNED BY public.hotspot_events.event_id;
 
 
 --
--- Name: hotspot_reports; Type: TABLE; Schema: public; Owner: -
+-- Name: hotspot_reports; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.hotspot_reports (
@@ -469,8 +559,10 @@ CREATE TABLE public.hotspot_reports (
 );
 
 
+ALTER TABLE public.hotspot_reports OWNER TO postgres;
+
 --
--- Name: hotspots; Type: TABLE; Schema: public; Owner: -
+-- Name: hotspots; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.hotspots (
@@ -522,8 +614,10 @@ CREATE TABLE public.hotspots (
 );
 
 
+ALTER TABLE public.hotspots OWNER TO postgres;
+
 --
--- Name: hotspots_hotspot_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: hotspots_hotspot_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 ALTER TABLE public.hotspots ALTER COLUMN hotspot_id ADD GENERATED ALWAYS AS IDENTITY (
@@ -537,7 +631,7 @@ ALTER TABLE public.hotspots ALTER COLUMN hotspot_id ADD GENERATED ALWAYS AS IDEN
 
 
 --
--- Name: incident_types; Type: TABLE; Schema: public; Owner: -
+-- Name: incident_types; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.incident_types (
@@ -548,12 +642,15 @@ CREATE TABLE public.incident_types (
     color_code character varying(7),
     is_active boolean DEFAULT true,
     created_at timestamp without time zone DEFAULT now(),
-    default_special_assignment_unit character varying(80)
+    default_special_assignment_unit character varying(80),
+    semantic_definition text
 );
 
 
+ALTER TABLE public.incident_types OWNER TO postgres;
+
 --
--- Name: incident_types_incident_type_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: incident_types_incident_type_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 ALTER TABLE public.incident_types ALTER COLUMN incident_type_id ADD GENERATED ALWAYS AS IDENTITY (
@@ -567,7 +664,7 @@ ALTER TABLE public.incident_types ALTER COLUMN incident_type_id ADD GENERATED AL
 
 
 --
--- Name: local_leader_auth_codes; Type: TABLE; Schema: public; Owner: -
+-- Name: local_leader_auth_codes; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.local_leader_auth_codes (
@@ -582,8 +679,10 @@ CREATE TABLE public.local_leader_auth_codes (
 );
 
 
+ALTER TABLE public.local_leader_auth_codes OWNER TO postgres;
+
 --
--- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 CREATE SEQUENCE public.local_leader_auth_codes_local_leader_auth_code_id_seq
@@ -595,15 +694,17 @@ CREATE SEQUENCE public.local_leader_auth_codes_local_leader_auth_code_id_seq
     CACHE 1;
 
 
+ALTER SEQUENCE public.local_leader_auth_codes_local_leader_auth_code_id_seq OWNER TO postgres;
+
 --
--- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
 --
 
 ALTER SEQUENCE public.local_leader_auth_codes_local_leader_auth_code_id_seq OWNED BY public.local_leader_auth_codes.local_leader_auth_code_id;
 
 
 --
--- Name: local_leader_coverage_locations; Type: TABLE; Schema: public; Owner: -
+-- Name: local_leader_coverage_locations; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.local_leader_coverage_locations (
@@ -613,8 +714,10 @@ CREATE TABLE public.local_leader_coverage_locations (
 );
 
 
+ALTER TABLE public.local_leader_coverage_locations OWNER TO postgres;
+
 --
--- Name: local_leader_coverage_locatio_local_leader_coverage_locatio_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: local_leader_coverage_locatio_local_leader_coverage_locatio_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 CREATE SEQUENCE public.local_leader_coverage_locatio_local_leader_coverage_locatio_seq
@@ -626,15 +729,17 @@ CREATE SEQUENCE public.local_leader_coverage_locatio_local_leader_coverage_locat
     CACHE 1;
 
 
+ALTER SEQUENCE public.local_leader_coverage_locatio_local_leader_coverage_locatio_seq OWNER TO postgres;
+
 --
--- Name: local_leader_coverage_locatio_local_leader_coverage_locatio_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: local_leader_coverage_locatio_local_leader_coverage_locatio_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
 --
 
 ALTER SEQUENCE public.local_leader_coverage_locatio_local_leader_coverage_locatio_seq OWNED BY public.local_leader_coverage_locations.local_leader_coverage_location_id;
 
 
 --
--- Name: local_leaders; Type: TABLE; Schema: public; Owner: -
+-- Name: local_leaders; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.local_leaders (
@@ -651,8 +756,10 @@ CREATE TABLE public.local_leaders (
 );
 
 
+ALTER TABLE public.local_leaders OWNER TO postgres;
+
 --
--- Name: local_leaders_local_leader_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: local_leaders_local_leader_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 CREATE SEQUENCE public.local_leaders_local_leader_id_seq
@@ -664,15 +771,17 @@ CREATE SEQUENCE public.local_leaders_local_leader_id_seq
     CACHE 1;
 
 
+ALTER SEQUENCE public.local_leaders_local_leader_id_seq OWNER TO postgres;
+
 --
--- Name: local_leaders_local_leader_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: local_leaders_local_leader_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
 --
 
 ALTER SEQUENCE public.local_leaders_local_leader_id_seq OWNED BY public.local_leaders.local_leader_id;
 
 
 --
--- Name: locations; Type: TABLE; Schema: public; Owner: -
+-- Name: locations; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.locations (
@@ -689,8 +798,10 @@ CREATE TABLE public.locations (
 );
 
 
+ALTER TABLE public.locations OWNER TO postgres;
+
 --
--- Name: locations_location_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: locations_location_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 ALTER TABLE public.locations ALTER COLUMN location_id ADD GENERATED ALWAYS AS IDENTITY (
@@ -704,7 +815,7 @@ ALTER TABLE public.locations ALTER COLUMN location_id ADD GENERATED ALWAYS AS ID
 
 
 --
--- Name: mfa_codes; Type: TABLE; Schema: public; Owner: -
+-- Name: mfa_codes; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.mfa_codes (
@@ -718,8 +829,10 @@ CREATE TABLE public.mfa_codes (
 );
 
 
+ALTER TABLE public.mfa_codes OWNER TO postgres;
+
 --
--- Name: mfa_codes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: mfa_codes_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 CREATE SEQUENCE public.mfa_codes_id_seq
@@ -731,15 +844,17 @@ CREATE SEQUENCE public.mfa_codes_id_seq
     CACHE 1;
 
 
+ALTER SEQUENCE public.mfa_codes_id_seq OWNER TO postgres;
+
 --
--- Name: mfa_codes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: mfa_codes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
 --
 
 ALTER SEQUENCE public.mfa_codes_id_seq OWNED BY public.mfa_codes.id;
 
 
 --
--- Name: ml_predictions; Type: TABLE; Schema: public; Owner: -
+-- Name: ml_predictions; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.ml_predictions (
@@ -758,8 +873,10 @@ CREATE TABLE public.ml_predictions (
 );
 
 
+ALTER TABLE public.ml_predictions OWNER TO postgres;
+
 --
--- Name: notifications; Type: TABLE; Schema: public; Owner: -
+-- Name: notifications; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.notifications (
@@ -779,8 +896,10 @@ CREATE TABLE public.notifications (
 );
 
 
+ALTER TABLE public.notifications OWNER TO postgres;
+
 --
--- Name: password_reset_codes; Type: TABLE; Schema: public; Owner: -
+-- Name: password_reset_codes; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.password_reset_codes (
@@ -792,8 +911,10 @@ CREATE TABLE public.password_reset_codes (
 );
 
 
+ALTER TABLE public.password_reset_codes OWNER TO postgres;
+
 --
--- Name: password_reset_codes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: password_reset_codes_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 CREATE SEQUENCE public.password_reset_codes_id_seq
@@ -805,15 +926,17 @@ CREATE SEQUENCE public.password_reset_codes_id_seq
     CACHE 1;
 
 
+ALTER SEQUENCE public.password_reset_codes_id_seq OWNER TO postgres;
+
 --
--- Name: password_reset_codes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: password_reset_codes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
 --
 
 ALTER SEQUENCE public.password_reset_codes_id_seq OWNED BY public.password_reset_codes.id;
 
 
 --
--- Name: police_users; Type: TABLE; Schema: public; Owner: -
+-- Name: police_users; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.police_users (
@@ -841,8 +964,10 @@ CREATE TABLE public.police_users (
 );
 
 
+ALTER TABLE public.police_users OWNER TO postgres;
+
 --
--- Name: police_users_police_user_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: police_users_police_user_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 ALTER TABLE public.police_users ALTER COLUMN police_user_id ADD GENERATED ALWAYS AS IDENTITY (
@@ -856,7 +981,7 @@ ALTER TABLE public.police_users ALTER COLUMN police_user_id ADD GENERATED ALWAYS
 
 
 --
--- Name: report_assignments; Type: TABLE; Schema: public; Owner: -
+-- Name: report_assignments; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.report_assignments (
@@ -871,8 +996,10 @@ CREATE TABLE public.report_assignments (
 );
 
 
+ALTER TABLE public.report_assignments OWNER TO postgres;
+
 --
--- Name: reports; Type: TABLE; Schema: public; Owner: -
+-- Name: reports; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.reports (
@@ -917,15 +1044,17 @@ CREATE TABLE public.reports (
 );
 
 
+ALTER TABLE public.reports OWNER TO postgres;
+
 --
--- Name: COLUMN reports.context_tags; Type: COMMENT; Schema: public; Owner: -
+-- Name: COLUMN reports.context_tags; Type: COMMENT; Schema: public; Owner: postgres
 --
 
 COMMENT ON COLUMN public.reports.context_tags IS 'Contextual tags from reporter (e.g. Night-time, Weapons involved, Multiple suspects).';
 
 
 --
--- Name: special_assignment_units; Type: TABLE; Schema: public; Owner: -
+-- Name: special_assignment_units; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.special_assignment_units (
@@ -941,8 +1070,10 @@ CREATE TABLE public.special_assignment_units (
 );
 
 
+ALTER TABLE public.special_assignment_units OWNER TO postgres;
+
 --
--- Name: special_assignment_units_unit_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: special_assignment_units_unit_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 CREATE SEQUENCE public.special_assignment_units_unit_id_seq
@@ -954,15 +1085,17 @@ CREATE SEQUENCE public.special_assignment_units_unit_id_seq
     CACHE 1;
 
 
+ALTER SEQUENCE public.special_assignment_units_unit_id_seq OWNER TO postgres;
+
 --
--- Name: special_assignment_units_unit_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: special_assignment_units_unit_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
 --
 
 ALTER SEQUENCE public.special_assignment_units_unit_id_seq OWNED BY public.special_assignment_units.unit_id;
 
 
 --
--- Name: station_coverage_cells; Type: TABLE; Schema: public; Owner: -
+-- Name: station_coverage_cells; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.station_coverage_cells (
@@ -972,8 +1105,10 @@ CREATE TABLE public.station_coverage_cells (
 );
 
 
+ALTER TABLE public.station_coverage_cells OWNER TO postgres;
+
 --
--- Name: station_coverage_cells_station_coverage_cell_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: station_coverage_cells_station_coverage_cell_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 CREATE SEQUENCE public.station_coverage_cells_station_coverage_cell_id_seq
@@ -985,15 +1120,17 @@ CREATE SEQUENCE public.station_coverage_cells_station_coverage_cell_id_seq
     CACHE 1;
 
 
+ALTER SEQUENCE public.station_coverage_cells_station_coverage_cell_id_seq OWNER TO postgres;
+
 --
--- Name: station_coverage_cells_station_coverage_cell_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: station_coverage_cells_station_coverage_cell_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
 --
 
 ALTER SEQUENCE public.station_coverage_cells_station_coverage_cell_id_seq OWNED BY public.station_coverage_cells.station_coverage_cell_id;
 
 
 --
--- Name: stations; Type: TABLE; Schema: public; Owner: -
+-- Name: stations; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.stations (
@@ -1013,8 +1150,10 @@ CREATE TABLE public.stations (
 );
 
 
+ALTER TABLE public.stations OWNER TO postgres;
+
 --
--- Name: stations_station_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: stations_station_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
 ALTER TABLE public.stations ALTER COLUMN station_id ADD GENERATED ALWAYS AS IDENTITY (
@@ -1028,7 +1167,7 @@ ALTER TABLE public.stations ALTER COLUMN station_id ADD GENERATED ALWAYS AS IDEN
 
 
 --
--- Name: system_config; Type: TABLE; Schema: public; Owner: -
+-- Name: system_config; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.system_config (
@@ -1040,8 +1179,10 @@ CREATE TABLE public.system_config (
 );
 
 
+ALTER TABLE public.system_config OWNER TO postgres;
+
 --
--- Name: user_sessions; Type: TABLE; Schema: public; Owner: -
+-- Name: user_sessions; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.user_sessions (
@@ -1056,64 +1197,73 @@ CREATE TABLE public.user_sessions (
 );
 
 
+ALTER TABLE public.user_sessions OWNER TO postgres;
+
 --
--- Name: hotspot_events event_id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: deployment_decisions decision_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.deployment_decisions ALTER COLUMN decision_id SET DEFAULT nextval('public.deployment_decisions_decision_id_seq'::regclass);
+
+
+--
+-- Name: hotspot_events event_id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.hotspot_events ALTER COLUMN event_id SET DEFAULT nextval('public.hotspot_events_event_id_seq'::regclass);
 
 
 --
--- Name: local_leader_auth_codes local_leader_auth_code_id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: local_leader_auth_codes local_leader_auth_code_id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.local_leader_auth_codes ALTER COLUMN local_leader_auth_code_id SET DEFAULT nextval('public.local_leader_auth_codes_local_leader_auth_code_id_seq'::regclass);
 
 
 --
--- Name: local_leader_coverage_locations local_leader_coverage_location_id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: local_leader_coverage_locations local_leader_coverage_location_id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.local_leader_coverage_locations ALTER COLUMN local_leader_coverage_location_id SET DEFAULT nextval('public.local_leader_coverage_locatio_local_leader_coverage_locatio_seq'::regclass);
 
 
 --
--- Name: local_leaders local_leader_id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: local_leaders local_leader_id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.local_leaders ALTER COLUMN local_leader_id SET DEFAULT nextval('public.local_leaders_local_leader_id_seq'::regclass);
 
 
 --
--- Name: mfa_codes id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: mfa_codes id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.mfa_codes ALTER COLUMN id SET DEFAULT nextval('public.mfa_codes_id_seq'::regclass);
 
 
 --
--- Name: password_reset_codes id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: password_reset_codes id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.password_reset_codes ALTER COLUMN id SET DEFAULT nextval('public.password_reset_codes_id_seq'::regclass);
 
 
 --
--- Name: special_assignment_units unit_id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: special_assignment_units unit_id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.special_assignment_units ALTER COLUMN unit_id SET DEFAULT nextval('public.special_assignment_units_unit_id_seq'::regclass);
 
 
 --
--- Name: station_coverage_cells station_coverage_cell_id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: station_coverage_cells station_coverage_cell_id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.station_coverage_cells ALTER COLUMN station_coverage_cell_id SET DEFAULT nextval('public.station_coverage_cells_station_coverage_cell_id_seq'::regclass);
 
 
 --
--- Data for Name: alembic_version; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: alembic_version; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.alembic_version (version_num) FROM stdin;
@@ -1122,7 +1272,7 @@ add_mfa_fields
 
 
 --
--- Data for Name: audit_logs; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: audit_logs; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.audit_logs (log_id, actor_type, actor_id, action_type, entity_type, entity_id, action_details, ip_address, user_agent, success, created_at, actor_role, masked_details, sensitivity_level) FROM stdin;
@@ -1158,7 +1308,7 @@ COPY public.audit_logs (log_id, actor_type, actor_id, action_type, entity_type, 
 
 
 --
--- Data for Name: case_reports; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: case_reports; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.case_reports (case_id, report_id, added_at, added_by) FROM stdin;
@@ -1792,11 +1942,17 @@ d37da893-e5d9-4ece-8202-3387e6d230cc	c0ce1e8d-7ce5-4bde-a21b-f8412a211952	2026-0
 10408c4e-1a21-4fd1-a113-c44bad6377e4	56c47cf5-7963-4dd2-9628-a80b935e9c54	2026-05-30 22:45:02.868908	\N
 fa69bbc6-6b65-430e-a0e7-8ccebe407e3c	83dd5e3d-62e2-42ef-87a6-63882807a01e	2026-05-14 06:38:59.378653	\N
 fa69bbc6-6b65-430e-a0e7-8ccebe407e3c	e0920867-0baa-4fb3-b08a-892ee9682e78	2026-05-14 06:38:59.378653	\N
+1c3ab7d7-7c90-45e6-8e61-cfdb2a1409c6	dd934d50-7483-4c5d-99c7-85a0f851060a	2026-06-09 14:15:27.610117	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	897e4525-7d74-4f5f-af23-b482ba7ab7fa	2026-06-09 14:15:34.435063	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	ec1828e4-b9d2-4929-807f-7e6d49151e76	2026-06-09 14:15:41.447984	\N
+9c918772-0b74-495c-95d8-7f9bf8355372	38d4dc5c-c264-4d61-8bd6-daab91c4475b	2026-06-09 14:15:47.998737	\N
+82576c48-a5a5-4e75-a277-26185fbfebf1	12f5fba7-cc38-435b-8628-d4bb94b70407	2026-06-09 14:15:55.937409	\N
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	94f06a22-f514-40d2-bf20-f1aff0768874	2026-06-09 14:16:37.081947	\N
 \.
 
 
 --
--- Data for Name: cases; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: cases; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.cases (case_id, case_number, title, description, incident_type_id, priority, status, assigned_to, assigned_by, created_by, created_at, updated_at, closed_at, closure_notes, latitude, longitude, location_id, report_count, assigned_to_id, opened_at, outcome, special_assignment_unit, rib_handed_over_at, rib_handover_summary, rib_handover_prerequisites_acknowledged, station_id) FROM stdin;
@@ -1812,21 +1968,19 @@ COPY public.cases (case_id, case_number, title, description, incident_type_id, p
 784a5ce8-2f89-461d-81fb-236889cc9205	CASE-2026-0025	Theft cluster in area	Multiple theft incidents reported in this area. 4 verified reports require coordinated investigation.	1	medium	open	\N	\N	1	2026-06-02 19:44:43.512821	2026-06-02 19:52:18.706504	\N	\N	-1.4669073	29.6849731	120	4	28	2026-05-26 04:46:31.820231+00	\N	\N	\N	\N	f	9
 7ec00289-6073-4641-93e9-80f5a99bc42d	CASE-2026-0026	Assault cluster in area	Multiple assault incidents reported in this area. 3 verified reports require coordinated investigation.	2	medium	open	\N	\N	1	2026-06-02 19:44:43.512821	2026-06-02 19:52:18.706504	\N	\N	-1.4665916	29.6842745	120	3	29	2026-05-30 10:01:10.97413+00	\N	\N	\N	\N	f	9
 8015b99c-9c40-41ab-81f0-9c10f50dc290	CASE-2026-0064	Vandalism cluster in area	Multiple vandalism incidents reported in this area. 3 verified reports require coordinated investigation.	3	low	open	\N	\N	26	2026-06-02 19:44:43.512821	2026-06-02 19:52:18.706504	\N	\N	-1.4464795	29.5373700	236	3	29	2026-05-26 09:22:36.796259+00	\N	\N	\N	\N	f	9
-1c3ab7d7-7c90-45e6-8e61-cfdb2a1409c6	CASE-2026-0086	Drug Activity cluster in area	Multiple drug activity incidents reported in this area. 2 verified reports require coordinated investigation.	6	high	open	\N	\N	1	2026-06-02 19:44:43.512821	2026-06-02 19:52:28.422107	\N	\N	-1.5718090	29.6370322	357	6	28	2026-05-10 23:11:17.164234+00	\N	\N	\N	\N	f	8
 564628a5-d063-40c4-8ab5-7be4cd137e47	CASE-2026-0057	Harassment cluster in area	Multiple harassment incidents reported in this area. 2 verified reports require coordinated investigation.	8	urgent	open	\N	\N	1	2026-06-02 19:44:43.512821	2026-06-02 19:52:28.331139	\N	\N	-1.4452542	29.6478599	409	9	29	2026-04-26 13:25:18.71045+00	\N	\N	\N	\N	f	9
 16b83733-ed25-471b-9f40-248e4749528a	CASE-2026-0022	Domestic Violence cluster in area	Multiple domestic violence incidents reported in this area. 4 verified reports require coordinated investigation.	5	high	open	\N	\N	26	2026-06-02 19:44:43.512821	2026-06-02 19:52:28.415397	\N	\N	-1.5958663	29.6631161	459	42	28	2026-05-25 06:00:19.441315+00	\N	\N	\N	\N	f	8
-9c918772-0b74-495c-95d8-7f9bf8355372	CASE-2026-0006	Theft Cases	Consolidated case for Theft incidents. Currently tracking 23 verified report(s). New reports of the same type will be added automatically.	1	high	open	\N	\N	1	2026-05-19 12:56:05.118325	2026-06-02 19:52:28.377594	\N	\N	-1.4604368	29.5931478	231	67	6	2026-05-19 12:56:01.245098+00	\N	\N	\N	\N	f	9
-82576c48-a5a5-4e75-a277-26185fbfebf1	CASE-2026-0037	Fraud/Scam cluster in area	Multiple fraud/scam incidents reported in this area. 2 verified reports require coordinated investigation.	7	high	open	\N	\N	7	2026-06-02 19:44:43.512821	2026-06-02 19:52:28.359828	\N	\N	-1.5371994	29.5358902	196	31	29	2026-05-04 02:56:20.475301+00	\N	\N	\N	\N	f	8
 d466c90b-c1e2-490f-95d6-1c0354a12550	CASE-2026-0004	Vandalism Cases	Consolidated case for Vandalism incidents. Currently tracking 19 verified report(s). New reports of the same type will be added automatically.	3	high	open	\N	\N	1	2026-05-19 12:55:55.888203	2026-06-02 19:52:28.429104	\N	\N	-1.4827577	29.6342529	133	43	28	2026-05-19 12:55:52.846701+00	\N	\N	\N	\N	f	9
 27316bb4-2d1f-45c9-a044-0e57c3a4f40d	CASE-2026-0003	Traffic Incident Cases	Consolidated case for Traffic Incident incidents. Currently tracking 31 verified report(s). New reports of the same type will be added automatically.	9	high	open	\N	\N	1	2026-05-19 12:55:49.518321	2026-06-02 19:52:28.35054	\N	\N	-1.4790771	29.6225916	292	50	6	2026-05-19 12:55:46.602748+00	\N	\N	\N	\N	f	8
 4fa86eb3-9217-4da5-bafe-f81fabb13c5c	CASE-2026-0059	Suspicious Activity cluster in area	Multiple suspicious activity incidents reported in this area. 6 verified reports require coordinated investigation.	4	low	open	\N	\N	1	2026-06-02 19:44:43.512821	2026-06-02 19:52:28.392224	\N	\N	-1.4480583	29.6489132	409	25	29	2026-06-01 22:15:11.088129+00	\N	\N	\N	\N	f	9
 63dfd892-31d9-4551-8ebd-e2e4264abb05	CASE-2026-0073	Drug Activity cluster in area	Multiple drug activity incidents reported in this area. 3 verified reports require coordinated investigation.	6	high	open	\N	\N	1	2026-06-02 19:44:43.512821	2026-06-02 19:52:26.991397	\N	\N	-1.5655048	29.6153220	382	5	28	2026-05-19 06:47:32.729896+00	\N	\N	\N	\N	f	8
-12492d52-ceb4-40b7-8fca-c1a9d9f46780	CASE-2026-0007	Assault Cases	Consolidated case for Assault incidents. Currently tracking 19 verified report(s). New reports of the same type will be added automatically.	2	high	open	\N	\N	1	2026-05-19 12:56:07.332738	2026-06-02 19:52:28.408164	\N	\N	-1.4618780	29.5914127	241	32	6	2026-05-19 12:56:04.130543+00	\N	\N	\N	\N	f	9
 5a50f99d-0a5b-40ed-9c99-f3a8d9c992fd	CASE-2026-0069	Harassment cluster in area	Multiple harassment incidents reported in this area. 2 verified reports require coordinated investigation.	8	high	open	\N	\N	26	2026-06-02 19:44:43.512821	2026-06-02 19:52:27.448818	\N	\N	-1.4863819	29.6313708	127	6	28	2026-05-26 06:37:40.665297+00	\N	\N	\N	\N	f	9
 0bce2205-5b7a-4344-85c4-9469e03e75b5	CASE-2026-0065	Suspicious Activity cluster in area	Multiple suspicious activity incidents reported in this area. 6 verified reports require coordinated investigation.	4	high	open	\N	\N	1	2026-06-02 19:44:43.512821	2026-06-02 19:52:28.059958	\N	\N	-1.4540783	29.5316194	236	23	29	2026-05-31 20:51:27.778121+00	\N	\N	\N	\N	f	9
 6e679eff-1e11-48bb-84d3-731733b8aac0	CASE-2026-0042	Suspicious Activity cluster in area	Multiple suspicious activity incidents reported in this area. 3 verified reports require coordinated investigation.	4	high	open	\N	\N	1	2026-06-02 19:44:43.512821	2026-06-02 19:52:27.344582	\N	\N	-1.5814198	29.6275729	365	11	29	2026-05-30 23:49:36.277511+00	\N	\N	\N	\N	f	8
 467f2158-7997-4e34-b5a9-06b135464dd0	CASE-2026-0012	Drug Activity cluster in area	Multiple drug activity incidents reported in this area. 4 verified reports require coordinated investigation.	6	high	open	\N	\N	26	2026-06-02 19:44:43.512821	2026-06-02 19:52:28.233774	\N	\N	-1.4181729	29.6198756	426	13	28	2026-05-21 22:07:31.709119+00	\N	\N	\N	\N	f	9
 8be8cdef-2287-4642-ba96-8bb9c3c59408	CASE-2026-0020	Suspicious Activity cluster in area	Multiple suspicious activity incidents reported in this area. 2 verified reports require coordinated investigation.	4	urgent	open	\N	\N	26	2026-06-02 19:44:43.512821	2026-06-02 19:52:18.706504	\N	\N	-1.5976846	29.6638141	459	2	29	2026-05-21 00:51:29.959175+00	\N	\N	\N	\N	f	8
+82576c48-a5a5-4e75-a277-26185fbfebf1	CASE-2026-0037	Fraud/Scam cluster in area	Multiple fraud/scam incidents reported in this area. 2 verified reports require coordinated investigation.	7	high	open	\N	\N	7	2026-06-02 19:44:43.512821	2026-06-09 14:15:55.940098	\N	\N	-1.5371994	29.5358902	196	32	29	2026-05-04 02:56:20.475301+00	\N	\N	\N	\N	f	8
+12492d52-ceb4-40b7-8fca-c1a9d9f46780	CASE-2026-0007	Assault Cases	Consolidated case for Assault incidents. Currently tracking 19 verified report(s). New reports of the same type will be added automatically.	2	high	open	\N	\N	1	2026-05-19 12:56:07.332738	2026-06-09 14:16:37.083105	\N	\N	-1.4618780	29.5914127	241	33	6	2026-05-19 12:56:04.130543+00	\N	\N	\N	\N	f	9
 8ff332c6-6052-48b3-bdfd-663e6ece5555	CASE-2026-0052	Traffic Incident cluster in area	Multiple traffic incident incidents reported in this area. 2 verified reports require coordinated investigation.	9	high	open	\N	\N	7	2026-06-02 19:44:43.512821	2026-06-02 19:52:18.706504	\N	\N	-1.5887779	29.6712926	461	2	29	2026-05-01 16:19:59.568267+00	\N	\N	\N	\N	f	8
 9321c529-6d64-4ffd-b9b7-dd1c142ef918	CASE-2026-0058	Vandalism cluster in area	Multiple vandalism incidents reported in this area. 4 verified reports require coordinated investigation.	3	low	investigating	\N	\N	1	2026-06-02 19:44:43.512821	2026-06-02 19:52:18.706504	\N	\N	-1.4457952	29.6478918	409	4	29	2026-05-29 07:28:22.230074+00	\N	\N	\N	\N	f	9
 953f6e5f-e083-4e55-944f-a3e1ff830fc9	CASE-2026-0034	Vandalism cluster in area	Multiple vandalism incidents reported in this area. 3 verified reports require coordinated investigation.	3	urgent	open	\N	\N	26	2026-06-02 19:44:43.512821	2026-06-02 19:52:18.706504	\N	\N	-1.4584106	29.6509874	130	3	28	2026-06-01 02:58:47.831027+00	\N	\N	\N	\N	f	9
@@ -1905,11 +2059,21 @@ fa69bbc6-6b65-430e-a0e7-8ccebe407e3c	CASE-2026-0108	Domestic Violence cluster in
 a07cfc48-7ce0-4e42-ade8-8c0f4a23082b	CASE-2026-0093	Traffic Incident cluster in area	Multiple traffic incident incidents reported in this area. 2 verified reports require coordinated investigation.	9	medium	open	\N	\N	1	2026-06-02 19:44:43.512821	2026-06-02 19:52:18.706504	\N	\N	-1.5511430	29.6273667	298	2	29	2026-05-29 20:04:24.539592+00	\N	\N	\N	\N	f	8
 a1c5848b-3860-48b0-a16f-138a1db78165	CASE-2026-0104	Vandalism cluster in area	Multiple vandalism incidents reported in this area. 2 verified reports require coordinated investigation.	3	urgent	investigating	\N	\N	26	2026-06-02 19:44:43.512821	2026-06-02 19:52:18.706504	\N	\N	-1.5547482	29.6833630	467	2	29	2026-05-29 02:26:24.474396+00	\N	\N	\N	\N	f	8
 d37da893-e5d9-4ece-8202-3387e6d230cc	CASE-2026-0106	Suspicious Activity cluster in area	Multiple suspicious activity incidents reported in this area. 2 verified reports require coordinated investigation.	4	medium	open	\N	\N	1	2026-06-02 19:44:43.512821	2026-06-02 19:52:18.706504	\N	\N	-1.4672096	29.5177342	229	2	28	2026-05-28 22:25:02.338586+00	\N	\N	\N	\N	f	9
+1c3ab7d7-7c90-45e6-8e61-cfdb2a1409c6	CASE-2026-0086	Drug Activity cluster in area	Multiple drug activity incidents reported in this area. 2 verified reports require coordinated investigation.	6	high	open	\N	\N	1	2026-06-02 19:44:43.512821	2026-06-09 14:15:27.610914	\N	\N	-1.5718090	29.6370322	357	7	28	2026-05-10 23:11:17.164234+00	\N	\N	\N	\N	f	8
+9c918772-0b74-495c-95d8-7f9bf8355372	CASE-2026-0006	Theft Cases	Consolidated case for Theft incidents. Currently tracking 23 verified report(s). New reports of the same type will be added automatically.	1	high	open	\N	\N	1	2026-05-19 12:56:05.118325	2026-06-09 14:15:48.002899	\N	\N	-1.4604368	29.5931478	231	70	6	2026-05-19 12:56:01.245098+00	\N	\N	\N	\N	f	9
 \.
 
 
 --
--- Data for Name: devices; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: deployment_decisions; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.deployment_decisions (decision_id, report_id, case_id, decided_by, deployment_status, assigned_unit, deployment_priority, decision_note, leader_confirmation_weight, deployed_at, estimated_arrival, actual_arrival, deployment_outcome, outcome_note, created_at, updated_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: devices; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.devices (device_id, device_hash, first_seen_at, last_seen_at, total_reports, trusted_reports, flagged_reports, spam_flags, device_trust_score, is_blacklisted, blacklist_reason, metadata, is_banned, mobile_token, sector_location_id) FROM stdin;
@@ -2300,11 +2464,23 @@ a9efb216-4a80-41a3-863f-e81ff5d9d04c	a7b06d625b284dd80c55534061ae804d0ff2f73c6ec
 f787643d-c308-4b41-bb91-edd4f10476ca	ec42e27339d8fd723c10fa63dfcefa1c267ad0950a8ae55a790c12574eae7059	2026-05-05 19:41:42.905031	2026-06-02 19:41:42.854428	5	5	0	0	72.50	f	\N	\N	f	\N	\N
 b73bf72b-bab8-43b2-a885-e99c0d33bb36	4781446f133561c60eaaa48a054e138d911d6b8b099566bd8c58c7c8548a4938	2026-05-05 19:41:42.898052	2026-06-02 19:41:42.854428	6	6	0	0	73.00	f	\N	\N	f	\N	\N
 527c6289-b1ab-410c-9341-679d79f10fb6	a41b56de614fd84183c92affe0b074fe4cfcf2779eb93d37b7bb002a4828fd74	2026-04-25 19:41:42.903519	2026-06-02 19:41:42.854428	6	3	0	0	38.00	f	\N	\N	f	\N	\N
+3cbee79c-ff3c-46ed-aee2-4dc05e1eff09	05ac079e8e3e6fb433e75e996c59f9df57858ebb543b9eaa8820f81eb17678c1	2026-06-09 14:15:13.154689	2026-06-09 14:16:37.376021	2	0	0	0	1.00	f	\N	\N	f	\N	\N
+bd349b28-3509-43cf-ad5f-8f22a46bb6df	9f6efb10aaad780eb21caadb0818063ff557fc0f0f528b9e19aadbc943bd8c28	2026-06-09 14:15:21.61542	2026-06-09 14:15:21.61542	1	1	0	0	70.50	f	\N	\N	f	\N	\N
+93e1b197-7a9b-4e00-9940-af3a510a5b3e	2884389ff2556758a07f217c3964a607468d23b85f4ff336956e9546d97834a9	2026-06-09 14:16:13.530726	2026-06-09 14:16:13.530726	1	0	0	0	0.50	f	\N	\N	f	\N	\N
+73bcd95b-5b70-456f-aa48-f9e0a01f2548	1506662e77cb4854cbeb65786b28c95ecca132bad6b780a4f6b991f8bc4a2e4f	2026-06-09 14:16:22.358941	2026-06-09 14:16:22.358941	1	0	0	0	0.50	f	\N	\N	f	\N	\N
+e578c96c-0829-4fc5-817b-33f2dcd19f5b	b53be45adaf260618e727246bce8dd5590dc33900e81de6758a439bb64d9ac9c	2026-06-09 14:15:27.936904	2026-06-09 14:15:27.936904	1	1	0	0	70.50	f	\N	\N	f	\N	\N
+b2c6d604-15aa-4259-a1cb-1ecbf7de5552	b014591d00594b32e092b49fb6466d10d8b38dccadb7f176b4267305d3db1c52	2026-06-09 14:15:34.743167	2026-06-09 14:15:34.743167	1	1	0	0	70.50	f	\N	\N	f	\N	\N
+7e5c39c5-20a0-41bf-9d97-5f1ff1bdf14a	75e636d5ef4e7fda531d4a1fe0281e4ed9e24443c009f33cacc97e9c4a31dea5	2026-06-09 14:15:41.765725	2026-06-09 14:15:41.765725	1	1	0	0	70.50	f	\N	\N	f	\N	\N
+a89b2301-880e-45b5-a1a4-27631718c36c	c995263751d3756c05e57b72d3ccbcb87af636994af04ba508e51c2aeaaa638b	2026-06-09 14:16:30.827865	2026-06-09 14:16:30.827865	1	1	0	0	70.50	f	\N	\N	f	\N	\N
+733f183f-778c-4d5e-b2a1-2a3ada3ebb3e	dace2dc639363c4d7831802b8081d4e93b01eb373fb086df255229a8d90d2779	2026-06-09 14:15:48.335592	2026-06-09 14:15:48.335592	1	1	0	0	70.50	f	\N	\N	f	\N	\N
+b1f8c81f-4ec4-48ec-b9e1-9852683a4719	4458fd8afeb524e23e5ed6774e22cb0784efe2ac232d4891869be91f6c779378	2026-06-09 14:16:00.637256	2026-06-09 14:16:00.637256	1	0	0	0	0.50	f	\N	\N	f	\N	\N
+35d1a0ae-bdb3-4a28-9e44-a89a91ab429a	4ddd8361262633c1f20a24ced51353ff076879d812861ffff3416e5bc4463a6b	2026-06-09 14:16:07.558444	2026-06-09 14:16:07.558444	1	0	0	0	0.50	f	\N	\N	f	\N	\N
+32682c82-108f-420b-8f37-2a1ba1270845	ac7da724f44e499ca185e189ea3af1e9a397aebef4081b90acd76c0532df54d1	2026-06-09 14:16:43.714535	2026-06-09 14:16:43.714535	1	0	0	0	0.50	f	\N	\N	f	\N	\N
 \.
 
 
 --
--- Data for Name: evidence_files; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: evidence_files; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.evidence_files (evidence_id, report_id, file_url, file_type, file_size, duration, media_latitude, media_longitude, captured_at, uploaded_at, is_live_capture, perceptual_hash, blur_score, tamper_score, quality_label, ai_checked_at, cloudinary_public_id, cloudinary_url, ground_truth_label, evidence_verified_by, evidence_verified_at, verification_confidence, used_for_evidence_training) FROM stdin;
@@ -2313,313 +2489,48 @@ COPY public.evidence_files (evidence_id, report_id, file_url, file_type, file_si
 
 
 --
--- Data for Name: hotspot_events; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: hotspot_events; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.hotspot_events (event_id, hotspot_id, event_type, previous_state, new_state, event_data, created_at, created_by_user_id, note) FROM stdin;
-726	766	created	\N	emerging	{"incident_count": 8, "group": "mixed", "corroboration_score": 0.8312, "anomaly_score": 0.0, "unique_reporters": 8, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-727	767	created	\N	emerging	{"incident_count": 5, "group": "mixed", "corroboration_score": 0.7551, "anomaly_score": 0.0, "unique_reporters": 5, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-729	769	created	\N	emerging	{"incident_count": 4, "group": "mixed", "corroboration_score": 0.7519, "anomaly_score": 0.0, "unique_reporters": 4, "predicted_next_state": "declining"}	2026-06-03 11:24:00.376548+00	\N	\N
-731	771	created	\N	emerging	{"incident_count": 4, "group": "mixed", "corroboration_score": 0.7536, "anomaly_score": 0.0, "unique_reporters": 4, "predicted_next_state": "escalating"}	2026-06-03 11:24:00.376548+00	\N	\N
-733	773	created	\N	emerging	{"incident_count": 6, "group": "mixed", "corroboration_score": 0.7505, "anomaly_score": 0.0, "unique_reporters": 6, "predicted_next_state": "escalating"}	2026-06-03 11:24:00.376548+00	\N	\N
-735	775	created	\N	emerging	{"incident_count": 5, "group": "mixed", "corroboration_score": 0.9142, "anomaly_score": 0.0, "unique_reporters": 5, "predicted_next_state": "escalating"}	2026-06-03 11:24:00.376548+00	\N	\N
-737	777	created	\N	emerging	{"incident_count": 5, "group": "mixed", "corroboration_score": 0.7435, "anomaly_score": 0.0, "unique_reporters": 5, "predicted_next_state": "escalating"}	2026-06-03 11:24:00.376548+00	\N	\N
-739	779	created	\N	emerging	{"incident_count": 13, "group": "mixed", "corroboration_score": 0.957, "anomaly_score": 0.0, "unique_reporters": 13, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-740	780	created	\N	emerging	{"incident_count": 5, "group": "mixed", "corroboration_score": 0.8741, "anomaly_score": 0.0, "unique_reporters": 5, "predicted_next_state": "escalating"}	2026-06-03 11:24:00.376548+00	\N	\N
-743	783	created	\N	emerging	{"incident_count": 9, "group": "mixed", "corroboration_score": 0.8869, "anomaly_score": 0.0, "unique_reporters": 9, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-744	784	created	\N	emerging	{"incident_count": 25, "group": "mixed", "corroboration_score": 0.9306, "anomaly_score": 0.0, "unique_reporters": 25, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-746	786	created	\N	emerging	{"incident_count": 2, "group": "mixed", "corroboration_score": 0.7407, "anomaly_score": 0.0, "unique_reporters": 2, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-748	788	created	\N	emerging	{"incident_count": 2, "group": "mixed", "corroboration_score": 0.75, "anomaly_score": 0.0, "unique_reporters": 2, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-750	790	created	\N	emerging	{"incident_count": 8, "group": "mixed", "corroboration_score": 0.9627, "anomaly_score": 0.0, "unique_reporters": 8, "predicted_next_state": "declining"}	2026-06-03 11:24:00.376548+00	\N	\N
-751	791	created	\N	emerging	{"incident_count": 2, "group": "mixed", "corroboration_score": 0.75, "anomaly_score": 0.0, "unique_reporters": 2, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-753	793	created	\N	emerging	{"incident_count": 2, "group": "mixed", "corroboration_score": 0.7497, "anomaly_score": 0.0, "unique_reporters": 2, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-755	773	prediction_verified	emerging	emerging	{"predicted": "escalating", "actual": "emerging", "accurate": false}	2026-06-03 11:24:00.376548+00	\N	\N
-756	773	updated	emerging	emerging	{"incident_count": 3, "trend": "stable"}	2026-06-03 11:24:00.376548+00	\N	\N
-758	796	created	\N	emerging	{"incident_count": 9, "group": "mixed", "corroboration_score": 0.9151, "anomaly_score": 0.0, "unique_reporters": 9, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-760	798	created	\N	emerging	{"incident_count": 6, "group": "mixed", "corroboration_score": 0.9902, "anomaly_score": 0.0, "unique_reporters": 6, "predicted_next_state": "escalating"}	2026-06-03 11:24:00.376548+00	\N	\N
-762	800	created	\N	emerging	{"incident_count": 6, "group": "mixed", "corroboration_score": 0.9827, "anomaly_score": 0.0, "unique_reporters": 6, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-764	779	prediction_verified	emerging	emerging	{"predicted": "active", "actual": "emerging", "accurate": false}	2026-06-03 11:24:00.376548+00	\N	\N
-765	779	updated	emerging	emerging	{"incident_count": 4, "trend": "stable"}	2026-06-03 11:24:00.376548+00	\N	\N
-767	803	created	\N	emerging	{"incident_count": 13, "group": "mixed", "corroboration_score": 0.9524, "anomaly_score": 0.0, "unique_reporters": 13, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-769	805	created	\N	emerging	{"incident_count": 9, "group": "mixed", "corroboration_score": 0.9338, "anomaly_score": 0.0, "unique_reporters": 9, "predicted_next_state": "escalating"}	2026-06-03 11:24:00.376548+00	\N	\N
-771	807	created	\N	emerging	{"incident_count": 10, "group": "mixed", "corroboration_score": 0.9083, "anomaly_score": 0.0, "unique_reporters": 10, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-773	780	prediction_verified	emerging	emerging	{"predicted": "escalating", "actual": "emerging", "accurate": false}	2026-06-03 11:24:00.376548+00	\N	\N
-774	780	updated	emerging	emerging	{"incident_count": 5, "trend": "rising"}	2026-06-03 11:24:00.376548+00	\N	\N
-776	810	created	\N	emerging	{"incident_count": 9, "group": "mixed", "corroboration_score": 0.9212, "anomaly_score": 0.0, "unique_reporters": 9, "predicted_next_state": "declining"}	2026-06-03 11:24:00.376548+00	\N	\N
-778	800	prediction_verified	emerging	emerging	{"predicted": "active", "actual": "emerging", "accurate": false}	2026-06-03 11:24:00.376548+00	\N	\N
-779	800	updated	emerging	emerging	{"incident_count": 5, "trend": "stable"}	2026-06-03 11:24:00.376548+00	\N	\N
-781	783	prediction_verified	emerging	emerging	{"predicted": "active", "actual": "emerging", "accurate": false}	2026-06-03 11:24:00.376548+00	\N	\N
-782	783	updated	emerging	emerging	{"incident_count": 6, "trend": "rising"}	2026-06-03 11:24:00.376548+00	\N	\N
-784	814	created	\N	emerging	{"incident_count": 4, "group": "mixed", "corroboration_score": 0.8956, "anomaly_score": 0.0, "unique_reporters": 4, "predicted_next_state": "escalating"}	2026-06-03 11:24:00.376548+00	\N	\N
-786	816	created	\N	emerging	{"incident_count": 3, "group": "mixed", "corroboration_score": 0.8256, "anomaly_score": 0.0, "unique_reporters": 3, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-788	818	created	\N	emerging	{"incident_count": 3, "group": "mixed", "corroboration_score": 0.7971, "anomaly_score": 0.0, "unique_reporters": 3, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
-789	819	created	\N	emerging	{"incident_count": 2, "group": "mixed", "corroboration_score": 0.7244, "anomaly_score": 0.0, "unique_reporters": 2, "predicted_next_state": "active"}	2026-06-03 11:24:00.376548+00	\N	\N
 \.
 
 
 --
--- Data for Name: hotspot_reports; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: hotspot_reports; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.hotspot_reports (hotspot_id, report_id, is_core) FROM stdin;
-766	a278c066-a5dd-43bb-9d20-4ed14f0c8dce	f
-766	6a9b8e8b-3409-4dc1-829c-1fa62c5d3e93	f
-766	5ba5d790-9984-473d-b123-128c4c404913	t
-766	2e717511-2176-4ee5-b756-b1b847c639c9	t
-766	fade6b34-7576-44aa-b1aa-c3dc755c2448	t
-766	410f4d8c-9330-45e1-9917-7400e86425fa	t
-766	855f4302-276a-4f5f-8663-1341016b8cd1	f
-766	fb2a6f9d-79aa-4e18-b790-e9f9322d219d	t
-767	4fca6507-70a5-4953-889a-fe58885ef80f	t
-767	61d9ad11-79ad-438c-88cf-7ad75fd823e4	t
-767	1d00d3f6-2d0b-40a7-b345-39e0aa8d9eb8	t
-767	66658237-5d9e-48d9-b903-94eb50420598	t
-767	be9b3ccd-a2e8-43d3-97b8-4d0e73792a3e	t
-769	41ba8864-1d44-4804-b828-cb69cd46ee1d	t
-769	ac105b65-8376-4b66-a216-e7416b7af3f4	t
-769	b20d17b7-2209-41cd-9ad9-371547051207	t
-769	5eef1033-aab3-4663-8470-79fcdc8c75ad	t
-771	debc3ac3-1471-4968-b832-138bb2bfa3aa	t
-771	263dc1a6-bf49-4879-936b-b4d803736044	t
-771	8479f8e2-d885-427f-a385-e28c74af3de4	t
-771	81dc465d-4c4b-4527-86df-3ffa1be00899	t
-775	b27e6bb7-1166-402b-9428-2c965c11c77d	t
-775	aaef4b7e-b9ad-4073-be2c-ffcb61c81ecc	t
-775	a8168200-bffd-4d4b-847c-69e1e4418b26	t
-775	685b2c28-757c-44e9-b8be-8e1273c435ff	t
-775	280fa13c-718b-40d5-91b5-53ca79194f41	t
-777	9cf848fb-a5f6-4f85-8fe7-b8a5f46e3fb9	t
-777	7d88181b-65c4-47a8-9e1d-b1a74d5cec02	t
-777	3dd73568-0c54-445b-9b26-31ae2aa55ed2	t
-777	f679c63f-4d00-4ba6-bc9c-c175a4f12124	t
-777	804515a3-79b1-4ca7-9e07-d4a06d924def	t
-784	cb2ab766-e7df-4626-94bc-ba4274f3501a	f
-784	d51efe0d-74a8-4c34-8fde-5cb1568c58db	t
-784	874e0f76-66a9-4c89-b67f-3664767de16a	t
-784	b0dc1780-c405-401b-bb35-3e54d1cd9fb7	t
-784	d9eb3cb6-5453-4a93-983b-ffa52563c0ca	t
-784	0b964f28-cf1f-44c5-9d56-6b9d8bd68963	t
-784	1b423a89-65bd-4414-b18c-ae0e107bcceb	t
-784	fc4a4b57-2198-4245-bd64-8ef8907c6ccf	t
-784	0975e5f1-01cc-432d-8af9-97a39cbacdee	t
-784	ce504619-78ce-4ace-87a0-f2b496f39338	t
-784	123894c0-a390-4106-98a7-19a7dc9daec6	t
-784	9bb8961f-cf0d-4d4e-bc6e-a898561751c8	t
-784	802ee375-0871-45bb-94ee-d310529ed2bf	t
-784	8f64ad36-7433-45f6-bcbe-c37284aefd52	t
-784	93c1a81f-d505-4e74-aa5d-390d3985581f	t
-784	f36d1416-9a9d-4ddc-9cb7-a4c3ca741202	t
-784	19c91d0a-9f78-4ff9-876e-0cb0d687ed8e	t
-784	5b9ca672-a9d1-4f10-a4fe-8dbd7f2d97a2	t
-784	9337e645-3108-4748-843a-85b377cea1d7	t
-784	5bf42ffa-80fa-453c-9180-b33cfd3fec7c	t
-784	019ba8be-1777-45e8-9923-c5efd0ae365a	t
-784	2ca7c816-399f-44aa-accd-7a36679cb852	t
-784	d117dfc1-f045-4f2e-aa65-d6c93be102b2	t
-784	ad3b90cf-88d5-4cda-8749-6a11264210f1	f
-784	19be0503-88fe-44f8-a42b-3c500113e4bb	t
-786	8259a0a7-7536-4276-9477-e8921202ccc3	t
-786	177cd3f3-cb1d-4734-8713-0d641474a3f7	t
-788	68d5c579-68bf-41da-8103-f5f20ba7c9b6	t
-788	b7b40b95-03f0-4dc2-b19c-6f13fb9d3a4a	t
-790	d0e97796-c317-4380-bc5f-5f7a5d16212e	t
-790	5dd686dd-c2ad-4d43-980d-6730dc1d3af0	t
-790	aa79e7e7-cdad-4ebe-b422-6fe5379ec294	t
-790	fc1357ff-da46-45c1-a1c4-878552c1a3a9	t
-790	805c32f5-75d1-4d86-95d7-8bc4cdb63c34	t
-790	ca830ca6-5687-4c97-b406-7707d9e4c953	t
-790	701c41a5-858a-4e48-ba58-532bbba4f847	t
-790	1f803be6-7c29-4435-ba44-baef606a6b24	t
-791	dd2f22a0-67f9-4523-83e1-665b3a108ce4	t
-791	5a1dd1bb-df91-4951-9a39-ee7b5989e92b	t
-793	dca91abe-5b7a-41a1-9e1b-c19d2d265e58	t
-793	5e63b8d8-b134-47b9-b2a5-dbd9b7ad15e6	t
-773	657d370d-237f-42b7-8327-7260fc799839	t
-773	e0a93427-4c3e-4bca-877c-5a890d7f098f	t
-773	f168d285-b488-4be8-8b47-2c11aff1d8a7	t
-796	7d843d09-9578-4124-9a9c-bdf4910fd3b1	t
-796	3715c46d-436b-46ed-b7d6-5b1617ab6eb4	t
-796	c6be1370-4162-486b-8762-daaa5da3ae2b	t
-796	a7dc7fff-8e22-4ace-ac6a-de4996fd1b36	t
-796	77c70a7b-5638-4fe0-8b4c-f60aca749f09	f
-796	9a41f94b-4136-44f6-aece-62c60354c4ca	t
-796	db101927-9e06-4d71-ab47-1a088909fd86	t
-796	32ff9939-37ca-45c2-a848-55c9fecf556b	f
-796	49b2d00c-66fc-434d-8e49-f60d461f70c4	t
-798	991d0bdf-8f04-4785-951c-7d9665d1fd01	t
-798	0f47ab2b-6187-4b95-8c65-54c5a7b92b3c	t
-798	618161dc-f74b-472a-a046-d016ad86082d	t
-798	55986eea-d996-4b7e-beb9-de89381c444f	t
-798	86812152-1e98-4cde-b6e9-e70cde23267e	t
-798	0b68268a-abf6-476f-b078-5403be6cd71a	t
-779	01534d28-42e7-4a32-988e-4d26330ee87d	f
-779	5c30c423-4f4c-4f9e-921a-c7ac35ad06e0	t
-779	e12b8e88-4ea3-4afe-a358-3a60a162fbaa	t
-779	39512ffb-e0de-4166-ac84-55819fecfa87	t
-803	f7de81a2-66fa-4b32-9704-54e99dbf7f16	f
-803	4b8d9c2b-1a3b-4d83-96e9-639b09a56401	t
-803	04383c42-10be-4541-9fc3-c4fca16659ca	t
-803	35ab833c-c4da-4f76-b72f-21006d9571a0	t
-803	73dbe556-754f-4fa6-8335-a2df0e4bff67	t
-803	d940a8ef-1711-4366-9698-1770abbc7d42	t
-803	ec87f9c6-413c-4ae9-84e7-55b14905e6d3	t
-803	9d85fa9b-43a3-4947-83f7-5bcbee13796b	t
-803	615332f2-4ad7-47b3-ba9b-b4a21829a2fe	t
-803	5ead8bc8-8f5f-418c-a5f8-26c08ea28bc3	t
-803	d6f06519-dd65-4136-ace1-909fd7ea2331	f
-803	ea076b35-4589-418b-bb29-9e64ff05b176	t
-803	0c069133-8d30-4861-a6ce-370bcde0f6b7	t
-805	3eebc49c-5ecc-4920-b15d-b3b1ca229cf0	f
-805	b3909030-eda2-4fe1-b9fb-27288d962a0d	f
-805	0c5f64d9-c478-4940-9748-eaf098b464ff	t
-805	2d63cf08-ec81-435b-96f8-8da7fbe0c15d	t
-805	f03e87ce-126b-4b7f-ac5b-0452f19d0f00	t
-805	9869e4d8-f77d-4656-b353-e260f14afb27	t
-805	50fd6e86-3ece-46d3-9056-40b39d140fb1	t
-805	366d3edb-6432-4e08-887f-72d7236b22dd	t
-805	8a5e631c-80bf-4cd4-8eab-f28cf69d6567	t
-807	6d603856-287b-4a61-a16b-dd152a503ed6	t
-807	96a7646c-69fe-4211-8d84-075896d5af51	t
-807	c092ddf2-aaec-418c-bde3-29d052925e56	t
-807	53747f83-22ff-4e32-8995-4ac474498059	t
-807	a89a73ec-3ef1-4748-a444-d425ad46b6aa	t
-807	de1ff307-5c09-4771-9efa-82f093c530f3	t
-807	1461d3ee-8a86-4948-8b19-809f3929354a	t
-807	20243bb1-45ac-45fa-8bd6-77d093a852e0	t
-807	64ae17a2-a91b-4996-8471-b3ae2c9a0f94	f
-807	623519b0-ccc7-4f96-ab0a-a53514e86b15	t
-780	4d19876e-f8a4-4c0a-a8f1-80eb678e0889	t
-780	13202ed5-0ef4-4800-8f8d-3b00f1d01156	t
-780	5df7ea49-f35c-4e24-a61f-b3a345c9d02a	t
-780	e88b5924-3942-4f62-9f52-c2b56be0ad41	t
-780	1d030dfb-0d93-40f6-9a3b-2b4343594204	t
-810	bce0abe6-b65b-4ffb-b26b-b74ed51c6f10	t
-810	1d391fda-26f2-4161-99f5-a2a71b50b137	t
-810	4ca9095c-a97c-48b8-abad-fcfed15fe04a	t
-810	a7e86788-b1ac-490f-b3f3-f6bed53a165b	f
-810	1568edf2-ebba-4fec-af58-53276a70ec8f	t
-810	92bcb937-c0f0-4fad-8370-92888846585f	t
-810	9a2ad6d5-7c2d-49a0-9d30-415a2ecb1abd	t
-810	a7b94ec6-b4e4-4b78-a9d3-5d6c4c1689cb	t
-810	b33e75c1-e6be-4a69-9bbe-2b1e4481674b	t
-800	fd8aff28-4fe3-47b8-a3c0-27b25284dd9c	t
-800	46995a66-90ce-4ba3-80b4-f2c7cc56dd31	t
-800	5cc1ff16-e789-475d-a7d0-17f4043bd2b9	t
-800	0668ef2b-8bd8-440f-901c-bba0bf359f35	f
-800	271f60b5-960f-4b36-8f6a-8994b0dd1aa4	f
-783	05d1fbd7-945e-4d62-9767-18cd3a46a9e2	t
-783	169b1876-f1c2-4dfc-aaa5-dec71f5cb398	t
-783	c016ae02-a7a3-43f4-8421-647a92d88dd2	t
-783	863d833d-05d3-4100-a92e-9d4cfc6a2693	t
-783	ef06b0e0-838a-4903-962c-5fa26a93f34d	t
-783	7caba3d3-a8b2-4f6f-a285-90f305f91873	t
-814	cf5056a3-8f9e-4afb-ab19-4b96d46885f2	t
-814	17df1bc0-5cf7-4b39-abf1-c74d27eeecf3	t
-814	ba6d6ac0-221f-4fef-bcf9-8c1a1664ff90	t
-814	d97fb996-3fdb-49d6-8043-55a1c0a3131e	t
-816	47829ec7-405e-46b1-83b8-bfd0b623e69c	t
-816	17f66610-8dde-4709-9a07-4068886256bf	t
-816	55ca84e8-c3db-4d4b-8d11-87af5849a7ea	t
-818	c1b29171-b47f-4093-a6a4-b4ffc4542e7e	f
-818	1c114917-b615-40d6-ae7e-2ee0cb6199ce	t
-818	407bb9bd-6a21-4f92-ad4a-400594fb0b08	f
-819	f546a4a2-5eff-4915-94c4-d16016a93474	t
-819	e3f20bb0-2190-49b8-baad-b1a9e06d05e1	t
-821	ff211874-f382-4e5e-8ba9-36af7acf774e	t
-821	8f5e81e4-67c1-4e2c-ab72-be0359dee24e	t
-821	0fb01b56-e836-434d-8b50-0e4a7b1b3e95	t
-821	bbc946dc-4217-455d-abbd-602bf6597438	t
-823	4da8719b-9c5b-462c-9faa-9d37e248a1d7	t
-823	c12ef205-a1bc-49d2-8454-7cf8a5a53412	t
-823	56b5d53f-a12b-4eb5-a567-c25234ae5c33	t
-825	952f30b9-02f6-4560-b08b-10e5e22566d8	t
-825	c210c040-7c34-4b1a-a4fe-d82ad7f5f940	t
-825	4177618d-d31a-4158-b57d-d2c31399a46a	t
-827	e0169391-9e77-4bcd-80e5-a6702ede524f	t
-827	a390ef71-32ad-4154-aac7-2cc830695f41	t
-827	68731260-d83d-4864-8839-33f0e49702e2	t
-827	492d87d6-5d7f-4665-841b-d9e66a60e7db	t
-829	4e7a70fd-0efa-4de3-9f96-f29c5bc884a1	t
-829	1899fb15-d8da-4652-b361-7359a2dc35ea	t
-829	06b182d9-3fae-49d1-8de3-621f2e435f05	t
-829	2ae2f239-c634-4d69-9c35-a0cca3ddd1c0	t
-831	d2c5e28b-dff0-4d17-a184-5803d887c956	t
-831	7e39dd82-6a27-4827-bbcf-76cd57e43163	t
-790	a2e9b519-737c-4dcb-85c4-a26aaf5f3ebb	t
-800	24124010-da5e-428f-ace9-bae386b1c1b7	t
-798	cfd68214-1a71-492e-acac-142c0f65c1bc	t
-790	6e13c334-7a41-4ef3-8bbb-c242166e19a2	t
-769	991731d6-020f-464b-8286-be0d9f2eaa47	t
-786	041c8980-ad00-443b-ba65-dadb522d2dc4	t
-814	eee0e86e-9d50-4d89-abeb-809047efe893	t
-814	dc5841cf-861e-451c-a492-fc0dd6e85695	t
-814	4432f11e-4894-4756-94c0-661036509943	t
-814	e703455c-c6e0-49fa-b26e-2b853c1d6eaf	t
-771	56c47cf5-7963-4dd2-9628-a80b935e9c54	t
-798	508adc4a-263d-4e5d-8333-80f1e91b481e	t
 \.
 
 
 --
--- Data for Name: hotspots; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: hotspots; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.hotspots (hotspot_id, hotspot_name, center_lat, center_long, radius_meters, incident_count, report_ids, risk_level, incident_type_distribution, time_window_hours, detected_at, expires_at, is_active, incident_type_id, lifecycle_state, composition, temporal_intensity, severity_score, trend_direction, cluster_confidence, polygon_points, crime_group, assigned_unit_code, controlled_by_user_id, deployed_at, deployment_note, llm_narrative, llm_recommendation, llm_status, llm_citizen_advisory, llm_provider, llm_generated_at, unique_reporter_count, corroboration_score, is_multi_crime_zone, multi_crime_groups, predicted_next_state, predicted_at, prediction_verified_at, prediction_was_accurate, explanation_json, cache_version, abuse_flag, anomaly_score, area_label) FROM stdin;
-791	\N	-1.4466138	29.5831672	625.00	2	\N	medium	\N	720	2026-06-03 11:24:07.727402	\N	t	2	emerging	{"Assault": 1, "Vandalism": 1}	0.0400	5.3432	stable	0.7750	[[-1.4463074, 29.584566], [-1.4470853, 29.5810144]]	violent	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2	0.7500	f	\N	active	2026-06-03 11:24:07.727402+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "medium", "note": "Moderate severity 5.3/10 \\u2014 mix of serious and minor incidents"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.75, "note": "2 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.775, "note": "Cluster confidence 78% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 5.343, "trust_average": 85.6, "temporal_intensity": 0.04, "cluster_confidence": 0.775, "corroboration_score": 0.75, "anomaly_score": 0.0}, "top_crime_types": [["Assault", 1], ["Vandalism", 1]], "incident_count": 2, "generated_at": "2026-06-03T11:24:07.727391+00:00"}	1	f	0.0000	Kampanga Cell
-793	\N	-1.5205678	29.6295890	625.00	2	\N	medium	\N	720	2026-06-03 11:24:08.061982	\N	t	2	emerging	{"Assault": 1, "Vandalism": 1}	0.0606	5.3105	stable	0.7714	[[-1.5208653, 29.629101], [-1.5200762, 29.6303955]]	violent	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2	0.7497	f	\N	active	2026-06-03 11:24:08.061982+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "medium", "note": "Moderate severity 5.3/10 \\u2014 mix of serious and minor incidents"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.7497, "note": "2 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.7714, "note": "Cluster confidence 77% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 5.31, "trust_average": 84.7, "temporal_intensity": 0.0606, "cluster_confidence": 0.7714, "corroboration_score": 0.7497, "anomaly_score": 0.0}, "top_crime_types": [["Assault", 1], ["Vandalism", 1]], "incident_count": 2, "generated_at": "2026-06-03T11:24:08.061971+00:00"}	1	f	0.0000	Kabaya Village
-800	\N	-1.5707946	29.6345527	625.00	6	\N	medium	\N	720	2026-06-03 11:24:16.150679	\N	t	4	emerging	{"Assault": 1, "Suspicious Activity": 2, "Vandalism": 1, "Drug Activity": 1, "Traffic Incident": 1}	0.0329	2.7510	stable	0.6006	[[-1.574208, 29.6306345], [-1.5707435, 29.6399018], [-1.5686544, 29.6338308]]	mixed	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	5	0.9684	f	\N	active	2026-06-03 11:24:12.049703+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 2.8/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.9684, "note": "5 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.6006, "note": "Cluster confidence 60% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 2.751, "trust_average": 64.6, "temporal_intensity": 0.0329, "cluster_confidence": 0.6006, "corroboration_score": 0.9684, "anomaly_score": 0.0}, "top_crime_types": [["Suspicious Activity", 2], ["Assault", 1], ["Vandalism", 1], ["Drug Activity", 1]], "incident_count": 5, "generated_at": "2026-06-03T11:24:12.049691+00:00"}	2	f	0.0000	Bikara Cell
-803	\N	-1.5528501	29.6272135	625.00	13	\N	medium	\N	720	2026-06-03 11:24:10.134111	\N	t	5	emerging	{"Domestic Violence": 2, "Traffic Incident": 2, "Assault": 2, "Vandalism": 2, "Drug Activity": 2, "Suspicious Activity": 1, "Theft": 1, "Fraud/Scam": 1}	0.0247	3.1051	stable	0.7647	[[-1.5591115, 29.6225532], [-1.5566298, 29.6268397], [-1.5548051, 29.6296677], [-1.5524452, 29.6297533], [-1.5469565, 29.6269533], [-1.5510388, 29.6254333]]	violent	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	13	0.9524	f	\N	active	2026-06-03 11:24:10.134111+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 3.1/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.9524, "note": "13 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.7647, "note": "Cluster confidence 76% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 3.105, "trust_average": 59.7, "temporal_intensity": 0.0247, "cluster_confidence": 0.7647, "corroboration_score": 0.9524, "anomaly_score": 0.0}, "top_crime_types": [["Domestic Violence", 2], ["Traffic Incident", 2], ["Assault", 2], ["Vandalism", 2], ["Drug Activity", 2]], "incident_count": 13, "generated_at": "2026-06-03T11:24:10.134100+00:00"}	1	f	0.0000	MUHOZA Station area
-805	\N	-1.5478473	29.5784468	625.00	9	\N	medium	\N	720	2026-06-03 11:24:10.51613	\N	t	8	emerging	{"Suspicious Activity": 1, "Drug Activity": 1, "Theft": 2, "Harassment": 3, "Assault": 2}	0.0212	3.3183	rising	0.7340	[[-1.5493731, 29.5749098], [-1.5505613, 29.5766608], [-1.5490999, 29.5796673], [-1.5468394, 29.5804535], [-1.5428214, 29.5781106], [-1.5480937, 29.5749313]]	sexual	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	9	0.9338	f	\N	escalating	2026-06-03 11:24:10.51613+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 3.3/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "rising", "note": "Incident rate is INCREASING \\u2014 more reports in the recent half of the window than the earlier half"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.9338, "note": "9 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.734, "note": "Cluster confidence 73% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 3.318, "trust_average": 62.6, "temporal_intensity": 0.0212, "cluster_confidence": 0.734, "corroboration_score": 0.9338, "anomaly_score": 0.0}, "top_crime_types": [["Harassment", 3], ["Theft", 2], ["Assault", 2], ["Suspicious Activity", 1], ["Drug Activity", 1]], "incident_count": 9, "generated_at": "2026-06-03T11:24:10.516119+00:00"}	1	f	0.0000	Cyasure Village
-807	\N	-1.4149969	29.6171692	625.00	10	\N	medium	\N	720	2026-06-03 11:24:10.888717	\N	t	2	emerging	{"Assault": 3, "Traffic Incident": 1, "Harassment": 2, "Suspicious Activity": 1, "Vandalism": 1, "Drug Activity": 2}	0.0179	3.1702	stable	0.8017	[[-1.417465, 29.6151505], [-1.4167832, 29.618061], [-1.4143027, 29.6221992], [-1.4133883, 29.6160911], [-1.4156051, 29.6152364]]	violent	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	10	0.9083	f	\N	active	2026-06-03 11:24:10.888717+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 3.2/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.9083, "note": "10 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.8017, "note": "Cluster confidence 80% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 3.17, "trust_average": 63.7, "temporal_intensity": 0.0179, "cluster_confidence": 0.8017, "corroboration_score": 0.9083, "anomaly_score": 0.0}, "top_crime_types": [["Assault", 3], ["Harassment", 2], ["Drug Activity", 2], ["Traffic Incident", 1], ["Suspicious Activity", 1]], "incident_count": 10, "generated_at": "2026-06-03T11:24:10.888704+00:00"}	1	f	0.0000	Nyamiyaga Village
-818	\N	-1.4607005	29.6100305	625.00	3	\N	medium	\N	720	2026-06-03 11:24:13.549984	\N	t	4	emerging	{"Suspicious Activity": 1, "Assault": 1, "Traffic Incident": 1}	0.0176	2.7175	stable	0.4159	[[-1.4591952, 29.6068108], [-1.4610139, 29.6100943], [-1.4597965, 29.6125529]]	public_order	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	3	0.7971	f	\N	active	2026-06-03 11:24:13.549984+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 2.7/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.7971, "note": "3 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.4159, "note": "Cluster confidence 42% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 2.718, "trust_average": 53.2, "temporal_intensity": 0.0176, "cluster_confidence": 0.4159, "corroboration_score": 0.7971, "anomaly_score": 0.0}, "top_crime_types": [["Suspicious Activity", 1], ["Assault", 1], ["Traffic Incident", 1]], "incident_count": 3, "generated_at": "2026-06-03T11:24:13.549971+00:00"}	1	f	0.0000	Nyange Sector
-819	\N	-1.4745278	29.6250774	625.00	2	\N	medium	\N	720	2026-06-03 11:24:13.923683	\N	t	4	emerging	{"Suspicious Activity": 1, "Assault": 1}	0.0324	4.0414	stable	0.7175	[[-1.4730247, 29.6230615], [-1.4749748, 29.6256769]]	public_order	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2	0.7244	f	\N	active	2026-06-03 11:24:13.923683+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 4.0/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.7244, "note": "2 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.7175, "note": "Cluster confidence 72% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 4.041, "trust_average": 72.8, "temporal_intensity": 0.0324, "cluster_confidence": 0.7175, "corroboration_score": 0.7244, "anomaly_score": 0.0}, "top_crime_types": [["Suspicious Activity", 1], ["Assault", 1]], "incident_count": 2, "generated_at": "2026-06-03T11:24:13.923672+00:00"}	1	f	0.0000	Gashangiro Village
-827	\N	-1.5067603	29.7104087	500.00	4	\N	medium	\N	720	2026-06-03 11:24:15.353891	\N	t	1	emerging	{"Domestic Violence": 1, "Suspicious Activity": 1, "Theft": 2}	0.0080	3.0406	stable	0.6884	[[-1.5081451, 29.7089557], [-1.5072133, 29.7119957], [-1.5056784, 29.7122263], [-1.5069397, 29.7095678]]	property	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	f	\N	\N	\N	\N	\N	\N	0	f	\N	Gataba Village
-829	\N	-1.5736056	29.6045727	500.00	4	\N	medium	\N	720	2026-06-03 11:24:15.709857	\N	t	3	emerging	{"Vandalism": 2, "Domestic Violence": 1, "Traffic Incident": 1}	0.0101	3.3372	stable	0.6290	[[-1.5726884, 29.6034419], [-1.5779738, 29.6041103], [-1.5800318, 29.6063998], [-1.5707743, 29.6086496]]	property	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	f	\N	\N	\N	\N	\N	\N	0	f	\N	Nkotsi Sector
-831	\N	-1.5520923	29.6630998	500.00	2	\N	low	\N	720	2026-06-03 11:24:16.05196	\N	t	6	low_activity	{"Drug Activity": 1, "Domestic Violence": 1}	0.0070	4.3356	stable	0.7086	[[-1.5486685, 29.6640571], [-1.5527726, 29.6629096]]	drug	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	f	\N	\N	\N	\N	\N	\N	0	f	\N	Rwaza Sector
-766	\N	-1.5031582	29.6393375	625.00	8	\N	medium	\N	720	2026-06-03 11:24:02.949218	\N	t	4	emerging	{"Suspicious Activity": 2, "Domestic Violence": 2, "Vandalism": 1, "Theft": 2, "Assault": 1}	0.0264	3.9087	stable	0.7220	[[-1.5114053, 29.6300188], [-1.5079605, 29.6410425], [-1.4975202, 29.6435025], [-1.4997038, 29.6405002]]	public_order	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	8	0.8312	f	\N	active	2026-06-03 11:24:02.949218+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 3.9/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.8312, "note": "8 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.722, "note": "Cluster confidence 72% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 3.909, "trust_average": 76.3, "temporal_intensity": 0.0264, "cluster_confidence": 0.722, "corroboration_score": 0.8312, "anomaly_score": 0.0}, "top_crime_types": [["Suspicious Activity", 2], ["Domestic Violence", 2], ["Theft", 2], ["Vandalism", 1], ["Assault", 1]], "incident_count": 8, "generated_at": "2026-06-03T11:24:02.949205+00:00"}	1	f	0.0000	Muhoza Sector
-767	\N	-1.5032089	29.6190892	625.00	5	\N	medium	\N	720	2026-06-03 11:24:03.183729	\N	t	9	emerging	{"Traffic Incident": 5}	6.6667	2.5790	stable	0.8368	[[-1.5033692, 29.6188436], [-1.5034364, 29.6192634], [-1.5032754, 29.6194157], [-1.5029187, 29.619005], [-1.5030396, 29.6189229]]	traffic	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	5	0.7551	f	\N	active	2026-06-03 11:24:03.183729+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 2.6/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.7551, "note": "5 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.8368, "note": "Cluster confidence 84% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 2.579, "trust_average": 86.0, "temporal_intensity": 6.6667, "cluster_confidence": 0.8368, "corroboration_score": 0.7551, "anomaly_score": 0.0}, "top_crime_types": [["Traffic Incident", 5]], "incident_count": 5, "generated_at": "2026-06-03T11:24:03.183718+00:00"}	1	f	0.0000	Muhe Village
-775	\N	-1.4585786	29.5181985	625.00	5	\N	medium	\N	720	2026-06-03 11:24:04.668658	\N	t	1	emerging	{"Theft": 4, "Drug Activity": 1}	0.0427	3.5945	rising	0.7819	[[-1.4591428, 29.5176893], [-1.4586746, 29.5183747], [-1.4567366, 29.5203632], [-1.4585664, 29.5179265]]	property	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	5	0.9142	f	\N	escalating	2026-06-03 11:24:04.668658+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 3.6/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "rising", "note": "Incident rate is INCREASING \\u2014 more reports in the recent half of the window than the earlier half"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.9142, "note": "5 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.7819, "note": "Cluster confidence 78% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 3.594, "trust_average": 73.8, "temporal_intensity": 0.0427, "cluster_confidence": 0.7819, "corroboration_score": 0.9142, "anomaly_score": 0.0}, "top_crime_types": [["Theft", 4], ["Drug Activity", 1]], "incident_count": 5, "generated_at": "2026-06-03T11:24:04.668642+00:00"}	1	f	0.0000	Kumazi Village
-777	\N	-1.4373785	29.5488620	625.00	5	\N	medium	\N	720	2026-06-03 11:24:05.027283	\N	t	1	emerging	{"Theft": 5}	4.6875	3.9624	rising	0.8066	[[-1.4376707, 29.548412], [-1.4377095, 29.5490548], [-1.4369983, 29.5491028], [-1.4369766, 29.5486857]]	property	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	5	0.7435	f	\N	escalating	2026-06-03 11:24:05.027283+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 4.0/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "rising", "note": "Incident rate is INCREASING \\u2014 more reports in the recent half of the window than the earlier half"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.7435, "note": "5 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.8066, "note": "Cluster confidence 81% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 3.962, "trust_average": 79.2, "temporal_intensity": 4.6875, "cluster_confidence": 0.8066, "corroboration_score": 0.7435, "anomaly_score": 0.0}, "top_crime_types": [["Theft", 5]], "incident_count": 5, "generated_at": "2026-06-03T11:24:05.027271+00:00"}	1	f	0.0000	Musingi Village
-784	\N	-1.4530758	29.6477709	625.00	25	\N	critical	\N	720	2026-06-03 11:24:06.450565	\N	t	3	emerging	{"Vandalism": 7, "Suspicious Activity": 5, "Traffic Incident": 3, "Harassment": 3, "Fraud/Scam": 1, "Theft": 2, "Drug Activity": 2, "Assault": 2}	0.0396	2.7010	stable	0.8090	[[-1.4483144, 29.6417567], [-1.4583554, 29.6443537], [-1.4636254, 29.6523294], [-1.4476885, 29.6514644], [-1.4424669, 29.6472366]]	property	\N	\N	\N	\N	Across CYUVE Station area, 25 incident reports show a mix of crimes, with vandalism leading at 7 cases, followed by 5 suspicious activities, 3 traffic incidents, 3 harassment, 2 theft, 2 assault, 2 drug activities, and 1 fraud/scam. The trend direction is stable, with a severity score of 2.7/10 and temporal intensity of 0.04 incidents/hr. Given the emerging lifecycle state and nearby active clusters, Community Policing Unit (CPU) with Intelligence & Surveillance Unit (ISU) support is suitable for addressing this crime mix, through uniformed community patrol and neighborhood liaison, focusing on peak hours and coordinating with other units for area response.	Deploy Community Policing Unit (CPU) with Intelligence & Surveillance Unit (ISU) support, focusing on uniformed community patrol and neighborhood liaison in CYUVE Station area, concentrating operations between 16:00-02:00, especially 20:00-22:00 peak hours, amidst 25 reports of mixed incidents including 7 vandalism cases, given the stable trend and emerging lifecycle state.	emerging_trend	25 theft incidents have been reported near CYUVE Station area in the past month — this is an elevated-risk zone right now. Keep phones and bags out of sight, avoid walking alone especially after dark, and lock your property. Report any suspicious activity or attempted theft through TrustBond immediately.	llm	2026-06-03 11:27:12.618971+00	25	0.9306	f	\N	active	2026-06-03 11:24:06.450565+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 2.7/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.9306, "note": "25 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.809, "note": "Cluster confidence 81% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 2.701, "trust_average": 63.8, "temporal_intensity": 0.0396, "cluster_confidence": 0.809, "corroboration_score": 0.9306, "anomaly_score": 0.0}, "top_crime_types": [["Vandalism", 7], ["Suspicious Activity", 5], ["Traffic Incident", 3], ["Harassment", 3], ["Theft", 2]], "incident_count": 25, "generated_at": "2026-06-03T11:24:06.450550+00:00"}	1	f	0.0000	CYUVE Station area
-773	\N	-1.4976002	29.6316066	625.00	3	\N	medium	\N	720	2026-06-03 11:24:08.345458	\N	t	3	emerging	{"Vandalism": 1, "Assault": 1, "Theft": 1}	0.0492	3.4559	stable	0.6861	[[-1.4985603, 29.6297386], [-1.4987447, 29.6329171], [-1.4943587, 29.6319669]]	property	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	3	0.7659	f	\N	active	2026-06-03 11:24:08.345458+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 3.5/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.7659, "note": "3 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.6861, "note": "Cluster confidence 69% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 3.456, "trust_average": 61.4, "temporal_intensity": 0.0492, "cluster_confidence": 0.6861, "corroboration_score": 0.7659, "anomaly_score": 0.0}, "top_crime_types": [["Vandalism", 1], ["Assault", 1], ["Theft", 1]], "incident_count": 3, "generated_at": "2026-06-03T11:24:08.345448+00:00"}	2	f	0.0000	Rwebeya Cell
-788	\N	-1.4312566	29.5467237	625.00	2	\N	medium	\N	720	2026-06-03 11:24:07.134608	\N	t	4	emerging	{"Suspicious Activity": 1, "Domestic Violence": 1}	0.0717	4.0079	stable	0.7329	[[-1.4304077, 29.5466831], [-1.4315005, 29.5467354]]	public_order	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2	0.7500	f	\N	active	2026-06-03 11:24:07.134608+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 4.0/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.75, "note": "2 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.7329, "note": "Cluster confidence 73% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 4.008, "trust_average": 76.2, "temporal_intensity": 0.0717, "cluster_confidence": 0.7329, "corroboration_score": 0.75, "anomaly_score": 0.0}, "top_crime_types": [["Suspicious Activity", 1], ["Domestic Violence", 1]], "incident_count": 2, "generated_at": "2026-06-03T11:24:07.134597+00:00"}	1	f	0.0000	Gasizi Village
-779	\N	-1.5881819	29.6688947	625.00	4	\N	medium	\N	720	2026-06-03 11:24:09.770944	\N	t	5	emerging	{"Domestic Violence": 1, "Drug Activity": 1, "Vandalism": 1, "Assault": 1}	0.0190	3.8867	stable	0.6337	[[-1.5893644, 29.6673161], [-1.5902816, 29.6683554], [-1.586948, 29.6699671], [-1.5855617, 29.6703428]]	violent	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	4	0.9631	f	\N	active	2026-06-03 11:24:09.770944+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 3.9/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.9631, "note": "4 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.6337, "note": "Cluster confidence 63% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 3.887, "trust_average": 64.7, "temporal_intensity": 0.019, "cluster_confidence": 0.6337, "corroboration_score": 0.9631, "anomaly_score": 0.0}, "top_crime_types": [["Domestic Violence", 1], ["Drug Activity", 1], ["Vandalism", 1], ["Assault", 1]], "incident_count": 4, "generated_at": "2026-06-03T11:24:09.770934+00:00"}	2	f	0.0000	Nyakarambi II Village
-796	\N	-1.5670009	29.6150585	625.00	9	\N	medium	\N	720	2026-06-03 11:24:08.745703	\N	t	6	emerging	{"Vandalism": 1, "Drug Activity": 3, "Traffic Incident": 2, "Theft": 1, "Assault": 1, "Harassment": 1}	0.0193	2.4385	stable	0.7079	[[-1.5643264, 29.6109099], [-1.5700771, 29.6155576], [-1.5691988, 29.6175763], [-1.5651763, 29.6192168]]	drug	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	9	0.9151	f	\N	active	2026-06-03 11:24:08.745703+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 2.4/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.9151, "note": "9 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.7079, "note": "Cluster confidence 71% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 2.438, "trust_average": 56.8, "temporal_intensity": 0.0193, "cluster_confidence": 0.7079, "corroboration_score": 0.9151, "anomaly_score": 0.0}, "top_crime_types": [["Drug Activity", 3], ["Traffic Incident", 2], ["Vandalism", 1], ["Theft", 1], ["Assault", 1]], "incident_count": 9, "generated_at": "2026-06-03T11:24:08.745693+00:00"}	1	f	0.0000	Kamusheshe Village
-780	\N	-1.4703851	29.6860082	625.00	5	\N	medium	\N	720	2026-06-03 11:24:11.260847	\N	t	1	emerging	{"Theft": 1, "Assault": 1, "Vandalism": 1, "Harassment": 1, "Suspicious Activity": 1}	0.0323	2.5983	rising	0.6944	[[-1.4722464, 29.683499], [-1.472269, 29.6856456], [-1.4707292, 29.6879971], [-1.4669073, 29.6849731]]	property	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	5	0.9672	f	\N	escalating	2026-06-03 11:24:11.260847+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 2.6/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "rising", "note": "Incident rate is INCREASING \\u2014 more reports in the recent half of the window than the earlier half"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.9672, "note": "5 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.6944, "note": "Cluster confidence 69% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 2.598, "trust_average": 54.3, "temporal_intensity": 0.0323, "cluster_confidence": 0.6944, "corroboration_score": 0.9672, "anomaly_score": 0.0}, "top_crime_types": [["Theft", 1], ["Assault", 1], ["Vandalism", 1], ["Harassment", 1], ["Suspicious Activity", 1]], "incident_count": 5, "generated_at": "2026-06-03T11:24:11.260836+00:00"}	2	f	0.0000	Mugarama Village
-783	\N	-1.4529660	29.5358624	625.00	6	\N	medium	\N	720	2026-06-03 11:24:12.437888	\N	t	4	emerging	{"Traffic Incident": 1, "Suspicious Activity": 3, "Assault": 1, "Vandalism": 1}	0.0442	2.1939	rising	0.7192	[[-1.4522718, 29.534086], [-1.4558153, 29.534572], [-1.4540547, 29.5400326], [-1.4515028, 29.5371983], [-1.4499868, 29.5345121]]	public_order	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	6	0.9779	f	\N	escalating	2026-06-03 11:24:12.437888+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 2.2/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "rising", "note": "Incident rate is INCREASING \\u2014 more reports in the recent half of the window than the earlier half"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.9779, "note": "6 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.7192, "note": "Cluster confidence 72% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 2.194, "trust_average": 55.4, "temporal_intensity": 0.0442, "cluster_confidence": 0.7192, "corroboration_score": 0.9779, "anomaly_score": 0.0}, "top_crime_types": [["Suspicious Activity", 3], ["Traffic Incident", 1], ["Assault", 1], ["Vandalism", 1]], "incident_count": 6, "generated_at": "2026-06-03T11:24:12.437876+00:00"}	2	f	0.0000	Kaniga Village
-810	\N	-1.5458510	29.7547215	625.00	9	\N	medium	\N	720	2026-06-03 11:24:11.669709	\N	t	4	emerging	{"Vandalism": 2, "Suspicious Activity": 3, "Fraud/Scam": 1, "Assault": 1, "Theft": 1, "Drug Activity": 1}	0.0252	2.7131	falling	0.7523	[[-1.5467127, 29.7509029], [-1.5482825, 29.7552776], [-1.5460965, 29.7564514], [-1.5405441, 29.755896]]	public_order	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	9	0.9212	f	\N	declining	2026-06-03 11:24:11.669709+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 2.7/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "falling", "note": "Incident rate is DECLINING \\u2014 fewer reports in the recent half; current measures may be working"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.9212, "note": "9 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.7523, "note": "Cluster confidence 75% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 2.713, "trust_average": 58.0, "temporal_intensity": 0.0252, "cluster_confidence": 0.7523, "corroboration_score": 0.9212, "anomaly_score": 0.0}, "top_crime_types": [["Suspicious Activity", 3], ["Vandalism", 2], ["Fraud/Scam", 1], ["Assault", 1], ["Theft", 1]], "incident_count": 9, "generated_at": "2026-06-03T11:24:11.669697+00:00"}	1	f	0.0000	Muharuro Cell
-816	\N	-1.5910298	29.6615866	625.00	3	\N	medium	\N	720	2026-06-03 11:24:13.187421	\N	t	5	emerging	{"Domestic Violence": 1, "Suspicious Activity": 1, "Vandalism": 1}	0.0199	3.1987	stable	0.6935	[[-1.5892802, 29.6610793], [-1.5918751, 29.6615196], [-1.5923128, 29.6620205]]	violent	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	3	0.8256	f	\N	active	2026-06-03 11:24:13.187421+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 3.2/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.8256, "note": "3 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.6935, "note": "Cluster confidence 69% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 3.199, "trust_average": 63.0, "temporal_intensity": 0.0199, "cluster_confidence": 0.6935, "corroboration_score": 0.8256, "anomaly_score": 0.0}, "top_crime_types": [["Domestic Violence", 1], ["Suspicious Activity", 1], ["Vandalism", 1]], "incident_count": 3, "generated_at": "2026-06-03T11:24:13.187410+00:00"}	1	f	0.0000	Bumara Cell
-821	\N	-1.4984666	29.6472038	500.00	4	\N	medium	\N	720	2026-06-03 11:24:14.287052	\N	t	9	emerging	{"Traffic Incident": 1, "Vandalism": 1, "Theft": 1, "Suspicious Activity": 1}	0.0077	2.6310	falling	0.4762	[[-1.4983109, 29.6452961], [-1.5027327, 29.6543717], [-1.4959495, 29.6489506]]	traffic	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	f	\N	\N	\N	\N	\N	\N	0	f	\N	Muhoza Sector
-823	\N	-1.4258383	29.5652721	500.00	3	\N	medium	\N	720	2026-06-03 11:24:14.620174	\N	t	9	emerging	{"Traffic Incident": 1, "Theft": 1, "Vandalism": 1}	0.0095	2.8672	stable	0.4935	[[-1.4248607, 29.5627061], [-1.4289483, 29.5664334], [-1.4222899, 29.5649601]]	traffic	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	f	\N	\N	\N	\N	\N	\N	0	f	\N	Kinigi Sector
-825	\N	-1.5375041	29.6659284	500.00	3	\N	medium	\N	720	2026-06-03 11:24:14.983858	\N	t	7	emerging	{"Fraud/Scam": 1, "Domestic Violence": 1, "Harassment": 1}	0.0073	3.3978	stable	0.4354	[[-1.5364183, 29.6642301], [-1.5402225, 29.6680053], [-1.5328439, 29.6651374]]	fraud	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	f	\N	\N	\N	\N	\N	\N	0	f	\N	Nyarubuye Cell
-769	\N	-1.5047190	29.6693795	625.00	5	\N	medium	\N	720	2026-06-03 11:24:16.241828	\N	t	9	emerging	{"Traffic Incident": 4, "Vandalism": 1}	3.2432	2.5340	falling	0.8101	[[-1.5045637, 29.6691475], [-1.5050257, 29.6692351], [-1.5048861, 29.6695261], [-1.5043404, 29.6696328]]	mixed	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	4	0.7519	f	\N	declining	2026-06-03 11:24:03.52775+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 2.5/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "falling", "note": "Incident rate is DECLINING \\u2014 fewer reports in the recent half; current measures may be working"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.7519, "note": "4 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.8101, "note": "Cluster confidence 81% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 2.534, "trust_average": 84.5, "temporal_intensity": 3.2432, "cluster_confidence": 0.8101, "corroboration_score": 0.7519, "anomaly_score": 0.0}, "top_crime_types": [["Traffic Incident", 4]], "incident_count": 4, "generated_at": "2026-06-03T11:24:03.527740+00:00"}	1	f	0.0000	Gatare Village
-790	\N	-1.4863151	29.6341533	625.00	10	\N	medium	\N	720	2026-06-03 11:24:16.177032	\N	t	1	emerging	{"Theft": 3, "Suspicious Activity": 3, "Traffic Incident": 1, "Assault": 1, "Harassment": 2}	0.0325	3.2430	falling	0.8373	[[-1.4881654, 29.6319675], [-1.4883942, 29.6343007], [-1.4885116, 29.6381305], [-1.4852226, 29.6382805], [-1.4832682, 29.6349957], [-1.4843226, 29.6327518]]	mixed	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	8	0.9627	f	\N	declining	2026-06-03 11:24:07.411751+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 3.2/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "falling", "note": "Incident rate is DECLINING \\u2014 fewer reports in the recent half; current measures may be working"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.9627, "note": "8 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.8373, "note": "Cluster confidence 84% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 3.243, "trust_average": 72.7, "temporal_intensity": 0.0325, "cluster_confidence": 0.8373, "corroboration_score": 0.9627, "anomaly_score": 0.0}, "top_crime_types": [["Theft", 3], ["Suspicious Activity", 2], ["Traffic Incident", 1], ["Assault", 1], ["Harassment", 1]], "incident_count": 8, "generated_at": "2026-06-03T11:24:07.411740+00:00"}	1	f	0.0000	Kabeza Cell
-786	\N	-1.5136182	29.6456380	625.00	3	\N	medium	\N	720	2026-06-03 11:24:16.257699	\N	t	1	emerging	{"Theft": 1, "Domestic Violence": 1, "Suspicious Activity": 1}	0.0134	5.4597	stable	0.7630	[[-1.5138243, 29.6449344], [-1.5135424, 29.6458968]]	mixed	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2	0.7407	f	\N	active	2026-06-03 11:24:06.829717+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "medium", "note": "Moderate severity 5.5/10 \\u2014 mix of serious and minor incidents"}, {"factor": "trend", "direction": "stable", "note": "Incident rate is STABLE \\u2014 consistent volume throughout the observation window"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.7407, "note": "2 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.763, "note": "Cluster confidence 76% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 5.46, "trust_average": 82.9, "temporal_intensity": 0.0134, "cluster_confidence": 0.763, "corroboration_score": 0.7407, "anomaly_score": 0.0}, "top_crime_types": [["Theft", 1], ["Domestic Violence", 1]], "incident_count": 2, "generated_at": "2026-06-03T11:24:06.829705+00:00"}	1	f	0.0000	Kigombe Cell
-814	\N	-1.5409723	29.5381040	625.00	8	\N	medium	\N	720	2026-06-03 11:24:16.417798	\N	t	5	emerging	{"Domestic Violence": 1, "Assault": 1, "Drug Activity": 1, "Harassment": 1, "Vandalism": 1, "Suspicious Activity": 2, "Theft": 1}	0.0298	3.9813	rising	0.7060	[[-1.5408634, 29.5375096], [-1.5431354, 29.5377691], [-1.5395489, 29.5392159]]	mixed	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	4	0.8956	f	\N	escalating	2026-06-03 11:24:12.816252+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 4.0/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "rising", "note": "Incident rate is INCREASING \\u2014 more reports in the recent half of the window than the earlier half"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.8956, "note": "4 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.706, "note": "Cluster confidence 71% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 3.981, "trust_average": 61.3, "temporal_intensity": 0.0298, "cluster_confidence": 0.706, "corroboration_score": 0.8956, "anomaly_score": 0.0}, "top_crime_types": [["Domestic Violence", 1], ["Assault", 1], ["Drug Activity", 1], ["Harassment", 1]], "incident_count": 4, "generated_at": "2026-06-03T11:24:12.816235+00:00"}	1	f	0.0000	Rusambu Village
-771	\N	-1.4681662	29.6445304	625.00	5	\N	medium	\N	720	2026-06-03 11:24:16.427289	\N	t	3	emerging	{"Vandalism": 4, "Drug Activity": 1}	3.0000	3.5867	rising	0.7887	[[-1.4679317, 29.6440628], [-1.4684659, 29.6448082], [-1.4679014, 29.6445362]]	mixed	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	4	0.7536	f	\N	escalating	2026-06-03 11:24:03.879088+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 3.6/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "rising", "note": "Incident rate is INCREASING \\u2014 more reports in the recent half of the window than the earlier half"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.7536, "note": "4 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.7887, "note": "Cluster confidence 79% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 3.587, "trust_average": 79.7, "temporal_intensity": 3.0, "cluster_confidence": 0.7887, "corroboration_score": 0.7536, "anomaly_score": 0.0}, "top_crime_types": [["Vandalism", 4]], "incident_count": 4, "generated_at": "2026-06-03T11:24:03.879078+00:00"}	1	f	0.0000	Cyuve Sector
-798	\N	-1.5127734	29.6959081	625.00	8	\N	medium	\N	720	2026-06-03 11:24:16.432205	\N	t	4	emerging	{"Theft": 1, "Drug Activity": 2, "Suspicious Activity": 4, "Assault": 1}	0.0276	2.0693	rising	0.7392	[[-1.5134545, 29.6923712], [-1.5144728, 29.6952548], [-1.5148022, 29.6984595], [-1.5097937, 29.6961801]]	mixed	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	6	0.9902	f	\N	escalating	2026-06-03 11:24:09.102233+00	\N	\N	{"classification_factors": [{"factor": "severity", "level": "low", "note": "Low severity 2.1/10 \\u2014 minor incident types"}, {"factor": "trend", "direction": "rising", "note": "Incident rate is INCREASING \\u2014 more reports in the recent half of the window than the earlier half"}, {"factor": "lifecycle", "state": "emerging", "note": "NEW cluster \\u2014 no prior hotspot detected in this geographic area"}, {"factor": "corroboration", "level": "strong", "score": 0.9902, "note": "6 unique reporter(s) \\u2014 high independent corroboration"}, {"factor": "confidence", "score": 0.7392, "note": "Cluster confidence 74% = core-point ratio \\u00d7 0.35 + avg-trust \\u00d7 0.45 + cluster-size-score \\u00d7 0.20"}], "score_breakdown": {"severity_score": 2.069, "trust_average": 59.8, "temporal_intensity": 0.0276, "cluster_confidence": 0.7392, "corroboration_score": 0.9902, "anomaly_score": 0.0}, "top_crime_types": [["Suspicious Activity", 3], ["Drug Activity", 2], ["Theft", 1]], "incident_count": 6, "generated_at": "2026-06-03T11:24:09.102221+00:00"}	1	f	0.0000	Kanama Village
 \.
 
 
 --
--- Data for Name: incident_types; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: incident_types; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.incident_types (incident_type_id, type_name, description, severity_weight, color_code, is_active, created_at, default_special_assignment_unit) FROM stdin;
-2	Assault	Physical attack or violence against a person.	1.60	\N	t	2026-03-02 11:21:05.80863	RRU
-5	Domestic Violence	Threats or violence within a household/family.	1.70	\N	t	2026-03-02 11:21:05.80863	VPU
-6	Drug Activity	Suspected selling/using of illegal drugs.	1.40	\N	t	2026-03-02 11:21:05.80863	DEU
-7	Fraud/Scam	Deception to gain money/property (mobile money scam, etc.).	1.30	\N	t	2026-03-02 11:21:05.80863	AFU
-8	Harassment	Repeated threats, stalking, or intimidation.	1.20	\N	t	2026-03-02 11:21:05.80863	VPU
-4	Suspicious Activity	Unusual behavior or suspicious movement in the area.	1.00	\N	t	2026-03-02 11:21:05.80863	ISU
-1	Theft	Stealing of property (e.g., phone, money, livestock).	1.20	\N	t	2026-03-02 11:21:05.80863	CPU
-9	Traffic Incident	Non-emergency road incident affecting safety.	1.00	\N	t	2026-03-02 11:21:05.80863	TPU
-3	Vandalism	Damage or destruction of public/private property.	1.10	\N	t	2026-03-02 11:21:05.80863	CPU
+COPY public.incident_types (incident_type_id, type_name, description, severity_weight, color_code, is_active, created_at, default_special_assignment_unit, semantic_definition) FROM stdin;
+2	Assault	Physical attack or violence against a person.	1.60	\N	t	2026-03-02 11:21:05.80863	RRU	Assault is the intentional use of physical force or violence against another person, causing bodily harm or creating reasonable fear of imminent harm. This includes punching, kicking, slapping, stabbing, hitting with objects or weapons, pushing, choking, and any attack causing injury. It covers bar fights, street altercations, mob violence, gang-related beatings, assaults with deadly weapons (knives, machetes, blunt objects), sexual assault, assault on public officials, and unprovoked attacks. Severity ranges from minor bruises to life-threatening injuries. Key indicators include visible injuries, witness testimony of violent acts, medical reports, blood at the scene, and damaged surroundings from physical confrontation.
+5	Domestic Violence	Threats or violence within a household/family.	1.70	\N	t	2026-03-02 11:21:05.80863	VPU	Domestic violence encompasses any pattern of abusive behavior in a household or intimate relationship used to gain or maintain power and control over a partner, spouse, or family member. This includes physical abuse (hitting, slapping, beating, burning), emotional and psychological abuse (threats, intimidation, isolation, verbal degradation), sexual abuse within relationships, economic abuse (controlling finances, preventing employment), and destruction of personal property. It affects men, women, and children. Indicators include visible injuries on family members, frequent loud arguments or screaming from a residence, children appearing frightened or withdrawn, neighbors hearing sounds of violence, and repeated visits to medical facilities for unexplained injuries.
+6	Drug Activity	Suspected selling/using of illegal drugs.	1.40	\N	t	2026-03-02 11:21:05.80863	DEU	Drug activity involves the illegal production, distribution, sale, possession, or use of controlled substances and narcotics. This includes street-level drug dealing, drug trafficking, operating drug labs or manufacturing sites, growing marijuana or other illicit plants, selling drugs near schools or public spaces, possession of large quantities indicating intent to distribute, drug use in public areas, and the presence of drug paraphernalia (pipes, needles, scales, packaging materials). It also covers prescription drug abuse and diversion, smuggling drugs across borders, and money laundering associated with drug trade. Signs include frequent short visits to a location, unusual chemical odors, excessive security measures at residences, and discarded drug packaging.
+7	Fraud/Scam	Deception to gain money/property (mobile money scam, etc.).	1.30	\N	t	2026-03-02 11:21:05.80863	AFU	Fraud and scams involve intentional deception for financial or personal gain at the expense of victims. This includes mobile money fraud (fake transfers, unauthorized withdrawals), phone scams (impersonating officials, fake lottery wins), online fraud (phishing, fake websites, romance scams), identity fraud (using someone else's documents), investment scams (Ponzi schemes, fake business opportunities), insurance fraud, counterfeit currency, fake job offers requiring upfront payment, land title fraud, impersonation of government officials to collect fees, and manipulation of digital payment systems. Victims are tricked through trust, urgency, or authority into giving away money, information, or access. Evidence includes fraudulent messages, fake documents, unauthorized transactions, and victim testimony.
+8	Harassment	Repeated threats, stalking, or intimidation.	1.20	\N	t	2026-03-02 11:21:05.80863	VPU	Harassment is persistent unwanted behavior directed at an individual that causes distress, fear, or intimidation. This includes verbal harassment (insults, threats, slurs), sexual harassment (unwanted advances, catcalling, inappropriate touching), cyberbullying and online harassment (threatening messages, doxxing, revenge sharing of private content), stalking (following someone repeatedly, monitoring their movements), workplace harassment, harassment based on gender, ethnicity, or religion, noise harassment (deliberate disturbance), and intimidation through repeated unwanted contact. It also covers harassment by neighbors, debt collectors using abusive tactics, and community ostracism. The behavior is repeated, unwelcome, and creates a hostile environment for the victim.
+4	Suspicious Activity	Unusual behavior or suspicious movement in the area.	1.00	\N	t	2026-03-02 11:21:05.80863	ISU	Suspicious activity refers to unusual or concerning behavior that may indicate criminal intent or a threat to public safety, but does not yet constitute a completed crime. This includes loitering near homes or businesses with no clear purpose, individuals photographing security systems or entry points, unfamiliar vehicles repeatedly circling a neighborhood, strangers attempting to open doors or gates, people concealing their identity (masks, hoods) in unusual contexts, abandoned packages or bags in public areas, individuals watching or following others, unusual gatherings at odd hours, people carrying tools associated with break-ins, and any behavior that deviates significantly from normal community patterns. Reporting suspicious activity helps prevent crimes before they occur.
+1	Theft	Stealing of property (e.g., phone, money, livestock).	1.20	\N	t	2026-03-02 11:21:05.80863	CPU	Theft involves the unlawful taking of someone else's property without their consent and with the intent to permanently deprive them of it. This includes pickpocketing, shoplifting, burglary (breaking into homes or businesses to steal), robbery (theft using force or intimidation), carjacking, livestock theft, crop theft, phone snatching, purse grabbing, and stealing from vehicles. It also covers organized theft rings, theft of utilities (electricity, water), identity theft, and theft of construction materials. The victim loses possession of their belongings through deception, stealth, or force. Common indicators include missing items, broken locks, forced entry, witness accounts of someone fleeing with property, and CCTV footage of unauthorized taking.
+9	Traffic Incident	Non-emergency road incident affecting safety.	1.00	\N	t	2026-03-02 11:21:05.80863	TPU	Traffic incidents involve events on roads and public ways that disrupt normal traffic flow, endanger lives, or cause property damage. This includes vehicle collisions (car-to-car, car-to-motorcycle, car-to-pedestrian, car-to-bicycle), hit-and-run accidents, reckless driving, drunk driving incidents, speeding violations causing accidents, motorcycle accidents, public transport accidents (bus, taxi), road rage confrontations, pedestrian injuries from vehicles, damaged road infrastructure (broken barriers, fallen signs), vehicles obstructing roads, and accidents involving livestock on roads. It also covers dangerous road conditions causing accidents and illegal racing. Evidence includes vehicle damage, skid marks, injured parties, traffic camera footage, and witness accounts of the incident.
+3	Vandalism	Damage or destruction of public/private property.	1.10	\N	t	2026-03-02 11:21:05.80863	CPU	Vandalism is the deliberate destruction, damage, or defacement of property belonging to another person or the public. This includes graffiti on walls and buildings, smashing windows, slashing tires, keying vehicles, breaking streetlights, damaging public benches or bus stops, defacing monuments or signs, arson of property, destroying fences, tampering with water pipes or electrical installations, and damaging crops or farmland. It also covers destruction of community property like schools, churches, and market stalls. The act is intentional and serves no constructive purpose. Evidence typically includes damaged property, paint marks, broken glass, burn marks, and witness accounts of destructive behavior.
 \.
 
 
 --
--- Data for Name: local_leader_auth_codes; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: local_leader_auth_codes; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.local_leader_auth_codes (local_leader_auth_code_id, local_leader_id, phone_number, code, purpose, expires_at, used_at, created_at) FROM stdin;
@@ -2628,7 +2539,7 @@ COPY public.local_leader_auth_codes (local_leader_auth_code_id, local_leader_id,
 
 
 --
--- Data for Name: local_leader_coverage_locations; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: local_leader_coverage_locations; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.local_leader_coverage_locations (local_leader_coverage_location_id, local_leader_id, location_id) FROM stdin;
@@ -2637,7 +2548,7 @@ COPY public.local_leader_coverage_locations (local_leader_coverage_location_id, 
 
 
 --
--- Data for Name: local_leaders; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: local_leaders; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.local_leaders (local_leader_id, full_name, phone_number, email, password_hash, is_active, created_at, last_login_at, fcm_device_token, role) FROM stdin;
@@ -2646,7 +2557,7 @@ COPY public.local_leaders (local_leader_id, full_name, phone_number, email, pass
 
 
 --
--- Data for Name: locations; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: locations; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.locations (location_id, location_type, location_name, parent_location_id, geometry, centroid_lat, centroid_long, is_active, created_at) FROM stdin;
@@ -3169,7 +3080,7 @@ COPY public.locations (location_id, location_type, location_name, parent_locatio
 
 
 --
--- Data for Name: mfa_codes; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: mfa_codes; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.mfa_codes (id, police_user_id, code, purpose, expires_at, used_at, created_at) FROM stdin;
@@ -3177,7 +3088,7 @@ COPY public.mfa_codes (id, police_user_id, code, purpose, expires_at, used_at, c
 
 
 --
--- Data for Name: ml_predictions; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: ml_predictions; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.ml_predictions (prediction_id, report_id, trust_score, prediction_label, confidence, model_version, model_type, explanation, processing_time, is_final, evaluated_at) FROM stdin;
@@ -4311,11 +4222,24 @@ cfafc3df-4ea6-4f13-8c1a-bf7e797a6f1c	a743e59a-6182-454a-8b94-fc36cd012676	48.76	
 3eb897fc-ab4f-4739-87da-401e125ebe7c	cb0daecc-4051-462c-9393-9625c632c716	68.59	suspicious	66.26	unified_v3.2	unified_aggregation	{"temporal_pattern": 0.591, "device_credibility": 0.356, "description_quality": 0.734, "location_consistency": 0.876}	1029	t	2026-06-02 19:44:43.512821
 e032c0df-1086-46a1-a959-9da1b1c1bb42	7e5d86fa-418b-4fe7-94ad-2d9098c882bc	60.62	likely_real	52.22	unified_v3.2	unified_aggregation	{"temporal_pattern": 0.522, "device_credibility": 0.464, "description_quality": 0.522, "location_consistency": 0.728}	377	t	2026-06-02 19:44:43.512821
 e7d73220-82cc-4ed9-bd4c-c90db4eaf091	d12c7519-dc1b-4993-89ad-6507a549caa1	58.52	likely_real	66.01	unified_v3.2	unified_aggregation	{"temporal_pattern": 0.375, "device_credibility": 0.855, "description_quality": 0.552, "location_consistency": 0.645}	2002	t	2026-06-02 19:44:43.512821
+779b6f99-5dc6-4c2c-83d0-39057e7898c6	6bc63aca-703f-4303-af89-a9d8cb803dfd	69.73	suspicious	0.27	trustbond_v3_20260523_000841	xgboost	{"cluster_score": 0.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 50.0, "coordination_penalty": 0.0, "description_credibility": {"word_count": 17, "has_evidence": false, "length_points": 1.2, "length_adjustment": "bonus", "semantic_similarity": 9.58, "min_recommended_words": 15}}	\N	t	2026-06-09 14:15:13.154689
+9d2f7cca-7e1c-4d5f-a3b1-c97894c0765c	dd934d50-7483-4c5d-99c7-85a0f851060a	70.16	likely_real	0.27	trustbond_v3_20260523_000841	xgboost	{"cluster_score": 0.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 50.0, "coordination_penalty": 0.0, "description_credibility": {"word_count": 18, "has_evidence": false, "length_points": 1.8, "length_adjustment": "bonus", "semantic_similarity": 23.9, "min_recommended_words": 15}}	\N	t	2026-06-09 14:15:21.61542
+135fc5d4-c590-4aad-9ef7-8ca582557374	c1d178bf-cef6-4fb7-9e14-c62c65db6f0e	69.12	suspicious	0.27	trustbond_v3_20260523_000841	xgboost	{"cluster_score": 0.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 50.0, "coordination_penalty": 0.0, "description_credibility": {"word_count": 24, "has_evidence": false, "length_points": 5.4, "length_adjustment": "bonus", "semantic_similarity": 40.85, "min_recommended_words": 15}}	\N	t	2026-06-09 14:16:13.530726
+2339fa18-d034-4c3a-9d25-f980e6e6e3f9	f84beeea-7a39-4839-8ab1-e33a704cbe71	66.65	suspicious	0.26	trustbond_v3_20260523_000841	xgboost	{"cluster_score": 100.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 50.0, "coordination_penalty": 0.0, "description_credibility": {"word_count": 24, "has_evidence": false, "length_points": 5.4, "length_adjustment": "bonus", "semantic_similarity": 31.1, "min_recommended_words": 15}}	\N	t	2026-06-09 14:16:22.358941
+bcbf303b-8f30-4217-9869-ba7fcb88655a	897e4525-7d74-4f5f-af23-b482ba7ab7fa	74.23	likely_real	0.27	trustbond_v3_20260523_000841	xgboost	{"cluster_score": 0.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 50.0, "coordination_penalty": 0.0, "description_credibility": {"word_count": 29, "has_evidence": false, "length_points": 8.4, "length_adjustment": "bonus", "semantic_similarity": 9.38, "min_recommended_words": 15}}	\N	t	2026-06-09 14:15:27.936904
+8cf4784c-4b66-4338-a8f9-7759dec1dadb	ec1828e4-b9d2-4929-807f-7e6d49151e76	71.52	likely_real	0.26	trustbond_v3_20260523_000841	xgboost	{"cluster_score": 0.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 50.0, "coordination_penalty": 0.0, "description_credibility": {"word_count": 31, "has_evidence": false, "length_points": 9.6, "length_adjustment": "bonus", "semantic_similarity": 85.0, "min_recommended_words": 15}}	\N	t	2026-06-09 14:15:34.743167
+efd16775-6bca-4ee2-bb6f-e8f8ab876ce5	38d4dc5c-c264-4d61-8bd6-daab91c4475b	70.72	likely_real	0.27	trustbond_v3_20260523_000841	xgboost	{"cluster_score": 0.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 50.0, "coordination_penalty": 0.0, "description_credibility": {"word_count": 28, "has_evidence": false, "length_points": 7.8, "length_adjustment": "bonus", "semantic_similarity": 34.32, "min_recommended_words": 15}}	\N	t	2026-06-09 14:15:41.765725
+8ba4803e-d3e3-4dfa-b2cf-ad435f696ee6	94f06a22-f514-40d2-bf20-f1aff0768874	75.37	likely_real	0.27	trustbond_v3_20260523_000841	xgboost	{"cluster_score": 0.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 50.0, "coordination_penalty": 0.0, "description_credibility": {"word_count": 31, "has_evidence": false, "length_points": 9.6, "length_adjustment": "bonus", "semantic_similarity": 9.62, "min_recommended_words": 15}}	\N	t	2026-06-09 14:16:30.827865
+5af740b8-9519-4802-bf22-6b915f6b4ec4	12f5fba7-cc38-435b-8628-d4bb94b70407	70.24	likely_real	0.26	trustbond_v3_20260523_000841	xgboost	{"cluster_score": 80.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 50.0, "coordination_penalty": 0.0, "description_credibility": {"word_count": 19, "has_evidence": false, "length_points": 2.4, "length_adjustment": "bonus", "semantic_similarity": 40.89, "min_recommended_words": 15}}	\N	t	2026-06-09 14:15:48.335592
+e7e80fea-39d9-4e74-9aa5-51367e98aa84	c16cfaa5-d655-418b-b7c6-4b1065179763	68.34	suspicious	0.03	trustbond_v3_20260523_000841	xgboost	{"cluster_score": 0.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 0.5, "coordination_penalty": 0.0, "description_credibility": {"word_count": 18, "has_evidence": false, "length_points": 1.8, "length_adjustment": "bonus", "semantic_similarity": 9.79, "min_recommended_words": 15}}	\N	t	2026-06-09 14:16:37.376021
+e02eaaf7-e9fa-4c26-8024-962181aa36a1	f86b48e0-e0e3-4a67-902b-98f5106b5749	69.24	suspicious	0.27	trustbond_v3_20260523_000841	xgboost	{"cluster_score": 0.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 50.0, "coordination_penalty": 0.0, "description_credibility": {"word_count": 25, "has_evidence": false, "length_points": 6.0, "length_adjustment": "bonus", "semantic_similarity": 9.96, "min_recommended_words": 15}}	\N	t	2026-06-09 14:16:00.637256
+1e846013-aff2-4066-a3dc-b77986f36bf8	d675d5d2-c481-43c1-be74-22d0c597482d	68.03	suspicious	0.27	trustbond_v3_20260523_000841	xgboost	{"cluster_score": 0.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 50.0, "coordination_penalty": 0.0, "description_credibility": {"word_count": 23, "has_evidence": false, "length_points": 4.8, "length_adjustment": "bonus", "semantic_similarity": 26.09, "min_recommended_words": 15}}	\N	t	2026-06-09 14:16:07.558444
+edc3ce0f-8a0a-4990-8792-d44555ad67d4	2cf60110-932d-455e-a76a-24b6ef70299c	68.48	suspicious	0.26	trustbond_v3_20260523_000841	xgboost	{"cluster_score": 0.0, "content_score": 0.0, "location_score": 100.0, "community_net_votes": 0, "user_behavior_score": 50.0, "coordination_penalty": 0.0, "description_credibility": {"word_count": 22, "has_evidence": false, "length_points": 4.2, "length_adjustment": "bonus", "semantic_similarity": 10.8, "min_recommended_words": 15}}	\N	t	2026-06-09 14:16:43.714535
 \.
 
 
 --
--- Data for Name: notifications; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: notifications; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.notifications (notification_id, police_user_id, title, message, type, priority, related_entity_type, related_entity_id, action_url, is_read, read_at, created_at, expires_at) FROM stdin;
@@ -5375,6 +5299,7 @@ c2a9f697-3216-4cb3-b682-ceef894e31a8	27	URGENT: Unknown	Verified urgent-priority
 1d33d076-8538-4b39-bb04-d9949dbb3e1e	7	Report needs review: Unknown	Report RPT-2026-0240 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	00670992-adc5-4562-89c3-a4fd0b21fe63	\N	t	\N	2026-06-02 22:49:54.623155	\N
 157703f7-09ce-40b4-8ab8-edb71c0ee0f3	1	Report needs review: Unknown	Report RPT-2026-0240 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	00670992-adc5-4562-89c3-a4fd0b21fe63	\N	f	\N	2026-06-02 22:48:54.623155	\N
 a93732f2-b0a1-4b61-9d09-a524422e4283	26	Report needs review: Unknown	Report RPT-2026-0240 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	00670992-adc5-4562-89c3-a4fd0b21fe63	\N	t	\N	2026-06-02 22:55:54.623155	\N
+dba111de-6cc6-4adf-85dd-8d986b986e78	27	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	5e496142-b1b7-42ce-addf-c4cbdb74db7d	\N	f	\N	2026-06-02 07:03:39.444189	\N
 9655d453-d656-44eb-a674-61608079d65e	7	Report needs review: Unknown	Report RPT-2026-0241 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	9219c7a1-f9c1-4012-b549-962c7d8d8d7c	\N	f	\N	2026-05-09 03:13:30.94717	\N
 0f68d2ae-6caf-4d0e-92fe-aec104a5a561	1	Report needs review: Unknown	Report RPT-2026-0241 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	9219c7a1-f9c1-4012-b549-962c7d8d8d7c	\N	f	\N	2026-05-09 03:09:30.94717	\N
 f9c0ef33-5d50-43d9-8f60-506a6617d9f0	26	Report needs review: Unknown	Report RPT-2026-0241 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	9219c7a1-f9c1-4012-b549-962c7d8d8d7c	\N	t	\N	2026-05-09 03:05:30.94717	\N
@@ -5541,6 +5466,7 @@ c01a6091-7f63-4e12-89ac-c062cfb3cf80	1	Report needs review: Unknown	Report RPT-2
 f68b057e-d02d-40e3-ac4f-c304d631fac6	27	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	04383c42-10be-4541-9fc3-c4fca16659ca	\N	f	\N	2026-05-23 19:24:29.060244	\N
 1df7f28b-0970-4ad4-908c-b3fd42a46d26	6	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	04383c42-10be-4541-9fc3-c4fca16659ca	\N	f	\N	2026-05-23 19:20:29.060244	\N
 b7fbd15a-8804-48ae-a3b5-519956dd4d20	7	Report needs review: Unknown	Report RPT-2026-0312 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	d8916ffd-077c-43ba-94c4-5f21315c322e	\N	f	\N	2026-05-13 19:54:50.311897	\N
+31506d1d-6a3a-4c07-8418-8302c1510126	6	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	5e496142-b1b7-42ce-addf-c4cbdb74db7d	\N	f	\N	2026-06-02 06:56:39.444189	\N
 eba652ae-d732-4f0f-a40c-b88b1bcd4d10	1	Report needs review: Unknown	Report RPT-2026-0312 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	d8916ffd-077c-43ba-94c4-5f21315c322e	\N	t	\N	2026-05-13 19:51:50.311897	\N
 4d3b3d85-6042-421f-81c9-2bddd2b0fe72	26	Report needs review: Unknown	Report RPT-2026-0312 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	d8916ffd-077c-43ba-94c4-5f21315c322e	\N	t	\N	2026-05-13 19:47:50.311897	\N
 896adf64-04d8-483a-9d73-fb249864063d	7	Report needs review: Unknown	Report RPT-2026-0313 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	5d626942-955a-4f0f-acd7-52c071eeb230	\N	t	\N	2026-05-11 16:15:40.728221	\N
@@ -5575,6 +5501,7 @@ fc28132a-3b6e-45cc-aed3-edab890c824e	28	HIGH: Unknown	Verified high-priority inc
 3828eba6-6766-4fd1-9427-835778789400	7	Report needs review: Unknown	Report RPT-2026-0325 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	304a9c53-445c-4a96-9284-6d10790ead41	\N	f	\N	2026-05-25 14:41:20.808746	\N
 489f7750-decc-42d1-b5c1-7c17f8b10d53	1	Report needs review: Unknown	Report RPT-2026-0325 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	304a9c53-445c-4a96-9284-6d10790ead41	\N	t	\N	2026-05-25 14:32:20.808746	\N
 0546faad-fb21-4538-9793-98efdc427c7d	26	Report needs review: Unknown	Report RPT-2026-0325 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	304a9c53-445c-4a96-9284-6d10790ead41	\N	f	\N	2026-05-25 14:34:20.808746	\N
+6f7894e0-14f7-46d4-834e-ee3afa592217	7	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	e5700373-0c40-4e50-af1b-5d4297715147	\N	f	\N	2026-05-03 23:11:11.673218	\N
 d05a6927-bd17-4abb-b566-89eb14c0be59	7	Report needs review: Unknown	Report RPT-2026-0328 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	0977cb99-6170-411b-afd2-031ab7737359	\N	t	\N	2026-05-29 17:06:41.400661	\N
 3eb82593-ba7b-4b0f-ad56-52f6fe3c8bf1	1	Report needs review: Unknown	Report RPT-2026-0328 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	0977cb99-6170-411b-afd2-031ab7737359	\N	f	\N	2026-05-29 16:59:41.400661	\N
 8999897c-89fd-4463-951e-11dc2848eb9a	26	Report needs review: Unknown	Report RPT-2026-0328 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	0977cb99-6170-411b-afd2-031ab7737359	\N	f	\N	2026-05-29 17:01:41.400661	\N
@@ -5944,6 +5871,7 @@ f3420999-19d9-417e-96f7-022d7d5f8ea5	28	URGENT: Unknown	Verified urgent-priority
 eca0d01f-a043-401f-9a19-4705146350a5	6	URGENT: Unknown	Verified urgent-priority incident reported. Case investigation may be required.	report	medium	report	b4b9664c-82ba-4d7e-841a-13220004162c	\N	f	\N	2026-05-29 08:28:21.104827	\N
 74339df2-3430-4a88-afb6-539bdef0d75e	7	Report needs review: Unknown	Report RPT-2026-0486 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	82bf0d7a-afcc-4cd0-bc78-608cda798717	\N	t	\N	2026-06-01 04:57:07.154853	\N
 49e64479-4ca8-438f-8ca8-552d0b091a89	1	Report needs review: Unknown	Report RPT-2026-0486 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	82bf0d7a-afcc-4cd0-bc78-608cda798717	\N	f	\N	2026-06-01 05:09:07.154853	\N
+167d93c3-4ed7-42fd-bc79-a2c75777d6c6	29	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	e5700373-0c40-4e50-af1b-5d4297715147	\N	t	\N	2026-05-03 23:16:11.673218	\N
 0dc6ee0f-809a-494a-9274-07d45174e1bb	26	Report needs review: Unknown	Report RPT-2026-0486 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	82bf0d7a-afcc-4cd0-bc78-608cda798717	\N	t	\N	2026-06-01 04:59:07.154853	\N
 eb5152d1-3f3d-4c9c-82ff-1de697c533ea	7	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	c44f53a4-e90c-4ea1-8c2a-3e8abf0081ba	\N	t	\N	2026-05-13 21:10:45.442864	\N
 b360fcfe-f9cb-456b-be9a-0c49dfb5460e	29	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	c44f53a4-e90c-4ea1-8c2a-3e8abf0081ba	\N	f	\N	2026-05-13 21:12:45.442864	\N
@@ -6012,6 +5940,7 @@ ab8fe5d7-e711-4e2b-ace9-1da32f0bae3c	29	HIGH: Unknown	Verified high-priority inc
 0cf7bc2d-09aa-45aa-bda1-db1163e72d9e	6	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	991731d6-020f-464b-8286-be0d9f2eaa47	\N	f	\N	2026-05-30 19:23:19.277451	\N
 700e045b-f806-4850-9b2b-0c25c728a102	7	Report needs review: Unknown	Report RPT-2026-0522 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	d2851e61-0f40-4103-bc9a-e237ffbcb7af	\N	f	\N	2026-04-28 08:03:00.38282	\N
 d1df720c-bd08-40c9-8f3e-71bca185750b	1	Report needs review: Unknown	Report RPT-2026-0522 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	d2851e61-0f40-4103-bc9a-e237ffbcb7af	\N	f	\N	2026-04-28 07:52:00.38282	\N
+e00ee197-941e-4d12-8f01-268aa3629f7d	7	New Hotspots Detected	42 new safety hotspots have been automatically detected based on recent reports.	hotspot	medium	hotspot	\N	\N	f	\N	2026-06-09 14:15:21.362176	\N
 bc1c5606-7b2d-4809-be44-387ba73bb3af	26	Report needs review: Unknown	Report RPT-2026-0522 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	d2851e61-0f40-4103-bc9a-e237ffbcb7af	\N	f	\N	2026-04-28 07:53:00.38282	\N
 3aa2c6ec-4a28-4af6-b624-174be9d1f706	7	Report needs review: Unknown	Report RPT-2026-0523 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	c3be31a3-649e-4602-b3ef-3ec59a0c1175	\N	f	\N	2026-05-08 17:48:17.246645	\N
 e8c28a41-5303-40b2-ba4e-9a5f01bb03ed	1	Report needs review: Unknown	Report RPT-2026-0523 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	c3be31a3-649e-4602-b3ef-3ec59a0c1175	\N	f	\N	2026-05-08 17:54:17.246645	\N
@@ -6384,6 +6313,7 @@ feaaf7ac-b403-46cf-a878-208df99e7c05	29	HIGH: Unknown	Verified high-priority inc
 05e35f8d-54db-4de9-bafe-bb8908405104	28	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	7a0dddc4-4a23-4d7e-b6fd-2eba28e25e07	\N	t	\N	2026-05-10 15:51:50.765047	\N
 62bc1746-0ede-461a-b556-f9c4b7030161	27	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	7a0dddc4-4a23-4d7e-b6fd-2eba28e25e07	\N	f	\N	2026-05-10 15:38:50.765047	\N
 88565c67-d339-4c12-9cf7-d850a575cb1d	6	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	7a0dddc4-4a23-4d7e-b6fd-2eba28e25e07	\N	f	\N	2026-05-10 15:44:50.765047	\N
+2fe97267-bbc6-4458-a6c5-c06b2a11e479	28	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	e5700373-0c40-4e50-af1b-5d4297715147	\N	t	\N	2026-05-03 23:17:11.673218	\N
 811de97b-9553-4937-ba29-8857c0236a3b	7	Report needs review: Unknown	Report RPT-2026-0714 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	54249cec-4df1-46fc-a8ff-461f7ebcc4b1	\N	f	\N	2026-04-29 09:53:27.760877	\N
 05c86dbc-1ad0-48a2-b180-f24189b68dc8	1	Report needs review: Unknown	Report RPT-2026-0714 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	54249cec-4df1-46fc-a8ff-461f7ebcc4b1	\N	f	\N	2026-04-29 09:52:27.760877	\N
 7c4f23d4-af57-4301-be72-6c5d15d4966d	26	Report needs review: Unknown	Report RPT-2026-0714 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	54249cec-4df1-46fc-a8ff-461f7ebcc4b1	\N	f	\N	2026-04-29 09:51:27.760877	\N
@@ -6416,11 +6346,6 @@ f6d4fcc7-c265-4fcc-bdeb-99ce86f82ee9	26	Report needs review: Unknown	Report RPT-
 c7587c27-cc0f-471c-83aa-2e2b15b2da52	7	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	5e496142-b1b7-42ce-addf-c4cbdb74db7d	\N	t	\N	2026-06-02 07:02:39.444189	\N
 34e13bbb-ecc3-4e3f-96f6-1d6687acc309	29	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	5e496142-b1b7-42ce-addf-c4cbdb74db7d	\N	t	\N	2026-06-02 06:39:39.444189	\N
 5fc2c201-6643-47c0-9591-fac49c7829e1	28	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	5e496142-b1b7-42ce-addf-c4cbdb74db7d	\N	f	\N	2026-06-02 06:59:39.444189	\N
-dba111de-6cc6-4adf-85dd-8d986b986e78	27	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	5e496142-b1b7-42ce-addf-c4cbdb74db7d	\N	f	\N	2026-06-02 07:03:39.444189	\N
-31506d1d-6a3a-4c07-8418-8302c1510126	6	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	5e496142-b1b7-42ce-addf-c4cbdb74db7d	\N	f	\N	2026-06-02 06:56:39.444189	\N
-6f7894e0-14f7-46d4-834e-ee3afa592217	7	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	e5700373-0c40-4e50-af1b-5d4297715147	\N	f	\N	2026-05-03 23:11:11.673218	\N
-167d93c3-4ed7-42fd-bc79-a2c75777d6c6	29	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	e5700373-0c40-4e50-af1b-5d4297715147	\N	t	\N	2026-05-03 23:16:11.673218	\N
-2fe97267-bbc6-4458-a6c5-c06b2a11e479	28	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	e5700373-0c40-4e50-af1b-5d4297715147	\N	t	\N	2026-05-03 23:17:11.673218	\N
 ab4bd039-7a70-491c-93bf-210f1644458f	27	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	e5700373-0c40-4e50-af1b-5d4297715147	\N	t	\N	2026-05-03 23:30:11.673218	\N
 3345e380-158c-4c56-af35-985974e4eedc	6	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	e5700373-0c40-4e50-af1b-5d4297715147	\N	f	\N	2026-05-03 23:24:11.673218	\N
 cd0a03c6-4507-4c37-8faa-d217d6f6573c	7	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	366d3edb-6432-4e08-887f-72d7236b22dd	\N	f	\N	2026-05-21 17:32:20.90841	\N
@@ -6928,6 +6853,7 @@ c8b587f6-e78b-437e-b06a-5322ee8dd8c5	7	HIGH: Unknown	Verified high-priority inci
 b69632b6-3aee-4f43-8252-f8359514945b	28	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	7b1e1f9b-a2f8-484f-a043-99ecb9047bbe	\N	t	\N	2026-05-27 20:11:10.552999	\N
 9421f5b4-92b5-4a59-b96c-ab04773304f7	27	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	7b1e1f9b-a2f8-484f-a043-99ecb9047bbe	\N	f	\N	2026-05-27 20:11:10.552999	\N
 c4bb31c7-0413-4d15-aa2b-cd602d3eb72a	6	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	7b1e1f9b-a2f8-484f-a043-99ecb9047bbe	\N	t	\N	2026-05-27 19:50:10.552999	\N
+56745b28-54a2-4d4a-a2d5-c8f1eb1f0bd1	1	New Hotspots Detected	42 new safety hotspots have been automatically detected based on recent reports.	hotspot	medium	hotspot	\N	\N	f	\N	2026-06-09 14:15:21.362176	\N
 4a9785f7-9885-48d0-a838-1a5b95688e06	7	Report needs review: Unknown	Report RPT-2026-0980 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	b3697eab-0f37-4a09-bb96-e9d7f8cae3da	\N	f	\N	2026-04-30 16:28:46.556423	\N
 1cf005a5-d8b0-44cb-8ab0-c2aa53084496	1	Report needs review: Unknown	Report RPT-2026-0980 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	b3697eab-0f37-4a09-bb96-e9d7f8cae3da	\N	f	\N	2026-04-30 16:29:46.556423	\N
 0a1a111a-81dc-4365-83e4-5cc00c25d581	26	Report needs review: Unknown	Report RPT-2026-0980 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	b3697eab-0f37-4a09-bb96-e9d7f8cae3da	\N	f	\N	2026-04-30 16:24:46.556423	\N
@@ -6993,6 +6919,7 @@ c1de6f83-4fb4-49ac-bfb1-325a924dfe40	28	URGENT: Unknown	Verified urgent-priority
 aeedce94-4438-4e80-a1b2-6482b304eb73	7	Report needs review: Unknown	Report RPT-2026-1009 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	3d83aafe-1101-41b1-9f1a-977e9dc2a6a8	\N	f	\N	2026-05-24 20:02:03.228177	\N
 78ce999e-4bef-4974-b720-8c559cb4ec82	1	Report needs review: Unknown	Report RPT-2026-1009 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	3d83aafe-1101-41b1-9f1a-977e9dc2a6a8	\N	f	\N	2026-05-24 20:01:03.228177	\N
 90909cb0-e0cc-48ad-bd1e-f99af3f66a64	26	Report needs review: Unknown	Report RPT-2026-1009 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	3d83aafe-1101-41b1-9f1a-977e9dc2a6a8	\N	f	\N	2026-05-24 19:55:03.228177	\N
+d0dadeb3-e4d9-42df-b1d9-c66d6282286c	26	New Hotspots Detected	42 new safety hotspots have been automatically detected based on recent reports.	hotspot	medium	hotspot	\N	\N	f	\N	2026-06-09 14:15:21.362176	\N
 c41f482d-0192-4016-9a5a-991389658f70	7	Report needs review: Unknown	Report RPT-2026-1011 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	43cb4226-63a7-4009-b035-2374429d9371	\N	t	\N	2026-05-11 22:14:22.006867	\N
 4cf7a6b6-efa4-40fe-9432-3da37afcfa76	1	Report needs review: Unknown	Report RPT-2026-1011 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	43cb4226-63a7-4009-b035-2374429d9371	\N	t	\N	2026-05-11 22:09:22.006867	\N
 213e54c8-37b8-4dd0-8003-f34f6db57d1c	26	Report needs review: Unknown	Report RPT-2026-1011 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	43cb4226-63a7-4009-b035-2374429d9371	\N	f	\N	2026-05-11 22:05:22.006867	\N
@@ -7094,6 +7021,7 @@ f93fe4aa-bc87-486b-98a2-d1970b55b930	1	Report needs review: Unknown	Report RPT-2
 614d7252-3efb-4898-8415-4694679584b8	6	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	9e7583a6-68bc-47df-a5c7-a5c43e1d4251	\N	t	\N	2026-04-26 16:10:37.886782	\N
 565ae9a4-8eaf-4f85-abef-7d632261cb7e	7	Report needs review: Unknown	Report RPT-2026-1059 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	018d38ff-0c8c-4ce5-8286-49a8ef25be03	\N	t	\N	2026-05-31 06:43:04.504326	\N
 51bdb37a-1fa0-422d-9f68-12d0a5325a62	1	Report needs review: Unknown	Report RPT-2026-1059 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	018d38ff-0c8c-4ce5-8286-49a8ef25be03	\N	f	\N	2026-05-31 06:47:04.504326	\N
+594d7652-4a23-459d-a076-14195abd7519	7	New Hotspots Detected	42 new safety hotspots have been automatically detected based on recent reports.	hotspot	medium	hotspot	\N	\N	f	\N	2026-06-09 14:15:37.287936	\N
 1b702e99-e8e5-4dc0-8d34-a6b1d757df39	26	Report needs review: Unknown	Report RPT-2026-1059 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	018d38ff-0c8c-4ce5-8286-49a8ef25be03	\N	f	\N	2026-05-31 06:51:04.504326	\N
 7cff355e-113d-4112-9f49-aaf4199ec73e	7	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	2ae2f239-c634-4d69-9c35-a0cca3ddd1c0	\N	f	\N	2026-05-16 23:40:27.263634	\N
 0a10e6b9-6844-4268-acfb-dbc3dab3b974	29	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	2ae2f239-c634-4d69-9c35-a0cca3ddd1c0	\N	f	\N	2026-05-16 23:28:27.263634	\N
@@ -7323,6 +7251,7 @@ dd1faf99-14cd-47c5-bf17-044c43406e5e	27	HIGH: Unknown	Verified high-priority inc
 aefd3c3b-5017-4ae3-b0fb-662eff53a83e	7	Report needs review: Unknown	Report RPT-2026-0134 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	2d98a6e9-ab43-4af5-aa67-34e63bf7b285	\N	f	\N	2026-05-12 18:51:47.939394	\N
 42eab386-b807-43c7-ba68-a6dd0f6c86e5	1	Report needs review: Unknown	Report RPT-2026-0134 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	2d98a6e9-ab43-4af5-aa67-34e63bf7b285	\N	f	\N	2026-05-12 19:01:47.939394	\N
 af291d40-e6f8-4031-a50a-afba37c8e20d	26	Report needs review: Unknown	Report RPT-2026-0134 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	2d98a6e9-ab43-4af5-aa67-34e63bf7b285	\N	f	\N	2026-05-12 18:56:47.939394	\N
+f5aeb583-f9a4-4706-b6c9-015c18612561	1	New Hotspots Detected	42 new safety hotspots have been automatically detected based on recent reports.	hotspot	medium	hotspot	\N	\N	f	\N	2026-06-09 14:15:37.287936	\N
 209270c0-efd9-4ddf-8525-f1af08b26070	7	Report needs review: Unknown	Report RPT-2026-0137 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	b77261f3-b118-4566-93ee-ac504de86e70	\N	f	\N	2026-05-16 17:12:52.209398	\N
 04ef977b-a747-4b9e-a3e6-e92bfdd68a7f	1	Report needs review: Unknown	Report RPT-2026-0137 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	b77261f3-b118-4566-93ee-ac504de86e70	\N	f	\N	2026-05-16 17:21:52.209398	\N
 d91cf3df-5588-422c-9edf-62e47dcb1cf8	26	Report needs review: Unknown	Report RPT-2026-0137 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	b77261f3-b118-4566-93ee-ac504de86e70	\N	f	\N	2026-05-16 17:13:52.209398	\N
@@ -7492,6 +7421,7 @@ e2d74d09-dae7-42d4-9ab3-1e628800a2db	1	Report needs review: Unknown	Report RPT-2
 8d53de38-68b4-4fbd-bd4a-ec3375ea6e9e	6	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	cbca43d7-da04-4d66-beb6-97b464f3f687	\N	f	\N	2026-05-10 10:05:18.210445	\N
 2fa5117c-77c0-4a0b-9644-0201b84c62ec	7	Report needs review: Unknown	Report RPT-2026-0222 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	979c9a6e-9f81-4c06-8c4b-983ae2c0540f	\N	f	\N	2026-05-29 22:39:35.05644	\N
 96504412-c4cb-40d1-9cd8-a0977020cd6a	1	Report needs review: Unknown	Report RPT-2026-0222 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	979c9a6e-9f81-4c06-8c4b-983ae2c0540f	\N	f	\N	2026-05-29 22:42:35.05644	\N
+0d226829-b2ee-4fdd-847f-578338225274	26	New Hotspots Detected	42 new safety hotspots have been automatically detected based on recent reports.	hotspot	medium	hotspot	\N	\N	f	\N	2026-06-09 14:15:37.287936	\N
 0cbbda49-46bf-44a0-8081-41fdc41e7197	26	Report needs review: Unknown	Report RPT-2026-0222 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	979c9a6e-9f81-4c06-8c4b-983ae2c0540f	\N	f	\N	2026-05-29 22:40:35.05644	\N
 119a86c2-0607-4fd3-9703-2ead3bb7b979	7	Report needs review: Unknown	Report RPT-2026-0223 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	7f74ebbc-50aa-441c-9f1c-e1993a3e29b7	\N	f	\N	2026-05-05 18:02:22.505048	\N
 ce14ee25-aaf2-48d0-8630-124b1ea66443	1	Report needs review: Unknown	Report RPT-2026-0223 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	7f74ebbc-50aa-441c-9f1c-e1993a3e29b7	\N	t	\N	2026-05-05 18:05:22.505048	\N
@@ -8301,6 +8231,7 @@ a3269892-9395-469f-a9a9-01278e51c59b	28	HIGH: Unknown	Verified high-priority inc
 457203cb-1843-413b-ab46-46c61e3f654b	27	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	6e9cef89-8026-4bdf-bb16-a61d381e9eca	\N	f	\N	2026-05-11 21:11:12.885548	\N
 2838c311-bd40-405e-9214-565fa7f9d62f	6	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	6e9cef89-8026-4bdf-bb16-a61d381e9eca	\N	t	\N	2026-05-11 20:49:12.885548	\N
 0b884c1a-a8b8-4743-a02b-d219c3ca5cb9	7	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	89795545-2399-426d-8199-10396150b6be	\N	f	\N	2026-05-18 19:03:11.571938	\N
+63ad623f-b19d-492e-ae1e-4ef5ba2ee2f1	7	New Hotspots Detected	41 new safety hotspots have been automatically detected based on recent reports.	hotspot	medium	hotspot	\N	\N	f	\N	2026-06-09 14:16:07.261571	\N
 879d016d-47fb-4e25-8dec-8635812f1139	29	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	89795545-2399-426d-8199-10396150b6be	\N	f	\N	2026-05-18 19:05:11.571938	\N
 20c8880b-e80f-4f5c-84ff-951965229627	28	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	89795545-2399-426d-8199-10396150b6be	\N	f	\N	2026-05-18 19:17:11.571938	\N
 b76e3dc7-976f-442b-8b77-e855909bd6ee	27	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	89795545-2399-426d-8199-10396150b6be	\N	f	\N	2026-05-18 19:08:11.571938	\N
@@ -8369,6 +8300,7 @@ c938a697-33ac-4426-bfa1-87882f2f03aa	1	Report needs review: Unknown	Report RPT-2
 dbcf5351-96da-45a3-8b0f-1b9733e9bc82	7	Report needs review: Unknown	Report RPT-2026-0615 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	67408a26-9869-4b91-ac5a-b9856ec38a29	\N	f	\N	2026-05-15 21:52:56.573009	\N
 16d09cbb-e7ef-4014-9328-1008002d15ab	1	Report needs review: Unknown	Report RPT-2026-0615 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	67408a26-9869-4b91-ac5a-b9856ec38a29	\N	f	\N	2026-05-15 21:48:56.573009	\N
 b6d1e9f7-c43b-42a0-a184-db80283af962	26	Report needs review: Unknown	Report RPT-2026-0615 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	67408a26-9869-4b91-ac5a-b9856ec38a29	\N	f	\N	2026-05-15 21:55:56.573009	\N
+3ba8405d-4937-4d65-b739-b93e8520d0e7	1	New Hotspots Detected	41 new safety hotspots have been automatically detected based on recent reports.	hotspot	medium	hotspot	\N	\N	f	\N	2026-06-09 14:16:07.261571	\N
 62aecc23-0169-4fbe-a32d-c508132d1938	7	Report needs review: Unknown	Report RPT-2026-0616 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	1ee31637-9d31-411d-ba94-fd8b2b84e17b	\N	f	\N	2026-05-22 10:25:28.601257	\N
 2035457b-67a7-4cc9-a990-9b28acc864d3	1	Report needs review: Unknown	Report RPT-2026-0616 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	1ee31637-9d31-411d-ba94-fd8b2b84e17b	\N	f	\N	2026-05-22 10:16:28.601257	\N
 48add0d2-d110-4015-ba03-1bcd81688fa9	26	Report needs review: Unknown	Report RPT-2026-0616 has been flagged for review. Trust score indicates community verification is needed.	report	medium	report	1ee31637-9d31-411d-ba94-fd8b2b84e17b	\N	f	\N	2026-05-22 10:18:28.601257	\N
@@ -8437,6 +8369,7 @@ affa4be4-900f-4402-96fb-64643e6e120d	27	HIGH: Unknown	Verified high-priority inc
 29e2878f-4d46-417e-9d2d-506562ddc903	28	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	7ffd6421-7255-4223-9711-77f7292cc662	\N	t	\N	2026-05-05 20:31:43.518491	\N
 e2664035-f44a-4501-8af4-edc11cd5ab1e	27	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	7ffd6421-7255-4223-9711-77f7292cc662	\N	f	\N	2026-05-05 20:30:43.518491	\N
 babbd11d-8188-48ea-b512-6740ab2917a0	6	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	7ffd6421-7255-4223-9711-77f7292cc662	\N	t	\N	2026-05-05 20:18:43.518491	\N
+8dc843d0-ffdf-45c5-9b7e-a84e36d868c4	26	New Hotspots Detected	41 new safety hotspots have been automatically detected based on recent reports.	hotspot	medium	hotspot	\N	\N	f	\N	2026-06-09 14:16:07.261571	\N
 e241acf1-359d-4cb4-a41c-ef7b33852f60	7	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	f6ecd055-cafe-4f10-abee-e7e67025cfa1	\N	t	\N	2026-05-06 20:05:09.933948	\N
 7b01d5d9-3225-45d6-8257-0d4a4ee2c786	29	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	f6ecd055-cafe-4f10-abee-e7e67025cfa1	\N	f	\N	2026-05-06 20:04:09.933948	\N
 3b03fc65-4454-4d87-bba5-df268793125d	28	HIGH: Unknown	Verified high-priority incident reported. Case investigation may be required.	report	medium	report	f6ecd055-cafe-4f10-abee-e7e67025cfa1	\N	f	\N	2026-05-06 20:27:09.933948	\N
@@ -9601,11 +9534,38 @@ bf42593c-cf35-4213-84aa-d132cce1f468	27	New case assigned: Theft	Case CASE-2026-
 a9ca0109-2f24-4a37-a825-89ab5b302d0e	28	New case assigned: Suspicious Activity	Case CASE-2026-0106 has been assigned to you. 2 related reports in the area require investigation.	assignment	medium	case	d37da893-e5d9-4ece-8202-3387e6d230cc	\N	f	\N	2026-05-28 22:31:02.338586	\N
 1ec528b9-8c50-45cd-8e8a-01b9d0140233	28	New case assigned: Drug Activity	Case CASE-2026-0107 has been assigned to you. 2 related reports in the area require investigation.	assignment	medium	case	10408c4e-1a21-4fd1-a113-c44bad6377e4	\N	f	\N	2026-05-30 22:51:02.868908	\N
 3647d498-8f8e-4f80-885e-585a462a43a5	27	New case assigned: Domestic Violence	Case CASE-2026-0108 has been assigned to you. 2 related reports in the area require investigation.	assignment	medium	case	fa69bbc6-6b65-430e-a0e7-8ccebe407e3c	\N	f	\N	2026-05-14 06:42:59.378653	\N
+75c4ae4e-b0ea-4995-b314-9c51aa15ea47	7	No local leader for report area	Report RPT-2026-1129 in Kungo was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	6bc63aca-703f-4303-af89-a9d8cb803dfd	\N	f	\N	2026-06-09 14:15:21.332482	\N
+9a227ccc-6a6b-4a0e-b9d7-63e4abc8db60	1	No local leader for report area	Report RPT-2026-1129 in Kungo was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	6bc63aca-703f-4303-af89-a9d8cb803dfd	\N	f	\N	2026-06-09 14:15:21.332482	\N
+0194c1c8-58f9-41b8-ae8f-356032683fb5	26	No local leader for report area	Report RPT-2026-1129 in Kungo was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	6bc63aca-703f-4303-af89-a9d8cb803dfd	\N	f	\N	2026-06-09 14:15:21.332482	\N
+66f61062-e594-4b38-9ccf-fee3da3c63eb	27	New Cluster Detected in Your Area	A new incident cluster with 2 reports has been detected near your station area. Please review the Safety Map.	hotspot	medium	hotspot	896	\N	f	\N	2026-06-09 14:15:29.096715	\N
+662830ed-4ac6-4fb3-b243-7ed5a38ade5d	6	New Cluster Detected in Your Area	A new incident cluster with 2 reports has been detected near your station area. Please review the Safety Map.	hotspot	medium	hotspot	896	\N	f	\N	2026-06-09 14:15:29.096715	\N
+6143dddf-b426-444b-937f-bbfadf71ed66	27	New Cluster Detected in Your Area	A new incident cluster with 2 reports has been detected near your station area. Please review the Safety Map.	hotspot	medium	hotspot	962	\N	f	\N	2026-06-09 14:15:51.059446	\N
+8676e69b-4725-481a-a3c4-664795a973da	6	New Cluster Detected in Your Area	A new incident cluster with 2 reports has been detected near your station area. Please review the Safety Map.	hotspot	medium	hotspot	962	\N	f	\N	2026-06-09 14:15:51.059446	\N
+8e5df050-44e6-4c1d-8bcc-73970be7c012	7	No local leader for report area	Report RPT-2026-1135 in Ruhindinka was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	f86b48e0-e0e3-4a67-902b-98f5106b5749	\N	f	\N	2026-06-09 14:16:07.24424	\N
+47e1e9ec-ee88-4869-9d67-367fea498300	1	No local leader for report area	Report RPT-2026-1135 in Ruhindinka was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	f86b48e0-e0e3-4a67-902b-98f5106b5749	\N	f	\N	2026-06-09 14:16:07.24424	\N
+198e13f0-546e-4a82-beb0-94edfcac9d05	26	No local leader for report area	Report RPT-2026-1135 in Ruhindinka was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	f86b48e0-e0e3-4a67-902b-98f5106b5749	\N	f	\N	2026-06-09 14:16:07.24424	\N
+8d542e25-b852-4a92-b792-bf1cc24209bb	7	No local leader for report area	Report RPT-2026-1136 in Bushozi was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	d675d5d2-c481-43c1-be74-22d0c597482d	\N	f	\N	2026-06-09 14:16:13.154961	\N
+5fad8d2d-b46b-4abe-b00f-c293d9bc80ad	1	No local leader for report area	Report RPT-2026-1136 in Bushozi was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	d675d5d2-c481-43c1-be74-22d0c597482d	\N	f	\N	2026-06-09 14:16:13.154961	\N
+1485a7a9-8532-46cf-ac49-b80271ada14c	26	No local leader for report area	Report RPT-2026-1136 in Bushozi was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	d675d5d2-c481-43c1-be74-22d0c597482d	\N	f	\N	2026-06-09 14:16:13.154961	\N
+f53750f5-d042-4e44-9aec-ba4cf89da6b6	7	No local leader for report area	Report RPT-2026-1137 in Muhe was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	c1d178bf-cef6-4fb7-9e14-c62c65db6f0e	\N	f	\N	2026-06-09 14:16:21.975357	\N
+1df8fb55-dc8b-4fb9-845a-09efc030e5b0	1	No local leader for report area	Report RPT-2026-1137 in Muhe was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	c1d178bf-cef6-4fb7-9e14-c62c65db6f0e	\N	f	\N	2026-06-09 14:16:21.975357	\N
+919357bf-f67f-4dd7-9b4a-ebe7b2878a5b	26	No local leader for report area	Report RPT-2026-1137 in Muhe was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	c1d178bf-cef6-4fb7-9e14-c62c65db6f0e	\N	f	\N	2026-06-09 14:16:21.975357	\N
+1ebc1d69-5665-48b0-a338-7c29afde4fce	7	No local leader for report area	Report RPT-2026-1138 in Nyarubande was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	f84beeea-7a39-4839-8ab1-e33a704cbe71	\N	f	\N	2026-06-09 14:16:30.496191	\N
+b37294bc-98b5-4cb4-8718-b1c79859d824	1	No local leader for report area	Report RPT-2026-1138 in Nyarubande was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	f84beeea-7a39-4839-8ab1-e33a704cbe71	\N	f	\N	2026-06-09 14:16:30.496191	\N
+d6ddbdf2-1fee-4381-b103-e12fe7dfb61d	26	No local leader for report area	Report RPT-2026-1138 in Nyarubande was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	f84beeea-7a39-4839-8ab1-e33a704cbe71	\N	f	\N	2026-06-09 14:16:30.496191	\N
+20e38fe4-4018-450d-8333-ab8421bafdfb	27	New Cluster Detected in Your Area	A new incident cluster with 2 reports has been detected near your station area. Please review the Safety Map.	hotspot	medium	hotspot	1021	\N	f	\N	2026-06-09 14:16:23.783733	\N
+b1f7a7fa-a35d-4102-a157-a0193f04822c	6	New Cluster Detected in Your Area	A new incident cluster with 2 reports has been detected near your station area. Please review the Safety Map.	hotspot	medium	hotspot	1021	\N	f	\N	2026-06-09 14:16:23.783733	\N
+1083bb37-1dbe-4210-a870-7999d16957db	7	No local leader for report area	Report RPT-2026-1140 in Nyarubande was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	c16cfaa5-d655-418b-b7c6-4b1065179763	\N	f	\N	2026-06-09 14:16:43.361426	\N
+e523e50f-7a57-455b-a3f8-37b6439b3a8b	1	No local leader for report area	Report RPT-2026-1140 in Nyarubande was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	c16cfaa5-d655-418b-b7c6-4b1065179763	\N	f	\N	2026-06-09 14:16:43.361426	\N
+74684d4d-ab06-450b-a71d-6b79f9fe93fd	26	No local leader for report area	Report RPT-2026-1140 in Nyarubande was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	c16cfaa5-d655-418b-b7c6-4b1065179763	\N	f	\N	2026-06-09 14:16:43.361426	\N
+1a98c3b3-df1f-4a5a-962e-260b49d28db9	7	No local leader for report area	Report RPT-2026-1141 in Byimana was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	2cf60110-932d-455e-a76a-24b6ef70299c	\N	f	\N	2026-06-09 14:16:49.398103	\N
+ac8b567c-2203-4fc9-b01a-4e4b56afe854	1	No local leader for report area	Report RPT-2026-1141 in Byimana was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	2cf60110-932d-455e-a76a-24b6ef70299c	\N	f	\N	2026-06-09 14:16:49.398103	\N
+87982d0b-8deb-49fe-a9d3-e53433c95bd9	26	No local leader for report area	Report RPT-2026-1141 in Byimana was submitted but no active village chief or cell executive is registered for that area. Assign a local leader in Admin → Local Leaders.	system	medium	report	2cf60110-932d-455e-a76a-24b6ef70299c	\N	f	\N	2026-06-09 14:16:49.398103	\N
 \.
 
 
 --
--- Data for Name: password_reset_codes; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: password_reset_codes; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.password_reset_codes (id, email, code, expires_at, created_at) FROM stdin;
@@ -9613,7 +9573,7 @@ COPY public.password_reset_codes (id, email, code, expires_at, created_at) FROM 
 
 
 --
--- Data for Name: police_users; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: police_users; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.police_users (police_user_id, badge_number, first_name, middle_name, last_name, email, phone_number, password_hash, role, assigned_location_id, station_id, profile_picture_url, is_active, mfa_enabled, mfa_secret, last_login_at, last_password_change, created_at, updated_at, rank, mfa_method) FROM stdin;
@@ -9628,7 +9588,7 @@ COPY public.police_users (police_user_id, badge_number, first_name, middle_name,
 
 
 --
--- Data for Name: report_assignments; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: report_assignments; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.report_assignments (assignment_id, report_id, police_user_id, status, priority, assigned_at, completed_at, assignment_note) FROM stdin;
@@ -9636,7 +9596,7 @@ COPY public.report_assignments (assignment_id, report_id, police_user_id, status
 
 
 --
--- Data for Name: reports; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: reports; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.reports (report_id, report_number, device_id, incident_type_id, description, latitude, longitude, gps_accuracy, movement_speed, was_stationary, location_id, handling_station_id, reported_at, status, is_flagged, flag_reason, verification_status, verified_by, verified_at, feature_vector, ai_ready, features_extracted_at, app_version, network_type, battery_level, motion_level, features_extracted, village_location_id, rule_status, context_tags, priority, ai_evidence_description, ai_verification_reason, leader_verification_status, leader_verified_by, leader_verified_at, leader_verification_note, submitted_by_local_leader_id) FROM stdin;
@@ -9681,6 +9641,7 @@ a8168200-bffd-4d4b-847c-69e1e4418b26	RPT-2026-0035	ababc889-2467-42cc-8cee-3645e
 685b2c28-757c-44e9-b8be-8e1273c435ff	RPT-2026-0036	3acb63d9-4e1c-4de3-a57f-ad994dcde4e8	1	My neighbor informed me that someone broke into the small shop on the road and stole groceries and mobile phone accessories. The padlock was cut with a metal cutter.	-1.4585664	29.5179265	34.68	1.14	f	231	8	2026-05-09 16:18:00	verified	f	\N	verified	7	2026-05-09 19:14:00	{"text_only_nl": {"score": 0.9399, "word_count": 29, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.9399, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 94.8, "user_behavior_score": 72.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	wifi	55.00	medium	\N	231	passed	{}	low	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-09 17:18:00+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
 9cf848fb-a5f6-4f85-8fe7-b8a5f46e3fb9	RPT-2026-0037	93da6e1b-5cca-4577-afdd-c9f6b7e4e0d9	1	A bicycle was stolen from outside the church during the morning service. The owner chained it to the fence but the chain was broken. No one saw who took it.	-1.4369983	29.5491028	37.10	0.85	f	237	8	2026-05-04 15:37:00	verified	f	\N	verified	7	2026-05-04 19:32:00	{"text_only_nl": {"score": 0.9315, "word_count": 30, "is_text_only": true, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 1}, "semantic_alignment": {"score": 0.9315, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 0.0, "location_score": 94.44, "user_behavior_score": 76.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	68.00	low	\N	237	passed	{}	low	No media evidence submitted. Report evaluated on description quality and device trust.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-04 17:03:00+00	Visited the scene after receiving the alert. The report matches what I found.	\N
 9ff7beaf-93b0-49e7-9410-89c28a9141d7	RPT-2026-0132	eccc7a24-42ab-46d7-a68a-b8de4101df0a	4	A drone was spotted flying over residential areas at night. No one in the community owns one.	-1.5149124	29.6946776	23.50	0.78	t	3	9	2026-05-16 19:32:35.873835	pending	t	threshold_low_score	under_review	\N	\N	{"base_trust": 52.17, "word_count": 17, "device_trust": 29.24, "gps_accuracy": 40.66, "description_length": 93}	t	2026-05-16 19:32:42.873835	1.2.1	4g	46.50	low	2026-05-16 19:32:47.873835+00	156	flagged	{Night-time}	medium	\N	AI flagged: low trust indicators require community leader confirmation	pending	\N	\N	\N	\N
+8a37b956-8680-4c70-9d11-eeb037af7e57	RPT-2026-0187	135940a1-33cd-4f59-b95b-08460dc10b15	3	Several windows of the local school were broken overnight. Glass and stones found inside classrooms. Happened near the main road.	-1.4208974	29.5333797	22.25	\N	f	7	8	2026-04-30 19:18:01.405343	verified	f	\N	verified	\N	2026-04-30 19:38:01.405343	{"base_trust": 55.75, "word_count": 20, "device_trust": 50.0, "gps_accuracy": 3.4, "description_length": 129}	t	2026-04-30 19:18:28.405343	1.2.1	2g	68.30	low	2026-04-30 19:18:22.405343+00	258	passed	{"Public property"}	high	\N	AI verified: adequate trust indicators meet threshold	pending	\N	\N	\N	\N
 7d88181b-65c4-47a8-9e1d-b1a74d5cec02	RPT-2026-0038	e739dea9-68c2-48f6-abfd-ae05173eecbe	1	A woman reported that her handbag containing money and her national ID was snatched while she was waiting for a bus. There were children playing nearby but no adult witnesses.	-1.4377095	29.5490548	19.10	1.53	f	237	8	2026-05-04 16:19:00	verified	f	\N	verified	7	2026-05-04 17:18:00	{"text_only_nl": {"score": 0.8995, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 3, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8995, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 97.14, "user_behavior_score": 77.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	4g	81.00	low	\N	237	passed	{}	low	Evidence files reviewed. 3 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Rule engine returned passed status. Description quality scored above threshold. Device behavioral history supports genuine reporting pattern. Trust score: high. Verified.	confirmed	3	2026-05-04 16:51:00+00	Confirmed. I know the families involved and the incident happened as described.	\N
 3dd73568-0c54-445b-9b26-31ae2aa55ed2	RPT-2026-0039	98b07cbf-4272-4f34-88a3-ae992c605640	1	Two young men on foot grabbed a phone from someone who was walking home from the bus stop. They ran through the narrow path between the houses towards the bush.	-1.4375653	29.5490113	13.91	0.54	f	237	8	2026-05-04 16:26:00	verified	f	\N	verified	7	2026-05-04 17:33:00	{"text_only_nl": {"score": 0.8881, "word_count": 30, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 1, "rejected": 0, "confirmed": 3}, "semantic_alignment": {"score": 0.8881, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 97.91, "user_behavior_score": 79.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.4	3g	40.00	low	\N	237	passed	{}	low	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-04 16:57:00+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
 f679c63f-4d00-4ba6-bc9c-c175a4f12124	RPT-2026-0040	6751960b-edf7-4947-9103-60411f4a4f73	1	Someone stole a jerrycan full of petrol from a parked motorcycle near the trading center. The motorcycle owner had gone into a shop for a few minutes.	-1.4376707	29.5484120	11.38	0.32	t	237	8	2026-05-04 16:41:00	verified	f	\N	verified	7	2026-05-04 19:07:00	{"text_only_nl": {"score": 0.8556, "word_count": 27, "is_text_only": false, "description_quality": "good"}, "community_votes": {"total": 2, "rejected": 0, "confirmed": 2}, "semantic_alignment": {"score": 0.8556, "mismatch_detected": false}, "threshold_scorecard": {"cluster_score": 0.0, "content_score": 100.0, "location_score": 98.29, "user_behavior_score": 75.0, "coordination_penalty": 0.0}, "evidence_validations": []}	t	\N	1.2.2	4g	32.00	low	\N	237	passed	{"Reporter was stationary"}	high	Evidence files reviewed. 2 photo(s) analysed. No screenshot or screen-recording patterns detected. Image metadata timestamps are consistent with the reported incident time.	Report coordinates fall within expected zone. GPS signal quality is good. Community confirmation received. ML prediction confidence is high. Verified.	confirmed	3	2026-05-04 18:00:00+00	I spoke with the reporter directly. The details are correct. Confirming.	\N
@@ -9826,7 +9787,6 @@ d24d47c4-b1fe-4833-af7f-0f4d13a9a6b3	RPT-2026-0177	d290564f-455d-4325-bc84-7df7f
 f7de81a2-66fa-4b32-9704-54e99dbf7f16	RPT-2026-0184	78c87882-fcff-414b-a1d4-e2a2c228b684	5	Woman came to the village office with injuries saying her partner attacked her when she refused to hand over money. Weather was clear at the time.	-1.5591115	29.6225532	45.43	\N	f	11	8	2026-05-16 17:34:43.909004	verified	f	\N	verified	\N	2026-05-16 18:02:43.909004	{"base_trust": 39.82, "word_count": 26, "device_trust": 67.84, "gps_accuracy": 41.0, "description_length": 146}	t	2026-05-16 17:34:51.909004	1.2.4	2g	50.40	medium	2026-05-16 17:34:50.909004+00	381	passed	{"Children present"}	urgent	\N	AI verified: adequate trust indicators meet threshold	confirmed	\N	2026-05-18 14:34:43.909004+00	\N	\N
 5e63b8d8-b134-47b9-b2a5-dbd9b7ad15e6	RPT-2026-0185	32d674b7-638f-476a-ab9e-cac4167c241a	3	Community garden fence was torn down and some plants uprooted during the night. The area was dark at the time.	-1.5200762	29.6303955	33.78	\N	t	8	9	2026-05-08 18:06:59.110766	verified	f	\N	verified	\N	2026-05-08 18:10:59.110766	{"base_trust": 79.44, "word_count": 20, "device_trust": 91.76, "gps_accuracy": 21.6, "description_length": 110}	t	2026-05-08 18:07:02.110766	1.2.3	4g	71.30	medium	2026-05-08 18:07:13.110766+00	291	passed	{"Repeated damage"}	high	\N	AI auto-verified: high trust score with consistent indicators	confirmed	\N	2026-05-09 05:06:59.110766+00	Verified through community channels. Details consistent.	\N
 24326291-1b63-4ef0-8018-b858ed067e65	RPT-2026-0186	676a33b1-d3eb-422e-a154-ff22fb07e698	4	Person was seen climbing over a compound wall and then leaving quickly when spotted by a neighbor.	-1.4450423	29.5974479	17.62	2.13	f	12	8	2026-05-24 20:47:31.796386	pending	t	threshold_low_score	under_review	\N	\N	{"base_trust": 35.19, "word_count": 17, "device_trust": 45.68, "gps_accuracy": 14.73, "description_length": 98}	t	2026-05-24 20:47:34.796386	1.2.3	wifi	85.00	medium	2026-05-24 20:47:59.796386+00	390	flagged	{Night-time}	medium	\N	AI flagged: low trust indicators require community leader confirmation	pending	\N	\N	\N	\N
-8a37b956-8680-4c70-9d11-eeb037af7e57	RPT-2026-0187	135940a1-33cd-4f59-b95b-08460dc10b15	3	Several windows of the local school were broken overnight. Glass and stones found inside classrooms. Happened near the main road.	-1.4208974	29.5333797	22.25	\N	f	7	8	2026-04-30 19:18:01.405343	verified	f	\N	verified	\N	2026-04-30 19:38:01.405343	{"base_trust": 55.75, "word_count": 20, "device_trust": 50.0, "gps_accuracy": 3.4, "description_length": 129}	t	2026-04-30 19:18:28.405343	1.2.1	2g	68.30	low	2026-04-30 19:18:22.405343+00	258	passed	{"Public property"}	high	\N	AI verified: adequate trust indicators meet threshold	pending	\N	\N	\N	\N
 d87f72dd-0ab9-4552-98c2-60c7770715e0	RPT-2026-0188	4d05d6d3-a497-4e77-9065-00d40db247b2	7	A person was tricked into sending money for a fake job opportunity abroad. Communication was via WhatsApp. Local residents are concerned.	-1.4163749	29.6185909	5.67	\N	t	12	9	2026-04-19 19:55:17.273832	verified	f	\N	verified	\N	2026-04-19 20:33:17.273832	{"base_trust": 43.15, "word_count": 21, "device_trust": 59.37, "gps_accuracy": 45.62, "description_length": 137}	t	2026-04-19 19:55:27.273832	1.2.3	3g	69.00	high	2026-04-19 19:55:28.273832+00	426	passed	{Door-to-door}	high	\N	AI verified: adequate trust indicators meet threshold	pending	\N	\N	\N	\N
 3eebc49c-5ecc-4920-b15d-b3b1ca229cf0	RPT-2026-0189	ad001272-2aa8-4a72-aa5b-dd68fddf03cc	4	A drone was spotted flying over residential areas at night. No one in the community owns one. The area was dark at the time.	-1.5480937	29.5749313	18.57	2.13	t	1	8	2026-05-08 22:43:57.351936	verified	f	\N	verified	\N	2026-05-08 22:52:57.351936	{"base_trust": 65.03, "word_count": 24, "device_trust": 65.73, "gps_accuracy": 20.94, "description_length": 124}	t	2026-05-08 22:44:20.351936	1.2.1	3g	55.00	low	2026-05-08 22:44:26.351936+00	93	passed	{"Near school"}	medium	\N	AI verified: adequate trust indicators meet threshold	confirmed	\N	2026-05-09 09:43:57.351936+00	\N	\N
 b3909030-eda2-4fe1-b9fb-27288d962a0d	RPT-2026-0190	bb573867-b331-4a20-ab4b-a7c0e6b21f62	6	Unknown substances found discarded in plastic bags near the community water source. Appears to be drug paraphernalia. The situation was reported promptly.	-1.5446114	29.5778723	23.18	\N	t	1	8	2026-05-13 09:49:10.604272	verified	f	\N	verified	\N	2026-05-13 10:05:10.604272	{"base_trust": 57.59, "word_count": 22, "device_trust": 79.07, "gps_accuracy": 27.96, "description_length": 154}	t	2026-05-13 09:49:38.604272	1.2.2	2g	90.30	low	2026-05-13 09:49:36.604272+00	93	passed	{"Near school"}	medium	\N	AI verified: adequate trust indicators meet threshold	confirmed	\N	2026-05-15 09:49:10.604272+00	\N	\N
@@ -10768,11 +10728,24 @@ a743e59a-6182-454a-8b94-fc36cd012676	RPT-2026-1125	3a5826b6-7669-472d-81b7-d3303
 cb0daecc-4051-462c-9393-9625c632c716	RPT-2026-1126	8d6553d8-2bc1-4c54-8baf-fac7d90e3e4b	4	Unknown person was watching children at the school playground from across the road for extended periods. Community members alerted the local leader.	-1.5484817	29.5793796	33.15	\N	t	1	9	2026-05-19 18:16:30.136906	pending	t	threshold_low_score	under_review	\N	\N	{"base_trust": 64.21, "word_count": 22, "device_trust": 50.0, "gps_accuracy": 29.89, "description_length": 148}	t	2026-05-19 18:16:32.136906	1.2.1	wifi	97.30	low	2026-05-19 18:16:44.136906+00	93	flagged	{Night-time}	medium	\N	AI flagged for review: borderline trust score requires human verification	pending	\N	\N	\N	\N
 7e5d86fa-418b-4fe7-94ad-2d9098c882bc	RPT-2026-1127	0a971f27-870c-446b-9fab-e0650e7e5970	3	Street lights along the main road were deliberately damaged. Three poles had their wiring cut. Local residents are concerned.	-1.5038892	29.6000572	48.03	\N	t	6	9	2026-05-03 21:55:23.474672	verified	f	\N	verified	\N	2026-05-03 22:36:23.474672	{"base_trust": 60.75, "word_count": 19, "device_trust": 68.22, "gps_accuracy": 14.8, "description_length": 125}	t	2026-05-03 21:55:40.474672	1.2.3	3g	38.80	medium	2026-05-03 21:55:35.474672+00	222	passed	{Night-time}	medium	\N	AI verified: adequate trust indicators meet threshold	confirmed	\N	2026-05-05 03:55:23.474672+00	\N	\N
 d12c7519-dc1b-4993-89ad-6507a549caa1	RPT-2026-1128	3d37f675-ebed-4b1e-8b96-ac3123dbd27c	1	Crops were stolen from a field near the main road. Maize and beans harvested by unknown individuals at night. Local residents are concerned.	-1.5599709	29.6756040	4.90	\N	t	14	8	2026-05-18 16:55:42.563993	verified	f	\N	verified	\N	2026-05-18 17:42:42.563993	{"base_trust": 62.25, "word_count": 23, "device_trust": 50.0, "gps_accuracy": 20.85, "description_length": 140}	t	2026-05-18 16:55:51.563993	1.2.2	4g	76.50	medium	2026-05-18 16:55:58.563993+00	470	passed	{"Repeated offender area"}	low	\N	AI verified: adequate trust indicators meet threshold	confirmed	\N	2026-05-19 14:55:42.563993+00	\N	\N
+6bc63aca-703f-4303-af89-a9d8cb803dfd	RPT-2026-1129	3cbee79c-ff3c-46ed-aee2-4dc05e1eff09	7	A construction company took 2,000,000 RWF advance to build a house. They started the foundation then disappeared.	-1.4934021	29.6342488	6.22	2.03	f	128	\N	2026-06-09 14:15:13.154689	pending	f	\N	under_review	\N	\N	{"text_only_nl": {"confidence": 0.9999999999999999, "overall_score": 47.632, "description_quality": 73.0, "semantic_similarity": 9.58}, "pipeline_audit": [{"name": "evidence_admissibility", "score": 100.0, "stage": 1, "decision": "skip", "duration_ms": 1.3}, {"name": "incident_description_validation", "score": 53.83, "stage": 2, "decision": "accept", "duration_ms": 1939.8}, {"name": "description_quality", "score": 77.25, "stage": 3, "decision": "accept", "duration_ms": 1438.0}, {"name": "description_evidence_matching", "score": null, "stage": 4, "decision": "skip", "duration_ms": 1.6}, {"name": "dynamic_trust_score", "score": 69.73, "stage": 5, "decision": "FLAGGED_FOR_REVIEW", "duration_ms": 1.0}], "pipeline_decision": "FLAGGED_FOR_REVIEW", "stage_5_trust_score": {"decision": "FLAGGED_FOR_REVIEW", "metadata": {"computed_at": "2026-06-09T14:15:20.268201+00:00", "has_evidence": false, "total_components": 7, "available_components": 5, "available_weight_sum": 75.0, "normalization_factor": 1.3333}, "components": [{"name": "incident_match", "weight": 25.0, "available": true, "raw_score": 53.83, "contribution": 17.94, "normalized_weight": 33.33}, {"name": "description_quality", "weight": 20.0, "available": true, "raw_score": 77.25, "contribution": 20.6, "normalized_weight": 26.67}, {"name": "evidence_match", "weight": 10.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "evidence_admissibility", "weight": 15.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "reporter_history", "weight": 5.0, "available": true, "raw_score": 27.75, "contribution": 1.85, "normalized_weight": 6.67}, {"name": "corroboration", "weight": 5.0, "available": true, "raw_score": 60.0, "contribution": 4.0, "normalized_weight": 6.67}, {"name": "location_consistency", "weight": 20.0, "available": true, "raw_score": 95.0, "contribution": 25.33, "normalized_weight": 26.67}], "trust_band": "medium_confidence", "trust_score": 69.73}, "threshold_scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5383, "weight": 33.33, "max_points": 33.33, "points_awarded": 17.94}, "reporter_history": {"signal": 0.2775, "weight": 6.67, "max_points": 6.67, "points_awarded": 1.85}, "description_quality": {"signal": 0.7725, "weight": 26.67, "max_points": 26.67, "points_awarded": 20.6}, "location_consistency": {"signal": 0.95, "weight": 26.67, "max_points": 26.67, "points_awarded": 25.33}}, "max_score": 100.0, "hard_gates": [], "total_score": 69.73, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Cyuve > Kabeza > Kungo", "coordinates": "-1.49340, 29.63425", "gps_accuracy_m": 6.22}, "scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5383, "weight": 33.33, "max_points": 33.33, "points_awarded": 17.94}, "reporter_history": {"signal": 0.2775, "weight": 6.67, "max_points": 6.67, "points_awarded": 1.85}, "description_quality": {"signal": 0.7725, "weight": 26.67, "max_points": 26.67, "points_awarded": 20.6}, "location_consistency": {"signal": 0.95, "weight": 26.67, "max_points": 26.67, "points_awarded": 25.33}}, "max_score": 100.0, "hard_gates": [], "total_score": 69.73, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "context_tags": [], "incident_type": "Fraud/Scam", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"per_file": [], "breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}, "description_credibility": {"word_count": 17, "has_evidence": false, "length_points": 1.2, "length_adjustment": "bonus", "semantic_similarity": 9.58, "min_recommended_words": 15}}, "final_decision": {"label": "suspicious", "status": "under_review", "is_flagged": false, "rule_status": "passed", "trust_score": 69.73, "threshold_band": "under_review"}, "scorecard_digest": {"band": "under_review", "total_points": 69.73}, "reporter_description": "A construction company took 2,000,000 RWF advance to build a house. They started the foundation then disappeared.", "unified_validation_digest": {"trust_band": "medium_confidence", "aggregated_score": 69.73}}, "text_only_validation": {"valid": true, "confidence": 0.35, "quality_band": "accept_quality", "reason_codes": [], "overall_score": 65.54, "description_quality": 77.25, "semantic_similarity": 0.5383}, "stage_1_admissibility": {"score": 100.0, "reasons": ["no_evidence_provided_skipping_admissibility"], "skipped": true, "accepted": true}, "stage_2_incident_match": {"decision": "accept", "metadata": {"validated_at": "2026-06-09T14:15:18.451758+00:00", "llm_available": false, "llm_reasoning": "", "embedding_method": "tfidf", "incident_type_id": 7, "incident_type_name": "Fraud/Scam", "semantic_definition_used": "Fraud/Scam: Deception to gain money/property (mobile money scam, etc.)."}, "final_score": 53.83, "llm_match_score": 50.0, "embedding_similarity": 9.58}, "stage_4_evidence_match": {"skipped": true, "decision": "accept", "metadata": {"reason": "no_evidence_skipping_stage_4"}, "support_level": "", "semantic_similarity": 0.0, "evidence_match_score": 0.0, "evidence_descriptions": []}, "description_credibility": {"word_count": 17, "has_evidence": false, "length_points": 1.2, "length_adjustment": "bonus", "semantic_similarity": 9.58, "min_recommended_words": 15}, "stage_3_description_quality": {"clarity": 90.0, "decision": "accept", "metadata": {"issues": [], "llm_used": false, "char_count": 113, "word_count": 17, "analyzed_at": "2026-06-09T14:15:19.889763+00:00", "sentence_count": 2, "has_actor_references": true, "has_location_markers": true, "has_temporal_markers": false}, "consistency": 75.0, "specificity": 75.0, "completeness": 70.0, "description_score": 77.25}}	t	2026-06-09 14:15:21.284577	1.2.0	4G	67.00	low	\N	128	passed	{}	low	\N	This Fraud/Scam report was submitted from Cyuve > Kabeza > Kungo.\nThe citizen wrote: "A construction company took 2,000,000 RWF advance to build a house. They started the foundation then disappeared."\n\nAutomated result: Pending leader review. The report was not auto-confirmed. A local leader must decide after reviewing it.\n\nWhy:\n1. The credibility model rated this submission as low authenticity.\n\nNo photos, videos, or audio were uploaded. The decision used the written description, location, and automated text checks only.\n\nRecommended next step:\nRead the description and any media, confirm or correct the incident type, then verify or reject manually.	pending	\N	\N	\N	\N
+2cf60110-932d-455e-a76a-24b6ef70299c	RPT-2026-1141	32682c82-108f-420b-8f37-2a1ba1270845	2	Someone threw stones at children playing near the road. One child was hit on the back. The person appeared to be intoxicated.	-1.5022913	29.6314406	14.23	3.74	f	290	\N	2026-06-09 14:16:43.714535	pending	f	\N	under_review	\N	\N	{"text_only_nl": {"confidence": 0.9999999999999999, "overall_score": 48.12, "description_quality": 73.0, "semantic_similarity": 10.8}, "pipeline_audit": [{"name": "evidence_admissibility", "score": 100.0, "stage": 1, "decision": "skip", "duration_ms": 0.0}, {"name": "incident_description_validation", "score": 54.32, "stage": 2, "decision": "accept", "duration_ms": 1456.1}, {"name": "description_quality", "score": 76.25, "stage": 3, "decision": "accept", "duration_ms": 1999.8}, {"name": "description_evidence_matching", "score": null, "stage": 4, "decision": "skip", "duration_ms": 0.0}, {"name": "dynamic_trust_score", "score": 68.48, "stage": 5, "decision": "FLAGGED_FOR_REVIEW", "duration_ms": 0.1}], "pipeline_decision": "FLAGGED_FOR_REVIEW", "stage_5_trust_score": {"decision": "FLAGGED_FOR_REVIEW", "metadata": {"computed_at": "2026-06-09T14:16:48.153166+00:00", "has_evidence": false, "total_components": 7, "available_components": 5, "available_weight_sum": 75.0, "normalization_factor": 1.3333}, "components": [{"name": "incident_match", "weight": 25.0, "available": true, "raw_score": 54.32, "contribution": 18.11, "normalized_weight": 33.33}, {"name": "description_quality", "weight": 20.0, "available": true, "raw_score": 76.25, "contribution": 20.33, "normalized_weight": 26.67}, {"name": "evidence_match", "weight": 10.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "evidence_admissibility", "weight": 15.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "reporter_history", "weight": 5.0, "available": true, "raw_score": 30.59, "contribution": 2.04, "normalized_weight": 6.67}, {"name": "corroboration", "weight": 5.0, "available": true, "raw_score": 60.0, "contribution": 4.0, "normalized_weight": 6.67}, {"name": "location_consistency", "weight": 20.0, "available": true, "raw_score": 90.0, "contribution": 24.0, "normalized_weight": 26.67}], "trust_band": "medium_confidence", "trust_score": 68.48}, "threshold_scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5432, "weight": 33.33, "max_points": 33.33, "points_awarded": 18.11}, "reporter_history": {"signal": 0.3059, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.04}, "description_quality": {"signal": 0.7625, "weight": 26.67, "max_points": 26.67, "points_awarded": 20.33}, "location_consistency": {"signal": 0.9, "weight": 26.67, "max_points": 26.67, "points_awarded": 24.0}}, "max_score": 100.0, "hard_gates": [], "total_score": 68.48, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Muhoza > Ruhengeri > Byimana", "coordinates": "-1.50229, 29.63144", "gps_accuracy_m": 14.23}, "scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5432, "weight": 33.33, "max_points": 33.33, "points_awarded": 18.11}, "reporter_history": {"signal": 0.3059, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.04}, "description_quality": {"signal": 0.7625, "weight": 26.67, "max_points": 26.67, "points_awarded": 20.33}, "location_consistency": {"signal": 0.9, "weight": 26.67, "max_points": 26.67, "points_awarded": 24.0}}, "max_score": 100.0, "hard_gates": [], "total_score": 68.48, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "context_tags": ["Victim present"], "incident_type": "Assault", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"per_file": [], "breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}, "description_credibility": {"word_count": 22, "has_evidence": false, "length_points": 4.2, "length_adjustment": "bonus", "semantic_similarity": 10.8, "min_recommended_words": 15}}, "final_decision": {"label": "suspicious", "status": "under_review", "is_flagged": false, "rule_status": "passed", "trust_score": 68.48, "threshold_band": "under_review"}, "scorecard_digest": {"band": "under_review", "total_points": 68.48}, "reporter_description": "Someone threw stones at children playing near the road. One child was hit on the back. The person appeared to be intoxicated.", "unified_validation_digest": {"trust_band": "medium_confidence", "aggregated_score": 68.48}}, "text_only_validation": {"valid": true, "confidence": 0.35, "quality_band": "accept_quality", "reason_codes": [], "overall_score": 65.28, "description_quality": 76.25, "semantic_similarity": 0.5432}, "stage_1_admissibility": {"score": 100.0, "reasons": ["no_evidence_provided_skipping_admissibility"], "skipped": true, "accepted": true}, "stage_2_incident_match": {"decision": "accept", "metadata": {"validated_at": "2026-06-09T14:16:46.007520+00:00", "llm_available": false, "llm_reasoning": "", "embedding_method": "tfidf", "incident_type_id": 2, "incident_type_name": "Assault", "semantic_definition_used": "Assault: Physical attack or violence against a person."}, "final_score": 54.32, "llm_match_score": 50.0, "embedding_similarity": 10.8}, "stage_4_evidence_match": {"skipped": true, "decision": "accept", "metadata": {"reason": "no_evidence_skipping_stage_4"}, "support_level": "", "semantic_similarity": 0.0, "evidence_match_score": 0.0, "evidence_descriptions": []}, "description_credibility": {"word_count": 22, "has_evidence": false, "length_points": 4.2, "length_adjustment": "bonus", "semantic_similarity": 10.8, "min_recommended_words": 15}, "stage_3_description_quality": {"clarity": 90.0, "decision": "accept", "metadata": {"issues": [], "llm_used": false, "char_count": 125, "word_count": 22, "analyzed_at": "2026-06-09T14:16:48.007344+00:00", "sentence_count": 3, "has_actor_references": true, "has_location_markers": true, "has_temporal_markers": false}, "consistency": 75.0, "specificity": 65.0, "completeness": 75.0, "description_score": 76.25}}	t	2026-06-09 14:16:49.215555	1.1.0	4G	75.00	low	\N	290	passed	{"Victim present"}	medium	\N	This Assault report was submitted from Muhoza > Ruhengeri > Byimana.\nThe citizen wrote: "Someone threw stones at children playing near the road. One child was hit on the back. The person appeared to be intoxicated."\n\nAutomated result: Pending leader review. The report was not auto-confirmed. A local leader must decide after reviewing it.\n\nWhy:\n1. The credibility model rated this submission as low authenticity.\n\nNo photos, videos, or audio were uploaded. The decision used the written description, location, and automated text checks only.\n\nRecommended next step:\nRead the description and any media, confirm or correct the incident type, then verify or reject manually.	pending	\N	\N	\N	\N
+dd934d50-7483-4c5d-99c7-85a0f851060a	RPT-2026-1130	bd349b28-3509-43cf-ad5f-8f22a46bb6df	6	A bar in our area is selling drugs along with alcohol. Young people become very aggressive after visiting.	-1.4855420	29.6514148	9.48	0.60	f	111	\N	2026-06-09 14:15:21.61542	verified	f	\N	verified	\N	\N	{"text_only_nl": {"confidence": 0.9999999999999999, "overall_score": 53.36, "description_quality": 73.0, "semantic_similarity": 23.9}, "pipeline_audit": [{"name": "evidence_admissibility", "score": 100.0, "stage": 1, "decision": "skip", "duration_ms": 0.0}, {"name": "incident_description_validation", "score": 59.56, "stage": 2, "decision": "accept", "duration_ms": 2459.9}, {"name": "description_quality", "score": 66.5, "stage": 3, "decision": "accept", "duration_ms": 1871.0}, {"name": "description_evidence_matching", "score": null, "stage": 4, "decision": "skip", "duration_ms": 0.0}, {"name": "dynamic_trust_score", "score": 70.16, "stage": 5, "decision": "ACCEPTED", "duration_ms": 0.0}], "pipeline_decision": "ACCEPTED", "stage_5_trust_score": {"decision": "ACCEPTED", "metadata": {"computed_at": "2026-06-09T14:15:26.504434+00:00", "has_evidence": false, "total_components": 7, "available_components": 5, "available_weight_sum": 75.0, "normalization_factor": 1.3333}, "components": [{"name": "incident_match", "weight": 25.0, "available": true, "raw_score": 59.56, "contribution": 19.85, "normalized_weight": 33.33}, {"name": "description_quality", "weight": 20.0, "available": true, "raw_score": 66.5, "contribution": 17.73, "normalized_weight": 26.67}, {"name": "evidence_match", "weight": 10.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "evidence_admissibility", "weight": 15.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "reporter_history", "weight": 5.0, "available": true, "raw_score": 28.53, "contribution": 1.9, "normalized_weight": 6.67}, {"name": "corroboration", "weight": 5.0, "available": true, "raw_score": 60.0, "contribution": 4.0, "normalized_weight": 6.67}, {"name": "location_consistency", "weight": 20.0, "available": true, "raw_score": 100.0, "contribution": 26.67, "normalized_weight": 26.67}], "trust_band": "high_confidence", "trust_score": 70.16}, "threshold_scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5956, "weight": 33.33, "max_points": 33.33, "points_awarded": 19.85}, "reporter_history": {"signal": 0.2853, "weight": 6.67, "max_points": 6.67, "points_awarded": 1.9}, "description_quality": {"signal": 0.665, "weight": 26.67, "max_points": 26.67, "points_awarded": 17.73}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 70.16, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "confirmed_candidate", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "high_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Cyuve > Buruba > Ruhindinka", "coordinates": "-1.48554, 29.65141", "gps_accuracy_m": 9.48}, "scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5956, "weight": 33.33, "max_points": 33.33, "points_awarded": 19.85}, "reporter_history": {"signal": 0.2853, "weight": 6.67, "max_points": 6.67, "points_awarded": 1.9}, "description_quality": {"signal": 0.665, "weight": 26.67, "max_points": 26.67, "points_awarded": 17.73}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 70.16, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "confirmed_candidate", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "high_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "context_tags": ["Multiple suspects", "Ongoing"], "incident_type": "Drug Activity", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"per_file": [], "breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}, "description_credibility": {"word_count": 18, "has_evidence": false, "length_points": 1.8, "length_adjustment": "bonus", "semantic_similarity": 23.9, "min_recommended_words": 15}}, "final_decision": {"label": "likely_real", "status": "verified", "is_flagged": false, "rule_status": "passed", "trust_score": 70.16, "threshold_band": "confirmed_candidate"}, "scorecard_digest": {"band": "confirmed_candidate", "total_points": 70.16}, "reporter_description": "A bar in our area is selling drugs along with alcohol. Young people become very aggressive after visiting.", "unified_validation_digest": {"trust_band": "high_confidence", "aggregated_score": 70.16}}, "text_only_validation": {"valid": true, "confidence": 0.35, "quality_band": "accept_quality", "reason_codes": [], "overall_score": 63.03, "description_quality": 66.5, "semantic_similarity": 0.5956}, "stage_1_admissibility": {"score": 100.0, "reasons": ["no_evidence_provided_skipping_admissibility"], "skipped": true, "accepted": true}, "stage_2_incident_match": {"decision": "accept", "metadata": {"validated_at": "2026-06-09T14:15:24.590306+00:00", "llm_available": false, "llm_reasoning": "", "embedding_method": "tfidf", "incident_type_id": 6, "incident_type_name": "Drug Activity", "semantic_definition_used": "Drug Activity: Suspected selling/using of illegal drugs."}, "final_score": 59.56, "llm_match_score": 50.0, "embedding_similarity": 23.9}, "stage_4_evidence_match": {"skipped": true, "decision": "accept", "metadata": {"reason": "no_evidence_skipping_stage_4"}, "support_level": "", "semantic_similarity": 0.0, "evidence_match_score": 0.0, "evidence_descriptions": []}, "description_credibility": {"word_count": 18, "has_evidence": false, "length_points": 1.8, "length_adjustment": "bonus", "semantic_similarity": 23.9, "min_recommended_words": 15}, "stage_3_description_quality": {"clarity": 90.0, "decision": "accept", "metadata": {"issues": [], "llm_used": false, "char_count": 106, "word_count": 18, "analyzed_at": "2026-06-09T14:15:26.461363+00:00", "sentence_count": 2, "has_actor_references": true, "has_location_markers": false, "has_temporal_markers": false}, "consistency": 75.0, "specificity": 50.0, "completeness": 55.0, "description_score": 66.5}}	t	2026-06-09 14:15:27.535784	1.0.0	WiFi	60.00	medium	\N	111	passed	{"Multiple suspects",Ongoing}	low	\N	This Drug Activity report was submitted from Cyuve > Buruba > Ruhindinka.\nThe citizen wrote: "A bar in our area is selling drugs along with alcohol. Young people become very aggressive after visiting."\n\nAutomated result: Confirmed. Automated screening accepted this report. An officer may still change the decision.\n\nWhy:\n1. Screening completed without a single dominant concern on record.\n\nNo photos, videos, or audio were uploaded. The decision used the written description, location, and automated text checks only.\n\nRecommended next step:\nProceed unless field knowledge contradicts this report.	confirmed	\N	\N	\N	\N
+c1d178bf-cef6-4fb7-9e14-c62c65db6f0e	RPT-2026-1137	93e1b197-7a9b-4e00-9940-af3a510a5b3e	2	Two groups of young men got into a fight near the market. About six people were involved. Several had injuries and broken market stalls.	-1.5036542	29.6271760	11.89	0.66	f	292	\N	2026-06-09 14:16:13.530726	pending	f	\N	under_review	\N	\N	{"text_only_nl": {"confidence": 0.7999999999999999, "overall_score": 60.14, "description_quality": 73.0, "semantic_similarity": 40.85}, "pipeline_audit": [{"name": "evidence_admissibility", "score": 100.0, "stage": 1, "decision": "skip", "duration_ms": 0.0}, {"name": "incident_description_validation", "score": 50.0, "stage": 2, "decision": "accept", "duration_ms": 2583.8}, {"name": "description_quality", "score": 78.75, "stage": 3, "decision": "accept", "duration_ms": 2846.0}, {"name": "description_evidence_matching", "score": null, "stage": 4, "decision": "skip", "duration_ms": 0.0}, {"name": "dynamic_trust_score", "score": 69.12, "stage": 5, "decision": "FLAGGED_FOR_REVIEW", "duration_ms": 0.1}], "pipeline_decision": "FLAGGED_FOR_REVIEW", "stage_5_trust_score": {"decision": "FLAGGED_FOR_REVIEW", "metadata": {"computed_at": "2026-06-09T14:16:20.722036+00:00", "has_evidence": false, "total_components": 7, "available_components": 5, "available_weight_sum": 75.0, "normalization_factor": 1.3333}, "components": [{"name": "incident_match", "weight": 25.0, "available": true, "raw_score": 50.0, "contribution": 16.67, "normalized_weight": 33.33}, {"name": "description_quality", "weight": 20.0, "available": true, "raw_score": 78.75, "contribution": 21.0, "normalized_weight": 26.67}, {"name": "evidence_match", "weight": 10.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "evidence_admissibility", "weight": 15.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "reporter_history", "weight": 5.0, "available": true, "raw_score": 31.87, "contribution": 2.12, "normalized_weight": 6.67}, {"name": "corroboration", "weight": 5.0, "available": true, "raw_score": 60.0, "contribution": 4.0, "normalized_weight": 6.67}, {"name": "location_consistency", "weight": 20.0, "available": true, "raw_score": 95.0, "contribution": 25.33, "normalized_weight": 26.67}], "trust_band": "medium_confidence", "trust_score": 69.12}, "threshold_scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5, "weight": 33.33, "max_points": 33.33, "points_awarded": 16.67}, "reporter_history": {"signal": 0.3187, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.12}, "description_quality": {"signal": 0.7875, "weight": 26.67, "max_points": 26.67, "points_awarded": 21.0}, "location_consistency": {"signal": 0.95, "weight": 26.67, "max_points": 26.67, "points_awarded": 25.33}}, "max_score": 100.0, "hard_gates": [], "total_score": 69.12, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Muhoza > Ruhengeri > Muhe", "coordinates": "-1.50365, 29.62718", "gps_accuracy_m": 11.89}, "scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5, "weight": 33.33, "max_points": 33.33, "points_awarded": 16.67}, "reporter_history": {"signal": 0.3187, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.12}, "description_quality": {"signal": 0.7875, "weight": 26.67, "max_points": 26.67, "points_awarded": 21.0}, "location_consistency": {"signal": 0.95, "weight": 26.67, "max_points": 26.67, "points_awarded": 25.33}}, "max_score": 100.0, "hard_gates": [], "total_score": 69.12, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "context_tags": ["Multiple suspects", "Ongoing"], "incident_type": "Assault", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"per_file": [], "breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}, "description_credibility": {"word_count": 24, "has_evidence": false, "length_points": 5.4, "length_adjustment": "bonus", "semantic_similarity": 40.85, "min_recommended_words": 15}}, "final_decision": {"label": "suspicious", "status": "under_review", "is_flagged": false, "rule_status": "passed", "trust_score": 69.12, "threshold_band": "under_review"}, "scorecard_digest": {"band": "under_review", "total_points": 69.12}, "reporter_description": "Two groups of young men got into a fight near the market. About six people were involved. Several had injuries and broken market stalls.", "unified_validation_digest": {"trust_band": "medium_confidence", "aggregated_score": 69.12}}, "text_only_validation": {"valid": true, "confidence": 0.35, "quality_band": "accept_quality", "reason_codes": [], "overall_score": 64.38, "description_quality": 78.75, "semantic_similarity": 0.5}, "stage_1_admissibility": {"score": 100.0, "reasons": ["no_evidence_provided_skipping_admissibility"], "skipped": true, "accepted": true}, "stage_2_incident_match": {"decision": "accept", "metadata": {"validated_at": "2026-06-09T14:16:17.269243+00:00", "llm_available": false, "llm_reasoning": "", "embedding_method": "tfidf", "incident_type_id": 2, "incident_type_name": "Assault", "semantic_definition_used": "Assault: Physical attack or violence against a person."}, "final_score": 50.0, "llm_match_score": 50.0, "embedding_similarity": 0.0}, "stage_4_evidence_match": {"skipped": true, "decision": "accept", "metadata": {"reason": "no_evidence_skipping_stage_4"}, "support_level": "", "semantic_similarity": 0.0, "evidence_match_score": 0.0, "evidence_descriptions": []}, "description_credibility": {"word_count": 24, "has_evidence": false, "length_points": 5.4, "length_adjustment": "bonus", "semantic_similarity": 40.85, "min_recommended_words": 15}, "stage_3_description_quality": {"clarity": 90.0, "decision": "accept", "metadata": {"issues": [], "llm_used": false, "char_count": 136, "word_count": 24, "analyzed_at": "2026-06-09T14:16:20.115491+00:00", "sentence_count": 3, "has_actor_references": true, "has_location_markers": true, "has_temporal_markers": false}, "consistency": 75.0, "specificity": 75.0, "completeness": 75.0, "description_score": 78.75}}	t	2026-06-09 14:16:21.838807	1.0.0	WiFi	41.00	medium	\N	292	passed	{"Multiple suspects",Ongoing}	medium	\N	This Assault report was submitted from Muhoza > Ruhengeri > Muhe.\nThe citizen wrote: "Two groups of young men got into a fight near the market. About six people were involved. Several had injuries and broken market stalls."\n\nAutomated result: Pending leader review. The report was not auto-confirmed. A local leader must decide after reviewing it.\n\nWhy:\n1. The credibility model rated this submission as low authenticity.\n\nNo photos, videos, or audio were uploaded. The decision used the written description, location, and automated text checks only.\n\nRecommended next step:\nRead the description and any media, confirm or correct the incident type, then verify or reject manually.	pending	\N	\N	\N	\N
+f84beeea-7a39-4839-8ab1-e33a704cbe71	RPT-2026-1138	73bcd95b-5b70-456f-aa48-f9e0a01f2548	9	A child was hit by a bicycle near the school crossing. The child has a scraped knee and arm. The cyclist did not stop.	-1.4945224	29.6382499	9.17	4.97	f	140	\N	2026-06-09 14:16:22.358941	pending	f	\N	under_review	\N	\N	{"text_only_nl": {"confidence": 0.7999999999999999, "overall_score": 54.739999999999995, "description_quality": 70.5, "semantic_similarity": 31.1}, "pipeline_audit": [{"name": "evidence_admissibility", "score": 100.0, "stage": 1, "decision": "skip", "duration_ms": 0.0}, {"name": "incident_description_validation", "score": 50.0, "stage": 2, "decision": "accept", "duration_ms": 2552.2}, {"name": "description_quality", "score": 69.5, "stage": 3, "decision": "accept", "duration_ms": 1897.0}, {"name": "description_evidence_matching", "score": null, "stage": 4, "decision": "skip", "duration_ms": 0.0}, {"name": "dynamic_trust_score", "score": 66.65, "stage": 5, "decision": "FLAGGED_FOR_REVIEW", "duration_ms": 0.1}], "pipeline_decision": "FLAGGED_FOR_REVIEW", "stage_5_trust_score": {"decision": "FLAGGED_FOR_REVIEW", "metadata": {"computed_at": "2026-06-09T14:16:28.918134+00:00", "has_evidence": false, "total_components": 7, "available_components": 5, "available_weight_sum": 75.0, "normalization_factor": 1.3333}, "components": [{"name": "incident_match", "weight": 25.0, "available": true, "raw_score": 50.0, "contribution": 16.67, "normalized_weight": 33.33}, {"name": "description_quality", "weight": 20.0, "available": true, "raw_score": 69.5, "contribution": 18.53, "normalized_weight": 26.67}, {"name": "evidence_match", "weight": 10.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "evidence_admissibility", "weight": 15.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "reporter_history", "weight": 5.0, "available": true, "raw_score": 31.77, "contribution": 2.12, "normalized_weight": 6.67}, {"name": "corroboration", "weight": 5.0, "available": true, "raw_score": 60.0, "contribution": 4.0, "normalized_weight": 6.67}, {"name": "location_consistency", "weight": 20.0, "available": true, "raw_score": 95.0, "contribution": 25.33, "normalized_weight": 26.67}], "trust_band": "medium_confidence", "trust_score": 66.65}, "threshold_scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5, "weight": 33.33, "max_points": 33.33, "points_awarded": 16.67}, "reporter_history": {"signal": 0.3177, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.12}, "description_quality": {"signal": 0.695, "weight": 26.67, "max_points": 26.67, "points_awarded": 18.53}, "location_consistency": {"signal": 0.95, "weight": 26.67, "max_points": 26.67, "points_awarded": 25.33}}, "max_score": 100.0, "hard_gates": [], "total_score": 66.65, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Cyuve > Rwebeya > Nyarubande", "coordinates": "-1.49452, 29.63825", "gps_accuracy_m": 9.17}, "scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5, "weight": 33.33, "max_points": 33.33, "points_awarded": 16.67}, "reporter_history": {"signal": 0.3177, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.12}, "description_quality": {"signal": 0.695, "weight": 26.67, "max_points": 26.67, "points_awarded": 18.53}, "location_consistency": {"signal": 0.95, "weight": 26.67, "max_points": 26.67, "points_awarded": 25.33}}, "max_score": 100.0, "hard_gates": [], "total_score": 66.65, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "context_tags": ["Vehicle involved", "Victim present"], "incident_type": "Traffic Incident", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"per_file": [], "breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}, "description_credibility": {"word_count": 24, "has_evidence": false, "length_points": 5.4, "length_adjustment": "bonus", "semantic_similarity": 31.1, "min_recommended_words": 15}}, "final_decision": {"label": "suspicious", "status": "under_review", "is_flagged": false, "rule_status": "passed", "trust_score": 66.65, "threshold_band": "under_review"}, "scorecard_digest": {"band": "under_review", "total_points": 66.65}, "reporter_description": "A child was hit by a bicycle near the school crossing. The child has a scraped knee and arm. The cyclist did not stop.", "unified_validation_digest": {"trust_band": "medium_confidence", "aggregated_score": 66.65}}, "text_only_validation": {"valid": true, "confidence": 0.35, "quality_band": "accept_quality", "reason_codes": [], "overall_score": 59.75, "description_quality": 69.5, "semantic_similarity": 0.5}, "stage_1_admissibility": {"score": 100.0, "reasons": ["no_evidence_provided_skipping_admissibility"], "skipped": true, "accepted": true}, "stage_2_incident_match": {"decision": "accept", "metadata": {"validated_at": "2026-06-09T14:16:26.463505+00:00", "llm_available": false, "llm_reasoning": "", "embedding_method": "tfidf", "incident_type_id": 9, "incident_type_name": "Traffic Incident", "semantic_definition_used": "Traffic Incident: Non-emergency road incident affecting safety."}, "final_score": 50.0, "llm_match_score": 50.0, "embedding_similarity": 0.0}, "stage_4_evidence_match": {"skipped": true, "decision": "accept", "metadata": {"reason": "no_evidence_skipping_stage_4"}, "support_level": "", "semantic_similarity": 0.0, "evidence_match_score": 0.0, "evidence_descriptions": []}, "description_credibility": {"word_count": 24, "has_evidence": false, "length_points": 5.4, "length_adjustment": "bonus", "semantic_similarity": 31.1, "min_recommended_words": 15}, "stage_3_description_quality": {"clarity": 90.0, "decision": "accept", "metadata": {"issues": [], "llm_used": false, "char_count": 118, "word_count": 24, "analyzed_at": "2026-06-09T14:16:28.356735+00:00", "sentence_count": 3, "has_actor_references": false, "has_location_markers": true, "has_temporal_markers": false}, "consistency": 75.0, "specificity": 50.0, "completeness": 65.0, "description_score": 69.5}}	t	2026-06-09 14:16:30.052919	1.0.0	4G	24.00	low	\N	140	passed	{"Vehicle involved","Victim present"}	low	\N	This Traffic Incident report was submitted from Cyuve > Rwebeya > Nyarubande.\nThe citizen wrote: "A child was hit by a bicycle near the school crossing. The child has a scraped knee and arm. The cyclist did not stop."\n\nAutomated result: Pending leader review. The report was not auto-confirmed. A local leader must decide after reviewing it.\n\nWhy:\n1. The credibility model rated this submission as low authenticity.\n\nNo photos, videos, or audio were uploaded. The decision used the written description, location, and automated text checks only.\n\nRecommended next step:\nRead the description and any media, confirm or correct the incident type, then verify or reject manually.	pending	\N	\N	\N	\N
+897e4525-7d74-4f5f-af23-b482ba7ab7fa	RPT-2026-1131	e578c96c-0829-4fc5-817b-33f2dcd19f5b	1	Someone stole the solar panel from the roof of our house while we were away visiting relatives. We left Friday morning and returned Sunday evening to find it gone.	-1.4861217	29.6423701	7.75	1.81	f	128	\N	2026-06-09 14:15:27.936904	verified	f	\N	verified	\N	\N	{"text_only_nl": {"confidence": 0.9999999999999999, "overall_score": 51.752, "description_quality": 80.0, "semantic_similarity": 9.38}, "pipeline_audit": [{"name": "evidence_admissibility", "score": 100.0, "stage": 1, "decision": "skip", "duration_ms": 0.0}, {"name": "incident_description_validation", "score": 53.75, "stage": 2, "decision": "accept", "duration_ms": 2425.6}, {"name": "description_quality", "score": 87.25, "stage": 3, "decision": "accept", "duration_ms": 2285.7}, {"name": "description_evidence_matching", "score": null, "stage": 4, "decision": "skip", "duration_ms": 0.0}, {"name": "dynamic_trust_score", "score": 74.23, "stage": 5, "decision": "ACCEPTED", "duration_ms": 0.1}], "pipeline_decision": "ACCEPTED", "stage_5_trust_score": {"decision": "ACCEPTED", "metadata": {"computed_at": "2026-06-09T14:15:33.208145+00:00", "has_evidence": false, "total_components": 7, "available_components": 5, "available_weight_sum": 75.0, "normalization_factor": 1.3333}, "components": [{"name": "incident_match", "weight": 25.0, "available": true, "raw_score": 53.75, "contribution": 17.92, "normalized_weight": 33.33}, {"name": "description_quality", "weight": 20.0, "available": true, "raw_score": 87.25, "contribution": 23.27, "normalized_weight": 26.67}, {"name": "evidence_match", "weight": 10.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "evidence_admissibility", "weight": 15.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "reporter_history", "weight": 5.0, "available": true, "raw_score": 35.72, "contribution": 2.38, "normalized_weight": 6.67}, {"name": "corroboration", "weight": 5.0, "available": true, "raw_score": 60.0, "contribution": 4.0, "normalized_weight": 6.67}, {"name": "location_consistency", "weight": 20.0, "available": true, "raw_score": 100.0, "contribution": 26.67, "normalized_weight": 26.67}], "trust_band": "high_confidence", "trust_score": 74.23}, "threshold_scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5375, "weight": 33.33, "max_points": 33.33, "points_awarded": 17.92}, "reporter_history": {"signal": 0.3572, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.38}, "description_quality": {"signal": 0.8725, "weight": 26.67, "max_points": 26.67, "points_awarded": 23.27}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 74.23, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "confirmed_candidate", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "high_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Cyuve > Kabeza > Kungo", "coordinates": "-1.48612, 29.64237", "gps_accuracy_m": 7.75}, "scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5375, "weight": 33.33, "max_points": 33.33, "points_awarded": 17.92}, "reporter_history": {"signal": 0.3572, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.38}, "description_quality": {"signal": 0.8725, "weight": 26.67, "max_points": 26.67, "points_awarded": 23.27}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 74.23, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "confirmed_candidate", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "high_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "context_tags": [], "incident_type": "Theft", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"per_file": [], "breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}, "description_credibility": {"word_count": 29, "has_evidence": false, "length_points": 8.4, "length_adjustment": "bonus", "semantic_similarity": 9.38, "min_recommended_words": 15}}, "final_decision": {"label": "likely_real", "status": "verified", "is_flagged": false, "rule_status": "passed", "trust_score": 74.23, "threshold_band": "confirmed_candidate"}, "scorecard_digest": {"band": "confirmed_candidate", "total_points": 74.23}, "reporter_description": "Someone stole the solar panel from the roof of our house while we were away visiting relatives. We left Friday morning and returned Sunday evening to find it gone.", "unified_validation_digest": {"trust_band": "high_confidence", "aggregated_score": 74.23}}, "text_only_validation": {"valid": true, "confidence": 0.35, "quality_band": "accept_quality", "reason_codes": [], "overall_score": 70.5, "description_quality": 87.25, "semantic_similarity": 0.5375}, "stage_1_admissibility": {"score": 100.0, "reasons": ["no_evidence_provided_skipping_admissibility"], "skipped": true, "accepted": true}, "stage_2_incident_match": {"decision": "accept", "metadata": {"validated_at": "2026-06-09T14:15:30.889369+00:00", "llm_available": false, "llm_reasoning": "", "embedding_method": "tfidf", "incident_type_id": 1, "incident_type_name": "Theft", "semantic_definition_used": "Theft: Stealing of property (e.g., phone, money, livestock)."}, "final_score": 53.75, "llm_match_score": 50.0, "embedding_similarity": 9.38}, "stage_4_evidence_match": {"skipped": true, "decision": "accept", "metadata": {"reason": "no_evidence_skipping_stage_4"}, "support_level": "", "semantic_similarity": 0.0, "evidence_match_score": 0.0, "evidence_descriptions": []}, "description_credibility": {"word_count": 29, "has_evidence": false, "length_points": 8.4, "length_adjustment": "bonus", "semantic_similarity": 9.38, "min_recommended_words": 15}, "stage_3_description_quality": {"clarity": 90.0, "decision": "accept", "metadata": {"issues": [], "llm_used": false, "char_count": 163, "word_count": 29, "analyzed_at": "2026-06-09T14:15:33.175114+00:00", "sentence_count": 2, "has_actor_references": true, "has_location_markers": true, "has_temporal_markers": true}, "consistency": 75.0, "specificity": 85.0, "completeness": 95.0, "description_score": 87.25}}	t	2026-06-09 14:15:34.374833	1.2.0	WiFi	67.00	low	\N	128	passed	{}	low	\N	This Theft report was submitted from Cyuve > Kabeza > Kungo.\nThe citizen wrote: "Someone stole the solar panel from the roof of our house while we were away visiting relatives. We left Friday morning and returned Sunday evening to find it gone."\n\nAutomated result: Confirmed. Automated screening accepted this report. An officer may still change the decision.\n\nWhy:\n1. Screening completed without a single dominant concern on record.\n\nNo photos, videos, or audio were uploaded. The decision used the written description, location, and automated text checks only.\n\nRecommended next step:\nProceed unless field knowledge contradicts this report.	confirmed	\N	\N	\N	\N
+ec1828e4-b9d2-4929-807f-7e6d49151e76	RPT-2026-1132	b2c6d604-15aa-4259-a1cb-1ecbf7de5552	1	A thief snatched my bag while I was walking near the health center. He ran behind the building and disappeared. The bag contained my ID card, 30,000 RWF, and my keys.	-1.5046219	29.6248503	12.50	0.00	t	288	\N	2026-06-09 14:15:34.743167	verified	f	\N	verified	\N	\N	{"text_only_nl": {"confidence": 0.9999999999999999, "overall_score": 82.0, "description_quality": 80.0, "semantic_similarity": 85.0}, "pipeline_audit": [{"name": "evidence_admissibility", "score": 100.0, "stage": 1, "decision": "skip", "duration_ms": 0.0}, {"name": "incident_description_validation", "score": 50.0, "stage": 2, "decision": "accept", "duration_ms": 2259.3}, {"name": "description_quality", "score": 81.75, "stage": 3, "decision": "accept", "duration_ms": 1890.4}, {"name": "description_evidence_matching", "score": null, "stage": 4, "decision": "skip", "duration_ms": 0.0}, {"name": "dynamic_trust_score", "score": 71.52, "stage": 5, "decision": "ACCEPTED", "duration_ms": 0.0}], "pipeline_decision": "ACCEPTED", "stage_5_trust_score": {"decision": "ACCEPTED", "metadata": {"computed_at": "2026-06-09T14:15:40.424212+00:00", "has_evidence": false, "total_components": 7, "available_components": 5, "available_weight_sum": 75.0, "normalization_factor": 1.3333}, "components": [{"name": "incident_match", "weight": 25.0, "available": true, "raw_score": 50.0, "contribution": 16.67, "normalized_weight": 33.33}, {"name": "description_quality", "weight": 20.0, "available": true, "raw_score": 81.75, "contribution": 21.8, "normalized_weight": 26.67}, {"name": "evidence_match", "weight": 10.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "evidence_admissibility", "weight": 15.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "reporter_history", "weight": 5.0, "available": true, "raw_score": 35.84, "contribution": 2.39, "normalized_weight": 6.67}, {"name": "corroboration", "weight": 5.0, "available": true, "raw_score": 60.0, "contribution": 4.0, "normalized_weight": 6.67}, {"name": "location_consistency", "weight": 20.0, "available": true, "raw_score": 100.0, "contribution": 26.67, "normalized_weight": 26.67}], "trust_band": "high_confidence", "trust_score": 71.52}, "threshold_scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5, "weight": 33.33, "max_points": 33.33, "points_awarded": 16.67}, "reporter_history": {"signal": 0.3584, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.39}, "description_quality": {"signal": 0.8175, "weight": 26.67, "max_points": 26.67, "points_awarded": 21.8}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 71.52, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "confirmed_candidate", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "high_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Muhoza > Ruhengeri > Burera", "coordinates": "-1.50462, 29.62485", "gps_accuracy_m": 12.5}, "scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5, "weight": 33.33, "max_points": 33.33, "points_awarded": 16.67}, "reporter_history": {"signal": 0.3584, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.39}, "description_quality": {"signal": 0.8175, "weight": 26.67, "max_points": 26.67, "points_awarded": 21.8}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 71.52, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "confirmed_candidate", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "high_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "context_tags": ["Ongoing"], "incident_type": "Theft", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"per_file": [], "breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}, "description_credibility": {"word_count": 31, "has_evidence": false, "length_points": 9.6, "length_adjustment": "bonus", "semantic_similarity": 85.0, "min_recommended_words": 15}}, "final_decision": {"label": "likely_real", "status": "verified", "is_flagged": false, "rule_status": "passed", "trust_score": 71.52, "threshold_band": "confirmed_candidate"}, "scorecard_digest": {"band": "confirmed_candidate", "total_points": 71.52}, "reporter_description": "A thief snatched my bag while I was walking near the health center. He ran behind the building and disappeared. The bag contained my ID card, 30,000 RWF, and my keys.", "unified_validation_digest": {"trust_band": "high_confidence", "aggregated_score": 71.52}}, "text_only_validation": {"valid": true, "confidence": 0.35, "quality_band": "accept_quality", "reason_codes": [], "overall_score": 65.88, "description_quality": 81.75, "semantic_similarity": 0.5}, "stage_1_admissibility": {"score": 100.0, "reasons": ["no_evidence_provided_skipping_admissibility"], "skipped": true, "accepted": true}, "stage_2_incident_match": {"decision": "accept", "metadata": {"validated_at": "2026-06-09T14:15:38.490333+00:00", "llm_available": false, "llm_reasoning": "", "embedding_method": "tfidf", "incident_type_id": 1, "incident_type_name": "Theft", "semantic_definition_used": "Theft: Stealing of property (e.g., phone, money, livestock)."}, "final_score": 50.0, "llm_match_score": 50.0, "embedding_similarity": 0.0}, "stage_4_evidence_match": {"skipped": true, "decision": "accept", "metadata": {"reason": "no_evidence_skipping_stage_4"}, "support_level": "", "semantic_similarity": 0.0, "evidence_match_score": 0.0, "evidence_descriptions": []}, "description_credibility": {"word_count": 31, "has_evidence": false, "length_points": 9.6, "length_adjustment": "bonus", "semantic_similarity": 85.0, "min_recommended_words": 15}, "stage_3_description_quality": {"clarity": 90.0, "decision": "accept", "metadata": {"issues": [], "llm_used": false, "char_count": 166, "word_count": 31, "analyzed_at": "2026-06-09T14:15:40.380758+00:00", "sentence_count": 3, "has_actor_references": true, "has_location_markers": true, "has_temporal_markers": false}, "consistency": 75.0, "specificity": 75.0, "completeness": 85.0, "description_score": 81.75}}	t	2026-06-09 14:15:41.382089	1.2.0	WiFi	18.00	low	\N	288	passed	{Ongoing}	low	\N	This Theft report was submitted from Muhoza > Ruhengeri > Burera.\nThe citizen wrote: "A thief snatched my bag while I was walking near the health center. He ran behind the building and disappeared. The bag contained my ID card, 30,000 RWF, and my keys."\n\nAutomated result: Confirmed. Automated screening accepted this report. An officer may still change the decision.\n\nWhy:\n1. Screening completed without a single dominant concern on record.\n\nNo photos, videos, or audio were uploaded. The decision used the written description, location, and automated text checks only.\n\nRecommended next step:\nProceed unless field knowledge contradicts this report.	confirmed	\N	\N	\N	\N
+38d4dc5c-c264-4d61-8bd6-daab91c4475b	RPT-2026-1133	7e5c39c5-20a0-41bf-9d97-5f1ff1bdf14a	1	My radio was taken from the shop counter when I turned to help another customer. A young man pretending to be a customer grabbed it and ran out.	-1.5049798	29.6261962	4.57	1.71	f	288	\N	2026-06-09 14:15:41.765725	verified	f	\N	verified	\N	\N	{"text_only_nl": {"confidence": 0.7999999999999999, "overall_score": 63.528, "description_quality": 83.0, "semantic_similarity": 34.32}, "pipeline_audit": [{"name": "evidence_admissibility", "score": 100.0, "stage": 1, "decision": "skip", "duration_ms": 0.0}, {"name": "incident_description_validation", "score": 50.0, "stage": 2, "decision": "accept", "duration_ms": 1941.4}, {"name": "description_quality", "score": 79.0, "stage": 3, "decision": "accept", "duration_ms": 1385.3}, {"name": "description_evidence_matching", "score": null, "stage": 4, "decision": "skip", "duration_ms": 0.0}, {"name": "dynamic_trust_score", "score": 70.72, "stage": 5, "decision": "ACCEPTED", "duration_ms": 0.1}], "pipeline_decision": "ACCEPTED", "stage_5_trust_score": {"decision": "ACCEPTED", "metadata": {"computed_at": "2026-06-09T14:15:46.751638+00:00", "has_evidence": false, "total_components": 7, "available_components": 5, "available_weight_sum": 75.0, "normalization_factor": 1.3333}, "components": [{"name": "incident_match", "weight": 25.0, "available": true, "raw_score": 50.0, "contribution": 16.67, "normalized_weight": 33.33}, {"name": "description_quality", "weight": 20.0, "available": true, "raw_score": 79.0, "contribution": 21.07, "normalized_weight": 26.67}, {"name": "evidence_match", "weight": 10.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "evidence_admissibility", "weight": 15.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "reporter_history", "weight": 5.0, "available": true, "raw_score": 34.78, "contribution": 2.32, "normalized_weight": 6.67}, {"name": "corroboration", "weight": 5.0, "available": true, "raw_score": 60.0, "contribution": 4.0, "normalized_weight": 6.67}, {"name": "location_consistency", "weight": 20.0, "available": true, "raw_score": 100.0, "contribution": 26.67, "normalized_weight": 26.67}], "trust_band": "high_confidence", "trust_score": 70.72}, "threshold_scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5, "weight": 33.33, "max_points": 33.33, "points_awarded": 16.67}, "reporter_history": {"signal": 0.3478, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.32}, "description_quality": {"signal": 0.79, "weight": 26.67, "max_points": 26.67, "points_awarded": 21.07}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 70.72, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "confirmed_candidate", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "high_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Muhoza > Ruhengeri > Burera", "coordinates": "-1.50498, 29.62620", "gps_accuracy_m": 4.57}, "scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5, "weight": 33.33, "max_points": 33.33, "points_awarded": 16.67}, "reporter_history": {"signal": 0.3478, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.32}, "description_quality": {"signal": 0.79, "weight": 26.67, "max_points": 26.67, "points_awarded": 21.07}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 70.72, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "confirmed_candidate", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "high_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "context_tags": ["Ongoing"], "incident_type": "Theft", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"per_file": [], "breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}, "description_credibility": {"word_count": 28, "has_evidence": false, "length_points": 7.8, "length_adjustment": "bonus", "semantic_similarity": 34.32, "min_recommended_words": 15}}, "final_decision": {"label": "likely_real", "status": "verified", "is_flagged": false, "rule_status": "passed", "trust_score": 70.72, "threshold_band": "confirmed_candidate"}, "scorecard_digest": {"band": "confirmed_candidate", "total_points": 70.72}, "reporter_description": "My radio was taken from the shop counter when I turned to help another customer. A young man pretending to be a customer grabbed it and ran out.", "unified_validation_digest": {"trust_band": "high_confidence", "aggregated_score": 70.72}}, "text_only_validation": {"valid": true, "confidence": 0.35, "quality_band": "accept_quality", "reason_codes": [], "overall_score": 64.5, "description_quality": 79.0, "semantic_similarity": 0.5}, "stage_1_admissibility": {"score": 100.0, "reasons": ["no_evidence_provided_skipping_admissibility"], "skipped": true, "accepted": true}, "stage_2_incident_match": {"decision": "accept", "metadata": {"validated_at": "2026-06-09T14:15:44.767867+00:00", "llm_available": false, "llm_reasoning": "", "embedding_method": "tfidf", "incident_type_id": 1, "incident_type_name": "Theft", "semantic_definition_used": "Theft: Stealing of property (e.g., phone, money, livestock)."}, "final_score": 50.0, "llm_match_score": 50.0, "embedding_similarity": 0.0}, "stage_4_evidence_match": {"skipped": true, "decision": "accept", "metadata": {"reason": "no_evidence_skipping_stage_4"}, "support_level": "", "semantic_similarity": 0.0, "evidence_match_score": 0.0, "evidence_descriptions": []}, "description_credibility": {"word_count": 28, "has_evidence": false, "length_points": 7.8, "length_adjustment": "bonus", "semantic_similarity": 34.32, "min_recommended_words": 15}, "stage_3_description_quality": {"clarity": 90.0, "decision": "accept", "metadata": {"issues": [], "llm_used": false, "char_count": 144, "word_count": 28, "analyzed_at": "2026-06-09T14:15:46.153207+00:00", "sentence_count": 2, "has_actor_references": true, "has_location_markers": true, "has_temporal_markers": false}, "consistency": 75.0, "specificity": 70.0, "completeness": 80.0, "description_score": 79.0}}	t	2026-06-09 14:15:47.81984	1.0.0	4G	79.00	low	\N	288	passed	{Ongoing}	low	\N	This Theft report was submitted from Muhoza > Ruhengeri > Burera.\nThe citizen wrote: "My radio was taken from the shop counter when I turned to help another customer. A young man pretending to be a customer grabbed it and ran out."\n\nAutomated result: Confirmed. Automated screening accepted this report. An officer may still change the decision.\n\nWhy:\n1. Screening completed without a single dominant concern on record.\n\nNo photos, videos, or audio were uploaded. The decision used the written description, location, and automated text checks only.\n\nRecommended next step:\nProceed unless field knowledge contradicts this report.	confirmed	\N	\N	\N	\N
+12f5fba7-cc38-435b-8628-d4bb94b70407	RPT-2026-1134	733f183f-778c-4d5e-b2a1-2a3ada3ebb3e	7	A fake health insurance agent collected premiums from 30 families. He gave us counterfeit cards. The hospital rejected them.	-1.5190659	29.6233982	10.06	0.00	t	287	\N	2026-06-09 14:15:48.335592	verified	f	\N	verified	\N	\N	{"text_only_nl": {"confidence": 0.7999999999999999, "overall_score": 60.156, "description_quality": 73.0, "semantic_similarity": 40.89}, "pipeline_audit": [{"name": "evidence_admissibility", "score": 100.0, "stage": 1, "decision": "skip", "duration_ms": 0.0}, {"name": "incident_description_validation", "score": 50.0, "stage": 2, "decision": "accept", "duration_ms": 2508.4}, {"name": "description_quality", "score": 78.75, "stage": 3, "decision": "accept", "duration_ms": 1938.8}, {"name": "description_evidence_matching", "score": null, "stage": 4, "decision": "skip", "duration_ms": 0.0}, {"name": "dynamic_trust_score", "score": 70.24, "stage": 5, "decision": "ACCEPTED", "duration_ms": 0.0}], "pipeline_decision": "ACCEPTED", "stage_5_trust_score": {"decision": "ACCEPTED", "metadata": {"computed_at": "2026-06-09T14:15:54.758524+00:00", "has_evidence": false, "total_components": 7, "available_components": 5, "available_weight_sum": 75.0, "normalization_factor": 1.3333}, "components": [{"name": "incident_match", "weight": 25.0, "available": true, "raw_score": 50.0, "contribution": 16.67, "normalized_weight": 33.33}, {"name": "description_quality", "weight": 20.0, "available": true, "raw_score": 78.75, "contribution": 21.0, "normalized_weight": 26.67}, {"name": "evidence_match", "weight": 10.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "evidence_admissibility", "weight": 15.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "reporter_history", "weight": 5.0, "available": true, "raw_score": 28.54, "contribution": 1.9, "normalized_weight": 6.67}, {"name": "corroboration", "weight": 5.0, "available": true, "raw_score": 60.0, "contribution": 4.0, "normalized_weight": 6.67}, {"name": "location_consistency", "weight": 20.0, "available": true, "raw_score": 100.0, "contribution": 26.67, "normalized_weight": 26.67}], "trust_band": "high_confidence", "trust_score": 70.24}, "threshold_scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5, "weight": 33.33, "max_points": 33.33, "points_awarded": 16.67}, "reporter_history": {"signal": 0.2854, "weight": 6.67, "max_points": 6.67, "points_awarded": 1.9}, "description_quality": {"signal": 0.7875, "weight": 26.67, "max_points": 26.67, "points_awarded": 21.0}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 70.24, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "confirmed_candidate", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "high_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Muhoza > Ruhengeri > Buhoro", "coordinates": "-1.51907, 29.62340", "gps_accuracy_m": 10.06}, "scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5, "weight": 33.33, "max_points": 33.33, "points_awarded": 16.67}, "reporter_history": {"signal": 0.2854, "weight": 6.67, "max_points": 6.67, "points_awarded": 1.9}, "description_quality": {"signal": 0.7875, "weight": 26.67, "max_points": 26.67, "points_awarded": 21.0}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 70.24, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "confirmed_candidate", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "high_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "context_tags": ["Multiple suspects"], "incident_type": "Fraud/Scam", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"per_file": [], "breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}, "description_credibility": {"word_count": 19, "has_evidence": false, "length_points": 2.4, "length_adjustment": "bonus", "semantic_similarity": 40.89, "min_recommended_words": 15}}, "final_decision": {"label": "likely_real", "status": "verified", "is_flagged": false, "rule_status": "passed", "trust_score": 70.24, "threshold_band": "confirmed_candidate"}, "scorecard_digest": {"band": "confirmed_candidate", "total_points": 70.24}, "reporter_description": "A fake health insurance agent collected premiums from 30 families. He gave us counterfeit cards. The hospital rejected them.", "unified_validation_digest": {"trust_band": "high_confidence", "aggregated_score": 70.24}}, "text_only_validation": {"valid": true, "confidence": 0.35, "quality_band": "accept_quality", "reason_codes": [], "overall_score": 64.38, "description_quality": 78.75, "semantic_similarity": 0.5}, "stage_1_admissibility": {"score": 100.0, "reasons": ["no_evidence_provided_skipping_admissibility"], "skipped": true, "accepted": true}, "stage_2_incident_match": {"decision": "accept", "metadata": {"validated_at": "2026-06-09T14:15:52.196037+00:00", "llm_available": false, "llm_reasoning": "", "embedding_method": "tfidf", "incident_type_id": 7, "incident_type_name": "Fraud/Scam", "semantic_definition_used": "Fraud/Scam: Deception to gain money/property (mobile money scam, etc.)."}, "final_score": 50.0, "llm_match_score": 50.0, "embedding_similarity": 0.0}, "stage_4_evidence_match": {"skipped": true, "decision": "accept", "metadata": {"reason": "no_evidence_skipping_stage_4"}, "support_level": "", "semantic_similarity": 0.0, "evidence_match_score": 0.0, "evidence_descriptions": []}, "description_credibility": {"word_count": 19, "has_evidence": false, "length_points": 2.4, "length_adjustment": "bonus", "semantic_similarity": 40.89, "min_recommended_words": 15}, "stage_3_description_quality": {"clarity": 90.0, "decision": "accept", "metadata": {"issues": [], "llm_used": false, "char_count": 124, "word_count": 19, "analyzed_at": "2026-06-09T14:15:54.134835+00:00", "sentence_count": 3, "has_actor_references": true, "has_location_markers": true, "has_temporal_markers": false}, "consistency": 75.0, "specificity": 75.0, "completeness": 75.0, "description_score": 78.75}}	t	2026-06-09 14:15:55.842101	1.2.0	WiFi	69.00	low	\N	287	passed	{"Multiple suspects"}	low	\N	This Fraud/Scam report was submitted from Muhoza > Ruhengeri > Buhoro.\nThe citizen wrote: "A fake health insurance agent collected premiums from 30 families. He gave us counterfeit cards. The hospital rejected them."\n\nAutomated result: Confirmed. Automated screening accepted this report. An officer may still change the decision.\n\nWhy:\n1. Screening completed without a single dominant concern on record.\n\nNo photos, videos, or audio were uploaded. The decision used the written description, location, and automated text checks only.\n\nRecommended next step:\nProceed unless field knowledge contradicts this report.	confirmed	\N	\N	\N	\N
+c16cfaa5-d655-418b-b7c6-4b1065179763	RPT-2026-1140	3cbee79c-ff3c-46ed-aee2-4dc05e1eff09	4	An unknown person has been asking children for personal information about their families after school near the gate.	-1.4934357	29.6381378	10.38	0.00	t	140	\N	2026-06-09 14:16:37.376021	pending	f	\N	under_review	\N	\N	{"text_only_nl": {"confidence": 0.9999999999999999, "overall_score": 47.715999999999994, "description_quality": 73.0, "semantic_similarity": 9.79}, "pipeline_audit": [{"name": "evidence_admissibility", "score": 100.0, "stage": 1, "decision": "skip", "duration_ms": 0.0}, {"name": "incident_description_validation", "score": 53.92, "stage": 2, "decision": "accept", "duration_ms": 1303.8}, {"name": "description_quality", "score": 72.65, "stage": 3, "decision": "accept", "duration_ms": 2002.7}, {"name": "description_evidence_matching", "score": null, "stage": 4, "decision": "skip", "duration_ms": 0.0}, {"name": "dynamic_trust_score", "score": 68.34, "stage": 5, "decision": "FLAGGED_FOR_REVIEW", "duration_ms": 0.0}], "pipeline_decision": "FLAGGED_FOR_REVIEW", "stage_5_trust_score": {"decision": "FLAGGED_FOR_REVIEW", "metadata": {"computed_at": "2026-06-09T14:16:41.303421+00:00", "has_evidence": false, "total_components": 7, "available_components": 5, "available_weight_sum": 75.0, "normalization_factor": 1.3333}, "components": [{"name": "incident_match", "weight": 25.0, "available": true, "raw_score": 53.92, "contribution": 17.97, "normalized_weight": 33.33}, {"name": "description_quality", "weight": 20.0, "available": true, "raw_score": 72.65, "contribution": 19.37, "normalized_weight": 26.67}, {"name": "evidence_match", "weight": 10.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "evidence_admissibility", "weight": 15.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "reporter_history", "weight": 5.0, "available": true, "raw_score": 4.97, "contribution": 0.33, "normalized_weight": 6.67}, {"name": "corroboration", "weight": 5.0, "available": true, "raw_score": 60.0, "contribution": 4.0, "normalized_weight": 6.67}, {"name": "location_consistency", "weight": 20.0, "available": true, "raw_score": 100.0, "contribution": 26.67, "normalized_weight": 26.67}], "trust_band": "medium_confidence", "trust_score": 68.34}, "threshold_scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5392, "weight": 33.33, "max_points": 33.33, "points_awarded": 17.97}, "reporter_history": {"signal": 0.0497, "weight": 6.67, "max_points": 6.67, "points_awarded": 0.33}, "description_quality": {"signal": 0.7265, "weight": 26.67, "max_points": 26.67, "points_awarded": 19.37}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 68.34, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Cyuve > Rwebeya > Nyarubande", "coordinates": "-1.49344, 29.63814", "gps_accuracy_m": 10.38}, "scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5392, "weight": 33.33, "max_points": 33.33, "points_awarded": 17.97}, "reporter_history": {"signal": 0.0497, "weight": 6.67, "max_points": 6.67, "points_awarded": 0.33}, "description_quality": {"signal": 0.7265, "weight": 26.67, "max_points": 26.67, "points_awarded": 19.37}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 68.34, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "context_tags": [], "incident_type": "Suspicious Activity", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"per_file": [], "breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}, "description_credibility": {"word_count": 18, "has_evidence": false, "length_points": 1.8, "length_adjustment": "bonus", "semantic_similarity": 9.79, "min_recommended_words": 15}}, "final_decision": {"label": "suspicious", "status": "under_review", "is_flagged": false, "rule_status": "passed", "trust_score": 68.34, "threshold_band": "under_review"}, "scorecard_digest": {"band": "under_review", "total_points": 68.34}, "reporter_description": "An unknown person has been asking children for personal information about their families after school near the gate.", "unified_validation_digest": {"trust_band": "medium_confidence", "aggregated_score": 68.34}}, "text_only_validation": {"valid": true, "confidence": 0.35, "quality_band": "accept_quality", "reason_codes": [], "overall_score": 63.29, "description_quality": 72.65, "semantic_similarity": 0.5392}, "stage_1_admissibility": {"score": 100.0, "reasons": ["no_evidence_provided_skipping_admissibility"], "skipped": true, "accepted": true}, "stage_2_incident_match": {"decision": "accept", "metadata": {"validated_at": "2026-06-09T14:16:39.257432+00:00", "llm_available": false, "llm_reasoning": "", "embedding_method": "tfidf", "incident_type_id": 4, "incident_type_name": "Suspicious Activity", "semantic_definition_used": "Suspicious Activity: Unusual behavior or suspicious movement in the area."}, "final_score": 53.92, "llm_match_score": 50.0, "embedding_similarity": 9.79}, "stage_4_evidence_match": {"skipped": true, "decision": "accept", "metadata": {"reason": "no_evidence_skipping_stage_4"}, "support_level": "", "semantic_similarity": 0.0, "evidence_match_score": 0.0, "evidence_descriptions": []}, "description_credibility": {"word_count": 18, "has_evidence": false, "length_points": 1.8, "length_adjustment": "bonus", "semantic_similarity": 9.79, "min_recommended_words": 15}, "stage_3_description_quality": {"clarity": 90.0, "decision": "accept", "metadata": {"issues": [], "llm_used": false, "char_count": 116, "word_count": 18, "analyzed_at": "2026-06-09T14:16:41.260120+00:00", "sentence_count": 1, "has_actor_references": true, "has_location_markers": true, "has_temporal_markers": false}, "consistency": 75.0, "specificity": 65.0, "completeness": 63.0, "description_score": 72.65}}	t	2026-06-09 14:16:43.196545	1.1.0	3G	52.00	low	\N	140	passed	{}	low	\N	This Suspicious Activity report was submitted from Cyuve > Rwebeya > Nyarubande.\nThe citizen wrote: "An unknown person has been asking children for personal information about their families after school near the gate."\n\nAutomated result: Pending leader review. The report was not auto-confirmed. A local leader must decide after reviewing it.\n\nWhy:\n1. The credibility model rated this submission as low authenticity.\n\nNo photos, videos, or audio were uploaded. The decision used the written description, location, and automated text checks only.\n\nRecommended next step:\nRead the description and any media, confirm or correct the incident type, then verify or reject manually.	pending	\N	\N	\N	\N
+f86b48e0-e0e3-4a67-902b-98f5106b5749	RPT-2026-1135	b1f8c81f-4ec4-48ec-b9e1-9852683a4719	6	A new shop that opened recently seems to be a front for drug dealing. Very few customers buy goods but many young people visit briefly.	-1.4840992	29.6517673	12.15	2.54	f	111	\N	2026-06-09 14:16:00.637256	pending	f	\N	under_review	\N	\N	{"text_only_nl": {"confidence": 0.9999999999999999, "overall_score": 51.984, "description_quality": 80.0, "semantic_similarity": 9.96}, "pipeline_audit": [{"name": "evidence_admissibility", "score": 100.0, "stage": 1, "decision": "skip", "duration_ms": 0.0}, {"name": "incident_description_validation", "score": 53.98, "stage": 2, "decision": "accept", "duration_ms": 2565.3}, {"name": "description_quality", "score": 79.0, "stage": 3, "decision": "accept", "duration_ms": 1987.6}, {"name": "description_evidence_matching", "score": null, "stage": 4, "decision": "skip", "duration_ms": 0.0}, {"name": "dynamic_trust_score", "score": 69.24, "stage": 5, "decision": "FLAGGED_FOR_REVIEW", "duration_ms": 0.0}], "pipeline_decision": "FLAGGED_FOR_REVIEW", "stage_5_trust_score": {"decision": "FLAGGED_FOR_REVIEW", "metadata": {"computed_at": "2026-06-09T14:16:06.283204+00:00", "has_evidence": false, "total_components": 7, "available_components": 5, "available_weight_sum": 75.0, "normalization_factor": 1.3333}, "components": [{"name": "incident_match", "weight": 25.0, "available": true, "raw_score": 53.98, "contribution": 17.99, "normalized_weight": 33.33}, {"name": "description_quality", "weight": 20.0, "available": true, "raw_score": 79.0, "contribution": 21.07, "normalized_weight": 26.67}, {"name": "evidence_match", "weight": 10.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "evidence_admissibility", "weight": 15.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "reporter_history", "weight": 5.0, "available": true, "raw_score": 32.68, "contribution": 2.18, "normalized_weight": 6.67}, {"name": "corroboration", "weight": 5.0, "available": true, "raw_score": 60.0, "contribution": 4.0, "normalized_weight": 6.67}, {"name": "location_consistency", "weight": 20.0, "available": true, "raw_score": 90.0, "contribution": 24.0, "normalized_weight": 26.67}], "trust_band": "medium_confidence", "trust_score": 69.24}, "threshold_scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5398, "weight": 33.33, "max_points": 33.33, "points_awarded": 17.99}, "reporter_history": {"signal": 0.3268, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.18}, "description_quality": {"signal": 0.79, "weight": 26.67, "max_points": 26.67, "points_awarded": 21.07}, "location_consistency": {"signal": 0.9, "weight": 26.67, "max_points": 26.67, "points_awarded": 24.0}}, "max_score": 100.0, "hard_gates": [], "total_score": 69.24, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Cyuve > Buruba > Ruhindinka", "coordinates": "-1.48410, 29.65177", "gps_accuracy_m": 12.15}, "scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5398, "weight": 33.33, "max_points": 33.33, "points_awarded": 17.99}, "reporter_history": {"signal": 0.3268, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.18}, "description_quality": {"signal": 0.79, "weight": 26.67, "max_points": 26.67, "points_awarded": 21.07}, "location_consistency": {"signal": 0.9, "weight": 26.67, "max_points": 26.67, "points_awarded": 24.0}}, "max_score": 100.0, "hard_gates": [], "total_score": 69.24, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "context_tags": ["Ongoing"], "incident_type": "Drug Activity", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"per_file": [], "breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}, "description_credibility": {"word_count": 25, "has_evidence": false, "length_points": 6.0, "length_adjustment": "bonus", "semantic_similarity": 9.96, "min_recommended_words": 15}}, "final_decision": {"label": "suspicious", "status": "under_review", "is_flagged": false, "rule_status": "passed", "trust_score": 69.24, "threshold_band": "under_review"}, "scorecard_digest": {"band": "under_review", "total_points": 69.24}, "reporter_description": "A new shop that opened recently seems to be a front for drug dealing. Very few customers buy goods but many young people visit briefly.", "unified_validation_digest": {"trust_band": "medium_confidence", "aggregated_score": 69.24}}, "text_only_validation": {"valid": true, "confidence": 0.35, "quality_band": "accept_quality", "reason_codes": [], "overall_score": 66.49, "description_quality": 79.0, "semantic_similarity": 0.5398}, "stage_1_admissibility": {"score": 100.0, "reasons": ["no_evidence_provided_skipping_admissibility"], "skipped": true, "accepted": true}, "stage_2_incident_match": {"decision": "accept", "metadata": {"validated_at": "2026-06-09T14:16:04.271801+00:00", "llm_available": false, "llm_reasoning": "", "embedding_method": "tfidf", "incident_type_id": 6, "incident_type_name": "Drug Activity", "semantic_definition_used": "Drug Activity: Suspected selling/using of illegal drugs."}, "final_score": 53.98, "llm_match_score": 50.0, "embedding_similarity": 9.96}, "stage_4_evidence_match": {"skipped": true, "decision": "accept", "metadata": {"reason": "no_evidence_skipping_stage_4"}, "support_level": "", "semantic_similarity": 0.0, "evidence_match_score": 0.0, "evidence_descriptions": []}, "description_credibility": {"word_count": 25, "has_evidence": false, "length_points": 6.0, "length_adjustment": "bonus", "semantic_similarity": 9.96, "min_recommended_words": 15}, "stage_3_description_quality": {"clarity": 90.0, "decision": "accept", "metadata": {"issues": [], "llm_used": false, "char_count": 135, "word_count": 25, "analyzed_at": "2026-06-09T14:16:06.259339+00:00", "sentence_count": 2, "has_actor_references": true, "has_location_markers": true, "has_temporal_markers": false}, "consistency": 75.0, "specificity": 70.0, "completeness": 80.0, "description_score": 79.0}}	t	2026-06-09 14:16:07.226198	1.2.1	3G	72.00	low	\N	111	passed	{Ongoing}	low	\N	This Drug Activity report was submitted from Cyuve > Buruba > Ruhindinka.\nThe citizen wrote: "A new shop that opened recently seems to be a front for drug dealing. Very few customers buy goods but many young people visit briefly."\n\nAutomated result: Pending leader review. The report was not auto-confirmed. A local leader must decide after reviewing it.\n\nWhy:\n1. The credibility model rated this submission as low authenticity.\n\nNo photos, videos, or audio were uploaded. The decision used the written description, location, and automated text checks only.\n\nRecommended next step:\nRead the description and any media, confirm or correct the incident type, then verify or reject manually.	pending	\N	\N	\N	\N
+d675d5d2-c481-43c1-be74-22d0c597482d	RPT-2026-1136	35d1a0ae-bdb3-4a28-9e44-a89a91ab429a	8	My landlord keeps coming to my house uninvited and making inappropriate comments. When I asked him to stop he threatened to evict me.	-1.5128411	29.6279459	5.49	3.17	f	289	\N	2026-06-09 14:16:07.558444	pending	f	\N	under_review	\N	\N	{"text_only_nl": {"confidence": 0.7999999999999999, "overall_score": 54.236, "description_quality": 73.0, "semantic_similarity": 26.09}, "pipeline_audit": [{"name": "evidence_admissibility", "score": 100.0, "stage": 1, "decision": "skip", "duration_ms": 0.0}, {"name": "incident_description_validation", "score": 50.0, "stage": 2, "decision": "accept", "duration_ms": 1307.7}, {"name": "description_quality", "score": 74.75, "stage": 3, "decision": "accept", "duration_ms": 1332.9}, {"name": "description_evidence_matching", "score": null, "stage": 4, "decision": "skip", "duration_ms": 0.0}, {"name": "dynamic_trust_score", "score": 68.03, "stage": 5, "decision": "FLAGGED_FOR_REVIEW", "duration_ms": 0.1}], "pipeline_decision": "FLAGGED_FOR_REVIEW", "stage_5_trust_score": {"decision": "FLAGGED_FOR_REVIEW", "metadata": {"computed_at": "2026-06-09T14:16:11.873888+00:00", "has_evidence": false, "total_components": 7, "available_components": 5, "available_weight_sum": 75.0, "normalization_factor": 1.3333}, "components": [{"name": "incident_match", "weight": 25.0, "available": true, "raw_score": 50.0, "contribution": 16.67, "normalized_weight": 33.33}, {"name": "description_quality", "weight": 20.0, "available": true, "raw_score": 74.75, "contribution": 19.93, "normalized_weight": 26.67}, {"name": "evidence_match", "weight": 10.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "evidence_admissibility", "weight": 15.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "reporter_history", "weight": 5.0, "available": true, "raw_score": 31.39, "contribution": 2.09, "normalized_weight": 6.67}, {"name": "corroboration", "weight": 5.0, "available": true, "raw_score": 60.0, "contribution": 4.0, "normalized_weight": 6.67}, {"name": "location_consistency", "weight": 20.0, "available": true, "raw_score": 95.0, "contribution": 25.33, "normalized_weight": 26.67}], "trust_band": "medium_confidence", "trust_score": 68.03}, "threshold_scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5, "weight": 33.33, "max_points": 33.33, "points_awarded": 16.67}, "reporter_history": {"signal": 0.3139, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.09}, "description_quality": {"signal": 0.7475, "weight": 26.67, "max_points": 26.67, "points_awarded": 19.93}, "location_consistency": {"signal": 0.95, "weight": 26.67, "max_points": 26.67, "points_awarded": 25.33}}, "max_score": 100.0, "hard_gates": [], "total_score": 68.03, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Muhoza > Ruhengeri > Bushozi", "coordinates": "-1.51284, 29.62795", "gps_accuracy_m": 5.49}, "scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5, "weight": 33.33, "max_points": 33.33, "points_awarded": 16.67}, "reporter_history": {"signal": 0.3139, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.09}, "description_quality": {"signal": 0.7475, "weight": 26.67, "max_points": 26.67, "points_awarded": 19.93}, "location_consistency": {"signal": 0.95, "weight": 26.67, "max_points": 26.67, "points_awarded": 25.33}}, "max_score": 100.0, "hard_gates": [], "total_score": 68.03, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "under_review", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "medium_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "context_tags": ["Ongoing"], "incident_type": "Harassment", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"per_file": [], "breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}, "description_credibility": {"word_count": 23, "has_evidence": false, "length_points": 4.8, "length_adjustment": "bonus", "semantic_similarity": 26.09, "min_recommended_words": 15}}, "final_decision": {"label": "suspicious", "status": "under_review", "is_flagged": false, "rule_status": "passed", "trust_score": 68.03, "threshold_band": "under_review"}, "scorecard_digest": {"band": "under_review", "total_points": 68.03}, "reporter_description": "My landlord keeps coming to my house uninvited and making inappropriate comments. When I asked him to stop he threatened to evict me.", "unified_validation_digest": {"trust_band": "medium_confidence", "aggregated_score": 68.03}}, "text_only_validation": {"valid": true, "confidence": 0.35, "quality_band": "accept_quality", "reason_codes": [], "overall_score": 62.38, "description_quality": 74.75, "semantic_similarity": 0.5}, "stage_1_admissibility": {"score": 100.0, "reasons": ["no_evidence_provided_skipping_admissibility"], "skipped": true, "accepted": true}, "stage_2_incident_match": {"decision": "accept", "metadata": {"validated_at": "2026-06-09T14:16:10.027976+00:00", "llm_available": false, "llm_reasoning": "", "embedding_method": "tfidf", "incident_type_id": 8, "incident_type_name": "Harassment", "semantic_definition_used": "Harassment: Repeated threats, stalking, or intimidation."}, "final_score": 50.0, "llm_match_score": 50.0, "embedding_similarity": 0.0}, "stage_4_evidence_match": {"skipped": true, "decision": "accept", "metadata": {"reason": "no_evidence_skipping_stage_4"}, "support_level": "", "semantic_similarity": 0.0, "evidence_match_score": 0.0, "evidence_descriptions": []}, "description_credibility": {"word_count": 23, "has_evidence": false, "length_points": 4.8, "length_adjustment": "bonus", "semantic_similarity": 26.09, "min_recommended_words": 15}, "stage_3_description_quality": {"clarity": 90.0, "decision": "accept", "metadata": {"issues": [], "llm_used": false, "char_count": 133, "word_count": 23, "analyzed_at": "2026-06-09T14:16:11.360839+00:00", "sentence_count": 2, "has_actor_references": true, "has_location_markers": true, "has_temporal_markers": false}, "consistency": 75.0, "specificity": 65.0, "completeness": 70.0, "description_score": 74.75}}	t	2026-06-09 14:16:13.028411	1.1.0	4G	93.00	low	\N	289	passed	{Ongoing}	low	\N	This Harassment report was submitted from Muhoza > Ruhengeri > Bushozi.\nThe citizen wrote: "My landlord keeps coming to my house uninvited and making inappropriate comments. When I asked him to stop he threatened to evict me."\n\nAutomated result: Pending leader review. The report was not auto-confirmed. A local leader must decide after reviewing it.\n\nWhy:\n1. The credibility model rated this submission as low authenticity.\n\nNo photos, videos, or audio were uploaded. The decision used the written description, location, and automated text checks only.\n\nRecommended next step:\nRead the description and any media, confirm or correct the incident type, then verify or reject manually.	pending	\N	\N	\N	\N
+94f06a22-f514-40d2-bf20-f1aff0768874	RPT-2026-1139	a89b2301-880e-45b5-a1a4-27631718c36c	2	A fight broke out at a bar in Muhoza sector around midnight. One man hit another with a bottle on the head causing bleeding. The injured person was taken to hospital.	-1.5036930	29.6271206	8.09	0.00	t	292	\N	2026-06-09 14:16:30.827865	verified	f	\N	verified	\N	\N	{"text_only_nl": {"confidence": 0.9999999999999999, "overall_score": 55.448, "description_quality": 86.0, "semantic_similarity": 9.62}, "pipeline_audit": [{"name": "evidence_admissibility", "score": 100.0, "stage": 1, "decision": "skip", "duration_ms": 0.0}, {"name": "incident_description_validation", "score": 53.85, "stage": 2, "decision": "accept", "duration_ms": 2539.9}, {"name": "description_quality", "score": 91.25, "stage": 3, "decision": "accept", "duration_ms": 1552.2}, {"name": "description_evidence_matching", "score": null, "stage": 4, "decision": "skip", "duration_ms": 0.0}, {"name": "dynamic_trust_score", "score": 75.37, "stage": 5, "decision": "ACCEPTED", "duration_ms": 0.1}], "pipeline_decision": "ACCEPTED", "stage_5_trust_score": {"decision": "ACCEPTED", "metadata": {"computed_at": "2026-06-09T14:16:36.077364+00:00", "has_evidence": false, "total_components": 7, "available_components": 5, "available_weight_sum": 75.0, "normalization_factor": 1.3333}, "components": [{"name": "incident_match", "weight": 25.0, "available": true, "raw_score": 53.85, "contribution": 17.95, "normalized_weight": 33.33}, {"name": "description_quality", "weight": 20.0, "available": true, "raw_score": 91.25, "contribution": 24.33, "normalized_weight": 26.67}, {"name": "evidence_match", "weight": 10.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "evidence_admissibility", "weight": 15.0, "available": false, "raw_score": 0.0, "contribution": 0.0, "normalized_weight": 0.0}, {"name": "reporter_history", "weight": 5.0, "available": true, "raw_score": 36.31, "contribution": 2.42, "normalized_weight": 6.67}, {"name": "corroboration", "weight": 5.0, "available": true, "raw_score": 60.0, "contribution": 4.0, "normalized_weight": 6.67}, {"name": "location_consistency", "weight": 20.0, "available": true, "raw_score": 100.0, "contribution": 26.67, "normalized_weight": 26.67}], "trust_band": "high_confidence", "trust_score": 75.37}, "threshold_scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5385, "weight": 33.33, "max_points": 33.33, "points_awarded": 17.95}, "reporter_history": {"signal": 0.3631, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.42}, "description_quality": {"signal": 0.9125, "weight": 26.67, "max_points": 26.67, "points_awarded": 24.33}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 75.37, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "confirmed_candidate", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "high_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "ai_analysis_snapshot": {"rules": {"triggered": [], "hard_gates": []}, "location": {"label": "Muhoza > Ruhengeri > Muhe", "coordinates": "-1.50369, 29.62712", "gps_accuracy_m": 8.09}, "scorecard": {"factors": {"corroboration": {"signal": 0.6, "weight": 6.67, "max_points": 6.67, "points_awarded": 4.0}, "incident_match": {"signal": 0.5385, "weight": 33.33, "max_points": 33.33, "points_awarded": 17.95}, "reporter_history": {"signal": 0.3631, "weight": 6.67, "max_points": 6.67, "points_awarded": 2.42}, "description_quality": {"signal": 0.9125, "weight": 26.67, "max_points": 26.67, "points_awarded": 24.33}, "location_consistency": {"signal": 1.0, "weight": 26.67, "max_points": 26.67, "points_awarded": 26.67}}, "max_score": 100.0, "hard_gates": [], "total_score": 75.37, "scorecard_type": "pipeline_v2_5stage", "threshold_band": "confirmed_candidate", "decision_source": "unified_validation", "pipeline_version": "v2_5stage", "pipeline_decision": "", "unified_trust_band": "high_confidence", "evidence_all_failed": false, "unified_band_aligned": true, "evidence_mismatch_flag": false, "pipeline_rejection_stage": null}, "context_tags": ["Night-time", "Victim present"], "incident_type": "Assault", "model_signals": {"base": {}, "trustbond": {}, "evidence_ai": {"per_file": [], "breakdown": {}, "has_evidence": false, "evidence_count": 0}, "natural_language": {"mismatch": null, "breakdown": {}, "incident_evidence_similarity": null, "description_evidence_similarity": null, "description_incident_similarity": null}, "description_credibility": {"word_count": 31, "has_evidence": false, "length_points": 9.6, "length_adjustment": "bonus", "semantic_similarity": 9.62, "min_recommended_words": 15}}, "final_decision": {"label": "likely_real", "status": "verified", "is_flagged": false, "rule_status": "passed", "trust_score": 75.37, "threshold_band": "confirmed_candidate"}, "scorecard_digest": {"band": "confirmed_candidate", "total_points": 75.37}, "reporter_description": "A fight broke out at a bar in Muhoza sector around midnight. One man hit another with a bottle on the head causing bleeding. The injured person was taken to hospital.", "unified_validation_digest": {"trust_band": "high_confidence", "aggregated_score": 75.37}}, "text_only_validation": {"valid": true, "confidence": 0.35, "quality_band": "accept_quality", "reason_codes": [], "overall_score": 72.55, "description_quality": 91.25, "semantic_similarity": 0.5385}, "stage_1_admissibility": {"score": 100.0, "reasons": ["no_evidence_provided_skipping_admissibility"], "skipped": true, "accepted": true}, "stage_2_incident_match": {"decision": "accept", "metadata": {"validated_at": "2026-06-09T14:16:34.439257+00:00", "llm_available": false, "llm_reasoning": "", "embedding_method": "tfidf", "incident_type_id": 2, "incident_type_name": "Assault", "semantic_definition_used": "Assault: Physical attack or violence against a person."}, "final_score": 53.85, "llm_match_score": 50.0, "embedding_similarity": 9.62}, "stage_4_evidence_match": {"skipped": true, "decision": "accept", "metadata": {"reason": "no_evidence_skipping_stage_4"}, "support_level": "", "semantic_similarity": 0.0, "evidence_match_score": 0.0, "evidence_descriptions": []}, "description_credibility": {"word_count": 31, "has_evidence": false, "length_points": 9.6, "length_adjustment": "bonus", "semantic_similarity": 9.62, "min_recommended_words": 15}, "stage_3_description_quality": {"clarity": 90.0, "decision": "accept", "metadata": {"issues": [], "llm_used": false, "char_count": 166, "word_count": 31, "analyzed_at": "2026-06-09T14:16:35.991440+00:00", "sentence_count": 3, "has_actor_references": true, "has_location_markers": true, "has_temporal_markers": true}, "consistency": 75.0, "specificity": 95.0, "completeness": 100.0, "description_score": 91.25}}	t	2026-06-09 14:16:37.035777	1.2.1	3G	85.00	low	\N	292	passed	{Night-time,"Victim present"}	medium	\N	This Assault report was submitted from Muhoza > Ruhengeri > Muhe.\nThe citizen wrote: "A fight broke out at a bar in Muhoza sector around midnight. One man hit another with a bottle on the head causing bleeding. The injured person was taken to hospital."\n\nAutomated result: Confirmed. Automated screening accepted this report. An officer may still change the decision.\n\nWhy:\n1. Screening completed without a single dominant concern on record.\n\nNo photos, videos, or audio were uploaded. The decision used the written description, location, and automated text checks only.\n\nRecommended next step:\nProceed unless field knowledge contradicts this report.	confirmed	\N	\N	\N	\N
 \.
 
 
 --
--- Data for Name: spatial_ref_sys; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: spatial_ref_sys; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.spatial_ref_sys (srid, auth_name, auth_srid, srtext, proj4text) FROM stdin;
@@ -10780,7 +10753,7 @@ COPY public.spatial_ref_sys (srid, auth_name, auth_srid, srtext, proj4text) FROM
 
 
 --
--- Data for Name: special_assignment_units; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: special_assignment_units; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.special_assignment_units (unit_id, unit_code, unit_name, description, is_active, requires_commander_approval, created_at, updated_at, commander_user_id) FROM stdin;
@@ -10802,7 +10775,7 @@ COPY public.special_assignment_units (unit_id, unit_code, unit_name, description
 
 
 --
--- Data for Name: station_coverage_cells; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: station_coverage_cells; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.station_coverage_cells (station_coverage_cell_id, station_id, cell_location_id) FROM stdin;
@@ -10840,7 +10813,7 @@ COPY public.station_coverage_cells (station_coverage_cell_id, station_id, cell_l
 
 
 --
--- Data for Name: stations; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: stations; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.stations (station_id, station_code, station_name, station_type, latitude, longitude, address_text, phone_number, email, is_active, created_at, updated_at) FROM stdin;
@@ -10850,7 +10823,7 @@ COPY public.stations (station_id, station_code, station_name, station_type, lati
 
 
 --
--- Data for Name: system_config; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: system_config; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.system_config (config_key, config_value, description, updated_by, updated_at) FROM stdin;
@@ -10868,7 +10841,7 @@ dbscan.epsilon	{"value": 500}	DBSCAN cluster radius	26	2026-03-02 14:37:52.62308
 
 
 --
--- Data for Name: user_sessions; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: user_sessions; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.user_sessions (session_id, police_user_id, refresh_token, user_agent, ip_address, expires_at, created_at, revoked_at) FROM stdin;
@@ -10953,7 +10926,7 @@ cf293487-4f4f-49bf-9ecb-622980d55b2f	26	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ
 
 
 --
--- Data for Name: geocode_settings; Type: TABLE DATA; Schema: tiger; Owner: -
+-- Data for Name: geocode_settings; Type: TABLE DATA; Schema: tiger; Owner: postgres
 --
 
 COPY tiger.geocode_settings (name, setting, unit, category, short_desc) FROM stdin;
@@ -10961,7 +10934,7 @@ COPY tiger.geocode_settings (name, setting, unit, category, short_desc) FROM std
 
 
 --
--- Data for Name: pagc_gaz; Type: TABLE DATA; Schema: tiger; Owner: -
+-- Data for Name: pagc_gaz; Type: TABLE DATA; Schema: tiger; Owner: postgres
 --
 
 COPY tiger.pagc_gaz (id, seq, word, stdword, token, is_custom) FROM stdin;
@@ -10969,7 +10942,7 @@ COPY tiger.pagc_gaz (id, seq, word, stdword, token, is_custom) FROM stdin;
 
 
 --
--- Data for Name: pagc_lex; Type: TABLE DATA; Schema: tiger; Owner: -
+-- Data for Name: pagc_lex; Type: TABLE DATA; Schema: tiger; Owner: postgres
 --
 
 COPY tiger.pagc_lex (id, seq, word, stdword, token, is_custom) FROM stdin;
@@ -10977,7 +10950,7 @@ COPY tiger.pagc_lex (id, seq, word, stdword, token, is_custom) FROM stdin;
 
 
 --
--- Data for Name: pagc_rules; Type: TABLE DATA; Schema: tiger; Owner: -
+-- Data for Name: pagc_rules; Type: TABLE DATA; Schema: tiger; Owner: postgres
 --
 
 COPY tiger.pagc_rules (id, rule, is_custom) FROM stdin;
@@ -10985,7 +10958,7 @@ COPY tiger.pagc_rules (id, rule, is_custom) FROM stdin;
 
 
 --
--- Data for Name: topology; Type: TABLE DATA; Schema: topology; Owner: -
+-- Data for Name: topology; Type: TABLE DATA; Schema: topology; Owner: postgres
 --
 
 COPY topology.topology (id, name, srid, "precision", hasz) FROM stdin;
@@ -10993,7 +10966,7 @@ COPY topology.topology (id, name, srid, "precision", hasz) FROM stdin;
 
 
 --
--- Data for Name: layer; Type: TABLE DATA; Schema: topology; Owner: -
+-- Data for Name: layer; Type: TABLE DATA; Schema: topology; Owner: postgres
 --
 
 COPY topology.layer (topology_id, layer_id, schema_name, table_name, feature_column, feature_type, level, child_id) FROM stdin;
@@ -11001,112 +10974,119 @@ COPY topology.layer (topology_id, layer_id, schema_name, table_name, feature_col
 
 
 --
--- Name: audit_logs_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: audit_logs_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
 SELECT pg_catalog.setval('public.audit_logs_log_id_seq', 112, true);
 
 
 --
--- Name: hotspot_events_event_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: deployment_decisions_decision_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.hotspot_events_event_id_seq', 826, true);
-
-
---
--- Name: hotspots_hotspot_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
---
-
-SELECT pg_catalog.setval('public.hotspots_hotspot_id_seq', 851, true);
+SELECT pg_catalog.setval('public.deployment_decisions_decision_id_seq', 1, false);
 
 
 --
--- Name: incident_types_incident_type_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: hotspot_events_event_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.hotspot_events_event_id_seq', 1447, true);
+
+
+--
+-- Name: hotspots_hotspot_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.hotspots_hotspot_id_seq', 1172, true);
+
+
+--
+-- Name: incident_types_incident_type_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
 SELECT pg_catalog.setval('public.incident_types_incident_type_id_seq', 11, true);
 
 
 --
--- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: local_leader_auth_codes_local_leader_auth_code_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
 SELECT pg_catalog.setval('public.local_leader_auth_codes_local_leader_auth_code_id_seq', 13, true);
 
 
 --
--- Name: local_leader_coverage_locatio_local_leader_coverage_locatio_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: local_leader_coverage_locatio_local_leader_coverage_locatio_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
 SELECT pg_catalog.setval('public.local_leader_coverage_locatio_local_leader_coverage_locatio_seq', 4, true);
 
 
 --
--- Name: local_leaders_local_leader_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: local_leaders_local_leader_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
 SELECT pg_catalog.setval('public.local_leaders_local_leader_id_seq', 3, true);
 
 
 --
--- Name: locations_location_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: locations_location_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
 SELECT pg_catalog.setval('public.locations_location_id_seq', 515, true);
 
 
 --
--- Name: mfa_codes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: mfa_codes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
 SELECT pg_catalog.setval('public.mfa_codes_id_seq', 1, false);
 
 
 --
--- Name: password_reset_codes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: password_reset_codes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
 SELECT pg_catalog.setval('public.password_reset_codes_id_seq', 4, true);
 
 
 --
--- Name: police_users_police_user_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: police_users_police_user_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
 SELECT pg_catalog.setval('public.police_users_police_user_id_seq', 29, true);
 
 
 --
--- Name: special_assignment_units_unit_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: special_assignment_units_unit_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.special_assignment_units_unit_id_seq', 211, true);
+SELECT pg_catalog.setval('public.special_assignment_units_unit_id_seq', 217, true);
 
 
 --
--- Name: station_coverage_cells_station_coverage_cell_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: station_coverage_cells_station_coverage_cell_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
 SELECT pg_catalog.setval('public.station_coverage_cells_station_coverage_cell_id_seq', 39, true);
 
 
 --
--- Name: stations_station_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: stations_station_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
 SELECT pg_catalog.setval('public.stations_station_id_seq', 9, true);
 
 
 --
--- Name: topology_id_seq; Type: SEQUENCE SET; Schema: topology; Owner: -
+-- Name: topology_id_seq; Type: SEQUENCE SET; Schema: topology; Owner: postgres
 --
 
 SELECT pg_catalog.setval('topology.topology_id_seq', 1, false);
 
 
 --
--- Name: alembic_version alembic_version_pkc; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: alembic_version alembic_version_pkc; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.alembic_version
@@ -11114,7 +11094,7 @@ ALTER TABLE ONLY public.alembic_version
 
 
 --
--- Name: audit_logs audit_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: audit_logs audit_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.audit_logs
@@ -11122,7 +11102,7 @@ ALTER TABLE ONLY public.audit_logs
 
 
 --
--- Name: case_reports case_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: case_reports case_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.case_reports
@@ -11130,7 +11110,7 @@ ALTER TABLE ONLY public.case_reports
 
 
 --
--- Name: cases cases_case_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: cases cases_case_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.cases
@@ -11138,7 +11118,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: cases cases_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: cases cases_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.cases
@@ -11146,7 +11126,15 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: devices devices_device_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: deployment_decisions deployment_decisions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.deployment_decisions
+    ADD CONSTRAINT deployment_decisions_pkey PRIMARY KEY (decision_id);
+
+
+--
+-- Name: devices devices_device_hash_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.devices
@@ -11154,7 +11142,7 @@ ALTER TABLE ONLY public.devices
 
 
 --
--- Name: devices devices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: devices devices_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.devices
@@ -11162,7 +11150,7 @@ ALTER TABLE ONLY public.devices
 
 
 --
--- Name: evidence_files evidence_files_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: evidence_files evidence_files_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.evidence_files
@@ -11170,7 +11158,7 @@ ALTER TABLE ONLY public.evidence_files
 
 
 --
--- Name: hotspot_events hotspot_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: hotspot_events hotspot_events_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.hotspot_events
@@ -11178,7 +11166,7 @@ ALTER TABLE ONLY public.hotspot_events
 
 
 --
--- Name: hotspot_reports hotspot_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: hotspot_reports hotspot_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.hotspot_reports
@@ -11186,7 +11174,7 @@ ALTER TABLE ONLY public.hotspot_reports
 
 
 --
--- Name: hotspots hotspots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: hotspots hotspots_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.hotspots
@@ -11194,7 +11182,7 @@ ALTER TABLE ONLY public.hotspots
 
 
 --
--- Name: incident_types incident_types_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: incident_types incident_types_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.incident_types
@@ -11202,7 +11190,7 @@ ALTER TABLE ONLY public.incident_types
 
 
 --
--- Name: incident_types incident_types_type_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: incident_types incident_types_type_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.incident_types
@@ -11210,7 +11198,7 @@ ALTER TABLE ONLY public.incident_types
 
 
 --
--- Name: local_leader_auth_codes local_leader_auth_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: local_leader_auth_codes local_leader_auth_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.local_leader_auth_codes
@@ -11218,7 +11206,7 @@ ALTER TABLE ONLY public.local_leader_auth_codes
 
 
 --
--- Name: local_leader_coverage_locations local_leader_coverage_locations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: local_leader_coverage_locations local_leader_coverage_locations_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.local_leader_coverage_locations
@@ -11226,7 +11214,7 @@ ALTER TABLE ONLY public.local_leader_coverage_locations
 
 
 --
--- Name: local_leaders local_leaders_email_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: local_leaders local_leaders_email_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.local_leaders
@@ -11234,7 +11222,7 @@ ALTER TABLE ONLY public.local_leaders
 
 
 --
--- Name: local_leaders local_leaders_phone_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: local_leaders local_leaders_phone_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.local_leaders
@@ -11242,7 +11230,7 @@ ALTER TABLE ONLY public.local_leaders
 
 
 --
--- Name: local_leaders local_leaders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: local_leaders local_leaders_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.local_leaders
@@ -11250,7 +11238,7 @@ ALTER TABLE ONLY public.local_leaders
 
 
 --
--- Name: locations locations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: locations locations_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.locations
@@ -11258,7 +11246,7 @@ ALTER TABLE ONLY public.locations
 
 
 --
--- Name: mfa_codes mfa_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: mfa_codes mfa_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.mfa_codes
@@ -11266,7 +11254,7 @@ ALTER TABLE ONLY public.mfa_codes
 
 
 --
--- Name: ml_predictions ml_predictions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: ml_predictions ml_predictions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.ml_predictions
@@ -11274,7 +11262,7 @@ ALTER TABLE ONLY public.ml_predictions
 
 
 --
--- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.notifications
@@ -11282,7 +11270,7 @@ ALTER TABLE ONLY public.notifications
 
 
 --
--- Name: password_reset_codes password_reset_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: password_reset_codes password_reset_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.password_reset_codes
@@ -11290,7 +11278,7 @@ ALTER TABLE ONLY public.password_reset_codes
 
 
 --
--- Name: police_users police_users_badge_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: police_users police_users_badge_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.police_users
@@ -11298,7 +11286,7 @@ ALTER TABLE ONLY public.police_users
 
 
 --
--- Name: police_users police_users_email_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: police_users police_users_email_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.police_users
@@ -11306,7 +11294,7 @@ ALTER TABLE ONLY public.police_users
 
 
 --
--- Name: police_users police_users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: police_users police_users_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.police_users
@@ -11314,7 +11302,7 @@ ALTER TABLE ONLY public.police_users
 
 
 --
--- Name: report_assignments report_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: report_assignments report_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.report_assignments
@@ -11322,7 +11310,7 @@ ALTER TABLE ONLY public.report_assignments
 
 
 --
--- Name: reports reports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: reports reports_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.reports
@@ -11330,7 +11318,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_report_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: reports reports_report_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.reports
@@ -11338,7 +11326,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: special_assignment_units special_assignment_units_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: special_assignment_units special_assignment_units_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.special_assignment_units
@@ -11346,7 +11334,7 @@ ALTER TABLE ONLY public.special_assignment_units
 
 
 --
--- Name: special_assignment_units special_assignment_units_unit_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: special_assignment_units special_assignment_units_unit_code_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.special_assignment_units
@@ -11354,7 +11342,7 @@ ALTER TABLE ONLY public.special_assignment_units
 
 
 --
--- Name: station_coverage_cells station_coverage_cells_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: station_coverage_cells station_coverage_cells_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.station_coverage_cells
@@ -11362,7 +11350,7 @@ ALTER TABLE ONLY public.station_coverage_cells
 
 
 --
--- Name: stations stations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: stations stations_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.stations
@@ -11370,7 +11358,7 @@ ALTER TABLE ONLY public.stations
 
 
 --
--- Name: stations stations_station_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: stations stations_station_code_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.stations
@@ -11378,7 +11366,7 @@ ALTER TABLE ONLY public.stations
 
 
 --
--- Name: system_config system_config_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: system_config system_config_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.system_config
@@ -11386,7 +11374,7 @@ ALTER TABLE ONLY public.system_config
 
 
 --
--- Name: local_leader_coverage_locations uq_local_leader_coverage_location; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: local_leader_coverage_locations uq_local_leader_coverage_location; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.local_leader_coverage_locations
@@ -11394,7 +11382,7 @@ ALTER TABLE ONLY public.local_leader_coverage_locations
 
 
 --
--- Name: station_coverage_cells uq_station_coverage_cell; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: station_coverage_cells uq_station_coverage_cell; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.station_coverage_cells
@@ -11402,357 +11390,364 @@ ALTER TABLE ONLY public.station_coverage_cells
 
 
 --
--- Name: idx_audit_actor; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_audit_actor; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_audit_actor ON public.audit_logs USING btree (actor_type, actor_id, created_at DESC);
 
 
 --
--- Name: idx_audit_entity; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_audit_entity; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_audit_entity ON public.audit_logs USING btree (entity_type, entity_id);
 
 
 --
--- Name: idx_audit_time; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_audit_time; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_audit_time ON public.audit_logs USING btree (created_at);
 
 
 --
--- Name: idx_cases_assigned; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_cases_assigned; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_cases_assigned ON public.cases USING btree (assigned_to) WHERE ((status)::text <> 'closed'::text);
 
 
 --
--- Name: idx_cases_status; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_cases_status; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_cases_status ON public.cases USING btree (status, priority);
 
 
 --
--- Name: idx_devices_hash; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_devices_hash; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_devices_hash ON public.devices USING btree (device_hash);
 
 
 --
--- Name: idx_devices_trust; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_devices_trust; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_devices_trust ON public.devices USING btree (device_trust_score);
 
 
 --
--- Name: idx_evidence_hash; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_evidence_hash; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_evidence_hash ON public.evidence_files USING btree (perceptual_hash) WHERE (perceptual_hash IS NOT NULL);
 
 
 --
--- Name: idx_evidence_report; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_evidence_report; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_evidence_report ON public.evidence_files USING btree (report_id);
 
 
 --
--- Name: idx_hotspots_location; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_hotspots_location; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_hotspots_location ON public.hotspots USING gist (public.st_makepoint((center_long)::double precision, (center_lat)::double precision));
 
 
 --
--- Name: idx_hotspots_risk; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_hotspots_risk; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_hotspots_risk ON public.hotspots USING btree (risk_level) WHERE (is_active = true);
 
 
 --
--- Name: idx_locations_geom; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_locations_geom; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_locations_geom ON public.locations USING gist (geometry);
 
 
 --
--- Name: idx_locations_parent; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_locations_parent; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_locations_parent ON public.locations USING btree (parent_location_id);
 
 
 --
--- Name: idx_ml_final; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_ml_final; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_ml_final ON public.ml_predictions USING btree (report_id) WHERE (is_final = true);
 
 
 --
--- Name: idx_ml_report; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_ml_report; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_ml_report ON public.ml_predictions USING btree (report_id);
 
 
 --
--- Name: idx_notifications_user; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_notifications_user; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_notifications_user ON public.notifications USING btree (police_user_id, is_read, created_at DESC);
 
 
 --
--- Name: idx_report_assignments_user; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_report_assignments_user; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_report_assignments_user ON public.report_assignments USING btree (police_user_id);
 
 
 --
--- Name: idx_reports_device; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_reports_device; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_reports_device ON public.reports USING btree (device_id);
 
 
 --
--- Name: idx_reports_incident_type; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_reports_incident_type; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_reports_incident_type ON public.reports USING btree (incident_type_id);
 
 
 --
--- Name: idx_reports_location; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_reports_location; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_reports_location ON public.reports USING gist (public.st_makepoint((longitude)::double precision, (latitude)::double precision));
 
 
 --
--- Name: idx_reports_station; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_reports_station; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_reports_station ON public.reports USING btree (handling_station_id);
 
 
 --
--- Name: idx_reports_status; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_reports_status; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_reports_status ON public.reports USING btree (status, is_flagged);
 
 
 --
--- Name: idx_reports_time; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_reports_time; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_reports_time ON public.reports USING btree (reported_at DESC);
 
 
 --
--- Name: idx_reports_verification; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_reports_verification; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_reports_verification ON public.reports USING btree (verification_status) WHERE (verification_status <> 'verified'::public.verification_status);
 
 
 --
--- Name: idx_sessions_token; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_sessions_token; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_sessions_token ON public.user_sessions USING btree (refresh_token) WHERE (revoked_at IS NULL);
 
 
 --
--- Name: idx_sessions_user; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_sessions_user; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_sessions_user ON public.user_sessions USING btree (police_user_id, expires_at);
 
 
 --
--- Name: idx_stations_active; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_stations_active; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_stations_active ON public.stations USING btree (is_active);
 
 
 --
--- Name: idx_users_badge; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_users_badge; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_users_badge ON public.police_users USING btree (badge_number);
 
 
 --
--- Name: idx_users_email; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_users_email; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_users_email ON public.police_users USING btree (email);
 
 
 --
--- Name: idx_users_role; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_users_role; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_users_role ON public.police_users USING btree (role) WHERE (is_active = true);
 
 
 --
--- Name: idx_users_station; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_users_station; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_users_station ON public.police_users USING btree (station_id);
 
 
 --
--- Name: ix_audit_logs_actor_role; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_audit_logs_actor_role; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_audit_logs_actor_role ON public.audit_logs USING btree (actor_role);
 
 
 --
--- Name: ix_audit_logs_sensitivity_level; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_audit_logs_sensitivity_level; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_audit_logs_sensitivity_level ON public.audit_logs USING btree (sensitivity_level);
 
 
 --
--- Name: ix_cases_station_id; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_cases_station_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_cases_station_id ON public.cases USING btree (station_id);
 
 
 --
--- Name: ix_hotspot_events_created_at; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_deployment_decisions_report_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX ix_deployment_decisions_report_id ON public.deployment_decisions USING btree (report_id);
+
+
+--
+-- Name: ix_hotspot_events_created_at; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_hotspot_events_created_at ON public.hotspot_events USING btree (created_at);
 
 
 --
--- Name: ix_hotspot_events_event_type; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_hotspot_events_event_type; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_hotspot_events_event_type ON public.hotspot_events USING btree (event_type);
 
 
 --
--- Name: ix_hotspot_events_hotspot_id; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_hotspot_events_hotspot_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_hotspot_events_hotspot_id ON public.hotspot_events USING btree (hotspot_id);
 
 
 --
--- Name: ix_local_leader_auth_codes_local_leader_id; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_local_leader_auth_codes_local_leader_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_local_leader_auth_codes_local_leader_id ON public.local_leader_auth_codes USING btree (local_leader_id);
 
 
 --
--- Name: ix_local_leader_auth_codes_phone_number; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_local_leader_auth_codes_phone_number; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_local_leader_auth_codes_phone_number ON public.local_leader_auth_codes USING btree (phone_number);
 
 
 --
--- Name: ix_local_leader_coverage_locations_local_leader_id; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_local_leader_coverage_locations_local_leader_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_local_leader_coverage_locations_local_leader_id ON public.local_leader_coverage_locations USING btree (local_leader_id);
 
 
 --
--- Name: ix_local_leader_coverage_locations_location_id; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_local_leader_coverage_locations_location_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_local_leader_coverage_locations_location_id ON public.local_leader_coverage_locations USING btree (location_id);
 
 
 --
--- Name: ix_local_leaders_email; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_local_leaders_email; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_local_leaders_email ON public.local_leaders USING btree (email);
 
 
 --
--- Name: ix_local_leaders_phone_number; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_local_leaders_phone_number; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_local_leaders_phone_number ON public.local_leaders USING btree (phone_number);
 
 
 --
--- Name: ix_mfa_codes_user_purpose; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_mfa_codes_user_purpose; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_mfa_codes_user_purpose ON public.mfa_codes USING btree (police_user_id, purpose, expires_at);
 
 
 --
--- Name: ix_password_reset_codes_email; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_password_reset_codes_email; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_password_reset_codes_email ON public.password_reset_codes USING btree (email);
 
 
 --
--- Name: ix_reports_submitted_by_local_leader_id; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_reports_submitted_by_local_leader_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_reports_submitted_by_local_leader_id ON public.reports USING btree (submitted_by_local_leader_id);
 
 
 --
--- Name: ix_station_coverage_cells_cell_location_id; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_station_coverage_cells_cell_location_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_station_coverage_cells_cell_location_id ON public.station_coverage_cells USING btree (cell_location_id);
 
 
 --
--- Name: ix_station_coverage_cells_station_id; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_station_coverage_cells_station_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX ix_station_coverage_cells_station_id ON public.station_coverage_cells USING btree (station_id);
 
 
 --
--- Name: reports trigger_device_trust; Type: TRIGGER; Schema: public; Owner: -
+-- Name: reports trigger_device_trust; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
 CREATE TRIGGER trigger_device_trust AFTER INSERT OR UPDATE OF status ON public.reports FOR EACH ROW EXECUTE FUNCTION public.update_device_trust();
 
 
 --
--- Name: police_users trigger_update_police_users; Type: TRIGGER; Schema: public; Owner: -
+-- Name: police_users trigger_update_police_users; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
 CREATE TRIGGER trigger_update_police_users BEFORE UPDATE ON public.police_users FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
 --
--- Name: case_reports case_reports_added_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: case_reports case_reports_added_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.case_reports
@@ -11760,7 +11755,7 @@ ALTER TABLE ONLY public.case_reports
 
 
 --
--- Name: case_reports case_reports_case_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: case_reports case_reports_case_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.case_reports
@@ -11768,7 +11763,7 @@ ALTER TABLE ONLY public.case_reports
 
 
 --
--- Name: case_reports case_reports_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: case_reports case_reports_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.case_reports
@@ -11776,7 +11771,7 @@ ALTER TABLE ONLY public.case_reports
 
 
 --
--- Name: cases cases_assigned_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: cases cases_assigned_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.cases
@@ -11784,7 +11779,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: cases cases_assigned_to_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: cases cases_assigned_to_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.cases
@@ -11792,7 +11787,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: cases cases_assigned_to_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: cases cases_assigned_to_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.cases
@@ -11800,7 +11795,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: cases cases_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: cases cases_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.cases
@@ -11808,7 +11803,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: cases cases_incident_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: cases cases_incident_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.cases
@@ -11816,7 +11811,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: cases cases_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: cases cases_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.cases
@@ -11824,7 +11819,7 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: cases cases_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: cases cases_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.cases
@@ -11832,7 +11827,31 @@ ALTER TABLE ONLY public.cases
 
 
 --
--- Name: evidence_files evidence_files_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: deployment_decisions deployment_decisions_case_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.deployment_decisions
+    ADD CONSTRAINT deployment_decisions_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(case_id);
+
+
+--
+-- Name: deployment_decisions deployment_decisions_decided_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.deployment_decisions
+    ADD CONSTRAINT deployment_decisions_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.police_users(police_user_id);
+
+
+--
+-- Name: deployment_decisions deployment_decisions_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.deployment_decisions
+    ADD CONSTRAINT deployment_decisions_report_id_fkey FOREIGN KEY (report_id) REFERENCES public.reports(report_id);
+
+
+--
+-- Name: evidence_files evidence_files_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.evidence_files
@@ -11840,7 +11859,7 @@ ALTER TABLE ONLY public.evidence_files
 
 
 --
--- Name: reports fk_reports_leader_verified_by; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: reports fk_reports_leader_verified_by; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.reports
@@ -11848,7 +11867,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: hotspot_events hotspot_events_created_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: hotspot_events hotspot_events_created_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.hotspot_events
@@ -11856,7 +11875,7 @@ ALTER TABLE ONLY public.hotspot_events
 
 
 --
--- Name: hotspot_events hotspot_events_hotspot_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: hotspot_events hotspot_events_hotspot_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.hotspot_events
@@ -11864,7 +11883,7 @@ ALTER TABLE ONLY public.hotspot_events
 
 
 --
--- Name: hotspot_reports hotspot_reports_hotspot_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: hotspot_reports hotspot_reports_hotspot_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.hotspot_reports
@@ -11872,7 +11891,7 @@ ALTER TABLE ONLY public.hotspot_reports
 
 
 --
--- Name: hotspot_reports hotspot_reports_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: hotspot_reports hotspot_reports_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.hotspot_reports
@@ -11880,7 +11899,7 @@ ALTER TABLE ONLY public.hotspot_reports
 
 
 --
--- Name: hotspots hotspots_controlled_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: hotspots hotspots_controlled_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.hotspots
@@ -11888,7 +11907,7 @@ ALTER TABLE ONLY public.hotspots
 
 
 --
--- Name: hotspots hotspots_incident_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: hotspots hotspots_incident_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.hotspots
@@ -11896,7 +11915,7 @@ ALTER TABLE ONLY public.hotspots
 
 
 --
--- Name: local_leader_auth_codes local_leader_auth_codes_local_leader_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: local_leader_auth_codes local_leader_auth_codes_local_leader_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.local_leader_auth_codes
@@ -11904,7 +11923,7 @@ ALTER TABLE ONLY public.local_leader_auth_codes
 
 
 --
--- Name: local_leader_coverage_locations local_leader_coverage_locations_local_leader_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: local_leader_coverage_locations local_leader_coverage_locations_local_leader_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.local_leader_coverage_locations
@@ -11912,7 +11931,7 @@ ALTER TABLE ONLY public.local_leader_coverage_locations
 
 
 --
--- Name: local_leader_coverage_locations local_leader_coverage_locations_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: local_leader_coverage_locations local_leader_coverage_locations_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.local_leader_coverage_locations
@@ -11920,7 +11939,7 @@ ALTER TABLE ONLY public.local_leader_coverage_locations
 
 
 --
--- Name: locations locations_parent_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: locations locations_parent_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.locations
@@ -11928,7 +11947,7 @@ ALTER TABLE ONLY public.locations
 
 
 --
--- Name: mfa_codes mfa_codes_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: mfa_codes mfa_codes_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.mfa_codes
@@ -11936,7 +11955,7 @@ ALTER TABLE ONLY public.mfa_codes
 
 
 --
--- Name: ml_predictions ml_predictions_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: ml_predictions ml_predictions_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.ml_predictions
@@ -11944,7 +11963,7 @@ ALTER TABLE ONLY public.ml_predictions
 
 
 --
--- Name: notifications notifications_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: notifications notifications_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.notifications
@@ -11952,7 +11971,7 @@ ALTER TABLE ONLY public.notifications
 
 
 --
--- Name: police_users police_users_assigned_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: police_users police_users_assigned_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.police_users
@@ -11960,7 +11979,7 @@ ALTER TABLE ONLY public.police_users
 
 
 --
--- Name: police_users police_users_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: police_users police_users_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.police_users
@@ -11968,7 +11987,7 @@ ALTER TABLE ONLY public.police_users
 
 
 --
--- Name: report_assignments report_assignments_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: report_assignments report_assignments_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.report_assignments
@@ -11976,7 +11995,7 @@ ALTER TABLE ONLY public.report_assignments
 
 
 --
--- Name: report_assignments report_assignments_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: report_assignments report_assignments_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.report_assignments
@@ -11984,7 +12003,7 @@ ALTER TABLE ONLY public.report_assignments
 
 
 --
--- Name: reports reports_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: reports reports_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.reports
@@ -11992,7 +12011,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_handling_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: reports reports_handling_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.reports
@@ -12000,7 +12019,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_incident_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: reports reports_incident_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.reports
@@ -12008,7 +12027,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: reports reports_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.reports
@@ -12016,7 +12035,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_submitted_by_local_leader_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: reports reports_submitted_by_local_leader_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.reports
@@ -12024,7 +12043,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_verified_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: reports reports_verified_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.reports
@@ -12032,7 +12051,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: reports reports_village_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: reports reports_village_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.reports
@@ -12040,7 +12059,7 @@ ALTER TABLE ONLY public.reports
 
 
 --
--- Name: special_assignment_units special_assignment_units_commander_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: special_assignment_units special_assignment_units_commander_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.special_assignment_units
@@ -12048,7 +12067,7 @@ ALTER TABLE ONLY public.special_assignment_units
 
 
 --
--- Name: station_coverage_cells station_coverage_cells_cell_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: station_coverage_cells station_coverage_cells_cell_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.station_coverage_cells
@@ -12056,7 +12075,7 @@ ALTER TABLE ONLY public.station_coverage_cells
 
 
 --
--- Name: station_coverage_cells station_coverage_cells_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: station_coverage_cells station_coverage_cells_station_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.station_coverage_cells
@@ -12064,7 +12083,7 @@ ALTER TABLE ONLY public.station_coverage_cells
 
 
 --
--- Name: system_config system_config_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: system_config system_config_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.system_config
@@ -12072,7 +12091,7 @@ ALTER TABLE ONLY public.system_config
 
 
 --
--- Name: user_sessions user_sessions_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: user_sessions user_sessions_police_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.user_sessions
