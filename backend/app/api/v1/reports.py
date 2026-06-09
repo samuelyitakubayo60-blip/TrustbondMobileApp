@@ -1497,6 +1497,97 @@ def _resolve_trust_factors(
     return out
 
 
+def _extract_verification_pipeline(report: Report) -> Optional[Dict[str, Any]]:
+    """Extract 5-stage verification pipeline details from feature_vector for UI display."""
+    fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
+    if not fv:
+        return None
+
+    pipeline_version = ""
+    uv = fv.get("unified_validation")
+    if isinstance(uv, dict):
+        pipeline_version = uv.get("pipeline_version", "")
+
+    stage2 = fv.get("stage_2_incident_match") if isinstance(fv.get("stage_2_incident_match"), dict) else None
+    stage3 = fv.get("stage_3_description_quality") if isinstance(fv.get("stage_3_description_quality"), dict) else None
+    stage4 = fv.get("stage_4_evidence_match") if isinstance(fv.get("stage_4_evidence_match"), dict) else None
+    stage5 = fv.get("stage_5_trust_score") if isinstance(fv.get("stage_5_trust_score"), dict) else None
+
+    if not any([stage2, stage3, stage4, stage5]):
+        return None
+
+    result: Dict[str, Any] = {
+        "pipeline_version": pipeline_version or "v2_5stage",
+        "pipeline_decision": fv.get("pipeline_decision"),
+        "pipeline_rejection_stage": fv.get("pipeline_rejection_stage"),
+        "pipeline_rejection_reason": fv.get("pipeline_rejection_reason"),
+    }
+
+    if stage2:
+        result["incident_match"] = {
+            "embedding_similarity": stage2.get("embedding_similarity"),
+            "llm_match_score": stage2.get("llm_match_score"),
+            "final_score": stage2.get("final_score"),
+            "decision": stage2.get("decision"),
+            "confidence": stage2.get("confidence"),
+            "method": stage2.get("method"),
+            "incident_type_name": stage2.get("incident_type_name"),
+        }
+
+    if stage3:
+        result["description_quality"] = {
+            "description_score": stage3.get("description_score"),
+            "completeness": stage3.get("completeness"),
+            "specificity": stage3.get("specificity"),
+            "coherence": stage3.get("coherence"),
+            "word_count": stage3.get("word_count"),
+            "decision": stage3.get("decision"),
+        }
+
+    if stage4:
+        result["evidence_match"] = {
+            "semantic_similarity": stage4.get("semantic_similarity"),
+            "support_level": stage4.get("support_level"),
+            "final_score": stage4.get("final_score"),
+            "decision": stage4.get("decision"),
+        }
+
+    if stage5:
+        components = stage5.get("components", [])
+        result["trust_score"] = {
+            "trust_score": stage5.get("trust_score"),
+            "trust_band": stage5.get("trust_band"),
+            "decision": stage5.get("decision"),
+            "components": [
+                {
+                    "name": c.get("name"),
+                    "raw_score": c.get("raw_score"),
+                    "weight": c.get("normalized_weight"),
+                    "contribution": c.get("contribution"),
+                    "available": c.get("available"),
+                }
+                for c in components
+                if isinstance(c, dict)
+            ],
+        }
+
+    # Evidence admissibility from stage 1
+    ev = fv.get("evidence_validations")
+    if isinstance(ev, list) and ev:
+        result["evidence_admissibility"] = [
+            {
+                "admissibility_score": v.get("admissibility_score"),
+                "is_admissible": v.get("is_admissible"),
+                "file_type": v.get("file_type"),
+                "rejection_reasons": v.get("rejection_reasons", []),
+            }
+            for v in ev
+            if isinstance(v, dict)
+        ]
+
+    return result
+
+
 def _rule_adjusted_trust_label(
     report: Report,
     trust_score: Optional[float],
@@ -1619,8 +1710,90 @@ def _compute_threshold_scorecard(
     community_votes: Optional[Dict[str, int]] = None,
     unified_validation: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Compute a weighted 100-point threshold scorecard (text-only vs with evidence)."""
+    """Compute a weighted 100-point threshold scorecard (text-only vs with evidence).
+
+    When the 5-stage pipeline (v2) has run, uses Stage 5 trust score directly.
+    Falls back to legacy pillar-based computation for older pipeline results.
+    """
     fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
+
+    # ── NEW: Fast path for 5-stage pipeline results ──────────────────────────
+    # When the new pipeline has already computed the trust score in Stage 5,
+    # use it directly instead of re-computing from model breakdown.
+    stage5 = fv.get("stage_5_trust_score") if isinstance(fv.get("stage_5_trust_score"), dict) else {}
+    pipeline_version = (unified_validation or {}).get("pipeline_version", "") if isinstance(unified_validation, dict) else ""
+
+    if stage5 and pipeline_version == "v2_5stage":
+        trust_score = float(stage5.get("trust_score", 0.0))
+        trust_band = str(stage5.get("trust_band", ""))
+        components = stage5.get("components", [])
+
+        hard_gates: List[str] = []
+        rule_status = (getattr(report, "rule_status", None) or "").lower()
+        flag_reason = (getattr(report, "flag_reason", None) or "").lower()
+        if rule_status == "rejected":
+            hard_gates.append("RULE_REJECTED")
+        if "out_of_musanze_boundary" in flag_reason:
+            hard_gates.append("LOCATION_OUT_OF_BOUNDARY")
+
+        # Map trust band to threshold band
+        if hard_gates:
+            band = "hard_reject"
+        elif trust_band == "high_confidence":
+            band = "confirmed_candidate"
+        elif trust_band == "medium_confidence":
+            band = "under_review"
+        elif trust_band == "low_confidence":
+            band = "low_confidence"
+        else:
+            band = "low_confidence"
+
+        # Build factors from Stage 5 components
+        factors = {}
+        for comp in components:
+            if isinstance(comp, dict) and comp.get("available"):
+                factors[comp.get("name", "unknown")] = {
+                    "weight": comp.get("normalized_weight", 0),
+                    "max_points": comp.get("normalized_weight", 0),
+                    "signal": round(comp.get("raw_score", 0) / 100.0, 4),
+                    "points_awarded": comp.get("contribution", 0),
+                }
+
+        # Pipeline-level rejection reasons
+        pipeline_decision = fv.get("pipeline_decision", "")
+        pipeline_rejection_stage = fv.get("pipeline_rejection_stage")
+        evidence_validations = fv.get("evidence_validations") if isinstance(fv.get("evidence_validations"), list) else []
+        has_evidence = len(evidence_validations) > 0
+
+        return {
+            "scorecard_type": "pipeline_v2_5stage",
+            "max_score": 100.0,
+            "total_score": round(trust_score, 2),
+            "threshold_band": band,
+            "hard_gates": hard_gates,
+            "factors": factors,
+            "decision_source": "unified_validation",
+            "pipeline_version": "v2_5stage",
+            "pipeline_decision": pipeline_decision,
+            "pipeline_rejection_stage": pipeline_rejection_stage,
+            "evidence_all_failed": False,
+            "evidence_mismatch_flag": False,
+        }
+
+    # ── Fallback to ML Prediction if no validation ───────────────────────────
+    if ml_prediction is not None and not isinstance(unified_validation, dict):
+        if hasattr(ml_prediction, "trust_score") and ml_prediction.trust_score is not None:
+            ts = float(ml_prediction.trust_score)
+            return {
+                "scorecard_type": "legacy_ml_prediction",
+                "max_score": 100.0,
+                "total_score": round(ts, 2),
+                "threshold_band": "under_review" if ts >= 45.0 else "low_confidence",
+                "hard_gates": [],
+                "factors": {},
+            }
+
+    # ── Legacy path: pillar-based computation ────────────────────────────────
     evidence_validations = fv.get("evidence_validations") if isinstance(fv.get("evidence_validations"), list) else []
     semantic = fv.get("semantic_alignment") if isinstance(fv.get("semantic_alignment"), dict) else {}
     text_only = fv.get("text_only_validation") if isinstance(fv.get("text_only_validation"), dict) else {}
@@ -1818,12 +1991,13 @@ def _compute_threshold_scorecard(
             flag_reason_upper = (flag_reason or "").upper()
             has_text_mismatch_flag = (
                 semantic_mismatch
-                or "MISMATCH" in flag_reason_upper
                 or "INCIDENT_TEXT_MISMATCH" in reason_codes
                 or "GIBBERISH" in reason_codes
             )
-            if not text_valid or quality_band in {"reject_quality", "review_quality"}:
-                total = min(total, 55.0)
+            if not text_valid or quality_band == "reject_quality":
+                total = min(total, 45.0)
+            elif quality_band == "review_quality":
+                total = min(total, 65.0)
             if has_text_mismatch_flag:
                 total = min(total, 49.0)
 
@@ -1854,16 +2028,16 @@ def _compute_threshold_scorecard(
         if hard_gates:
             band = "hard_reject"
         elif not has_evidence:
-            if total >= 85.0:
+            if total >= 70.0:
                 band = "confirmed_candidate"
-            elif total >= 60.0:
+            elif total >= 45.0:
                 band = "under_review"
             else:
                 band = "low_confidence"
         else:
-            if total >= 80.0:
+            if total >= 70.0:
                 band = "confirmed_candidate"
-            elif total >= 55.0:
+            elif total >= 50.0:
                 band = "under_review"
             else:
                 band = "low_confidence"
@@ -1985,17 +2159,16 @@ def _compute_threshold_scorecard(
     if hard_gates:
         band = "hard_reject"
     elif not has_evidence:
-        # Text-only reports require a higher confidence threshold.
-        if total >= 85.0:
+        if total >= 70.0:
             band = "confirmed_candidate"
-        elif total >= 60.0:
+        elif total >= 45.0:
             band = "under_review"
         else:
             band = "low_confidence"
     else:
-        if total >= 80.0:
+        if total >= 70.0:
             band = "confirmed_candidate"
-        elif total >= 55.0:
+        elif total >= 50.0:
             band = "under_review"
         else:
             band = "low_confidence"
@@ -3036,12 +3209,12 @@ def _purge_outside_musanze_reports(db: Session, recompute_hotspots: bool = True)
 
 
 def _generate_report_number(db: Session) -> str:
-    """Generate next report number RPT-YYYY-NNNN with low-lock fallback."""
+    """Generate next report number RPT-YYYY-NNNN using advisory lock (concurrent-safe)."""
     year = datetime.now(timezone.utc).strftime("%Y")
     prefix = f"RPT-{year}-"
     try:
-        # Keep this query cheap; under DB pressure, fallback to non-sequential id.
-        db.execute(text("SET LOCAL statement_timeout = 1200"))
+        # Use advisory lock to serialize report number generation
+        db.execute(text("SELECT pg_advisory_xact_lock(42)"))
         row = db.execute(
             text("""
                 SELECT COALESCE(MAX(
@@ -3054,8 +3227,9 @@ def _generate_report_number(db: Session) -> str:
         next_num = row[0] if row else 1
         return f"{prefix}{next_num:04d}"
     except Exception:
-        # Fallback avoids blocking report creation if sequence lookup times out.
-        fast_suffix = datetime.now(timezone.utc).strftime("%m%d%H%M%S")
+        # Fallback: use uuid suffix to avoid collisions
+        import uuid
+        fast_suffix = uuid.uuid4().hex[:6].upper()
         return f"{prefix}{fast_suffix}"
 
 UPLOAD_DIR = "uploads/evidence"
@@ -3663,7 +3837,15 @@ def create_report(
                 report.verification_status == "rejected"
                 or report.rule_status == "rejected"
             )
-            if not ai_rejected:
+            if ai_rejected:
+                # Workflow rule: AI rejection auto-rejects leader verification too.
+                # Report must never appear on maps, hotspots, cases, or analytics.
+                report.leader_verification_status = "rejected"
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+            else:
                 background_tasks.add_task(notify_local_leaders_needs_verification_task, str(report.report_id))
 
     elif submitting_leader is not None:
@@ -6216,6 +6398,7 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         leader_verification_status=getattr(report, "leader_verification_status", None),
         leader_verified_at=getattr(report, "leader_verified_at", None),
         submitted_by_local_leader_id=getattr(report, "submitted_by_local_leader_id", None),
+        verification_pipeline=_extract_verification_pipeline(report),
         **report_credibility_api_fields(
             report,
             trust_score=float(trust_score) if trust_score is not None else None,

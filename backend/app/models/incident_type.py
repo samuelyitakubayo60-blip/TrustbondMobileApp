@@ -9,6 +9,7 @@ class IncidentType(Base):
     incident_type_id = Column(SmallInteger, primary_key=True, autoincrement=True)
     type_name = Column(String(100), nullable=False)
     description = Column(Text)
+    semantic_definition = Column(Text)  # Rich semantic definition for embedding-based matching
     severity_weight = Column(Numeric(3, 2), default=1.00)
     is_active = Column(Boolean, default=True)
     default_special_assignment_unit = Column(String(80), nullable=True)

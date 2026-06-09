@@ -1,7 +1,11 @@
 """
 Unified Trust Validator
 Integrates all models (TrustBond, Natural Language, Volo) with the central aggregator.
-Replaces the old fragmented validation approach.
+
+NOTE: The main verification pipeline now uses the 5-stage architecture
+in verification_orchestrator.py. This module is retained for backward
+compatibility and as the evidence analysis layer (Volo/YOLO) that
+Stage 4 depends on.
 """
 
 from typing import Dict, Any, Optional, List
@@ -85,7 +89,8 @@ class UnifiedValidator:
         try:
             evidence_count = len(evidence_files) if evidence_files else 0
             score_report_credibility(db, report, device, evidence_count)
-            
+            db.flush()  # Ensure XGBoost prediction is visible to subsequent query
+
             # Get the score from the prediction
             ml_prediction = db.query(MLPrediction).filter(
                 MLPrediction.report_id == report.report_id,
@@ -154,6 +159,7 @@ class UnifiedValidator:
                             audio_url=evidence_file.file_url,
                             incident_type_name=incident_context,
                             expected_objects=expected_objs if expected_objs else None,
+                            report_description=report.description or "",
                         )
 
                     volo_results.append(volo_result)

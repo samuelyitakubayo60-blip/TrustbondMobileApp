@@ -27,6 +27,7 @@ import '../models/evidence_attachment.dart';
 import '../widgets/shared_widgets.dart';
 
 import 'package:trustbond/services/mobile_verification_service.dart';
+import '../services/location_service.dart';
 
 /// Camera works only on Android/iOS. On Windows/Web use gallery.
 
@@ -671,6 +672,24 @@ class _ReportScreenState extends State<ReportScreen> {
         desiredAccuracy: LocationAccuracy.high,
 
       );
+
+      // Musanze boundary check — block reports from outside the district
+      final village = await LocationService()
+          .getVillageFromCoordinates(position.latitude, position.longitude);
+      if (village == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'You are outside Musanze District. '
+                'TrustBond only accepts reports from within Musanze.',
+              ),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+        return;
+      }
 
       setState(() {
 

@@ -94,6 +94,9 @@ DDL_STATEMENTS: tuple[str, ...] = (
     ALTER TABLE incident_types ADD COLUMN IF NOT EXISTS default_special_assignment_unit VARCHAR(80);
     """,
     """
+    ALTER TABLE incident_types ADD COLUMN IF NOT EXISTS semantic_definition TEXT;
+    """,
+    """
     CREATE TABLE IF NOT EXISTS special_assignment_units (
       unit_id SERIAL PRIMARY KEY,
       unit_code VARCHAR(50) NOT NULL UNIQUE,

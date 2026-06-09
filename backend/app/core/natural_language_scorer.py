@@ -2,6 +2,13 @@
 Natural Language Model Scorer
 Analyzes description quality and semantic consistency.
 Outputs only scores - no decision making.
+
+Updated for 5-stage pipeline:
+- Incident validation now handled by Stage 2 (semantic_incident_validator)
+- Description quality now handled by Stage 3 (description_quality_analyzer)
+- This module provides backward-compatible interface for callers
+  that still use analyze_description_quality()
+- Keyword matching REMOVED — semantic analysis used instead
 """
 
 from typing import Dict, Any, Optional, Tuple, List
@@ -18,13 +25,11 @@ from .trust_thresholds import trust_thresholds
 logger = logging.getLogger(__name__)
 
 
-# ── Incident reference texts for TF-IDF cosine similarity ────────────────────
-# Each value is a rich bag-of-words that covers:
-#   • All action verbs and their common conjugations
-#   • Every plausible object type (phone, moto, car, cattle, crops…)
-#   • Rwanda-specific vocabulary (moto, boda boda, piki piki, umuryango…)
-#   • Relevant contextual words (location, time, actors)
-# Keys are substrings matched against the incident type name (lowercase).
+# ── Incident reference texts REMOVED ─────────────────────────────────────────
+# Keyword matching has been completely replaced by semantic embeddings
+# and LLM reasoning in Stage 2 (semantic_incident_validator.py).
+# These reference texts are kept ONLY as fallback for the legacy TF-IDF path
+# when sentence-transformers AND LLM APIs are both unavailable.
 
 _INCIDENT_REFERENCE_TEXTS: Dict[str, str] = {
     # ── Property crimes ───────────────────────────────────────────────────────
@@ -435,14 +440,36 @@ class NaturalLanguageScorer:
         incident_type_name: str,
         incident_type_description: str
     ) -> Tuple[float, Dict[str, Any]]:
-        """Analyze semantic consistency between description and incident type."""
+        """
+        Analyze semantic consistency between description and incident type.
+
+        Now delegates to the semantic pipeline (Stage 2) when possible,
+        falling back to LLM API or TF-IDF for backward compatibility.
+        Keyword matching has been completely removed.
+        """
         metadata = {
             "incident_type": incident_type_name,
             "semantic_model_available": False
         }
 
+        # Primary path: use semantic embeddings from Stage 2 module
+        try:
+            from app.core.semantic_incident_validator import compute_embedding_similarity
+            semantic_def = f"{incident_type_name}: {incident_type_description}" if incident_type_description else incident_type_name
+            emb_score = compute_embedding_similarity(description, semantic_def)
+            if emb_score > 0:
+                metadata.update({
+                    "scoring_method": "semantic_embedding",
+                    "semantic_model_available": True,
+                    "embedding_similarity": emb_score,
+                })
+                return emb_score, metadata
+        except Exception as exc:
+            logger.debug("Semantic embedding fallback: %s", exc)
+
         from app.config import settings
 
+        # Secondary: LLM API
         if getattr(settings, "enable_semantic_match", False) and report_semantic_llm_configured():
             api_score, api_meta = score_description_incident_similarity(
                 description,
@@ -453,13 +480,14 @@ class NaturalLanguageScorer:
                 metadata.update(api_meta)
                 return float(api_score), metadata
 
-        # Local TF-IDF cosine similarity (scikit-learn) — much more reliable than
-        # substring keyword matching for varied phrasing, word forms, and objects.
+        # Tertiary: TF-IDF fallback (no keyword matching)
         tfidf_score, tfidf_meta = self._tfidf_consistency(description, incident_type_name, metadata)
         if tfidf_meta.get("scoring_method") == "tfidf":
             return tfidf_score, tfidf_meta
 
-        return self._keyword_based_consistency(description, incident_type_name, metadata)
+        # Last resort: neutral score (no keyword matching)
+        metadata["scoring_method"] = "neutral_fallback"
+        return 50.0, metadata
     
     def _tfidf_consistency(
         self,
@@ -504,11 +532,11 @@ class NaturalLanguageScorer:
 
         # Map 0-1 cosine similarity → 0-100 score.
         # Empirical calibration against real incident descriptions:
-        #   clear match (English)  → sim ≈ 0.06-0.08  → score 66-82
-        #   non-English (Kinyarwanda/French) → sim ≈ 0.01 → score ~26 (neutral)
-        #   completely unrelated   → sim ≈ 0.005-0.008 → score ~22  (weak signal)
-        # Formula: sim * 800 + 18 maps this range well.
-        score = round(min(100.0, max(10.0, sim * 800.0 + 18.0)), 2)
+        #   clear match (English)  → sim ≈ 0.04-0.08  → score 55-95
+        #   non-English (Kinyarwanda/French) → sim ≈ 0.01 → score ~25 (neutral)
+        #   completely unrelated   → sim ≈ 0.005-0.008 → score ~20  (weak signal)
+        # Formula: sim * 1000 + 15 provides better spread across realistic reports.
+        score = round(min(100.0, max(10.0, sim * 1000.0 + 15.0)), 2)
         metadata.update(
             {
                 "scoring_method": "tfidf",

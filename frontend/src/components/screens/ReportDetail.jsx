@@ -184,7 +184,7 @@ const renderDecisionPatternChips = (patterns, explanations) => {
       p.includes("INVALID_EVIDENCE") ||
       p.includes("SCREENSHOT")
     ) {
-      return { bg: "rgba(244,67,54,0.14)", border: "rgba(244,67,54,0.45)", text: "#ef5350" };
+      return { bg: "var(--surface2)", border: "var(--border2)", text: "var(--danger)" };
     }
     if (
       p.includes("PENDING") ||
@@ -193,7 +193,7 @@ const renderDecisionPatternChips = (patterns, explanations) => {
       p.includes("CONFLICT") ||
       p.includes("UNCLEAR")
     ) {
-      return { bg: "rgba(255,152,0,0.14)", border: "rgba(255,152,0,0.45)", text: "#ffb74d" };
+      return { bg: "var(--surface2)", border: "var(--border2)", text: "var(--warning)" };
     }
     if (
       p.includes("FINAL_CONFIRMED") ||
@@ -201,9 +201,9 @@ const renderDecisionPatternChips = (patterns, explanations) => {
       p.includes("HIGH_TRUST") ||
       p.includes("HUMAN_CONFIRMED")
     ) {
-      return { bg: "rgba(76,175,80,0.14)", border: "rgba(76,175,80,0.45)", text: "#81c784" };
+      return { bg: "var(--surface2)", border: "var(--border2)", text: "var(--success)" };
     }
-    return { bg: "rgba(158,158,158,0.14)", border: "rgba(158,158,158,0.4)", text: "var(--text)" };
+    return { bg: "var(--surface2)", border: "var(--border2)", text: "var(--text)" };
   };
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -246,270 +246,100 @@ const relativeTime = (isoLike) => {
 };
 
 // Verification helper functions
-const isReportVerified = (report, mlPrediction) => {
-  const status = (report.rule_status || "").toLowerCase();
 
-  if (status === "passed") {
-    if (
-      mlPrediction &&
-      mlPrediction.trust_score !== null &&
-      mlPrediction.trust_score !== undefined
-    ) {
-      const mlConfidence = parseFloat(mlPrediction.trust_score) || 0;
-      return mlConfidence >= 70;
-    }
-  }
-
-  return false;
+/**
+ * Workflow:
+ *   verified  (trust ≥ 70) → auto-verified + auto-confirmed (no leader needed)
+ *   under_review (45-70)   → only a local leader can confirm
+ *   rejected  (< threshold) → auto-rejected (no leader needed)
+ */
+const isReportVerified = (report) => {
+  const vs = (report.verification_status || "").toLowerCase();
+  return vs === "verified";
 };
 
-const getVerificationStatus = (report, mlPrediction) => {
-  const status = (report.rule_status || "").toLowerCase();
+const isReportRejected = (report) => {
+  const vs = (report.verification_status || "").toLowerCase();
+  const rs = (report.rule_status || "").toLowerCase();
+  return vs === "rejected" || rs === "rejected";
+};
 
-  if (status === "passed") {
-    if (
-      mlPrediction &&
-      mlPrediction.trust_score !== null &&
-      mlPrediction.trust_score !== undefined
-    ) {
-      const mlConfidence = parseFloat(mlPrediction.trust_score) || 0;
+const isReportUnderReview = (report) => {
+  if (isReportVerified(report) || isReportRejected(report)) return false;
+  const vs = (report.verification_status || "").toLowerCase();
+  return vs === "under_review" || vs === "pending" || vs === "";
+};
 
-      if (mlConfidence >= 70) {
-        return (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: "11px",
-            }}
-          >
-            <span style={{ color: "#4caf50", fontWeight: 600 }}>
-              AI-verified
-            </span>
-            <span style={{ color: "#666" }}>
-              — ML confidence: {mlConfidence.toFixed(1)}%
-            </span>
-          </div>
-        );
-      } else {
-        return (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: "11px",
-            }}
-          >
-            <span style={{ color: "#ff9800", fontWeight: 600 }}>
-              Low ML Confidence
-            </span>
-            <span style={{ color: "#666" }}>
-              - Current: {mlConfidence.toFixed(1)}% (needs ≥70%)
-            </span>
-          </div>
-        );
-      }
-    } else if (
-      report.ml_predictions && 
-      report.ml_predictions.length > 0 &&
-      !mlPrediction?.prediction_label
-    ) {
-      // Text analysis case
-      const latestPrediction = report.ml_predictions.reduce((latest, pred) => {
-        return (!latest || new Date(pred.evaluated_at) > new Date(latest.evaluated_at)) ? pred : latest;
-      }, null);
-      const textConfidence = latestPrediction ? parseFloat(latestPrediction.trust_score) : 0;
-      
-      return (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: "11px",
-          }}
-        >
-          <span 
-            style={{ 
-              color: textConfidence >= 70 ? "#4caf50" : textConfidence >= 40 ? "#ff9800" : "#f44336", 
-              fontWeight: 600 
-            }}
-          >
-            Text Analysis
-          </span>
-          <span style={{ color: "#666" }}>
-            — Confidence: {textConfidence.toFixed(1)}%
-          </span>
-        </div>
-      );
-    } else {
-      return (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: "11px",
-          }}
-        >
-          <span style={{ color: "#ff9800", fontWeight: 600 }}>
-            No ML Analysis
-          </span>
-          <span style={{ color: "#666" }}>- Awaiting community leader verification</span>
-        </div>
-      );
-    }
-  }
-
-  if (status === "pending") {
+const getVerificationStatus = (report) => {
+  if (isReportVerified(report)) {
     return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          fontSize: "11px",
-        }}
-      >
-        <span style={{ color: "#ff9800", fontWeight: 600 }}>
-          Pending Review
-        </span>
-        <span style={{ color: "#666" }}>
-          - Awaiting local leader community verification
-        </span>
-      </div>
+      <span style={{ fontSize: "11px", color: "var(--success)", fontWeight: 600 }}>
+        Auto-verified by AI
+      </span>
     );
   }
-
-  if (status === "flagged" || status === "rejected") {
+  if (isReportRejected(report)) {
     return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          fontSize: "11px",
-        }}
-      >
-        <span style={{ color: "#f44336", fontWeight: 600 }}>
-          {status === "flagged" ? "Flagged" : "Rejected"}
-        </span>
-        <span style={{ color: "#666" }}>- Cannot contribute to hotspots</span>
-      </div>
+      <span style={{ fontSize: "11px", color: "var(--danger)", fontWeight: 600 }}>
+        Auto-rejected by AI
+      </span>
     );
   }
-
+  // under_review / pending
+  const leaderStatus = (report.leader_verification_status || "").toLowerCase();
+  if (leaderStatus === "confirmed") {
+    return (
+      <span style={{ fontSize: "11px", color: "var(--success)", fontWeight: 600 }}>
+        Confirmed by local leader
+      </span>
+    );
+  }
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        fontSize: "11px",
-      }}
-    >
-      <span style={{ color: "#9e9e9e", fontWeight: 600 }}>Unknown Status</span>
-      <span style={{ color: "#666" }}>- Status unclear</span>
-    </div>
+    <span style={{ fontSize: "11px", color: "var(--warning)", fontWeight: 600 }}>
+      Under review — awaiting local leader
+    </span>
   );
 };
 
-const getVerificationRequirements = (report, mlPrediction) => {
-  const status = (report.rule_status || "").toLowerCase();
+const getLeaderReviewStatus = (report) => {
+  const leaderStatus = (report.leader_verification_status || "").toLowerCase();
+  const leaderSubmitted = report.submitted_by_local_leader_id != null && report.submitted_by_local_leader_id !== "";
 
-  if (status === "passed") {
-    if (
-      mlPrediction &&
-      mlPrediction.trust_score !== null &&
-      mlPrediction.trust_score !== undefined
-    ) {
-      const mlConfidence = parseFloat(mlPrediction.trust_score) || 0;
-
-      if (mlConfidence < 70) {
-        return (
-          <div>
-            <div style={{ marginBottom: "4px" }}>
-              AI confidence too low ({mlConfidence.toFixed(1)}% &lt; 70%) — awaiting community leader verification.
-            </div>
-            <div>
-              A local leader covering this area has been notified to verify this report.
-            </div>
-          </div>
-        );
-      } else {
-        return null; // ML confidence is sufficient for AI verification
-      }
-    } else if (
-      report.ml_predictions && 
-      report.ml_predictions.length > 0 &&
-      !mlPrediction?.prediction_label
-    ) {
-      // Text analysis case
-      const latestPrediction = report.ml_predictions.reduce((latest, pred) => {
-        return (!latest || new Date(pred.evaluated_at) > new Date(latest.evaluated_at)) ? pred : latest;
-      }, null);
-      const textConfidence = latestPrediction ? parseFloat(latestPrediction.trust_score) : 0;
-      
-      return (
-        <div>
-          <div style={{ marginBottom: "4px" }}>
-            Text analysis available ({textConfidence.toFixed(1)}% confidence)
-          </div>
-          {textConfidence < 70 && (
-            <div>
-              <strong>Note:</strong> Low confidence — local leader has been notified for community verification.
-            </div>
-          )}
-        </div>
-      );
-    } else {
-      return (
-        <div>
-          <div style={{ marginBottom: "4px" }}>No ML analysis available</div>
-          <div>
-            <strong>Note:</strong> Local leader has been notified for community verification.
-          </div>
-        </div>
-      );
-    }
+  if (leaderSubmitted) {
+    return {
+      text: "Submitted by local leader — auto-confirmed",
+      color: "var(--success)",
+    };
   }
-
-  if (status === "pending") {
-    return (
-      <div>
-        <div style={{ marginBottom: "4px" }}>
-          Report is pending — awaiting AI or community verification.
-        </div>
-        <div>
-          <strong>Note:</strong> Local leader has been notified to verify this report.
-        </div>
-      </div>
-    );
+  if (isReportVerified(report)) {
+    return {
+      text: "Auto-confirmed (AI verified with high confidence)",
+      color: "var(--success)",
+    };
   }
-
-  if (status === "flagged" || status === "rejected") {
-    return (
-      <div>
-        <div style={{ marginBottom: "4px" }}>
-          Report is {status} (cannot be verified)
-        </div>
-        <div>
-          <strong>Result:</strong> This report cannot contribute to hotspots
-        </div>
-      </div>
-    );
+  if (isReportRejected(report)) {
+    return {
+      text: "Not required — report was auto-rejected",
+      color: "var(--muted)",
+    };
   }
-
-  return (
-    <div>
-      <div style={{ marginBottom: "4px" }}>Verification status unclear</div>
-      <div>
-        <strong>Note:</strong> Local leader has been notified for community verification.
-      </div>
-    </div>
-  );
+  // under_review — leader is the one who decides
+  if (leaderStatus === "confirmed") {
+    return {
+      text: "Confirmed by local leader",
+      color: "var(--success)",
+    };
+  }
+  if (leaderStatus === "rejected") {
+    return {
+      text: "Rejected by local leader",
+      color: "var(--danger)",
+    };
+  }
+  return {
+    text: "Awaiting local leader verification",
+    color: "var(--warning)",
+  };
 };
 
 const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
@@ -916,8 +746,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
             marginBottom: 12,
             padding: "10px 12px",
             borderRadius: 8,
-            background: "rgba(76, 175, 80, 0.12)",
-            border: "1px solid rgba(76, 175, 80, 0.35)",
+            background: "var(--surface2)",
+            border: "1px solid var(--border2)",
             color: "var(--text)",
             fontSize: 12,
           }}
@@ -940,8 +770,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   margin: "0 14px 12px",
                   padding: "10px 12px",
                   borderRadius: 8,
-                  background: "rgba(255, 152, 0, 0.12)",
-                  border: "1px solid rgba(255, 152, 0, 0.35)",
+                  background: "var(--surface2)",
+                  border: "1px solid var(--border2)",
                   color: "var(--text)",
                   fontSize: 12,
                 }}
@@ -957,8 +787,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   margin: "0 14px 12px",
                   padding: "10px 12px",
                   borderRadius: 8,
-                  background: "rgba(33, 150, 243, 0.10)",
-                  border: "1px solid rgba(33, 150, 243, 0.30)",
+                  background: "var(--surface2)",
+                  border: "1px solid var(--border2)",
                   color: "var(--text)",
                   fontSize: 12,
                   display: "grid",
@@ -995,84 +825,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                 </div>
               </div>
               <div className="detail-field">
-                <div className="dfl">GPS Coords</div>
-                <div
-                  className="dfv"
-                  style={{ fontSize: "11px", fontFamily: "monospace" }}
-                >
-                  {coordsText}
-                </div>
-              </div>
-              <div className="detail-field">
-                <div className="dfl">Navigation</div>
-                <div className="dfv">
-                  {report.latitude && report.longitude ? (
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                      <button
-                        onClick={() => {
-                          const lat = parseFloat(report.latitude);
-                          const lon = parseFloat(report.longitude);
-                          window.open(
-                            `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`,
-                            '_blank'
-                          );
-                        }}
-                        style={{
-                          padding: "6px 12px",
-                          fontSize: "11px",
-                          backgroundColor: "var(--primary)",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "4px",
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px"
-                        }}
-                      >
-                        Navigate to report
-                      </button>
-                      <button
-                        onClick={() => {
-                          const lat = parseFloat(report.latitude);
-                          const lon = parseFloat(report.longitude);
-                          window.open(
-                            `https://www.google.com/maps?q=${lat},${lon}`,
-                            '_blank'
-                          );
-                        }}
-                        style={{
-                          padding: "6px 12px",
-                          fontSize: "11px",
-                          backgroundColor: "var(--secondary)",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "4px",
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px"
-                        }}
-                      >
-                        Open map
-                      </button>
-                    </div>
-                  ) : (
-                    <span style={{ color: "var(--muted)", fontSize: "12px" }}>
-                      Location not available
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="detail-field">
-                <div className="dfl">GPS Accuracy</div>
-                <div className="dfv" style={{ fontSize: "12px" }}>
-                  {report.gps_accuracy != null
-                    ? `${Number(report.gps_accuracy).toFixed(1)}m`
-                    : "—"}
-                </div>
-              </div>
-              <div className="detail-field">
                 <div className="dfl">Submitted At</div>
                 <div className="dfv" style={{ fontSize: "12px" }}>
                   {createdAt}
@@ -1104,6 +856,364 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
               </div>
             </div>
           </div>
+
+          {/* ── Incident Location Card ── */}
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">Incident Location</div>
+            </div>
+            <div style={{ padding: "14px 16px", fontSize: 12 }}>
+              {/* Primary: Administrative location */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4, letterSpacing: "0.5px" }}>
+                  Reported Area
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)" }}>
+                  {[report.incident_sector_name || report.sector_name, report.incident_cell_name || report.cell_name, report.incident_village_name || report.village_name].filter(Boolean).join("  >  ") || "Location not specified"}
+                </div>
+              </div>
+
+              {/* Location precision and reporter status */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
+                {report.gps_accuracy != null && (() => {
+                  const acc = Number(report.gps_accuracy);
+                  const label = acc <= 10 ? "High Precision" : acc <= 30 ? "Good Precision" : "Low Precision";
+                  const badgeClass = acc <= 10 ? "b-green" : acc <= 30 ? "b-orange" : "b-red";
+                  return (
+                    <span className={`badge ${badgeClass}`} style={{ fontSize: 11 }}>
+                      {label}
+                    </span>
+                  );
+                })()}
+
+              </div>
+
+              {/* GPS coordinates - subtle, not the focus */}
+              {coordsText && coordsText !== "—" && (
+                <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 12 }}>
+                  GPS: {coordsText}
+                </div>
+              )}
+
+              {/* Action buttons */}
+              {report.latitude && report.longitude && (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => goToScreen("safety-map", 0, { focusCoords: { lat: report.latitude, lon: report.longitude } })}
+                    style={{ fontSize: 11 }}
+                  >
+                    View on Map
+                  </button>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${report.latitude},${report.longitude}&travelmode=driving`, '_blank')}
+                    style={{ fontSize: 11 }}
+                  >
+                    Navigate to Location
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Report Credibility Analysis Card ── */}
+          {report.verification_pipeline && (() => {
+            const vp = report.verification_pipeline;
+            const ts = vp.trust_score || {};
+            const overallScore = ts.trust_score ?? 0;
+            const overallColor = overallScore >= 70 ? "var(--success)" : overallScore >= 45 ? "var(--warning)" : "var(--danger)";
+            const overallBg = "var(--surface2)";
+            const overallBorder = "var(--border2)";
+            const verdictText = overallScore >= 70
+              ? "This report has been verified as credible"
+              : overallScore >= 45
+              ? "This report needs further review"
+              : "This report was flagged as unreliable";
+
+            /* Helper: friendly name map for trust score components */
+            const friendlyNames = {
+              incident_match: "Description Match",
+              description_quality: "Description Quality",
+              evidence_match: "Evidence Review",
+              evidence_admissibility: "Evidence Validity",
+              location_consistency: "Location Credibility",
+              reporter_history: "Reporter Reliability",
+            };
+
+            const comps = (ts.components || []).filter(c => c.available);
+            const totalWeight = comps.reduce((sum, c) => sum + (c.weight ?? 0), 0);
+
+            return (
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title">Report Credibility Analysis</div>
+              </div>
+              <div style={{ padding: "14px 16px", fontSize: 12 }}>
+
+                {/* ── Overall Verdict Banner ── */}
+                <div style={{
+                  padding: "16px",
+                  borderRadius: 10,
+                  marginBottom: 16,
+                  background: overallBg,
+                  border: `1px solid ${overallBorder}`,
+                  textAlign: "center",
+                }}>
+                  {/* Circular score indicator */}
+                  <div style={{ position: "relative", width: 80, height: 80, margin: "0 auto 12px" }}>
+                    <svg viewBox="0 0 36 36" style={{ width: 80, height: 80, transform: "rotate(-90deg)" }}>
+                      <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--border)" strokeWidth="3" />
+                      <circle cx="18" cy="18" r="15.9" fill="none" stroke={overallColor} strokeWidth="3"
+                        strokeDasharray={`${Math.min(100, Math.max(0, overallScore))} ${100 - Math.min(100, Math.max(0, overallScore))}`}
+                        strokeLinecap="round" />
+                    </svg>
+                    <div style={{
+                      position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+                      fontWeight: 800, fontSize: 18, color: overallColor,
+                    }}>
+                      {Math.round(overallScore)}%
+                    </div>
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: overallColor, marginBottom: 4 }}>
+                    {verdictText}
+                  </div>
+                  {vp.pipeline_decision === "REJECTED" && vp.pipeline_rejection_reason && (
+                    <div style={{
+                      marginTop: 10, padding: "8px 12px", borderRadius: 6,
+                      background: "var(--surface2)", border: "1px solid var(--border2)",
+                      fontSize: 12, color: "var(--danger)", textAlign: "left",
+                    }}>
+                      <div style={{ fontWeight: 700, marginBottom: 4 }}>Why this report was not accepted:</div>
+                      <div style={{ color: "var(--text)", fontWeight: 400 }}>
+                        {(vp.pipeline_rejection_reason || "").replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Credibility Factors ── */}
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 10 }}>
+                  Credibility Factors
+                </div>
+
+                {/* Description Match */}
+                {vp.incident_match && (() => {
+                  const im = vp.incident_match;
+                  const score = im.final_score ?? im.embedding_similarity ?? 0;
+                  const label = score >= 75 ? "Strong match" : score >= 55 ? "Moderate match" : score >= 35 ? "Weak match" : "Does not match";
+                  const badgeClass = score >= 75 ? "b-green" : score >= 55 ? "b-orange" : score >= 35 ? "b-orange" : "b-red";
+                  return (
+                    <div style={{ marginBottom: 10, padding: "12px 14px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text)" }}>Description Match</div>
+                        <span className={`badge ${badgeClass}`} style={{ fontSize: 10 }}>
+                          {label}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5 }}>
+                        How well does the description match the reported incident type
+                        {im.incident_type_name ? ` (${im.incident_type_name})` : ""}?
+                      </div>
+                      <div style={{ marginTop: 6, fontSize: 11, color: "var(--text)", lineHeight: 1.5 }}>
+                        {score >= 75 ? "The description closely matches what would be expected for this type of incident."
+                          : score >= 55 ? "The description partially matches this incident type. Some details align, but more information could help."
+                          : score >= 35 ? "The description has limited connection to this incident type. Consider verifying the reported category."
+                          : "The description does not appear to match the selected incident type. This may need re-classification or further investigation."}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Description Quality */}
+                {vp.description_quality && (() => {
+                  const dq = vp.description_quality;
+                  const score = dq.description_score ?? 0;
+                  const label = score >= 75 ? "Detailed & Clear" : score >= 55 ? "Adequate" : score >= 35 ? "Needs More Detail" : "Too Vague";
+                  const badgeClass = score >= 75 ? "b-green" : score >= 55 ? "b-orange" : "b-red";
+                  return (
+                    <div style={{ marginBottom: 10, padding: "12px 14px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text)" }}>Description Quality</div>
+                        <span className={`badge ${badgeClass}`} style={{ fontSize: 10 }}>
+                          {label}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5 }}>
+                        How detailed and clear is the report description?
+                      </div>
+                      {dq.word_count != null && (
+                        <div style={{ marginTop: 6, fontSize: 11, color: "var(--text)" }}>
+                          {dq.word_count} words provided
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Location Credibility */}
+                {(() => {
+                  const locComp = comps.find(c => c.name === "location_consistency");
+                  if (!locComp) return null;
+                  const raw = locComp.raw_score ?? 0;
+                  const label = raw >= 75 ? "Confirmed in area" : raw >= 50 ? "Location verified" : raw >= 30 ? "Location uncertain" : "Location not confirmed";
+                  const badgeClass = raw >= 75 ? "b-green" : raw >= 50 ? "b-orange" : "b-red";
+                  return (
+                    <div style={{ marginBottom: 10, padding: "12px 14px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text)" }}>Location Credibility</div>
+                        <span className={`badge ${badgeClass}`} style={{ fontSize: 10 }}>
+                          {label}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5 }}>
+                        Was the report submitted from a valid location?
+                      </div>
+                      <div style={{ marginTop: 6, fontSize: 11, color: "var(--text)", lineHeight: 1.5 }}>
+                        {raw >= 75 ? "The reporter's location is consistent with the reported incident area."
+                          : raw >= 50 ? "The reporter's location has been verified but is not in the immediate area."
+                          : raw >= 30 ? "The reported location could not be fully confirmed. Consider verifying in person."
+                          : "The location data does not match the reported incident area. This needs investigation."}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Evidence Review - only show if evidence exists */}
+                {(vp.evidence_match || (vp.evidence_admissibility && vp.evidence_admissibility.length > 0)) && (() => {
+                  const em = vp.evidence_match;
+                  const ea = vp.evidence_admissibility || [];
+                  const emScore = em ? (em.final_score ?? em.semantic_similarity ?? 0) : 0;
+                  const allAccepted = ea.length > 0 && ea.every(e => e.is_admissible);
+                  const someRejected = ea.some(e => !e.is_admissible);
+
+                  let label, explanation;
+                  if (em && emScore >= 70) {
+                    label = "Evidence supports the report";
+                    explanation = "The submitted evidence is consistent with the report description.";
+                  } else if (em && emScore >= 45) {
+                    label = "Evidence partially supports the report";
+                    explanation = "The submitted evidence somewhat aligns with the description, but the connection is not strong.";
+                  } else if (em && emScore > 0) {
+                    label = "Evidence does not match";
+                    explanation = "The submitted evidence does not appear to support the report description. Review recommended.";
+                  } else if (ea.length > 0) {
+                    label = allAccepted ? "Evidence accepted" : someRejected ? "Some evidence could not be verified" : "Evidence under review";
+                    explanation = `${ea.length} file${ea.length !== 1 ? "s" : ""} submitted. ${allAccepted ? "All files were accepted." : someRejected ? "Some files could not be verified as valid evidence." : ""}`;
+                  } else {
+                    label = "No evidence provided";
+                    explanation = "No files or photos were submitted with this report.";
+                  }
+
+                  const badgeClass = (emScore >= 70 || allAccepted) ? "b-green" : (emScore >= 45 || ea.length > 0) ? "b-orange" : "b-red";
+
+                  return (
+                    <div style={{ marginBottom: 10, padding: "12px 14px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text)" }}>Evidence Review</div>
+                        <span className={`badge ${badgeClass}`} style={{ fontSize: 10 }}>
+                          {label}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--text)", lineHeight: 1.5 }}>
+                        {explanation}
+                      </div>
+                      {ea.length > 0 && (
+                        <div style={{ marginTop: 8 }}>
+                          {ea.map((item, i) => (
+                            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderTop: i > 0 ? "1px solid var(--border)" : "none" }}>
+                              <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                                {(item.file_type || "File").charAt(0).toUpperCase() + (item.file_type || "file").slice(1)} #{i + 1}
+                              </span>
+                              <span style={{
+                                fontSize: 10, fontWeight: 600,
+                                color: item.is_admissible ? "var(--success)" : "var(--danger)",
+                              }}>
+                                {item.is_admissible ? "Accepted" : "Not accepted"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Reporter Reliability */}
+                {(() => {
+                  const histComp = comps.find(c => c.name === "reporter_history");
+                  if (!histComp) return null;
+                  const raw = histComp.raw_score ?? 0;
+                  const label = raw >= 70 ? "Established reporter" : raw >= 45 ? "New reporter" : "Flagged reporter";
+                  const badgeClass = raw >= 70 ? "b-green" : raw >= 45 ? "b-orange" : "b-red";
+                  return (
+                    <div style={{ marginBottom: 10, padding: "12px 14px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text)" }}>Reporter Reliability</div>
+                        <span className={`badge ${badgeClass}`} style={{ fontSize: 10 }}>
+                          {label}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5 }}>
+                        Based on the reporter's previous submissions
+                      </div>
+                      <div style={{ marginTop: 6, fontSize: 11, color: "var(--text)", lineHeight: 1.5 }}>
+                        {raw >= 70 ? "This reporter has a history of submitting accurate and verified reports."
+                          : raw >= 45 ? "This reporter is relatively new or has limited submission history."
+                          : "This reporter has been flagged due to previously unreliable submissions. Extra verification recommended."}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* ── Trust Score Breakdown ── */}
+                {comps.length > 0 && (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 10 }}>
+                      Score Breakdown
+                    </div>
+                    {/* Stacked horizontal bar */}
+                    <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", marginBottom: 10 }}>
+                      {comps.map((c, i) => {
+                        const proportion = totalWeight > 0 ? ((c.weight ?? 0) / totalWeight) * 100 : 100 / comps.length;
+                        const raw = c.raw_score ?? 0;
+                        const cColor = raw >= 70 ? "var(--success)" : raw >= 45 ? "var(--warning)" : "var(--danger)";
+                        return (
+                          <div key={c.name} style={{
+                            width: `${proportion}%`,
+                            background: cColor,
+                            opacity: 0.8,
+                            borderRight: i < comps.length - 1 ? "2px solid var(--surface)" : "none",
+                          }} title={friendlyNames[c.name] || (c.name || "").replace(/_/g, " ")} />
+                        );
+                      })}
+                    </div>
+                    {/* Legend */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {comps.map((c) => {
+                        const raw = c.raw_score ?? 0;
+                        const cColor = raw >= 70 ? "var(--success)" : raw >= 45 ? "var(--warning)" : "var(--danger)";
+                        const friendlyLabel = raw >= 70 ? "Good" : raw >= 45 ? "Fair" : "Low";
+                        return (
+                          <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{ width: 10, height: 10, borderRadius: 3, background: cColor, flexShrink: 0 }} />
+                            <span style={{ fontSize: 11, color: "var(--text)", flex: 1 }}>
+                              {friendlyNames[c.name] || (c.name || "").replace(/_/g, " ")}
+                            </span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: cColor }}>
+                              {friendlyLabel}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </div>
+            );
+          })()}
 
           {/* Case Information Card */}
           {reportCase && (
@@ -1284,10 +1394,10 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
             </div>
           )}
 
-          {/* Enhanced Reporter Context Card */}
+          {/* Reporter Profile Card */}
           <div className="card">
             <div className="card-header">
-              <div className="card-title">Reporter Context</div>
+              <div className="card-title">Reporter Profile</div>
             </div>
             <div style={{ padding: "10px 14px", fontSize: 12 }}>
               <div
@@ -1297,8 +1407,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   gap: 10,
                 }}
               >
-                
-                {/* Location Consistency */}
+
+                {/* Reporting Pattern */}
                 <div>
                   <div
                     style={{
@@ -1308,26 +1418,24 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                       textTransform: "uppercase",
                     }}
                   >
-                    Location Consistency
+                    Reporting Pattern
                   </div>
                   <div style={{ marginTop: 6, color: "var(--text)" }}>
                     {(() => {
                       const history = report.metadata_json?.location_history || [];
                       if (history.length < 2) {
-                        return <span style={{ color: "var(--muted)", fontSize: 11 }}>Insufficient data</span>;
+                        return <span style={{ color: "var(--muted)", fontSize: 11 }}>Not enough reports yet to determine a pattern</span>;
                       }
-                      
-                      // Check for suspicious jumps (simplified analysis)
+
                       let suspiciousJumps = 0;
                       let totalDistance = 0;
-                      
+
                       for (let i = 1; i < history.length; i++) {
                         const prev = history[i-1];
                         const curr = history[i];
-                        
+
                         if (prev.latitude && prev.longitude && curr.latitude && curr.longitude) {
-                          // Calculate distance between consecutive points
-                          const R = 6371; // Earth's radius in km
+                          const R = 6371;
                           const dLat = (curr.latitude - prev.latitude) * Math.PI / 180;
                           const dLon = (curr.longitude - prev.longitude) * Math.PI / 180;
                           const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -1335,39 +1443,40 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                                     Math.sin(dLon/2) * Math.sin(dLon/2);
                           const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
                           totalDistance += distance;
-                          
-                          // Check for suspicious jumps (>50km in <1 hour)
+
                           if (distance > 50 && prev.timestamp && curr.timestamp) {
-                            const timeDiff = (new Date(curr.timestamp) - new Date(prev.timestamp)) / (1000 * 60 * 60); // hours
+                            const timeDiff = (new Date(curr.timestamp) - new Date(prev.timestamp)) / (1000 * 60 * 60);
                             if (timeDiff < 1 && timeDiff > 0) {
                               suspiciousJumps++;
                             }
                           }
                         }
                       }
-                      
+
                       const avgDistance = totalDistance / (history.length - 1);
-                      const consistency = suspiciousJumps === 0 ? 
-                        (avgDistance < 5 ? 'High' : avgDistance < 20 ? 'Medium' : 'Low') : 'Suspicious';
-                      
+                      const consistency = suspiciousJumps === 0 ?
+                        (avgDistance < 5 ? 'Consistent' : avgDistance < 20 ? 'Normal' : 'Needs Review') : 'Needs Review';
+
+                      const explanation = consistency === 'Consistent'
+                        ? 'This reporter submits from a consistent area'
+                        : consistency === 'Normal'
+                          ? 'This reporter submits from various areas within the district'
+                          : suspiciousJumps > 0
+                            ? 'Report locations have unusual gaps that may need verification'
+                            : 'Reports come from widely spread locations';
+
                       return (
                         <>
                           <div style={{ fontSize: 11, fontWeight: 600 }}>
                             <span style={{
-                              color: consistency === 'High' ? 'var(--success)' :
-                                     consistency === 'Medium' ? 'var(--warning)' :
-                                     consistency === 'Low' ? 'var(--orange)' : 'var(--danger)'
+                              color: consistency === 'Consistent' ? 'var(--success)' :
+                                     consistency === 'Normal' ? 'var(--warning)' : 'var(--danger)'
                             }}>
                               {consistency}
                             </span>
                           </div>
                           <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
-                            Avg movement: {avgDistance.toFixed(1)}km between reports
-                            {suspiciousJumps > 0 && (
-                              <div style={{ color: "var(--danger)", marginTop: 2 }}>
-                                {suspiciousJumps} suspicious jump{suspiciousJumps > 1 ? 's' : ''}
-                              </div>
-                            )}
+                            {explanation}
                           </div>
                         </>
                       );
@@ -1375,7 +1484,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   </div>
                 </div>
 
-                {/* Device Activity Pattern */}
+                {/* Reporting History */}
                 <div>
                   <div
                     style={{
@@ -1385,7 +1494,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                       textTransform: "uppercase",
                     }}
                   >
-                    Activity Pattern
+                    Reporting History
                   </div>
                   <div style={{ marginTop: 6, color: "var(--text)" }}>
                     {(() => {
@@ -1394,37 +1503,94 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                         report.metadata_json?.last_activity ||
                         report.metadata_json?.last_location_timestamp ||
                         report.reported_at;
-                      const rel = relativeTime(lastActiveIso);
                       if (total <= 1) {
                         return (
-                          <span style={{ color: "var(--muted)", fontSize: 11 }}>
-                            Limited history (first report)
-                          </span>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--warning)" }}>First report</div>
+                            <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
+                              This is the first report from this person
+                            </div>
+                          </div>
                         );
                       }
-                      if (!rel) {
+                      if (total <= 3) {
                         return (
-                          <span style={{ color: "var(--muted)", fontSize: 11 }}>
-                            Activity history unavailable
-                          </span>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text)" }}>New reporter</div>
+                            <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
+                              {total} reports submitted so far
+                              {lastActiveIso && <> &middot; Last active {new Date(lastActiveIso).toLocaleDateString()}</>}
+                            </div>
+                          </div>
                         );
                       }
                       return (
-                        <>
-                          <div style={{ fontSize: 11 }}>
-                            Last active:{" "}
-                            {lastActiveIso
-                              ? new Date(lastActiveIso).toLocaleDateString()
-                              : "—"}
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--success)" }}>Active reporter</div>
+                          <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
+                            {total} reports submitted
+                            {lastActiveIso && <> &middot; Last active {new Date(lastActiveIso).toLocaleDateString()}</>}
                           </div>
-                          <div
-                            style={{
-                              marginTop: 4,
-                              color: "var(--muted)",
-                              fontSize: 10,
-                            }}
-                          >
-                            {rel}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Reporter Movement */}
+                <div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: "var(--muted)",
+                      fontWeight: 800,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Reporter Movement
+                  </div>
+                  <div style={{ marginTop: 6, color: "var(--text)" }}>
+                    {(() => {
+                      const speed = report.movement_speed != null ? Number(report.movement_speed) : null;
+                      const stationary = report.was_stationary;
+
+                      if (speed == null && stationary == null && !report.motion_level) {
+                        return <span style={{ color: "var(--muted)", fontSize: 11 }}>Movement data not available</span>;
+                      }
+
+                      let movementLabel;
+                      let movementDesc;
+                      let movementColor;
+
+                      if (stationary === true || (speed != null && speed < 0.5)) {
+                        movementLabel = "Stationary";
+                        movementDesc = "The reporter was standing still or sitting when submitting";
+                        movementColor = "var(--success)";
+                      } else if (speed != null && speed < 2) {
+                        movementLabel = "Walking";
+                        movementDesc = "The reporter appeared to be walking when submitting";
+                        movementColor = "var(--text)";
+                      } else if (speed != null && speed < 8) {
+                        movementLabel = "Moving quickly";
+                        movementDesc = "The reporter appeared to be running or cycling when submitting";
+                        movementColor = "var(--warning)";
+                      } else if (speed != null) {
+                        movementLabel = "In a vehicle";
+                        movementDesc = "The reporter appeared to be in a moving vehicle when submitting";
+                        movementColor = "var(--warning)";
+                      } else {
+                        movementLabel = report.motion_level || "Unknown";
+                        movementDesc = "Movement was detected but exact status could not be determined";
+                        movementColor = "var(--muted)";
+                      }
+
+                      return (
+                        <>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: movementColor }}>
+                            {movementLabel}
+                          </div>
+                          <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
+                            {movementDesc}
                           </div>
                         </>
                       );
@@ -1432,221 +1598,6 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                   </div>
                 </div>
 
-                {/* Device Trust Score */}
-                <div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: "var(--muted)",
-                      fontWeight: 800,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Device Trust Score
-                  </div>
-                  <div style={{ marginTop: 6 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 60, height: 8, background: "var(--border)", borderRadius: 4, overflow: "hidden" }}>
-                        <div style={{
-                          width: `${Math.min(100, Math.max(0, report.device_trust_score || 0))}%`,
-                          height: "100%",
-                          background: (report.device_trust_score || 0) >= 70 ? "var(--success)" : (report.device_trust_score || 0) >= 40 ? "var(--warning)" : "var(--danger)",
-                          transition: "width 0.3s ease",
-                        }} />
-                      </div>
-                      <span style={{
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: (report.device_trust_score || 0) >= 70 ? "var(--success)" : (report.device_trust_score || 0) >= 40 ? "var(--warning)" : "var(--danger)",
-                      }}>
-                        {Math.round(report.device_trust_score || 0)}
-                      </span>
-                    </div>
-                    <div style={{ marginTop: 4, color: "var(--muted)", fontSize: 10 }}>
-                      {report.total_reports || 0} total reports · {(report.trusted_reports || 0)} trusted
-                    </div>
-                  </div>
-                </div>
-
-                {/* Context tags */}
-                <div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: "var(--muted)",
-                      fontWeight: 800,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Context tags
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 6,
-                      display: "flex",
-                      gap: 6,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    {(report.context_tags || []).length ? (
-                      (report.context_tags || []).map((t) => (
-                        <span
-                          key={t}
-                          className="badge b-gray"
-                          style={{ fontSize: 10 }}
-                        >
-                          {t}
-                        </span>
-                      ))
-                    ) : (
-                      <span style={{ color: "var(--muted)" }}>—</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Motion */}
-                <div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: "var(--muted)",
-                      fontWeight: 800,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Motion
-                  </div>
-                  <div style={{ marginTop: 6, color: "var(--text)" }}>
-                    Level: {report.motion_level || "—"}
-                    <div style={{ marginTop: 4, color: "var(--muted)" }}>
-                      Speed:{" "}
-                      {report.movement_speed != null
-                        ? `${Number(report.movement_speed).toFixed(2)} m/s`
-                        : "—"}
-                      {" · "}
-                      Stationary:{" "}
-                      {report.was_stationary == null
-                        ? "—"
-                        : report.was_stationary
-                          ? "Yes"
-                          : "No"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Location History */}
-                <div style={{ gridColumn: "1 / -1", marginTop: "10px" }}>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: "var(--muted)",
-                      fontWeight: 800,
-                      textTransform: "uppercase",
-                      marginBottom: "6px",
-                    }}
-                  >
-                    Location History
-                  </div>
-                  {locationLoading ? (
-                    <div style={{ padding: "10px", textAlign: "center", color: "var(--muted)" }}>
-                      Loading location history...
-                    </div>
-                  ) : locationHistory ? (
-                    <div>
-                      <div style={{ 
-                        fontSize: "11px", 
-                        marginBottom: "8px",
-                        padding: "8px",
-                        backgroundColor: "var(--surface2)",
-                        borderRadius: "6px",
-                        border: "1px solid var(--border)"
-                      }}>
-                        <strong>Current Location:</strong> {locationHistory.current_location?.sector || 'Unknown'} {'>'} {locationHistory.current_location?.cell || 'Unknown'} {'>'} {locationHistory.current_location?.village || 'Unknown'}
-                        <div style={{ marginTop: "4px", color: "var(--muted)" }}>
-                          Total Reports: {locationHistory.total_reports} • Location Changes: {locationHistory.location_changes}
-                        </div>
-                      </div>
-                      
-                      {locationHistory.history.length > 1 && (
-                        <div style={{ 
-                          maxHeight: "200px", 
-                          overflowY: "auto",
-                          border: "1px solid var(--border)",
-                          borderRadius: "6px",
-                          backgroundColor: "var(--surface)"
-                        }}>
-                          {locationHistory.history.slice(0, 10).map((entry, index) => (
-                            <div
-                              key={entry.report_id}
-                              style={{
-                                padding: "8px 10px",
-                                borderBottom: index < locationHistory.history.slice(0, 10).length - 1 ? "1px solid var(--border)" : "none",
-                                fontSize: "10px",
-                                backgroundColor: entry.location_changed ? "rgba(255, 152, 0, 0.1)" : "transparent",
-                                borderLeft: entry.location_changed ? "3px solid var(--warning)" : "3px solid transparent"
-                              }}
-                            >
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div>
-                                  <span style={{ fontWeight: "bold", color: "var(--primary)" }}>
-                                    {entry.report_number || entry.report_id.slice(0, 8)}
-                                  </span>
-                                  {entry.location_changed && (
-                                    <span style={{ 
-                                      marginLeft: "6px", 
-                                      padding: "2px 6px", 
-                                      backgroundColor: "var(--warning)", 
-                                      color: "white", 
-                                      borderRadius: "3px", 
-                                      fontSize: "9px",
-                                      fontWeight: "bold"
-                                    }}>
-                                      MOVED
-                                    </span>
-                                  )}
-                                </div>
-                                <div style={{ color: "var(--muted)" }}>
-                                  {new Date(entry.timestamp).toLocaleString()}
-                                </div>
-                              </div>
-                              <div style={{ marginTop: "4px", color: "var(--text)" }}>
-                                {entry.sector || 'Unknown'} {'>'} {entry.cell || 'Unknown'} {'>'} {entry.village || 'Unknown'}
-                              </div>
-                              {entry.latitude && entry.longitude && (
-                                <div style={{ marginTop: "2px", color: "var(--muted)", fontSize: "9px" }}>
-                                  {entry.latitude.toFixed(6)}, {entry.longitude.toFixed(6)}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      
-                      {locationHistory.history.length > 10 && (
-                        <div style={{ 
-                          marginTop: "6px", 
-                          textAlign: "center", 
-                          fontSize: "10px", 
-                          color: "var(--muted)" 
-                        }}>
-                          Showing 10 of {locationHistory.history.length} location entries
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ 
-                      padding: "10px", 
-                      textAlign: "center", 
-                      color: "var(--muted)",
-                      fontSize: "11px",
-                      backgroundColor: "var(--surface2)",
-                      borderRadius: "6px",
-                      border: "1px solid var(--border)"
-                    }}>
-                      No location history available
-                    </div>
-                  )}
-                </div>
 
                               </div>
             </div>
@@ -1716,8 +1667,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                             alignItems: "center",
                             justifyContent: "center",
                             flexDirection: "column",
-                            background: "#f8f9fa",
-                            color: "#666",
+                            background: "var(--surface2)",
+                            color: "var(--muted)",
                           }}
                         >
                           <div
@@ -1777,10 +1728,10 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                           right: "12px",
                           background:
                             ef.ai_quality_label === "good"
-                              ? "#28a745"
+                              ? "var(--success)"
                               : ef.ai_quality_label === "fair"
-                                ? "#fd7e14"
-                                : "#dc3545",
+                                ? "var(--warning)"
+                                : "var(--danger)",
                           color: "white",
                           padding: "4px 8px",
                           borderRadius: "6px",
@@ -1835,7 +1786,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                           gap: "6px",
                           marginBottom: "12px",
                           fontSize: "12px",
-                          color: "#666",
+                          color: "var(--muted)",
                         }}
                       >
                         <span>
@@ -1854,7 +1805,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                       <div
                         style={{
                           padding: "8px 0",
-                          borderTop: "1px solid #f0f0f0",
+                          borderTop: "1px solid var(--border)",
                           marginTop: "8px",
                         }}
                       >
@@ -1862,7 +1813,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                           style={{
                             fontSize: "11px",
                             fontWeight: "600",
-                            color: "#333",
+                            color: "var(--text)",
                             marginBottom: "4px",
                           }}
                         >
@@ -1873,7 +1824,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                             <div
                               style={{
                                 fontSize: "11px",
-                                color: "#666",
+                                color: "var(--muted)",
                                 marginBottom: "2px",
                               }}
                             >
@@ -1882,7 +1833,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                           )}
                         {typeof ef.tamper_score !== "undefined" &&
                           ef.tamper_score !== null && (
-                            <div style={{ fontSize: "11px", color: "#666" }}>
+                            <div style={{ fontSize: "11px", color: "var(--muted)" }}>
                               Tamper Score: {Number(ef.tamper_score).toFixed(2)}
                             </div>
                           )}
@@ -1896,8 +1847,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                           display: "inline-flex",
                           alignItems: "center",
                           gap: "4px",
-                          background: "#e3f2fd",
-                          color: "#1976d2",
+                          background: "var(--surface2)",
+                          color: "var(--primary)",
                           padding: "4px 8px",
                           borderRadius: "4px",
                           fontSize: "11px",
@@ -2026,8 +1977,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                             style={{
                               marginTop: 8,
                               padding: "8px",
-                              background: "rgba(255, 152, 0, 0.1)",
-                              border: "1px solid rgba(255, 152, 0, 0.3)",
+                              background: "var(--surface2)",
+                              border: "1px solid var(--border2)",
                               borderRadius: "4px",
                               fontSize: "11px",
                             }}
@@ -2036,12 +1987,12 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                               style={{
                                 fontWeight: 600,
                                 marginBottom: 2,
-                                color: "#f57c00",
+                                color: "var(--warning)",
                               }}
                             >
                               Assignment Note:
                             </div>
-                            <div style={{ color: "#666", lineHeight: 1.4 }}>
+                            <div style={{ color: "var(--muted)", lineHeight: 1.4 }}>
                               {a.assignment_note}
                             </div>
                           </div>
@@ -2086,392 +2037,113 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
         <div className="detail-col">
           <div className="card">
             <div className="card-header">
-              <div className="card-title">Verification & workflow gates</div>
+              <div className="card-title">Report Status</div>
               <span className={`badge ${operationalPipelineBadgeClass(report)}`}>
                 {formatOperationalPipelineLabel(report)}
               </span>
             </div>
             <div style={{ marginBottom: "12px" }}>
-              {/* Report-level ML trust */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginBottom: "4px",
-                }}
-              >
-                <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                  Report trust
-                </span>
-                <span
-                  style={{
-                    fontFamily: '"Syne", sans-serif',
-                    fontWeight: 800,
-                    fontSize: "17px",
-                    color: "var(--success)",
-                  }}
-                >
-                  {Math.round(trustScore || 0)}
-                </span>
-              </div>
-              <div className="prog-bar" style={{ marginBottom: "8px" }}>
-                <div
-                  className="prog-fill"
-                  style={{
-                    width: `${
-                      Math.max(0, Math.min(100, trustScore || 0))
-                    }%`,
-                    background: "var(--success)",
-                  }}
-                ></div>
-              </div>
-              {report.trust_score_note ? (
-                <div
-                  style={{
-                    fontSize: 10,
-                    color: "var(--muted)",
-                    lineHeight: 1.35,
-                    marginTop: 6,
-                  }}
-                >
-                  {report.trust_score_note}
-                </div>
-              ) : null}
-
-                            {mlLoading && (
-                <div
-                  style={{
-                    fontSize: "10px",
-                    color: "var(--muted)",
-                    marginTop: 6,
-                  }}
-                >
-                  Loading ML prediction…
-                </div>
-              )}
-              {mlPrediction && !mlLoading && (
-                <div
-                  style={{
-                    marginTop: 6,
-                    fontSize: "10px",
-                    color: "var(--muted)",
-                  }}
-                >
-                  <div>
-                    ML label:{" "}
-                    <strong title="From the stored classifier row, adjusted for flag/reject rules">
-                      {friendlyPredictionLabel(
-                        mlPrediction.prediction_label ?? report.ml_prediction_label,
-                      )}
-                    </strong>
-                    {normalizePercent(mlPrediction.confidence) != null ? (
-                      <>
-                        {" "}
-                        ·{" "}
-                        <span
-                          title="Max class probability from the model — not the same as report trust / scorecard total"
-                        >
-                          Model probability {Math.round(normalizePercent(mlPrediction.confidence))}%
-                        </span>
-                      </>
-                    ) : null}
-                  </div>
-                  <div>
-                    {mlPrediction.evaluated_at &&
-                      formatLocalDateTime(mlPrediction.evaluated_at)}
-                  </div>
-                </div>
-              )}
+              {/* Credibility Score — dynamic color */}
+              {(() => {
+                const ts = Math.round(trustScore || 0);
+                const scoreColor = ts >= 70 ? "var(--success)" : ts >= 45 ? "var(--warning)" : "var(--danger)";
+                return (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                      <span style={{ fontSize: "11px", color: "var(--muted)" }}>Credibility Score</span>
+                      <span style={{ fontFamily: '"Syne", sans-serif', fontWeight: 800, fontSize: "17px", color: scoreColor }}>
+                        {ts}
+                      </span>
+                    </div>
+                    <div className="prog-bar" style={{ marginBottom: "8px" }}>
+                      <div className="prog-fill" style={{ width: `${Math.max(0, Math.min(100, ts))}%`, background: scoreColor }}></div>
+                    </div>
+                  </>
+                );
+              })()}
 
               <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                {/* AI Verification */}
                 <div style={{ padding: "10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
-                  <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 4 }}>AI verification</div>
-                  <div style={{ fontSize: "11px", color: "var(--muted)", marginBottom: 6 }}>
-                    {formatTechnicalStatus(report)}
+                  <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>AI Verification</div>
+                  <div style={{ fontSize: "11px" }}>
+                    {getVerificationStatus(report)}
                   </div>
-                  <div style={{ fontSize: "11px", color: "var(--muted)" }}>
-                    {getVerificationStatus(report, mlPrediction)}
-                  </div>
-                </div>
-                <div style={{ padding: "10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
-                  <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>Community confirmation (local leader)</div>
-                  <div style={{ fontSize: "11px", color: "var(--muted)" }}>
-                    {formatCommunityConfirmation(report)}
-                  </div>
-                  {report.leader_verified_at ? (
+                  {isReportVerified(report) && (
                     <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: 4 }}>
-                      Verified at {formatLocalDateTime(report.leader_verified_at)}
+                      Credibility score ≥ 70% — no leader review required
                     </div>
-                  ) : null}
+                  )}
+                  {isReportRejected(report) && (
+                    <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: 4 }}>
+                      Credibility score too low — automatically rejected
+                    </div>
+                  )}
                 </div>
+
+                {/* Local Leader Review */}
+                {(() => {
+                  const leader = getLeaderReviewStatus(report);
+                  return (
+                    <div style={{ padding: "10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>Local Leader Review</div>
+                      <div style={{ fontSize: "11px", color: leader.color, fontWeight: 600 }}>
+                        {leader.text}
+                      </div>
+                      {report.leader_verified_at && (
+                        <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: 4 }}>
+                          Reviewed on {formatLocalDateTime(report.leader_verified_at)}
+                        </div>
+                      )}
+                      {isReportUnderReview(report) && !report.leader_verification_status && (
+                        <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: 4 }}>
+                          Only reports with under-review status require local leader verification
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {(() => {
                 const cue = formatHotspotClusteringCue(report);
                 return (
-                  <div
-                    style={{
-                      marginTop: 10,
-                      padding: "8px 10px",
-                      borderRadius: 8,
-                      fontSize: 11,
-                      lineHeight: 1.45,
-                      color: cue.excluded ? "var(--warning, #b45309)" : "var(--muted)",
-                      background: cue.excluded ? "rgba(251, 191, 36, 0.08)" : "var(--surface2)",
-                      border: `1px solid ${cue.excluded ? "rgba(251, 191, 36, 0.35)" : "var(--border2)"}`,
-                    }}
-                  >
-                    <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--text)" }}>
-                      Cases & hotspot clustering
-                    </div>
+                  <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 8, fontSize: 11, lineHeight: 1.45, color: cue.excluded ? "var(--warning)" : "var(--muted)", background: "var(--surface2)", border: "1px solid var(--border2)" }}>
+                    <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--text)" }}>Area Activity</div>
                     {cue.text}
                   </div>
                 );
               })()}
 
               <div style={{ marginTop: 12, padding: "10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
-                <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>Community Votes</div>
+                <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>Community Feedback</div>
                 {totalVotes > 0 ? (
                   <>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                        gap: 6,
-                        fontSize: 11,
-                      }}
-                    >
-                      <div><strong>{realVotes}</strong> real</div>
-                      <div><strong>{unknownVotes}</strong> unknown</div>
-                      <div><strong>{falseVotes}</strong> false</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6, fontSize: 11 }}>
+                      <div><strong>{realVotes}</strong> Confirmed real</div>
+                      <div><strong>{unknownVotes}</strong> Unsure</div>
+                      <div><strong>{falseVotes}</strong> Reported false</div>
                     </div>
-                    <div
-                      style={{
-                        marginTop: 8,
-                        height: 6,
-                        width: "100%",
-                        borderRadius: 999,
-                        overflow: "hidden",
-                        display: "flex",
-                        background: "var(--border2)",
-                      }}
-                    >
-                      <div style={{ width: `${(realVotes / totalVotes) * 100}%`, background: "#4caf50" }} />
-                      <div style={{ width: `${(unknownVotes / totalVotes) * 100}%`, background: "#9e9e9e" }} />
-                      <div style={{ width: `${(falseVotes / totalVotes) * 100}%`, background: "#f44336" }} />
+                    <div style={{ marginTop: 8, height: 6, width: "100%", borderRadius: 999, overflow: "hidden", display: "flex", background: "var(--border2)" }}>
+                      <div style={{ width: `${(realVotes / totalVotes) * 100}%`, background: "var(--success)" }} />
+                      <div style={{ width: `${(unknownVotes / totalVotes) * 100}%`, background: "var(--muted)" }} />
+                      <div style={{ width: `${(falseVotes / totalVotes) * 100}%`, background: "var(--danger)" }} />
                     </div>
                     <div style={{ marginTop: 6, fontSize: 10, color: "var(--muted)" }}>
-                      Total votes: {totalVotes}
+                      {totalVotes} community member{totalVotes !== 1 ? 's' : ''} voted
                     </div>
                   </>
                 ) : (
-                  <div style={{ fontSize: 11, color: "var(--muted)" }}>
-                    No community votes recorded yet.
-                  </div>
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>No community feedback received yet.</div>
                 )}
               </div>
 
               {report.flag_reason && (
-                <div style={{ marginTop: 10, padding: "10px", borderRadius: 8, background: "rgba(255, 152, 0, 0.12)", border: "1px solid rgba(255, 152, 0, 0.35)" }}>
-                  <div style={{ fontSize: "11px", fontWeight: 700, marginBottom: 4 }}>Flag reason</div>
+                <div style={{ marginTop: 10, padding: "10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border2)" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 700, marginBottom: 4 }}>Review Notes</div>
                   <div style={{ fontSize: "11px", color: "var(--text)" }}>{friendlyFlagReason(report.flag_reason)}</div>
                 </div>
               )}
-
-              {!isReportVerified(report, mlPrediction) && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: 6 }}>
-                    Verification Requirements
-                  </div>
-                  <div style={{ fontSize: "11px", color: "var(--muted)" }}>
-                    {getVerificationRequirements(report, mlPrediction)}
-                  </div>
-                </div>
-              )}
-
-              <div style={{ marginTop: 12 }}>
-                <div
-                  style={{ fontSize: "12px", fontWeight: 800, marginBottom: 4 }}
-                >
-                  Credibility breakdown
-                </div>
-                <div
-                  style={{
-                    fontSize: 10,
-                    color: "var(--muted)",
-                    marginBottom: 8,
-                    lineHeight: 1.35,
-                  }}
-                >
-                  Same total as report trust above: weighted signals (description, alignment,
-                  location, device, community). A policy row appears only if the total
-                  includes an adjustment not shown in the other lines.
-                </div>
-                {trustFactors && Object.keys(trustFactors).length > 0 ? (
-                  <div
-                    style={{ display: "flex", flexDirection: "column", gap: 6 }}
-                  >
-                    {trustFactors.threshold_band && (
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          padding: "6px 8px",
-                          borderRadius: 6,
-                          background: "var(--surface2)",
-                          border: "1px solid var(--border2)",
-                        }}
-                      >
-                        <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                          Threshold band
-                        </span>
-                        <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                          {String(trustFactors.threshold_band).replaceAll("_", " ")}
-                        </span>
-                      </div>
-                    )}
-                    {typeof trustFactors.total_score !== "undefined" && (
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          padding: "6px 8px",
-                          borderRadius: 6,
-                          background: "var(--surface2)",
-                          border: "1px solid var(--border2)",
-                        }}
-                      >
-                        <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                          Total score
-                        </span>
-                        <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                          {Number(trustFactors.total_score).toFixed(2)} / {Number(trustFactors.max_score ?? 100).toFixed(0)}
-                        </span>
-                      </div>
-                    )}
-                    {trustFactors.factors &&
-                      typeof trustFactors.factors === "object" &&
-                      Object.keys(trustFactors.factors).length > 0 && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                          {Object.entries(trustFactors.factors).map(([key, value]) => {
-                            const pts = Number(value?.points_awarded ?? 0);
-                            const maxPts = Number(
-                              value?.max_points ?? value?.weight ?? 0,
-                            );
-                            const ptsStr = pts.toFixed(2);
-                            const right =
-                              maxPts > 0 ? `${ptsStr} / ${maxPts.toFixed(0)}` : ptsStr;
-                            return (
-                              <div
-                                key={key}
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                }}
-                                title={value?.detail || ""}
-                              >
-                                <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                                  {prettyFactorName(key)}
-                                </span>
-                                <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                                  {right}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    {(!trustFactors.factors ||
-                      typeof trustFactors.factors !== "object" ||
-                      Object.keys(trustFactors.factors).length === 0) && (
-                      <>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                            Content score
-                          </span>
-                          <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                            {trustFactors.content_score ?? "—"}
-                          </span>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                            Location score
-                          </span>
-                          <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                            {trustFactors.location_score ?? "—"}
-                          </span>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                            Cluster score
-                          </span>
-                          <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                            {trustFactors.cluster_score ?? "—"}
-                          </span>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                            User behavior score
-                          </span>
-                          <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                            {trustFactors.user_behavior_score ?? "—"}
-                          </span>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                            Community net votes
-                          </span>
-                          <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                            {trustFactors.community_net_votes ?? "—"}
-                          </span>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                            Coordination penalty
-                          </span>
-                          <span style={{ fontSize: "11px", fontWeight: 800 }}>
-                            {trustFactors.coordination_penalty ?? "—"}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: "10px", color: "var(--muted)" }}>
-                    No breakdown available yet.
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
@@ -2560,8 +2232,8 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
 
             <div style={{ 
               padding: '12px', 
-              backgroundColor: 'rgba(59, 130, 246, 0.1)', 
-              border: '1px solid rgba(59, 130, 246, 0.3)', 
+              backgroundColor: 'var(--surface2)',
+              border: '1px solid var(--border2)', 
               borderRadius: '6px', 
               marginBottom: '16px',
               fontSize: '12px',

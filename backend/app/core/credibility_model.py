@@ -870,10 +870,10 @@ def update_device_ml_aggregates(
             logger.warning(f"  OVERRIDING: Preventing dramatic drop after high-trust report")
             blended = max(blended, current_score - 5.0)  # Allow small drop but not dramatic
 
-        # Step limiter: never allow large trust swings in a single recompute.
-        # This prevents one rejected/pending report from collapsing device trust.
-        max_increase_step = 2.5
-        max_decrease_step = 3.0
+        # Step limiter: prevent extreme trust swings in a single recompute.
+        # Allows reasonable movement while preventing one rejected report from collapsing trust.
+        max_increase_step = 5.0
+        max_decrease_step = 5.0
         delta = blended - current_score
         if delta > max_increase_step:
             blended = current_score + max_increase_step

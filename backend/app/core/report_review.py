@@ -51,16 +51,18 @@ def prediction_confidence_for_display(prediction: Any, raw_db_label: Optional[st
 def infer_prediction_label_from_trust_score(
     trust_score: float,
     *,
-    trust_threshold: float = 70.0,
-    under_review_threshold: float = 45.0,
+    verified_threshold: float = 70.0,
+    review_threshold: float = 40.0,
 ) -> str:
     """
-    When DB row has trust_score but no prediction_label (legacy / partial writes),
-    derive a label using standard trust bands (70 / 45 thresholds).
+    Derive prediction label from trust score — 3 tiers only:
+      70-100 → likely_real (verified)
+      40-69  → suspicious (under_review)
+      0-39   → fake (rejected)
     """
-    if trust_score >= trust_threshold:
+    if trust_score >= verified_threshold:
         return "likely_real"
-    if trust_score >= under_review_threshold:
+    if trust_score >= review_threshold:
         return "suspicious"
     return "fake"
 

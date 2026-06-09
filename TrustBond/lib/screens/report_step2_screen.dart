@@ -34,6 +34,7 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
   bool _locating = false;
   String? _locError;
   bool _canOpenSettings = false;
+  bool _outsideMusanze = false;
   final List<String> _selectedTags = [];
 
   static const _tags = [
@@ -60,6 +61,7 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
       _locError = null;
       _canOpenSettings = false;
       _villageLocation = null;
+      _outsideMusanze = false;
     });
     try {
       final result = await _locationService.getFullLocation();
@@ -71,11 +73,23 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
         });
         return;
       }
+      if (result.isOutsideMusanze) {
+        setState(() {
+          _latitude = result.latitude;
+          _longitude = result.longitude;
+          _gpsAccuracy = result.accuracy;
+          _villageLocation = null;
+          _outsideMusanze = true;
+          _locating = false;
+        });
+        return;
+      }
       setState(() {
         _latitude = result.latitude;
         _longitude = result.longitude;
         _gpsAccuracy = result.accuracy;
         _villageLocation = result.village;
+        _outsideMusanze = false;
         _locating = false;
       });
     } catch (e) {
@@ -273,8 +287,10 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: AppColors.accent),
                 ),
-              if (!_locating && _latitude != null)
+              if (!_locating && _latitude != null && !_outsideMusanze)
                 const StatusBadge(label: 'Acquired', type: BadgeType.ok),
+              if (!_locating && _outsideMusanze)
+                const StatusBadge(label: 'Outside Area', type: BadgeType.err),
               if (!_locating && _locError != null)
                 GestureDetector(
                   onTap: _getLocation,
@@ -283,7 +299,63 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
             ],
           ),
           const SizedBox(height: 8),
-          if (_latitude != null) ...[
+          if (_outsideMusanze) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.danger.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.block, size: 16, color: AppColors.danger),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'You are outside Musanze District',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.danger,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'TrustBond currently only accepts reports from within '
+                    'Musanze District. Reports from outside the district '
+                    'cannot be verified by local authorities.\n\n'
+                    'Please move to Musanze District to submit a report.',
+                    style: TextStyle(fontSize: 11, color: AppColors.danger),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _getLocation,
+                      icon: const Icon(Icons.refresh, size: 14),
+                      label: const Text('Re-check Location',
+                          style: TextStyle(fontSize: 11)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.danger,
+                        side: const BorderSide(color: AppColors.danger),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (_latitude != null) ...[
             if (_villageLocation != null) ...[
               Container(
                 padding: const EdgeInsets.all(10),
@@ -442,7 +514,7 @@ class _ReportStep2ScreenState extends State<ReportStep2Screen> {
   }
 
   Widget _buildContinueButton() {
-    final hasLoc = _latitude != null;
+    final hasLoc = _latitude != null && !_outsideMusanze;
     final words = _wordCount(_descController.text);
     final hasDescription = words >= ReportStep2Screen.minimumWordCount;
     final enabled = hasLoc && hasDescription;

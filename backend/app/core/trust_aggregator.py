@@ -2,6 +2,10 @@
 Central Trust Aggregator
 Combines scores from all models into a unified trust score.
 No model makes final decisions - only contributes scores.
+
+NOTE: The main trust computation now uses dynamic_trust_scorer.py (Stage 5).
+This module is retained for backward compatibility with callers that
+use aggregate_trust_scores() directly.
 """
 
 from typing import Dict, Any, Optional, List
@@ -188,36 +192,35 @@ class TrustAggregator:
                 'volo': 0.0,
                 'base_score': 0.0,
             }
-        
+
         # Calculate total weight to redistribute from missing main models
         missing_weight = sum(original_weights[model] for model in missing_main_models)
-        
+
         # Count available main models (trustbond, natural_language, volo)
-        available_main_models = [model for model, available in available_models.items() 
+        available_main_models = [model for model, available in available_models.items()
                                 if available and model != 'base_score']
-        
+
         if not available_main_models:
             # Only base_score available
             return {'base_score': 1.0, 'trustbond': 0.0, 'natural_language': 0.0, 'volo': 0.0}
-        
+
         # Start with original weights
         dynamic_weights = original_weights.copy()
-        
+
         # Set missing main models to 0
         for model in missing_main_models:
             dynamic_weights[model] = 0.0
-        
-        # Redistribute missing weight equally among available main models AND base_score
-        # This matches the examples: missing weight is shared by available models + base
-        total_recipients = len(available_main_models) + 1  # +1 for base_score
-        redistribution_per_recipient = missing_weight / total_recipients
-        
-        # Add redistributed weight to available main models
+
+        # Redistribute missing weight primarily to available main models.
+        # Base score gets only a small share to avoid inflating scores when few models run.
+        base_share = min(0.1, missing_weight * 0.15)  # base gets at most 15% of redistribution
+        model_share = missing_weight - base_share
+
+        per_model = model_share / len(available_main_models)
         for model in available_main_models:
-            dynamic_weights[model] += redistribution_per_recipient
-        
-        # Add redistributed weight to base_score
-        dynamic_weights['base_score'] += redistribution_per_recipient
+            dynamic_weights[model] += per_model
+
+        dynamic_weights['base_score'] += base_share
         
         # Ensure weights sum to 1.0 (normalize if needed)
         total = sum(dynamic_weights.values())

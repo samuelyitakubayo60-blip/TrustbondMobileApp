@@ -106,6 +106,7 @@ def create_incident_type(
     obj = IncidentType(
         type_name=payload.type_name.strip(),
         description=payload.description.strip() if payload.description else None,
+        semantic_definition=payload.semantic_definition.strip() if payload.semantic_definition else None,
         severity_weight=payload.severity_weight,
         is_active=payload.is_active,
     )
@@ -156,6 +157,8 @@ def update_incident_type(
         obj.type_name = name
     if payload.description is not None:
         obj.description = payload.description.strip() or None
+    if payload.semantic_definition is not None:
+        obj.semantic_definition = payload.semantic_definition.strip() or None
     if payload.severity_weight is not None:
         obj.severity_weight = payload.severity_weight
     if payload.is_active is not None:

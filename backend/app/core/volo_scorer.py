@@ -517,8 +517,16 @@ class VoloScorer:
         audio_url: str,
         incident_type_name: str = "",
         expected_objects: Optional[List[str]] = None,
+        report_description: str = "",
     ) -> VoloAnalysisResult:
-        """Download audio from URL; duration + optional transcript-based scoring."""
+        """Download audio from URL; run forensic audio analysis (spectral + LLM).
+
+        Uses the AudioForensicAnalyzer for:
+        - Signal-level features (spectral bands, amplitude spikes, pitch/stress,
+          voice activity, background noise classification)
+        - LLM reasoning over features + Whisper transcript
+        - Distress detection, urgency scoring, incident relevance
+        """
         del expected_objects  # reserved for future keyword mapping
         try:
             import requests
@@ -533,68 +541,131 @@ class VoloScorer:
 
             resp = requests.get(audio_url, timeout=120)
             resp.raise_for_status()
-            meta = self.analyze_audio_bytes(resp.content, suffix=ext)
-            if meta.get("error"):
-                return self._create_empty_result(str(meta.get("error")))
+            audio_bytes = resp.content
 
-            transcript = (meta.get("transcript") or "").strip()
-            dur = float(meta.get("duration_seconds") or 0.0)
+            # Get Whisper transcript via existing method
+            basic_meta = self.analyze_audio_bytes(audio_bytes, suffix=ext)
+            transcript = (basic_meta.get("transcript") or "").strip()
+            dur = float(basic_meta.get("duration_seconds") or 0.0)
 
-            # Authenticity: audio presence + duration + transcript richness
-            authenticity = 50.0 + min(20.0, dur * 2.5)
-            if transcript:
-                authenticity += min(25.0, len(transcript) / 8.0)
-            authenticity = max(0.0, min(100.0, authenticity))
+            # Run full forensic analysis (spectral features + LLM)
+            from .audio_forensic_analyzer import analyze_audio_forensic
 
-            # Detection: audio is content evidence — base on duration + transcript keyword match
-            # (no YOLO objects — don't penalise for missing visual detection)
-            detection_score = 55.0  # audio presence is itself evidence
-            if dur >= 2.0:
-                detection_score += min(15.0, dur * 1.5)
-            if transcript:
-                detection_score += min(25.0, len(transcript) / 6.0)
-                # Keyword relevance bonus if incident type words appear in transcript
-                if incident_type_name:
-                    type_words = set(incident_type_name.lower().split())
-                    transcript_lower = transcript.lower()
-                    matched = sum(1 for w in type_words if w in transcript_lower)
-                    if matched:
-                        detection_score += min(10.0, matched * 3.0)
-            detection_score = max(0.0, min(100.0, detection_score))
+            forensic = analyze_audio_forensic(
+                audio_bytes=audio_bytes,
+                suffix=ext,
+                transcript=transcript,
+                description=report_description,
+                incident_type=incident_type_name,
+            )
 
+            # Map forensic results to VoloAnalysisResult scores
+            authenticity = forensic.audio_authenticity_score
+            detection_score = forensic.audio_content_score
             quality_score = 50.0
+
+            # Quality: duration + clarity + speech
             if dur > 0.5:
                 quality_score += 15.0
-            if meta.get("rms_energy"):
+            if forensic.features.has_speech:
                 quality_score += 10.0
             if transcript:
                 quality_score += min(20.0, len(transcript) / 15.0)
+            if forensic.features.signal_to_noise_ratio > 15:
+                quality_score += 5.0
             quality_score = max(0.0, min(100.0, quality_score))
 
-            overall_score = authenticity * 0.35 + detection_score * 0.35 + quality_score * 0.3
-            confidence = 0.60
+            # Distress / urgency bonus — audio with distress indicators
+            # should score well even if noisy or unclear
+            distress_bonus = 0.0
+            if forensic.distress_level == "critical":
+                distress_bonus = 20.0
+            elif forensic.distress_level == "high":
+                distress_bonus = 15.0
+            elif forensic.distress_level == "moderate":
+                distress_bonus = 10.0
+            elif forensic.distress_level == "low":
+                distress_bonus = 5.0
+
+            detection_score = min(100.0, detection_score + distress_bonus)
+
+            overall_score = (
+                authenticity * 0.30
+                + detection_score * 0.35
+                + quality_score * 0.20
+                + forensic.audio_relevance_score * 0.15
+            )
+            overall_score = max(0.0, min(100.0, overall_score))
+
+            confidence = 0.55
             if transcript:
                 confidence += 0.15
             if dur > 2.0:
-                confidence += 0.10
+                confidence += 0.05
+            if forensic.llm_available:
+                confidence += 0.15
+            if forensic.features.has_distress_indicators:
+                confidence += 0.05
             confidence = max(0.3, min(1.0, confidence))
 
+            # Build rich metadata including forensic features
+            detected_sounds = forensic.detected_sounds or []
+            if forensic.features.detected_sound_events:
+                detected_sounds = list(set(
+                    detected_sounds + forensic.features.detected_sound_events
+                ))
+
             detection_metadata = {
-                "detected_objects": [],
+                "detected_objects": detected_sounds,
                 "expected_objects": [],
                 "final_detection_score": detection_score,
                 "transcript_excerpt": transcript[:500],
+                "forensic_sound_events": forensic.features.detected_sound_events,
+                "distress_level": forensic.distress_level,
+                "urgency_score": forensic.urgency_score,
             }
 
             metadata = {
                 "audio_url": audio_url,
                 "incident_type": incident_type_name,
-                "authenticity_analysis": {"final_authenticity_score": authenticity},
+                "authenticity_analysis": {
+                    "final_authenticity_score": authenticity,
+                    "dynamic_range_db": forensic.features.dynamic_range_db,
+                    "amplitude_spikes": forensic.features.amplitude_spikes,
+                },
                 "detection_analysis": detection_metadata,
-                "quality_analysis": {"final_quality_score": quality_score},
-                "audio_analysis": meta,
+                "quality_analysis": {
+                    "final_quality_score": quality_score,
+                    "snr_db": forensic.features.signal_to_noise_ratio,
+                    "is_noisy": forensic.features.is_noisy,
+                },
+                "audio_analysis": {
+                    "bytes": len(audio_bytes),
+                    "duration_seconds": dur,
+                    "transcript": transcript,
+                    "rms_energy": forensic.features.rms_energy,
+                },
+                "forensic_analysis": {
+                    "voice_activity_ratio": forensic.features.voice_activity_ratio,
+                    "has_speech": forensic.features.has_speech,
+                    "pitch_mean": forensic.features.pitch_mean,
+                    "pitch_std": forensic.features.pitch_std,
+                    "spectral_centroid_mean": forensic.features.spectral_centroid_mean,
+                    "is_chaotic": forensic.features.is_chaotic,
+                    "band_energies": forensic.features.band_energies,
+                    "detected_sound_events": forensic.features.detected_sound_events,
+                    "sound_event_confidences": forensic.features.sound_event_confidences,
+                    "distress_indicators": forensic.features.urgency_indicators,
+                    "distress_level": forensic.distress_level,
+                    "urgency_score": forensic.urgency_score,
+                    "incident_relevance": forensic.incident_relevance,
+                    "incident_relevance_score": forensic.incident_relevance_score,
+                    "llm_available": forensic.llm_available,
+                    "llm_reasoning": forensic.llm_reasoning,
+                    "evidence_text_summary": forensic.evidence_text_summary,
+                },
                 "analyzed_at": datetime.now(timezone.utc).isoformat(),
-                "analysis_kind": "audio",
+                "analysis_kind": "audio_forensic",
             }
 
             return VoloAnalysisResult(
@@ -974,10 +1045,12 @@ def analyze_evidence_audio_content(
     audio_url: str,
     incident_type_name: str = "",
     expected_objects: Optional[List[str]] = None,
+    report_description: str = "",
 ) -> VoloAnalysisResult:
-    """Analyze audio evidence (duration + optional Whisper transcript)."""
+    """Analyze audio evidence with forensic analysis (spectral + LLM)."""
     return volo_scorer.analyze_evidence_audio_from_url(
         audio_url=audio_url,
         incident_type_name=incident_type_name,
         expected_objects=expected_objects,
+        report_description=report_description,
     )

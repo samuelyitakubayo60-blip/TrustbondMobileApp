@@ -162,6 +162,8 @@ class LocationService {
   // ── Convenience ────────────────────────────────────────
 
   /// Get full location info: GPS position + village location.
+  /// If GPS succeeds but the coordinates fall outside all Musanze polygons,
+  /// [LocationResult.isOutsideMusanze] will be `true`.
   Future<LocationResult> getFullLocation() async {
     final result = await getCurrentPosition();
     if (!result.hasPosition) return result; // propagate error
@@ -174,6 +176,7 @@ class LocationService {
     return LocationResult(
       position: result.position,
       village: village,
+      isOutsideMusanze: village == null,
     );
   }
 }
@@ -185,11 +188,15 @@ class LocationResult {
   final String? error;
   final LocationErrorType? errorType;
 
+  /// True when GPS succeeded but coordinates are outside Musanze district.
+  final bool isOutsideMusanze;
+
   LocationResult({
     this.position,
     this.village,
     this.error,
     this.errorType,
+    this.isOutsideMusanze = false,
   });
 
   bool get hasPosition => position != null;

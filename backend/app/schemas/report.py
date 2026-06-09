@@ -132,6 +132,8 @@ class ReportResponse(BaseModel):
     # Location hierarchy and station assignment data
     assigned_station: Optional[Dict[str, Any]] = None  # station info from assigned officer
     assigned_officers: Optional[List[Dict[str, Any]]] = None  # list of assigned officers with their stations
+    # 5-stage verification pipeline breakdown (from feature_vector)
+    verification_pipeline: Optional[Dict[str, Any]] = None
 
     class Config:
         from_attributes = True

@@ -325,29 +325,43 @@ def verify_report(
         "decided_at": now.isoformat(),
         "note": (payload.note or "").strip()[:500] if payload.note else None,
     }
-    r.feature_vector = fv
 
     if decision == "confirmed":
+        # Leader manual confirmation → override to at least 92, capped at 100
+        # Local leader is a trusted authority; their confirmation is definitive
         if existing_ml:
             current_score = float(existing_ml.trust_score or 50.0)
-            new_score = max(85.0, min(100.0, current_score + 52))  # leader confirm → at least 85, capped at 100
+            new_score = max(92.0, min(100.0, current_score + 52))
             existing_ml.trust_score = Decimal(str(round(new_score, 2)))
             existing_ml.prediction_label = "likely_real"
-            existing_ml.confidence = Decimal("0.95")
+            existing_ml.confidence = Decimal("0.97")
             existing_ml.model_type = "leader_override"
             existing_ml.is_final = True  # lock score — no background job should override leader decision
             existing_ml.evaluated_at = now
         else:
+            new_score = 94.0
             db.add(MLPrediction(
                 prediction_id=uuid4(),
                 report_id=r.report_id,
-                trust_score=Decimal("90.0"),
+                trust_score=Decimal("94.0"),
                 prediction_label="likely_real",
-                confidence=Decimal("0.95"),
+                confidence=Decimal("0.97"),
                 model_type="leader_override",
                 is_final=True,
                 evaluated_at=now,
             ))
+
+        # Override the scorecard total so the displayed trust matches leader decision
+        scorecard = fv.get("threshold_scorecard") if isinstance(fv.get("threshold_scorecard"), dict) else {}
+        if scorecard:
+            scorecard["total_score"] = round(new_score, 2)
+            scorecard["threshold_band"] = "confirmed_candidate"
+            scorecard["leader_override"] = True
+            scorecard["leader_override_at"] = now.isoformat()
+            fv["threshold_scorecard"] = scorecard
+        # Also set the report-level trust_score if the column exists
+        if hasattr(r, "trust_score"):
+            r.trust_score = Decimal(str(round(new_score, 2)))
         # Reward reporting device — increment counter then recalculate full score
         if getattr(r, "device", None):
             if hasattr(r.device, "trusted_reports"):
@@ -357,25 +371,38 @@ def verify_report(
             update_device_ml_aggregates(db, r.device, window=30)
 
     elif decision == "rejected":
-        # Hard-lock at 10 (well below the < 40 rejection threshold).
+        # Leader rejection → hard-lock score below 10 (trusted authority rejection)
         # is_final=True prevents any background rerun from overwriting this.
+        reject_score = 8.0
         if existing_ml:
-            existing_ml.trust_score = Decimal("10.0")
+            existing_ml.trust_score = Decimal("8.0")
             existing_ml.prediction_label = "fake"
-            existing_ml.confidence = Decimal("0.95")
+            existing_ml.confidence = Decimal("0.97")
             existing_ml.model_type = "leader_override"
             existing_ml.is_final = True
         else:
             db.add(MLPrediction(
                 prediction_id=uuid4(),
                 report_id=r.report_id,
-                trust_score=Decimal("10.0"),
+                trust_score=Decimal("8.0"),
                 prediction_label="fake",
-                confidence=Decimal("0.95"),
+                confidence=Decimal("0.97"),
                 model_type="leader_override",
                 is_final=True,
                 evaluated_at=now,
             ))
+
+        # Override the scorecard total so the displayed trust matches leader decision
+        scorecard = fv.get("threshold_scorecard") if isinstance(fv.get("threshold_scorecard"), dict) else {}
+        if scorecard:
+            scorecard["total_score"] = reject_score
+            scorecard["threshold_band"] = "low_confidence"
+            scorecard["leader_override"] = True
+            scorecard["leader_override_at"] = now.isoformat()
+            fv["threshold_scorecard"] = scorecard
+        if hasattr(r, "trust_score"):
+            r.trust_score = Decimal(str(reject_score))
+
         # Penalise reporting device — increment counter then recalculate full score
         if getattr(r, "device", None):
             if hasattr(r.device, "flagged_reports"):
@@ -383,6 +410,9 @@ def verify_report(
             db.add(r)
             db.flush()
             update_device_ml_aggregates(db, r.device, window=30)
+
+    # Persist all feature_vector changes (leader_decision + scorecard override)
+    r.feature_vector = fv
 
     if not getattr(r, "device", None):
         db.add(r)

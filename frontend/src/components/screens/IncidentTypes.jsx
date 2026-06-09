@@ -39,6 +39,7 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
   const [bgRefreshing, setBgRefreshing] = useState(false);
   const [sortBy, setSortBy]         = useState('incidentType');
   const [sortOrder, setSortOrder]   = useState('desc');
+  const [viewType, setViewType]     = useState(null);   // popup detail card
   const chartRef  = useRef(null);
   const chartInst = useRef(null);
 
@@ -316,6 +317,7 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
                 <th>Severity</th>
                 <th>Level</th>
                 <th>Status</th>
+                <th style={{ width: 60 }}></th>
                 {canManage && <th>Actions</th>}
               </tr>
             </thead>
@@ -327,7 +329,6 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
                 if      (val >= 1.6) { level = 'Severe'; badge = 'b-red';    }
                 else if (val >= 1.3) { level = 'High';   badge = 'b-orange'; }
                 else if (val >= 1.1) { level = 'Medium'; badge = 'b-blue';   }
-
                 return (
                   <tr key={t.incident_type_id}>
                     <td style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>{index + 1}</td>
@@ -344,6 +345,15 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
                         {t.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
+                    <td>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={() => setViewType(t)}
+                        style={{ fontSize: 11, padding: '2px 10px' }}
+                      >
+                        View
+                      </button>
+                    </td>
                     {canManage && (
                       <td>
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -359,15 +369,212 @@ const IncidentTypes = ({ openModal, onEditIncidentType, refreshKey, wsRefreshKey
                 );
               })}
               {!types.length && !loading && (
-                <tr><td colSpan={canManage ? 7 : 6} style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', padding: '32px 0' }}>No incident types found.</td></tr>
+                <tr><td colSpan={canManage ? 8 : 7} style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', padding: '32px 0' }}>No incident types found.</td></tr>
               )}
               {loading && (
-                <tr><td colSpan={canManage ? 7 : 6} style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', padding: '32px 0' }}>Loading...</td></tr>
+                <tr><td colSpan={canManage ? 8 : 7} style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', padding: '32px 0' }}>Loading...</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* ── View Detail Popup ── */}
+      {viewType && (() => {
+        const vt = viewType;
+        const val = Number(vt.severity_weight ?? 1);
+        const sev = val.toFixed(2);
+        let level = 'Low', badge = 'b-gray', levelColor = '#64748b';
+        if      (val >= 1.6) { level = 'Severe'; badge = 'b-red';    levelColor = '#dc2626'; }
+        else if (val >= 1.3) { level = 'High';   badge = 'b-orange'; levelColor = '#d97706'; }
+        else if (val >= 1.1) { level = 'Medium'; badge = 'b-blue';   levelColor = '#2563eb'; }
+        const reportCount = (chartData.incidentTypes || {})[vt.type_name] || 0;
+
+        return (
+          <div
+            className="modal-overlay open"
+            onClick={(e) => e.target === e.currentTarget && setViewType(null)}
+            style={{ zIndex: 1000 }}
+          >
+            <div style={{
+              background: 'var(--bg, #fff)',
+              borderRadius: 14,
+              maxWidth: 560,
+              width: '94%',
+              maxHeight: '88vh',
+              overflowY: 'auto',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+              animation: 'fadeIn 0.2s ease-out',
+            }}>
+              {/* Header band */}
+              <div style={{
+                background: 'linear-gradient(135deg, #0f1f3d 0%, #1e3a8a 100%)',
+                padding: '22px 28px 18px',
+                borderRadius: '14px 14px 0 0',
+                color: '#fff',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>{vt.type_name}</div>
+                    <div style={{ fontSize: 12, opacity: 0.75 }}>Incident Type Details</div>
+                  </div>
+                  <button
+                    onClick={() => setViewType(null)}
+                    style={{
+                      background: 'rgba(255,255,255,0.15)',
+                      border: 'none',
+                      color: '#fff',
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      fontSize: 16,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Quick stat pills */}
+                <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+                  <span style={{
+                    background: 'rgba(255,255,255,0.15)',
+                    padding: '4px 12px',
+                    borderRadius: 20,
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}>
+                    Severity: {sev}
+                  </span>
+                  <span style={{
+                    background: levelColor,
+                    padding: '4px 12px',
+                    borderRadius: 20,
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}>
+                    {level}
+                  </span>
+                  <span style={{
+                    background: vt.is_active ? 'rgba(22,163,74,0.8)' : 'rgba(220,38,38,0.8)',
+                    padding: '4px 12px',
+                    borderRadius: 20,
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}>
+                    {vt.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                  <span style={{
+                    background: 'rgba(255,255,255,0.15)',
+                    padding: '4px 12px',
+                    borderRadius: 20,
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}>
+                    {reportCount} report{reportCount !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: '20px 28px 24px' }}>
+                {/* Description */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--muted)', marginBottom: 6 }}>
+                    Description
+                  </div>
+                  <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text)', margin: 0 }}>
+                    {vt.description || 'No description provided.'}
+                  </p>
+                </div>
+
+                {/* Semantic Definition */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--muted)', marginBottom: 6 }}>
+                    AI Semantic Definition
+                  </div>
+                  {vt.semantic_definition ? (
+                    <div style={{
+                      background: 'var(--bg-secondary, #f8fafc)',
+                      border: '1px solid var(--border, #e2e8f0)',
+                      borderRadius: 10,
+                      padding: '14px 16px',
+                    }}>
+                      <p style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--text)', margin: 0 }}>
+                        {vt.semantic_definition}
+                      </p>
+                      <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 8, textAlign: 'right' }}>
+                        {vt.semantic_definition.length} characters
+                      </div>
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--muted)', margin: 0, padding: '12px 0' }}>
+                      No semantic definition configured. The AI pipeline will fall back to the short description for verification matching.
+                    </p>
+                  )}
+                </div>
+
+                {/* Info grid */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 12,
+                  marginBottom: 6,
+                }}>
+                  {[
+                    { label: 'Severity Weight', value: sev },
+                    { label: 'Severity Level', value: level, color: levelColor },
+                    { label: 'Status', value: vt.is_active ? 'Active' : 'Inactive', color: vt.is_active ? '#16a34a' : '#dc2626' },
+                    { label: 'Total Reports', value: reportCount },
+                  ].map((item) => (
+                    <div key={item.label} style={{
+                      background: 'var(--bg-secondary, #f8fafc)',
+                      borderRadius: 8,
+                      padding: '10px 14px',
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)', marginBottom: 3 }}>
+                        {item.label}
+                      </div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: item.color || 'var(--text)' }}>
+                        {item.value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div style={{
+                padding: '14px 28px',
+                borderTop: '1px solid var(--border, #e2e8f0)',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 8,
+              }}>
+                {canManage && (
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => { setViewType(null); onEditIncidentType?.(vt); }}
+                    style={{ padding: '6px 16px' }}
+                  >
+                    Edit
+                  </button>
+                )}
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setViewType(null)}
+                  style={{ padding: '6px 20px' }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 };

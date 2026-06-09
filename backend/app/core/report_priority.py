@@ -103,8 +103,7 @@ def apply_anti_fraud_rules(
         return "flagged", True, "gibberish_description"
 
     semantic_mismatch = _incident_description_mismatch_semantic(report, db)
-    keyword_mismatch = _incident_description_mismatch(report, db)
-    if semantic_mismatch or keyword_mismatch:
+    if semantic_mismatch:
         # Keep hard rejections from base rules, otherwise require review.
         if base_status == "rejected":
             return base_status, base_flagged, base_reason
@@ -168,62 +167,16 @@ def _stale_evidence_reason(report: Report, db: Optional[Session]) -> Optional[st
 
 
 def _incident_description_mismatch(report: Report, db: Optional[Session]) -> bool:
-    """Heuristic mismatch check between selected incident type and free-text description."""
-    if db is None:
-        return False
-    description = (getattr(report, "description", None) or "").strip().lower()
-    if len(description) < 8:
-        return False
+    """
+    Heuristic mismatch check between selected incident type and free-text description.
 
-    incident_type_id = getattr(report, "incident_type_id", None)
-    if not incident_type_id:
-        return False
-    it = (
-        db.query(IncidentType)
-        .filter(IncidentType.incident_type_id == incident_type_id)
-        .first()
-    )
-    if not it or not getattr(it, "type_name", None):
-        return False
-
-    type_name = str(it.type_name).strip().lower()
-    keywords = {
-        "theft": {"steal", "stolen", "rob", "robbed", "snatch", "burglary", "thief"},
-        "vandalism": {"damage", "destroy", "broken", "graffiti", "deface"},
-        "suspicious activity": {"suspicious", "strange", "unknown", "lurking", "watching"},
-        "domestic violence": {"husband", "wife", "family", "home", "domestic", "partner", "beating"},
-        "drug activity": {"drug", "weed", "cocaine", "heroin", "dealer", "selling", "pills"},
-        "fraud/scam": {"scam", "fraud", "fake", "con", "money transfer", "phishing"},
-        "harassment": {"harass", "threat", "stalk", "intimidat", "abuse"},
-        "traffic incident": {"accident", "crash", "collision", "vehicle", "road", "car"},
-        "assault": {"assault", "attack", "fight", "hit", "beaten", "injur", "violence"},
-    }
-    own = keywords.get(type_name)
-    if not own:
-        # Generic fallback for any incident type not explicitly listed above.
-        stopwords = {"incident", "activity", "case", "report", "event", "type", "and", "or"}
-        derived = {
-            tok for tok in re.findall(r"[a-z]{4,}", type_name)
-            if tok not in stopwords
-        }
-        if not derived:
-            return False
-        return not any(k in description for k in derived)
-
-    own_hits = any(k in description for k in own)
-    # If user chose a known type but the description contains no related signal,
-    # require review (prevents "assault" + random text from passing).
-    if not own_hits:
-        return True
-    other_hits = 0
-    for t, ks in keywords.items():
-        if t == type_name:
-            continue
-        if any(k in description for k in ks):
-            other_hits += 1
-
-    # If description strongly matches other types too, keep mismatch as well.
-    return other_hits >= 1
+    DISABLED: This keyword-based approach produces too many false positives because
+    incident types naturally share vocabulary (assault/fight/domestic violence share
+    "hit", "beat", "violence" etc.).  The TF-IDF semantic similarity in the NL scorer
+    handles mismatch detection more accurately as part of the trust aggregation score.
+    Keeping the function for future reference but always returning False.
+    """
+    return False
 
 
 def _gibberish_description(report: Report) -> bool:
