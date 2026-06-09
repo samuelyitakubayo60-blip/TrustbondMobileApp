@@ -1788,7 +1788,7 @@ def _compute_threshold_scorecard(
                 "scorecard_type": "legacy_ml_prediction",
                 "max_score": 100.0,
                 "total_score": round(ts, 2),
-                "threshold_band": "under_review" if ts >= 45.0 else "low_confidence",
+                "threshold_band": "under_review" if ts >= 40.0 else "low_confidence",
                 "hard_gates": [],
                 "factors": {},
             }
@@ -2030,14 +2030,14 @@ def _compute_threshold_scorecard(
         elif not has_evidence:
             if total >= 70.0:
                 band = "confirmed_candidate"
-            elif total >= 45.0:
+            elif total >= 40.0:
                 band = "under_review"
             else:
                 band = "low_confidence"
         else:
             if total >= 70.0:
                 band = "confirmed_candidate"
-            elif total >= 50.0:
+            elif total >= 40.0:
                 band = "under_review"
             else:
                 band = "low_confidence"
@@ -2161,14 +2161,14 @@ def _compute_threshold_scorecard(
     elif not has_evidence:
         if total >= 70.0:
             band = "confirmed_candidate"
-        elif total >= 45.0:
+        elif total >= 40.0:
             band = "under_review"
         else:
             band = "low_confidence"
     else:
         if total >= 70.0:
             band = "confirmed_candidate"
-        elif total >= 50.0:
+        elif total >= 40.0:
             band = "under_review"
         else:
             band = "low_confidence"
