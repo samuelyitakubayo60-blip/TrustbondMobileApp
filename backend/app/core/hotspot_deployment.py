@@ -93,6 +93,7 @@ def _notify_deployment_stakeholders(
             )
             in_app_commander = 1
         except Exception as exc:
+            db.rollback()
             _log.warning("Commander in-app notification failed: %s", exc)
 
     station_ids = _station_ids_for_reports(db, reports)
@@ -121,6 +122,7 @@ def _notify_deployment_stakeholders(
             )
             in_app_stations += len(notes)
         except Exception as exc:
+            db.rollback()
             _log.warning(
                 "Station deployment notification failed station_id=%s: %s",
                 station_id,
@@ -140,6 +142,7 @@ def _notify_deployment_stakeholders(
             send_email=False,
         )
     except Exception as exc:
+        db.rollback()
         _log.warning("Admin deployment notification failed: %s", exc)
 
     return {

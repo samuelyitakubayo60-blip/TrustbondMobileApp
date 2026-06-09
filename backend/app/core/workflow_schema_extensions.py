@@ -145,6 +145,12 @@ DDL_STATEMENTS: tuple[str, ...] = (
       ON deployment_decisions (report_id);
     """,
     """
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'deployment';
+    """,
+    """
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'deployment';
+    """,
+    """
     INSERT INTO special_assignment_units (unit_code, unit_name, description)
     VALUES
       ('RIB', 'RIB — Investigation Bureau', 'Serious crime / investigation handover'),

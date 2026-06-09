@@ -62,8 +62,12 @@ def create_notification(
         related_entity_id=related_entity_id,
     )
     db.add(n)
-    db.commit()
-    db.refresh(n)
+    try:
+        db.commit()
+        db.refresh(n)
+    except Exception:
+        db.rollback()
+        raise
     
     # Send real-time notification update for the target user.
     _run_async_now_or_schedule(
@@ -139,8 +143,12 @@ def create_role_notifications(
         )
         db.add(notif)
         notifications.append(notif)
-    
-    db.commit()
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     
     # Send real-time notification updates for affected users.
     for user in users:

@@ -179,7 +179,8 @@ CREATE TYPE public.notification_type AS ENUM (
     'hotspot',
     'assignment',
     'system',
-    'alert'
+    'alert',
+    'deployment'
 );
 
 
