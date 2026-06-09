@@ -100,7 +100,7 @@ class EmailNotificationService:
     def __init__(self):
         from app.config import settings
         from app.core.brevo_email import is_brevo_configured
-        from app.core.email import is_email_configured
+        from app.core.email import is_email_configured, resolved_from_address
         from app.core.smtp_config import clean_env_value, resolve_smtp_host, smtp_settings_ready
 
         self.smtp_server = resolve_smtp_host(settings.smtp_host, settings.smtp_user) or "smtp.gmail.com"
