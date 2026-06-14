@@ -44,11 +44,12 @@ const applyReportTimeWindow = (hotspots, filterHours) => {
       // panel shows the time-relevant subset, not the full cluster history.
       return {
         ...h,
-        incident_points: pts.length > 0 ? pts : rawPts,
+        incident_points: pts,
+        _active_in_period: pts.length > 0,
         // incident_count is intentionally NOT overwritten here.
       };
     })
-    .filter((h) => (h.incident_count || 0) > 0);
+    .filter((h) => h._active_in_period);
 };
 
 const buildStatsFromHotspots = (hotspots) => {
