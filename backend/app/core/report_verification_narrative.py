@@ -119,12 +119,15 @@ def _decision_headline(
 def _evidence_paragraph(snapshot: Dict[str, Any]) -> str:
     evid = (snapshot.get("model_signals") or {}).get("evidence_ai") or {}
     ec = int(evid.get("evidence_count") or 0)
+    per_file: List[Dict[str, Any]] = evid.get("per_file") or []
+
     try:
         ec = max(
             ec,
             int(snapshot.get("evidence_count") or 0),
             int(snapshot.get("evidence_file_count") or 0),
             len(snapshot.get("evidence_files") or []),
+            len(per_file),
         )
     except Exception:
         pass
@@ -139,8 +142,7 @@ def _evidence_paragraph(snapshot: Dict[str, Any]) -> str:
     mismatch = nl.get("mismatch") is True
 
     # Per-file details (richer data stored by _extract_evidence_per_file_summary)
-    per_file: List[Dict[str, Any]] = evid.get("per_file") or []
-
+    
     # Build one sentence per file
     file_lines: List[str] = []
     any_failed = False

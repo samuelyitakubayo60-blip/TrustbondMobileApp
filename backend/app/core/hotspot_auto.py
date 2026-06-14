@@ -1833,12 +1833,12 @@ def _create_geographic_hotspots(
         noise_indices = [i for i, lbl in enumerate(labels) if lbl < 0]
         noise_pts = [group_pts[i] for i in noise_indices]
         leftover_noise: List[Dict[str, Any]] = []
-        if len(noise_pts) >= 2:
+        if len(noise_pts) >= dbscan_min_pts:
             logger.debug(
                 "[hotspot] group=%s: re-clustering %d noise points (spatial-only)",
                 group_name, len(noise_pts),
             )
-            n_labels, n_core = _st_dbscan(noise_pts, eps_m, 0.0, max(2, dbscan_min_pts))
+            n_labels, n_core = _st_dbscan(noise_pts, eps_m, 0.0, dbscan_min_pts)
             n_clusters: Dict[int, List[Dict[str, Any]]] = {}
             for ni, nlbl in enumerate(n_labels):
                 if nlbl < 0:
@@ -1850,7 +1850,7 @@ def _create_geographic_hotspots(
             noise_clusters_created = 0
             noise_clusters_attached = 0
             for cluster_pts in n_clusters.values():
-                if len(cluster_pts) < 2:
+                if len(cluster_pts) < dbscan_min_pts:
                     leftover_noise.extend(cluster_pts)
                     continue
                 incident_count = len(cluster_pts)

@@ -818,6 +818,9 @@ def _build_ai_analysis_snapshot(
                 description_credibility if isinstance(description_credibility, dict) else {}
             ),
         },
+        "evidence_count": int(evidence_count or 0),
+        "evidence_file_count": evidence_file_count,
+        "evidence_files": evidence_validations,
         "rules": {
             "triggered": rules_triggered,
             "hard_gates": hard_gates,

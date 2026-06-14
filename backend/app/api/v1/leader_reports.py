@@ -293,16 +293,19 @@ def verify_report(
     r.leader_verification_note = (payload.note or "").strip()[:500] if payload.note else None
 
     # Leader confirmation is sufficient for map display.
-    if decision == "confirmed" and r.verification_status not in ("rejected",):
+    if decision == "confirmed":
         r.verification_status = "verified"
         r.status = "verified"
-        if r.rule_status not in ("rejected", "passed"):
+        if r.rule_status not in ("passed",):
             r.rule_status = "passed"
+        r.is_flagged = False
+        r.flag_reason = None
     elif decision == "rejected":
         r.verification_status = "rejected"
         r.status = "rejected"
         r.is_flagged = True
         r.flag_reason = r.flag_reason or "rejected_by_local_leader"
+        r.rule_status = "rejected"
 
     # ── Update ML trust score based on leader decision ──────────────────────
     # confirmed: raise score to AT LEAST 90 (workflow rule: AI + leader only,
