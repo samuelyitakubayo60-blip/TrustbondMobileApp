@@ -3742,11 +3742,18 @@ def create_report(
                 )
                 _persist_ai_analysis_snapshot(r, snapshot)
 
+            # Flush so evidence rows are visible to queries and relationships
+            db.flush()
+            evidence_files_for_pipeline = (
+                db.query(EvidenceFile)
+                .filter(EvidenceFile.report_id == report.report_id)
+                .all()
+            )
             pipeline_result = run_citizen_verification_pipeline(
                 db,
                 report,
                 device,
-                evidence_files=list(getattr(report, "evidence_files", []) or []),
+                evidence_files=evidence_files_for_pipeline,
                 evidence_validations=evidence_validations,
                 evidence_metadata_list=evidence_metadata_list,
                 compute_scorecard_fn=_compute_threshold_scorecard,

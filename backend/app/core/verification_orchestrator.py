@@ -358,6 +358,9 @@ def store_pipeline_trust_score(
         .first()
     )
     if ml_prediction is not None:
+        # Don't overwrite leader/human override scores (is_final=True)
+        if getattr(ml_prediction, "is_final", False) and getattr(ml_prediction, "model_type", None) in ("leader_override", "human_override"):
+            return unified_validation
         ml_prediction.trust_score = score_decimal
         ml_prediction.prediction_label = label
         explanation = ml_prediction.explanation if isinstance(ml_prediction.explanation, dict) else {}
@@ -463,18 +466,13 @@ def rule_adjusted_trust_label(
     if rule_status == "rejected":
         return score, "fake"
     # 3-tier label: 70-100 likely_real, 40-69 suspicious, 0-39 fake
-    # Flags don't change the label — the score determines it.
-    if rule_status == "flagged" or is_flagged:
-        if score is not None and score >= 70.0:
-            if label is None:
-                label = "likely_real"
-        elif score is not None and score >= 40.0:
-            if label is None:
-                label = "suspicious"
-        else:
-            if label in (None, "likely_real", "suspicious"):
-                label = "fake"
-        return score, label
+    # Score always determines the label — override any stale/mismatched label.
+    if score is not None and score >= 70.0:
+        label = "likely_real"
+    elif score is not None and score >= 40.0:
+        label = "suspicious"
+    else:
+        label = "fake"
     return score, label
 
 
@@ -692,6 +690,26 @@ def run_citizen_verification_pipeline(
     Trust scoring only happens after Stages 1-4 pass.
     """
     import time
+
+    # ── Respect leader/human final decisions ─────────────────────────────────
+    ml_pred_check = resolve_ml_prediction_for_report(report)
+    if (
+        ml_pred_check is not None
+        and getattr(ml_pred_check, "is_final", False)
+        and getattr(ml_pred_check, "model_type", None) in ("leader_override", "human_override")
+    ):
+        ai_ts = float(ml_pred_check.trust_score) if ml_pred_check.trust_score is not None else None
+        ai_lbl = getattr(ml_pred_check, "prediction_label", None)
+        return VerificationPipelineResult(
+            unified_validation={}, scorecard={},
+            rule_status=report.rule_status or "passed",
+            is_flagged=bool(report.is_flagged),
+            flag_reason=report.flag_reason,
+            priority=report.priority or "medium",
+            ml_prediction=ml_pred_check,
+            ai_trust_score=ai_ts, ai_label=ai_lbl,
+            final_decision="ACCEPTED" if report.verification_status == "verified" else "REJECTED",
+        )
 
     audit_trail: List[PipelineStageAudit] = []
     fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
