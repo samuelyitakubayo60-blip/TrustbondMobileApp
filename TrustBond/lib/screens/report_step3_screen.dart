@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:exif/exif.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -205,12 +207,26 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
       setState(() => _isRecording = false);
     }
   }
+  Future<void> _pickExistingAudio() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.audio,
+      );
+      if (result != null && result.files.single.path != null) {
+        setState(() => _files.add(_EvidenceFile(path: result.files.single.path!, type: 'audio', isLive: false)));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick audio: $e')),
+      );
+    }
+  }
 
   Future<void> _validateAndAddEvidence(String filePath, String fileType, bool isLiveCapture) async {
     final file = File(filePath);
     final fileName = file.path.split('/').last.toLowerCase();
     
-    // Check for suspicious file patterns
     final suspiciousPatterns = [
       'screenshot', 'screen_shot', 'capture', 'download', 'whatsapp', 
       'telegram', 'instagram', 'facebook', 'twitter', 'saved', 
@@ -219,19 +235,33 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
     
     final hasSuspiciousName = suspiciousPatterns.any((pattern) => fileName.contains(pattern));
     
-    // Check file metadata for creation time vs modification time
+    DateTime? captureDate;
+    if (fileType == 'photo') {
+      try {
+        final bytes = await file.readAsBytes();
+        final tags = await readExifFromBytes(bytes);
+        if (tags.containsKey('Image DateTime')) {
+          final dateString = tags['Image DateTime']?.toString();
+          if (dateString != null) {
+            final formatted = dateString.replaceFirst(':', '-').replaceFirst(':', '-');
+            captureDate = DateTime.tryParse(formatted);
+          }
+        } else if (tags.containsKey('EXIF DateTimeOriginal')) {
+          final dateString = tags['EXIF DateTimeOriginal']?.toString();
+          if (dateString != null) {
+            final formatted = dateString.replaceFirst(':', '-').replaceFirst(':', '-');
+            captureDate = DateTime.tryParse(formatted);
+          }
+        }
+      } catch (_) {}
+    }
+
     final stat = await file.stat();
     final now = DateTime.now();
-    final timeDiff = now.difference(stat.modified);
     
-    // If file was modified recently but created long ago, likely downloaded/copied
-    final isRecentlyModified = timeDiff.inMinutes < 5;
-    final creationTimeDiff = now.difference(stat.accessed);
+    final actualCreationTime = captureDate ?? stat.accessed;
+    final creationTimeDiff = now.difference(actualCreationTime);
     final isOldFile = creationTimeDiff.inHours > 24;
-    
-    // Check file size for typical screenshots
-    final fileSize = await file.length();
-    final isScreenshotSize = fileSize > 500 * 1024 && fileSize < 5 * 1024 * 1024; // 500KB - 5MB
     
     String warningMessage = '';
     bool shouldBlock = false;
@@ -239,17 +269,14 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
     if (hasSuspiciousName) {
       warningMessage = 'This file appears to be from another app or was downloaded. For evidence integrity, please use original photos/videos taken with your camera.';
       shouldBlock = true;
-    } else if (isOldFile && isRecentlyModified) {
-      warningMessage = 'This file was created a while ago but recently modified. This may indicate it was copied from another source. Please use original evidence.';
-      shouldBlock = true;
-    } else if (isScreenshotSize && !isLiveCapture) {
-      warningMessage = 'This appears to be a screenshot. Screenshots can be edited. Please use original photos or videos for better evidence quality.';
-      shouldBlock = false; // Warning but allow
-    } else if (!isLiveCapture) {
-      warningMessage = 'For best evidence quality, original camera captures are preferred. Gallery items may have reduced authenticity.';
-      shouldBlock = false; // Just a gentle warning
+    } else if (isOldFile && !isLiveCapture) {
+      warningMessage = 'This evidence was captured over 24 hours ago. For best evidence quality, original recent camera captures are preferred.';
+      shouldBlock = false;
+    } else if (!isLiveCapture && captureDate == null && fileType == 'photo') {
+      warningMessage = 'Could not verify original capture date from metadata. Gallery items may have reduced authenticity.';
+      shouldBlock = false;
     }
-    
+
     if (warningMessage.isNotEmpty) {
       if (!mounted) return;
       showDialog(
@@ -261,7 +288,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
                 Icon(shouldBlock ? Icons.warning_amber_rounded : Icons.info_outline,
                     size: 18, color: shouldBlock ? AppColors.warn : AppColors.accent),
                 const SizedBox(width: 8),
-                Text(shouldBlock ? 'Evidence Validation Alert' : 'Evidence Quality Notice'),
+                Text(shouldBlock ? 'Evidence Validation Alert' : 'Evidence Quality Notice', style: const TextStyle(fontSize: 14)),
               ],
             ),
             content: Column(
@@ -619,7 +646,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
                     child: _actionChip(
                       _isRecording
                           ? 'Stop ${_recordingDuration.inSeconds}s'
-                          : 'Audio',
+                          : 'Record Audio',
                       _isRecording ? _stopRecording : _pickAudio,
                       icon: _isRecording ? Icons.stop_circle_outlined : Icons.mic_outlined,
                       highlight: _isRecording,
@@ -627,7 +654,11 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
                   ),
                 SizedBox(
                   width: itemWidth,
-                  child: _actionChip('Gallery', _pickGallery, icon: Icons.photo_library_outlined),
+                  child: _actionChip('Gallery Audio', _pickExistingAudio, icon: Icons.audio_file_outlined),
+                ),
+                SizedBox(
+                  width: itemWidth,
+                  child: _actionChip('Gallery Photos', _pickGallery, icon: Icons.photo_library_outlined),
                 ),
               ];
               return Wrap(

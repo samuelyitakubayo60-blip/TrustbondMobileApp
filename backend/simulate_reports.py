@@ -53,7 +53,7 @@ NUM_REPORTS = 400
 MIN_REJECTED = 16
 MIN_PENDING = 80
 NUM_DEVICES = 90
-DAYS_BACK = 45
+DAYS_BACK = 90
 BATCH_SIZE = 50
 
 # Realistic incident type weights (some crimes are more common)
@@ -72,110 +72,44 @@ INCIDENT_WEIGHTS = {
 # Realistic Kinyarwanda/English descriptions per incident type
 DESCRIPTIONS = {
     "Theft": [
-        "Someone broke into a shop near the market and stole electronic items around midnight. Neighbors heard glass breaking.",
-        "A motorcycle was stolen from outside a restaurant while the owner was eating lunch. Security camera may have captured it.",
-        "Multiple phones were reported missing from a charging station near the bus park. This is the third time this month.",
-        "Agricultural tools taken from a storage shed overnight in the village. The lock was cut with bolt cutters.",
-        "A bag was snatched from a woman walking home from the market in the late afternoon. The thief fled on foot towards the hill.",
-        "Shopkeeper reported cash stolen from the register during busy hours. Suspects may have used distraction technique.",
-        "Bicycle left outside a church during Sunday service was found missing afterwards. Owner had tied it to a fence post.",
-        "Small electronics shop was burglarized over the weekend. Glass door was smashed and several items were taken.",
-        "Two goats disappeared from a pen near the road overnight. Tracks suggest they were led away, not wandering.",
-        "Items were taken from an unlocked vehicle parked at the trading center during market day.",
-        "Construction materials were stolen from a building site. Workers noticed missing cement bags in the morning.",
-        "Household items stolen from a compound while family attended a community meeting in the evening.",
-        "Money was taken from a mobile money agent's booth during a brief moment when the agent stepped away.",
-        "Crops were stolen from a field near the main road. Maize and beans harvested by unknown individuals at night.",
-        "Water jerrycans and farming equipment stolen from a community water point storage area.",
+        "At approximately 11:45 PM last night, three unidentified men forced their way into the electronics shop near the main market by shattering the front glass window with a heavy stone. They made off with several smartphones, two laptops, and the cash register containing roughly 50,000 RWF. Neighbors heard the glass breaking and saw them fleeing down the alleyway towards the bus park.",
+        "A red Bajaj Boxer motorcycle (Plate No. RE 342 A) was stolen from outside the 'Good Eats' restaurant between 1:00 PM and 1:30 PM. The owner had locked the steering, but witnesses reported seeing two men load the bike into the back of a white pickup truck before speeding off towards the highway.",
+        "Over the past three days, we have noticed systematic theft of copper wire from the electrical poles along the secondary road to the village. The thieves operate between 2:00 AM and 4:00 AM using professional climbing gear, leaving the entire sector without power.",
+        "Thieves cut through the chain-link fence of the community agricultural storage shed during a heavy rainstorm last night, making off with 15 bags of fertilizer, 5 hoes, and the newly purchased water pump. Tire tracks indicate a medium-sized truck was used to transport the goods.",
+        "While walking home from the market near the hospital junction at 5:30 PM, a woman had her purse violently snatched by two young men riding a motorcycle without license plates. The purse contained her ID card, mobile phone, and business earnings for the week. The suspects wore black helmets obscuring their faces.",
     ],
     "Assault": [
-        "A fight broke out between two groups of young men near the bar. One person was injured with a broken bottle.",
-        "A man was attacked while walking home late at night on the path between the two villages. He sustained head injuries.",
-        "Dispute between neighbors escalated to physical violence over a land boundary issue. Several witnesses present.",
-        "A boda-boda driver was beaten by a passenger who refused to pay the fare. Other drivers intervened.",
-        "Physical altercation at a football field after a match dispute. Three people sustained minor injuries.",
-        "A vendor was assaulted at the market by someone he accused of stealing from his stall. Both parties needed medical attention.",
-        "Group of individuals attacked a man walking near the school compound after dark. Motive unclear.",
-        "Bar fight resulted in injuries to three people. One person was taken to Musanze hospital by neighbors.",
-        "Road rage incident where a truck driver attacked a cyclist who was blocking the road near the junction.",
-        "Person was pushed and hit during an argument at a neighborhood gathering. Witnesses say alcohol was involved.",
+        "A severe physical altercation occurred outside the local bar around 9:00 PM following a dispute over an unpaid debt. A man in his 30s was attacked by two others who used broken beer bottles, resulting in deep lacerations to his arm and face. Bystanders eventually intervened, and the victim was transported to the nearby clinic.",
+        "A boda-boda driver was aggressively beaten by a male passenger who refused to pay the agreed 1,000 RWF fare upon arriving at the destination. The passenger pulled the driver off the bike and punched him repeatedly in the face before running into the nearby neighborhood. Other drivers tried to chase him but lost him in the narrow paths.",
+        "During a community football match on Sunday afternoon, an argument over a referee's decision escalated into a massive brawl involving players and spectators. Wooden sticks and rocks were thrown, leading to at least four individuals sustaining moderate head and limb injuries. The crowd dispersed before local authorities arrived.",
     ],
     "Suspicious Activity": [
-        "Unknown individuals were seen photographing houses and noting entry points in a residential area during early morning hours.",
-        "A vehicle with no license plates was parked near the school for over three hours. No one was seen entering or leaving.",
-        "Several strangers were observed walking around the village at unusual hours asking questions about who lives where.",
-        "Someone was seen testing door handles of parked cars in the trading center parking area around 2am.",
-        "Unfamiliar person was loitering near the ATM for a long time without using it, appearing to watch people enter PINs.",
-        "A group was spotted unloading unmarked packages from a vehicle at night near the abandoned warehouse.",
-        "Someone keeps returning to the same spot near the bank every day without apparent reason, watching customers.",
-        "Unusual vehicle movements late at night on the road leading to the village. Multiple trips back and forth.",
-        "Person was seen climbing over a compound wall and then leaving quickly when spotted by a neighbor.",
-        "Unfamiliar individuals asking shop owners about their closing times and security arrangements.",
-        "A drone was spotted flying over residential areas at night. No one in the community owns one.",
-        "Repeated knocking on doors of houses where residents are known to be away during the day.",
-        "Unknown person was watching children at the school playground from across the road for extended periods.",
-        "Vehicle was seen slowly driving through residential streets multiple times over several days, seemingly surveying.",
+        "For the past three days, a dark blue SUV with tinted windows has been parked near the primary school gates during drop-off and pick-up times. The two occupants never exit the vehicle, but one was seen taking photographs of the children leaving the compound. They drive away quickly if approached.",
+        "A group of four unfamiliar men carrying large, heavy backpacks have been seen moving through the forest path behind the village very late at night. They do not use flashlights and avoid the main roads. This path is not normally used for legitimate travel after dark.",
+        "Several shop owners at the trading center reported that a well-dressed man has been coming in asking very specific questions about their security camera coverage, the times when cash is transported to the bank, and police patrol schedules. He claims to be doing a research project but refuses to show any identification.",
     ],
     "Domestic Violence": [
-        "Neighbors heard screaming and sounds of fighting from a house. A woman was seen leaving with visible injuries.",
-        "A woman sought help at a local leader's home saying her husband had beaten her. She had bruises on her arms.",
-        "Children reported that their father regularly beats their mother when he comes home drunk in the evenings.",
-        "Community health worker reported a case where a woman showed signs of repeated physical abuse during a home visit.",
-        "A woman was locked out of her home by her partner after an argument. She was found sleeping outside by neighbors.",
-        "Elderly parent was neglected and physically mistreated by adult children living in the same household.",
-        "Neighbor heard a child crying for help. Investigation revealed the child was being physically punished severely.",
-        "Woman came to the village office with injuries saying her partner attacked her when she refused to hand over money.",
+        "Frequent and severe screaming has been heard coming from the house at the end of the street for the past three nights. This morning, the wife was seen at the communal water tap with a heavily swollen eye and bruised arms. The children are crying continuously, and the husband was heard threatening further violence if anyone interferes.",
+        "An elderly woman living with her adult son is being systematically denied food and subjected to verbal and physical abuse to force her to hand over her pension money. Neighbors report hearing the son shouting and throwing objects inside the house, and the mother appears visibly malnourished and afraid.",
     ],
     "Drug Activity": [
-        "Young people are regularly gathering behind the abandoned building near the market. Strong smell of cannabis in the area.",
-        "Suspected drug dealing observed near the school entrance during morning hours. Multiple exchanges of small packages.",
-        "Unknown substances found discarded in plastic bags near the community water source. Appears to be drug paraphernalia.",
-        "Residents report increased drug use among youth in the area. Needles found near the football field.",
-        "A house in the neighborhood is suspected of being used for drug distribution. Frequent visitors at unusual hours.",
-        "Cannabis plants found growing in a hidden garden plot near the river. Estimated 20-30 plants.",
-        "Young men seen exchanging small packages for money near the bus stop on multiple occasions this week.",
-        "Strong chemical smell coming from a residence at night. Neighbors suspect production of illegal substances.",
+        "A coordinated drug distribution ring appears to be operating out of the abandoned half-built structure behind the old market. Every evening between 6:00 PM and 10:00 PM, dozens of youths arrive, briefly meet with two men standing at the entrance, exchange money for small wrapped packages, and leave immediately. There is a persistent strong smell of cannabis in the immediate vicinity.",
+        "We found several discarded syringes and empty small plastic baggies scattered around the children's playground near the community center this morning. Last night, a group of unruly teenagers were seen congregating there, playing loud music and passing around what appeared to be illegal substances.",
     ],
     "Vandalism": [
-        "Several windows of the local school were broken overnight. Glass and stones found inside classrooms.",
-        "Street lights along the main road were deliberately damaged. Three poles had their wiring cut.",
-        "A community notice board was torn down and vandalized with graffiti during the night.",
-        "Water pipes leading to the public tap were cut, causing flooding and water shortage for the village.",
-        "Walls of the health center were spray-painted with offensive messages over the weekend.",
-        "Someone deliberately damaged crops in a field near the road, cutting down banana plants with a machete.",
-        "Public toilet facility had its door broken and fixtures damaged. Unusable until repaired.",
-        "Church windows were smashed and chairs broken inside. Entry through a side door that was forced open.",
-        "Road signs were bent and knocked over along the stretch near the junction. Appears intentional.",
-        "Community garden fence was torn down and some plants uprooted during the night.",
+        "Over the weekend, vandals targeted the newly constructed community health center. They spray-painted offensive symbols on the main entrance doors, smashed five windows in the waiting area, and deliberately broke the external water pipes, causing severe flooding in the courtyard and delaying medical services.",
+        "The public solar-powered street lights installed along the main pathway were intentionally destroyed last night. The perpetrators climbed the poles to smash the solar panels and cut the internal wiring, leaving the entire neighborhood in complete darkness and increasing the risk of night-time crimes.",
     ],
     "Fraud/Scam": [
-        "Mobile money agent reported customers being scammed by fake mobile money messages asking them to send confirmation codes.",
-        "Someone is impersonating a government official collecting fees for a non-existent program door to door.",
-        "Fake agricultural cooperative representatives collected membership fees from farmers and disappeared.",
-        "Online marketplace scam where a seller collected payment but never delivered the goods. Multiple victims identified.",
-        "A person was tricked into sending money for a fake job opportunity abroad. Communication was via WhatsApp.",
-        "Residents warned of phone scam where callers claim to be from the bank and request account details.",
-        "Someone sold counterfeit medicine at the local market claiming it was from a hospital pharmacy.",
-        "Pyramid scheme operating in the area promising high returns on small investments. Several people lost money.",
-        "Forged documents being used to claim ownership of land that belongs to another family.",
+        "A highly organized scam is targeting elderly residents in the district. Two individuals claiming to be government agricultural officers are going door-to-door, requiring a 'mandatory registration fee' of 5,000 RWF to receive subsidized fertilizer for the upcoming planting season. They issue fake receipts with a forged official stamp and disappear with the money.",
+        "A fake mobile money agent operating near the bus park is tricking people into initiating transfers to his number, claiming the network is down and he needs to manually process it. He takes the cash, pretends to send the money, but sends a fake SMS confirmation from a regular phone number. Several travelers have already lost their money.",
     ],
     "Harassment": [
-        "A woman reported being followed home from work multiple times by an unknown man on a motorcycle.",
-        "Students reported verbal harassment from adults near the school gate during morning drop-off times.",
-        "A market vendor is being repeatedly intimidated by competitors trying to force them to leave their selling spot.",
-        "Someone is sending threatening messages to a business owner demanding protection payments.",
-        "A tenant reported ongoing harassment from their landlord trying to force them to move out before lease ends.",
-        "Woman reported catcalling and intimidation while walking on the main road. Multiple incidents over weeks.",
-        "Street vendor harassed by group of youth demanding free items. Threats were made when vendor refused.",
-        "Repeated threatening phone calls received by a community leader regarding their role in resolving disputes.",
+        "A young woman is being relentlessly stalked by an older man who waits for her outside her workplace every evening. He follows her all the way to her bus stop, making inappropriate and threatening comments about knowing where she lives. Despite being told to stop by her coworkers, he has escalated to sending her anonymous threatening text messages.",
+        "Local market vendors are facing extreme intimidation from a group of youths demanding a weekly 'protection fee' of 2,000 RWF per stall. If a vendor refuses, the group surrounds their stall, harasses their customers, and threatens to destroy their merchandise overnight. The vendors are terrified to report this formally out of fear of retaliation.",
     ],
     "Traffic Incident": [
-        "Motorcycle collided with a pedestrian at the intersection near the market. Pedestrian sustained leg injuries.",
-        "Vehicle lost control on the wet road and hit a roadside vendor's stand. No serious injuries but property damaged.",
-        "A truck was driving at excessive speed through the residential area. Nearly hit children playing near the road.",
-        "Hit-and-run incident where a car struck a cyclist and fled the scene. Witnesses noted a partial plate number.",
-        "Two boda-bodas collided at the roundabout. One driver was thrown off and needed hospital attention.",
-        "Vehicle parked illegally blocking emergency access to the health center. Repeated issue with same vehicle.",
+        "A severe hit-and-run accident occurred at the main intersection near the hospital. A speeding white Toyota Corolla ignored the stop sign and violently struck a pedestrian crossing the road, throwing them several meters. The driver did not stop but accelerated away. The vehicle has significant damage to its right front headlight, and witnesses recorded part of the license plate ending in '45 B'.",
     ],
 }
 
@@ -503,11 +437,27 @@ def build_village_pools(db):
     if not villages:
         raise RuntimeError("No villages with coordinates found in DB")
 
+    today_target_rows = db.execute(
+        text(
+            """
+            SELECT location_id FROM locations WHERE location_type = 'village' AND parent_location_id IN (
+                SELECT location_id FROM locations WHERE location_type = 'cell' AND parent_location_id IN (
+                    SELECT location_id FROM locations WHERE location_name IN ('Muhoza', 'Cyuve') AND location_type = 'sector'
+                )
+            )
+            """
+        )
+    ).fetchall()
+    today_target_ids = {r[0] for r in today_target_rows}
+    today_target_villages = [v for v in villages if v.location_id in today_target_ids]
+    if not today_target_villages:
+        today_target_villages = villages
+
     hotspot_villages = random.sample(villages, min(NUM_HOTSPOT_VILLAGES, len(villages)))
     hotspot_ids = {v.location_id for v in hotspot_villages}
 
     logger.info("Loaded %d villages, %d designated as hotspot villages", len(villages), len(hotspot_ids))
-    return villages, hotspot_villages, hotspot_ids
+    return villages, hotspot_villages, hotspot_ids, today_target_villages
 
 
 def pick_village(villages, hotspot_villages, hotspot_ids):
@@ -893,7 +843,7 @@ def seed_operational_data(
     it_map = {it.incident_type_id: it.type_name for it in incident_types}
     it_by_name = {it.type_name: it for it in incident_types}
 
-    villages, hotspot_villages, hotspot_ids = build_village_pools(db)
+    villages, hotspot_villages, hotspot_ids, today_target_villages = build_village_pools(db)
 
     from app.models.police_user import PoliceUser
     from app.models.station import Station
@@ -929,14 +879,24 @@ def seed_operational_data(
     for bucket, _target_score in score_plan:
         device = random.choice(devices)
         inc_type = random.choice(weighted_types)
-        village = pick_village(villages, hotspot_villages, hotspot_ids)
+        # 20 reports generated for today in Muhoza/Cyuve, rest over the specified period
+        is_today_report = i < 20
+        if is_today_report:
+            village = random.choice(today_target_villages)
+        else:
+            village = pick_village(villages, hotspot_villages, hotspot_ids)
+            
         sector_id, _cell_id = get_sector_cell_for_village(db, village)
 
         lat = jitter_coord(village.centroid_lat, spread=0.002)
         lng = jitter_coord(village.centroid_long, spread=0.002)
 
         leader_since = leader_village_since.get(int(village.location_id))
-        reported_at = report_time_for_bucket(now, days_back, bucket, leader_since)
+        
+        if is_today_report:
+            reported_at = now - timedelta(hours=random.uniform(0, 24))
+        else:
+            reported_at = report_time_for_bucket(now, days_back, bucket, leader_since)
         description = description_for_bucket(bucket, inc_type.type_name)
 
         tags_pool = CONTEXT_TAGS_POOL.get(inc_type.type_name, [[]])
