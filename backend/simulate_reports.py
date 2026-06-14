@@ -876,7 +876,7 @@ def seed_operational_data(
     flagged_count = 0
     rejected_count = 0
 
-    for bucket, _target_score in score_plan:
+    for i, (bucket, _target_score) in enumerate(score_plan):
         device = random.choice(devices)
         inc_type = random.choice(weighted_types)
         # 20 reports generated for today in Muhoza/Cyuve, rest over the specified period
