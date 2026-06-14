@@ -93,7 +93,6 @@ def list_leader_reports(
             .joinedload(Location.parent),
         )
         .filter(Report.village_location_id.in_(covered_villages))
-        .filter(Report.reported_at >= current_leader.created_at)
         .order_by(Report.reported_at.desc())
     )
     # Never show AI-rejected reports in the leader inbox — only flagged/under_review ones need review
@@ -185,9 +184,6 @@ def get_leader_report_detail(
 
     if r.village_location_id is None or int(r.village_location_id) not in covered_villages:
         raise HTTPException(status_code=403, detail="Not allowed for this location")
-
-    if current_leader.created_at and r.reported_at < current_leader.created_at:
-        raise HTTPException(status_code=403, detail="Report predates leader registration")
 
     vname = getattr(r.village_location, "location_name", None) if r.village_location else None
     cell_name = None
@@ -289,9 +285,6 @@ def verify_report(
 
     if r.village_location_id is None or int(r.village_location_id) not in covered_villages:
         raise HTTPException(status_code=403, detail="Not allowed for this location")
-
-    if current_leader.created_at and r.reported_at < current_leader.created_at:
-        raise HTTPException(status_code=403, detail="Report predates leader registration")
 
     now = datetime.now(timezone.utc)
     r.leader_verification_status = decision

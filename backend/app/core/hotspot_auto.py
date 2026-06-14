@@ -548,55 +548,6 @@ def _corroboration_score(pts: List[Dict[str, Any]], min_reporters: int = 2) -> f
 
 # ─── Improvement 3: Adaptive clustering radius ────────────────────────────────
 
-def _adaptive_radius_meters(
-    pts: List[Dict[str, Any]],
-    *,
-    base_radius: float = DEFAULT_RADIUS_METERS,
-) -> float:
-    """
-    Derive a clustering radius suited to the geographic density of the input
-    points.  The user-provided base_radius is always respected as a floor —
-    adaptive logic can only *widen* beyond the user's explicit choice, never
-    shrink below it.
-
-    Heuristic:
-      - Sample pairwise distances across up to 25 points.
-      - If the median pair-distance < 200 m  → dense; use base_radius (user floor).
-      - If the median pair-distance > 800 m  → sparse; widen proportionally.
-      - Otherwise                            → keep base_radius.
-
-    The result is clamped to [base_radius, 10 000 m].
-    """
-    n = len(pts)
-    if n < 3:
-        return base_radius
-
-    sample = pts[: min(25, n)]
-    dists: List[float] = []
-    for i, p in enumerate(sample):
-        for j in range(i + 1, len(sample)):
-            q = sample[j]
-            dists.append(_haversine_meters(p["lat"], p["lon"], q["lat"], q["lon"]))
-
-    if not dists:
-        return base_radius
-
-    dists.sort()
-    median_d = dists[len(dists) // 2]
-
-    if median_d > 800:
-        # Sparse points — widen slightly but cap at 1.25x base to prevent
-        # district-wide mega-clusters when points are uniformly scattered.
-        adaptive = max(base_radius, min(base_radius * 1.25, median_d * 0.8))
-    else:
-        adaptive = base_radius
-
-    # Never go below the user's requested radius
-    adaptive = max(base_radius, adaptive)
-    # Upper safety cap at 10 km
-    adaptive = min(10000.0, adaptive)
-
-    return round(adaptive, 0)
 
 
 # ─── Improvement 11: Anomaly / abuse detection ────────────────────────────────
@@ -1329,72 +1280,46 @@ def _try_append_report_to_nearby_hotspot(
     lat = float(p["lat"])
     lon = float(p["lon"])
     delta = max(0.001, float(eps_m) / 111000.0)
-    candidates = db.execute(
-        text(
-            """
-            SELECT hotspot_id, center_lat, center_long, incident_count, composition, crime_group
-            FROM hotspots
-            WHERE center_lat BETWEEN :lat_min AND :lat_max
-              AND center_long BETWEEN :lon_min AND :lon_max
-            """
-        ),
-        {
-            "lat_min": lat - delta,
-            "lat_max": lat + delta,
-            "lon_min": lon - delta,
-            "lon_max": lon + delta,
-        },
-    ).fetchall()
+    candidates = (
+        db.query(Hotspot)
+        .filter(
+            Hotspot.center_lat.between(lat - delta, lat + delta),
+            Hotspot.center_long.between(lon - delta, lon + delta),
+        )
+        .all()
+    )
     report_id_str = str(p["report"].report_id)
-    now = datetime.now(timezone.utc)
-    for hid, h_lat, h_lon, inc_count, composition_raw, crime_group in candidates:
-        if _haversine_meters(lat, lon, float(h_lat), float(h_lon)) > eps_m:
+    for h in candidates:
+        if _haversine_meters(lat, lon, float(h.center_lat), float(h.center_long)) > eps_m:
             continue
         exists = db.execute(
             text(
                 "SELECT 1 FROM hotspot_reports WHERE hotspot_id = :hid AND report_id = :rid"
             ),
-            {"hid": hid, "rid": report_id_str},
+            {"hid": h.hotspot_id, "rid": report_id_str},
         ).fetchone()
         if exists:
             return True
         i_name = p.get("incident_type_name") or "Unknown"
         composition: Dict[str, int] = {}
         try:
-            composition = json.loads(composition_raw) if composition_raw else {}
+            composition = json.loads(h.composition) if h.composition else {}
         except Exception:
             composition = {}
         composition[i_name] = composition.get(i_name, 0) + 1
-        new_count = int(inc_count or 0) + 1
-        new_crime_group = crime_group
-        if crime_group and crime_group != group_name:
-            new_crime_group = "mixed"
-        db.execute(
-            text(
-                """
-                UPDATE hotspots
-                SET incident_count = :cnt,
-                    composition = :comp,
-                    detected_at = :detected_at,
-                    crime_group = :crime_group
-                WHERE hotspot_id = :hid
-                """
-            ),
-            {
-                "cnt": new_count,
-                "comp": json.dumps(composition),
-                "detected_at": now,
-                "crime_group": new_crime_group,
-                "hid": hid,
-            },
-        )
+        new_count = int(h.incident_count or 0) + 1
+        h.incident_count = new_count
+        h.composition = json.dumps(composition)
+        h.detected_at = datetime.now(timezone.utc)
+        if h.crime_group and h.crime_group != group_name:
+            h.crime_group = "mixed"
         db.execute(
             text(
                 "INSERT INTO hotspot_reports (hotspot_id, report_id, is_core) "
                 "VALUES (:hid, :rid, true) "
                 "ON CONFLICT (hotspot_id, report_id) DO NOTHING"
             ),
-            {"hid": hid, "rid": report_id_str},
+            {"hid": h.hotspot_id, "rid": report_id_str},
         )
         db.flush()
         return True
@@ -1509,16 +1434,8 @@ def _create_geographic_hotspots(
     6. Post-processing: detect multi-crime zones (Improvement 2).
     7. Record lifecycle events in hotspot_events (Improvement 12).
     """
-    # ── Improvement 3: adaptive radius ──────────────────────────────────────
-    # Compute a density-aware radius from the report point cloud.
-    # Falls back to radius_meters when too few points for meaningful sampling.
-    eps_m = _adaptive_radius_meters(reports, base_radius=max(50.0, float(radius_meters)))
-    if abs(eps_m - float(radius_meters)) > 50:
-        logger.info(
-            "[hotspot] adaptive radius: requested=%.0fm → adaptive=%.0fm "
-            "(density-adjusted for %d reports)",
-            radius_meters, eps_m, len(reports),
-        )
+    # Strict application of dbscan.epsilon (radius) from settings
+    eps_m = float(radius_meters)
     # Temporal epsilon scaling:
     #   < 168 h  (< 1 week):  eps_t = window/4, clamped 6 h – 72 h
     #   168–720 h (1 wk–1 mo): eps_t = window/4, no 72 h cap — proportional
@@ -1531,7 +1448,7 @@ def _create_geographic_hotspots(
     else:
         raw_eps_t = float(time_window_hours) * 3600 / 4
         eps_t = max(6 * 3600, min(72 * 3600, raw_eps_t))
-    dbscan_min_pts = max(4, int(min_incidents))
+    dbscan_min_pts = int(min_incidents)
 
     logger.info(
         "[hotspot] DBSCAN params — eps_m=%.0fm, eps_t=%.1fh, min_pts=%d, "

@@ -1,22 +1,17 @@
 """
-Reset operational data and seed realistic incident reports for Musanze district.
+Simulate ~1000 realistic incident reports across Musanze district.
 
-Usage (inside container / backend folder):
+Usage (inside container):
     python simulate_reports.py
-    python simulate_reports.py --no-clear          # seed only
-    python simulate_reports.py --dry-run-clear     # preview counts
 
-Preserves: police_users, incident_types, locations, stations, local_leaders,
-           system_config, special_assignment_units.
-
-Clears: reports (+ related), hotspots, devices, audit_logs, sessions.
-Keeps up to 2 reports dated tomorrow (UTC), then seeds 400 new reports through the
-real 5-stage verification pipeline (AI summaries, scorecards, ML predictions).
-Target mix via description quality: ≥16 rejected, ≥80 pending, remainder verified.
+- Creates new devices with varied trust profiles
+- Distributes reports across all villages with realistic geographic jitter
+- Uses the real verification pipeline (AI auto-verification)
+- Triggers notifications for flagged/pending reports
+- Creates cases for high-severity clusters
+- No evidence files — reports rely on description quality for ML scoring
 """
 
-import argparse
-from types import SimpleNamespace
 import os
 import sys
 import uuid
@@ -35,25 +30,19 @@ from app.models.report import Report
 from app.models.device import Device
 from app.models.location import Location
 from app.models.incident_type import IncidentType
+from app.models.ml_prediction import MLPrediction
 from app.models.notification import Notification
 from app.models.case import Case, CaseReport
 from app.models.local_leader import LocalLeader
-from app.core.operational_data_reset import (
-    clear_operational_data,
-    find_preserved_report_ids,
-)
-from app.core.leader_workflow import leader_covered_village_ids
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger("simulate")
 
 # ─── Configuration ──────────────────────────────────────────────────────────────
 
-NUM_REPORTS = 400
-MIN_REJECTED = 16
-MIN_PENDING = 80
-NUM_DEVICES = 90
-DAYS_BACK = 90
+NUM_REPORTS = 1000
+NUM_DEVICES = 180          # ~5-6 reports per device on average
+DAYS_BACK = 45             # Reports spread over 45 days
 BATCH_SIZE = 50
 
 # Realistic incident type weights (some crimes are more common)
@@ -72,65 +61,112 @@ INCIDENT_WEIGHTS = {
 # Realistic Kinyarwanda/English descriptions per incident type
 DESCRIPTIONS = {
     "Theft": [
-        "At approximately 11:45 PM last night, three unidentified men forced their way into the electronics shop near the main market by shattering the front glass window with a heavy stone. They made off with several smartphones, two laptops, and the cash register containing roughly 50,000 RWF. Neighbors heard the glass breaking and saw them fleeing down the alleyway towards the bus park.",
-        "A red Bajaj Boxer motorcycle (Plate No. RE 342 A) was stolen from outside the 'Good Eats' restaurant between 1:00 PM and 1:30 PM. The owner had locked the steering, but witnesses reported seeing two men load the bike into the back of a white pickup truck before speeding off towards the highway.",
-        "Over the past three days, we have noticed systematic theft of copper wire from the electrical poles along the secondary road to the village. The thieves operate between 2:00 AM and 4:00 AM using professional climbing gear, leaving the entire sector without power.",
-        "Thieves cut through the chain-link fence of the community agricultural storage shed during a heavy rainstorm last night, making off with 15 bags of fertilizer, 5 hoes, and the newly purchased water pump. Tire tracks indicate a medium-sized truck was used to transport the goods.",
-        "While walking home from the market near the hospital junction at 5:30 PM, a woman had her purse violently snatched by two young men riding a motorcycle without license plates. The purse contained her ID card, mobile phone, and business earnings for the week. The suspects wore black helmets obscuring their faces.",
+        "Someone broke into a shop near the market and stole electronic items around midnight. Neighbors heard glass breaking.",
+        "A motorcycle was stolen from outside a restaurant while the owner was eating lunch. Security camera may have captured it.",
+        "Multiple phones were reported missing from a charging station near the bus park. This is the third time this month.",
+        "Agricultural tools taken from a storage shed overnight in the village. The lock was cut with bolt cutters.",
+        "A bag was snatched from a woman walking home from the market in the late afternoon. The thief fled on foot towards the hill.",
+        "Shopkeeper reported cash stolen from the register during busy hours. Suspects may have used distraction technique.",
+        "Bicycle left outside a church during Sunday service was found missing afterwards. Owner had tied it to a fence post.",
+        "Small electronics shop was burglarized over the weekend. Glass door was smashed and several items were taken.",
+        "Two goats disappeared from a pen near the road overnight. Tracks suggest they were led away, not wandering.",
+        "Items were taken from an unlocked vehicle parked at the trading center during market day.",
+        "Construction materials were stolen from a building site. Workers noticed missing cement bags in the morning.",
+        "Household items stolen from a compound while family attended a community meeting in the evening.",
+        "Money was taken from a mobile money agent's booth during a brief moment when the agent stepped away.",
+        "Crops were stolen from a field near the main road. Maize and beans harvested by unknown individuals at night.",
+        "Water jerrycans and farming equipment stolen from a community water point storage area.",
     ],
     "Assault": [
-        "A severe physical altercation occurred outside the local bar around 9:00 PM following a dispute over an unpaid debt. A man in his 30s was attacked by two others who used broken beer bottles, resulting in deep lacerations to his arm and face. Bystanders eventually intervened, and the victim was transported to the nearby clinic.",
-        "A boda-boda driver was aggressively beaten by a male passenger who refused to pay the agreed 1,000 RWF fare upon arriving at the destination. The passenger pulled the driver off the bike and punched him repeatedly in the face before running into the nearby neighborhood. Other drivers tried to chase him but lost him in the narrow paths.",
-        "During a community football match on Sunday afternoon, an argument over a referee's decision escalated into a massive brawl involving players and spectators. Wooden sticks and rocks were thrown, leading to at least four individuals sustaining moderate head and limb injuries. The crowd dispersed before local authorities arrived.",
+        "A fight broke out between two groups of young men near the bar. One person was injured with a broken bottle.",
+        "A man was attacked while walking home late at night on the path between the two villages. He sustained head injuries.",
+        "Dispute between neighbors escalated to physical violence over a land boundary issue. Several witnesses present.",
+        "A boda-boda driver was beaten by a passenger who refused to pay the fare. Other drivers intervened.",
+        "Physical altercation at a football field after a match dispute. Three people sustained minor injuries.",
+        "A vendor was assaulted at the market by someone he accused of stealing from his stall. Both parties needed medical attention.",
+        "Group of individuals attacked a man walking near the school compound after dark. Motive unclear.",
+        "Bar fight resulted in injuries to three people. One person was taken to Musanze hospital by neighbors.",
+        "Road rage incident where a truck driver attacked a cyclist who was blocking the road near the junction.",
+        "Person was pushed and hit during an argument at a neighborhood gathering. Witnesses say alcohol was involved.",
     ],
     "Suspicious Activity": [
-        "For the past three days, a dark blue SUV with tinted windows has been parked near the primary school gates during drop-off and pick-up times. The two occupants never exit the vehicle, but one was seen taking photographs of the children leaving the compound. They drive away quickly if approached.",
-        "A group of four unfamiliar men carrying large, heavy backpacks have been seen moving through the forest path behind the village very late at night. They do not use flashlights and avoid the main roads. This path is not normally used for legitimate travel after dark.",
-        "Several shop owners at the trading center reported that a well-dressed man has been coming in asking very specific questions about their security camera coverage, the times when cash is transported to the bank, and police patrol schedules. He claims to be doing a research project but refuses to show any identification.",
+        "Unknown individuals were seen photographing houses and noting entry points in a residential area during early morning hours.",
+        "A vehicle with no license plates was parked near the school for over three hours. No one was seen entering or leaving.",
+        "Several strangers were observed walking around the village at unusual hours asking questions about who lives where.",
+        "Someone was seen testing door handles of parked cars in the trading center parking area around 2am.",
+        "Unfamiliar person was loitering near the ATM for a long time without using it, appearing to watch people enter PINs.",
+        "A group was spotted unloading unmarked packages from a vehicle at night near the abandoned warehouse.",
+        "Someone keeps returning to the same spot near the bank every day without apparent reason, watching customers.",
+        "Unusual vehicle movements late at night on the road leading to the village. Multiple trips back and forth.",
+        "Person was seen climbing over a compound wall and then leaving quickly when spotted by a neighbor.",
+        "Unfamiliar individuals asking shop owners about their closing times and security arrangements.",
+        "A drone was spotted flying over residential areas at night. No one in the community owns one.",
+        "Repeated knocking on doors of houses where residents are known to be away during the day.",
+        "Unknown person was watching children at the school playground from across the road for extended periods.",
+        "Vehicle was seen slowly driving through residential streets multiple times over several days, seemingly surveying.",
     ],
     "Domestic Violence": [
-        "Frequent and severe screaming has been heard coming from the house at the end of the street for the past three nights. This morning, the wife was seen at the communal water tap with a heavily swollen eye and bruised arms. The children are crying continuously, and the husband was heard threatening further violence if anyone interferes.",
-        "An elderly woman living with her adult son is being systematically denied food and subjected to verbal and physical abuse to force her to hand over her pension money. Neighbors report hearing the son shouting and throwing objects inside the house, and the mother appears visibly malnourished and afraid.",
+        "Neighbors heard screaming and sounds of fighting from a house. A woman was seen leaving with visible injuries.",
+        "A woman sought help at a local leader's home saying her husband had beaten her. She had bruises on her arms.",
+        "Children reported that their father regularly beats their mother when he comes home drunk in the evenings.",
+        "Community health worker reported a case where a woman showed signs of repeated physical abuse during a home visit.",
+        "A woman was locked out of her home by her partner after an argument. She was found sleeping outside by neighbors.",
+        "Elderly parent was neglected and physically mistreated by adult children living in the same household.",
+        "Neighbor heard a child crying for help. Investigation revealed the child was being physically punished severely.",
+        "Woman came to the village office with injuries saying her partner attacked her when she refused to hand over money.",
     ],
     "Drug Activity": [
-        "A coordinated drug distribution ring appears to be operating out of the abandoned half-built structure behind the old market. Every evening between 6:00 PM and 10:00 PM, dozens of youths arrive, briefly meet with two men standing at the entrance, exchange money for small wrapped packages, and leave immediately. There is a persistent strong smell of cannabis in the immediate vicinity.",
-        "We found several discarded syringes and empty small plastic baggies scattered around the children's playground near the community center this morning. Last night, a group of unruly teenagers were seen congregating there, playing loud music and passing around what appeared to be illegal substances.",
+        "Young people are regularly gathering behind the abandoned building near the market. Strong smell of cannabis in the area.",
+        "Suspected drug dealing observed near the school entrance during morning hours. Multiple exchanges of small packages.",
+        "Unknown substances found discarded in plastic bags near the community water source. Appears to be drug paraphernalia.",
+        "Residents report increased drug use among youth in the area. Needles found near the football field.",
+        "A house in the neighborhood is suspected of being used for drug distribution. Frequent visitors at unusual hours.",
+        "Cannabis plants found growing in a hidden garden plot near the river. Estimated 20-30 plants.",
+        "Young men seen exchanging small packages for money near the bus stop on multiple occasions this week.",
+        "Strong chemical smell coming from a residence at night. Neighbors suspect production of illegal substances.",
     ],
     "Vandalism": [
-        "Over the weekend, vandals targeted the newly constructed community health center. They spray-painted offensive symbols on the main entrance doors, smashed five windows in the waiting area, and deliberately broke the external water pipes, causing severe flooding in the courtyard and delaying medical services.",
-        "The public solar-powered street lights installed along the main pathway were intentionally destroyed last night. The perpetrators climbed the poles to smash the solar panels and cut the internal wiring, leaving the entire neighborhood in complete darkness and increasing the risk of night-time crimes.",
+        "Several windows of the local school were broken overnight. Glass and stones found inside classrooms.",
+        "Street lights along the main road were deliberately damaged. Three poles had their wiring cut.",
+        "A community notice board was torn down and vandalized with graffiti during the night.",
+        "Water pipes leading to the public tap were cut, causing flooding and water shortage for the village.",
+        "Walls of the health center were spray-painted with offensive messages over the weekend.",
+        "Someone deliberately damaged crops in a field near the road, cutting down banana plants with a machete.",
+        "Public toilet facility had its door broken and fixtures damaged. Unusable until repaired.",
+        "Church windows were smashed and chairs broken inside. Entry through a side door that was forced open.",
+        "Road signs were bent and knocked over along the stretch near the junction. Appears intentional.",
+        "Community garden fence was torn down and some plants uprooted during the night.",
     ],
     "Fraud/Scam": [
-        "A highly organized scam is targeting elderly residents in the district. Two individuals claiming to be government agricultural officers are going door-to-door, requiring a 'mandatory registration fee' of 5,000 RWF to receive subsidized fertilizer for the upcoming planting season. They issue fake receipts with a forged official stamp and disappear with the money.",
-        "A fake mobile money agent operating near the bus park is tricking people into initiating transfers to his number, claiming the network is down and he needs to manually process it. He takes the cash, pretends to send the money, but sends a fake SMS confirmation from a regular phone number. Several travelers have already lost their money.",
+        "Mobile money agent reported customers being scammed by fake mobile money messages asking them to send confirmation codes.",
+        "Someone is impersonating a government official collecting fees for a non-existent program door to door.",
+        "Fake agricultural cooperative representatives collected membership fees from farmers and disappeared.",
+        "Online marketplace scam where a seller collected payment but never delivered the goods. Multiple victims identified.",
+        "A person was tricked into sending money for a fake job opportunity abroad. Communication was via WhatsApp.",
+        "Residents warned of phone scam where callers claim to be from the bank and request account details.",
+        "Someone sold counterfeit medicine at the local market claiming it was from a hospital pharmacy.",
+        "Pyramid scheme operating in the area promising high returns on small investments. Several people lost money.",
+        "Forged documents being used to claim ownership of land that belongs to another family.",
     ],
     "Harassment": [
-        "A young woman is being relentlessly stalked by an older man who waits for her outside her workplace every evening. He follows her all the way to her bus stop, making inappropriate and threatening comments about knowing where she lives. Despite being told to stop by her coworkers, he has escalated to sending her anonymous threatening text messages.",
-        "Local market vendors are facing extreme intimidation from a group of youths demanding a weekly 'protection fee' of 2,000 RWF per stall. If a vendor refuses, the group surrounds their stall, harasses their customers, and threatens to destroy their merchandise overnight. The vendors are terrified to report this formally out of fear of retaliation.",
+        "A woman reported being followed home from work multiple times by an unknown man on a motorcycle.",
+        "Students reported verbal harassment from adults near the school gate during morning drop-off times.",
+        "A market vendor is being repeatedly intimidated by competitors trying to force them to leave their selling spot.",
+        "Someone is sending threatening messages to a business owner demanding protection payments.",
+        "A tenant reported ongoing harassment from their landlord trying to force them to move out before lease ends.",
+        "Woman reported catcalling and intimidation while walking on the main road. Multiple incidents over weeks.",
+        "Street vendor harassed by group of youth demanding free items. Threats were made when vendor refused.",
+        "Repeated threatening phone calls received by a community leader regarding their role in resolving disputes.",
     ],
     "Traffic Incident": [
-        "A severe hit-and-run accident occurred at the main intersection near the hospital. A speeding white Toyota Corolla ignored the stop sign and violently struck a pedestrian crossing the road, throwing them several meters. The driver did not stop but accelerated away. The vehicle has significant damage to its right front headlight, and witnesses recorded part of the license plate ending in '45 B'.",
+        "Motorcycle collided with a pedestrian at the intersection near the market. Pedestrian sustained leg injuries.",
+        "Vehicle lost control on the wet road and hit a roadside vendor's stand. No serious injuries but property damaged.",
+        "A truck was driving at excessive speed through the residential area. Nearly hit children playing near the road.",
+        "Hit-and-run incident where a car struck a cyclist and fled the scene. Witnesses noted a partial plate number.",
+        "Two boda-bodas collided at the roundabout. One driver was thrown off and needed hospital attention.",
+        "Vehicle parked illegally blocking emergency access to the health center. Repeated issue with same vehicle.",
     ],
 }
-
-WEAK_DESCRIPTIONS = [
-    "something happened",
-    "bad thing",
-    "help",
-    "problem",
-    "incident here",
-    "need police",
-    "theft maybe",
-    "saw something",
-    "not sure what",
-    "urgent",
-    "bad people",
-    "trouble",
-    "call someone",
-    "idk",
-    "happened yesterday",
-    "weird stuff",
-]
 
 # Time-of-day distribution (hour weights — crimes peak in evening/night)
 HOUR_WEIGHTS = {
@@ -190,122 +226,6 @@ def random_report_time(now, days_back):
     second = random.randint(0, 59)
     base = now - timedelta(days=day_offset)
     return base.replace(hour=hour, minute=minute, second=second, microsecond=random.randint(0, 999999))
-
-
-def resolve_distribution_targets(
-    num_reports: int,
-    min_rejected: int = MIN_REJECTED,
-    min_pending: int = MIN_PENDING,
-) -> tuple[int, int]:
-    """Scale rejected/pending targets for small test runs (e.g. --count 10)."""
-    if num_reports >= min_rejected + min_pending:
-        return min_rejected, min_pending
-
-    if num_reports <= 0:
-        return 0, 0
-    if num_reports == 1:
-        return 0, 0
-
-    # Same ratios as full seed: 16/400 rejected, 80/400 pending
-    rejected = max(1, round(num_reports * min_rejected / NUM_REPORTS))
-    pending = max(1, round(num_reports * min_pending / NUM_REPORTS))
-
-    while rejected + pending >= num_reports:
-        if pending >= rejected and pending > 0:
-            pending -= 1
-        elif rejected > 0:
-            rejected -= 1
-        else:
-            break
-
-    return rejected, pending
-
-
-def build_trust_score_plan(
-    num_reports: int = NUM_REPORTS,
-    min_rejected: int = MIN_REJECTED,
-    min_pending: int = MIN_PENDING,
-) -> list[tuple[str, float]]:
-    """Return shuffled (bucket, trust_score) pairs matching planned distribution."""
-    min_rejected, min_pending = resolve_distribution_targets(
-        num_reports, min_rejected, min_pending
-    )
-    verified_count = num_reports - min_rejected - min_pending
-    if verified_count < 0:
-        verified_count = 0
-
-    plan: list[tuple[str, float]] = []
-    for _ in range(min_rejected):
-        plan.append(("rejected", round(random.uniform(12, 39), 2)))
-    for _ in range(min_pending):
-        plan.append(("pending", round(random.uniform(40, 69), 2)))
-    for _ in range(verified_count):
-        plan.append(("verified", round(random.uniform(70, 96), 2)))
-    random.shuffle(plan)
-    return plan
-
-
-def build_leader_village_since_map(db, local_leaders) -> dict[int, datetime]:
-    """Earliest leader registration time per covered village."""
-    village_since: dict[int, datetime] = {}
-    for leader in local_leaders:
-        if not leader.created_at:
-            continue
-        for vid in leader_covered_village_ids(db, leader.local_leader_id):
-            prev = village_since.get(vid)
-            if prev is None or leader.created_at < prev:
-                village_since[vid] = leader.created_at
-    return village_since
-
-
-def report_time_for_bucket(
-    now: datetime,
-    days_back: int,
-    bucket: str,
-    leader_since: datetime | None,
-) -> datetime:
-    """Pending reports must post-date local leader registration in that village."""
-    if bucket == "pending" and leader_since is not None:
-        earliest = leader_since + timedelta(hours=random.randint(2, 48))
-        if earliest >= now:
-            earliest = now - timedelta(hours=random.randint(6, 72))
-        span_seconds = max(3600.0, (now - earliest).total_seconds())
-        reported_at = earliest + timedelta(seconds=random.uniform(0, span_seconds))
-        hour = weighted_choice(HOUR_WEIGHTS)
-        return reported_at.replace(
-            hour=hour,
-            minute=random.randint(0, 59),
-            second=random.randint(0, 59),
-            microsecond=random.randint(0, 999999),
-        )
-    return random_report_time(now, days_back)
-
-
-def enrich_description(base: str, inc_type_name: str) -> str:
-    """Add witness/time/location detail so descriptions read like real submissions."""
-    extras = [
-        " A neighbor witnessed part of the incident and is willing to provide a statement.",
-        " The reporting party included specific times and nearby landmarks.",
-        " Several residents gathered at the scene and confirmed the sequence of events.",
-        " The incident was reported within an hour of occurring.",
-        " Details include clothing descriptions and direction of travel for suspects.",
-        " The reporter noted prior similar incidents in the same area this month.",
-        " Local shop owners confirmed unusual activity matching this description.",
-        " Children playing nearby alerted adults, who then called for assistance.",
-    ]
-    location_hints = [
-        " near the trading center",
-        " along the main village road",
-        " close to the community water point",
-        " behind the market stalls",
-        " near the school compound",
-    ]
-    text_out = base.strip()
-    if random.random() < 0.75:
-        text_out += random.choice(extras)
-    if random.random() < 0.5:
-        text_out += random.choice(location_hints) + "."
-    return text_out
 
 
 def generate_report_number(db, index):
@@ -376,88 +296,24 @@ def create_devices(db, count):
     return devices
 
 
-def load_incident_types(db):
-    """Load incident types; raw SQL fallback when ORM columns lag migrations."""
-    try:
-        rows = (
-            db.query(IncidentType)
-            .filter(IncidentType.is_active.is_(True))
-            .all()
-        )
-        if rows:
-            return rows
-    except Exception:
-        db.rollback()
-        logger.warning("ORM incident_types query failed — using raw SQL fallback")
-
-    raw = db.execute(
-        text(
-            """
-            SELECT incident_type_id, type_name, COALESCE(severity_weight, 1.0) AS severity_weight
-            FROM incident_types
-            WHERE is_active IS NOT FALSE
-            """
-        )
-    ).fetchall()
-    return [
-        SimpleNamespace(
-            incident_type_id=int(r[0]),
-            type_name=str(r[1]),
-            severity_weight=r[2],
-        )
-        for r in raw
-    ]
-
-
 def build_village_pools(db):
-    """Load villages via raw SQL (avoids heavy PostGIS geometry on remote DB)."""
-    rows = db.execute(
-        text(
-            """
-            SELECT location_id, parent_location_id, centroid_lat, centroid_long
-            FROM locations
-            WHERE location_type = 'village'
-              AND is_active IS NOT FALSE
-              AND centroid_lat IS NOT NULL
-              AND centroid_long IS NOT NULL
-            """
-        )
-    ).fetchall()
-
-    villages = [
-        SimpleNamespace(
-            location_id=int(r[0]),
-            parent_location_id=r[1],
-            centroid_lat=r[2],
-            centroid_long=r[3],
-        )
-        for r in rows
-    ]
+    """Load all villages with coordinates and build weighted sampling pools."""
+    villages = db.query(Location).filter(
+        Location.location_type == "village",
+        Location.is_active == True,
+        Location.centroid_lat.isnot(None),
+        Location.centroid_long.isnot(None),
+    ).all()
 
     if not villages:
         raise RuntimeError("No villages with coordinates found in DB")
 
-    today_target_rows = db.execute(
-        text(
-            """
-            SELECT location_id FROM locations WHERE location_type = 'village' AND parent_location_id IN (
-                SELECT location_id FROM locations WHERE location_type = 'cell' AND parent_location_id IN (
-                    SELECT location_id FROM locations WHERE location_name IN ('Muhoza', 'Cyuve') AND location_type = 'sector'
-                )
-            )
-            """
-        )
-    ).fetchall()
-    today_target_ids = {r[0] for r in today_target_rows}
-    today_target_villages = [v for v in villages if v.location_id in today_target_ids]
-    if not today_target_villages:
-        today_target_villages = villages
-
+    # Pick hotspot villages (will get more reports)
     hotspot_villages = random.sample(villages, min(NUM_HOTSPOT_VILLAGES, len(villages)))
     hotspot_ids = {v.location_id for v in hotspot_villages}
 
     logger.info("Loaded %d villages, %d designated as hotspot villages", len(villages), len(hotspot_ids))
-    return villages, hotspot_villages, hotspot_ids, today_target_villages
+    return villages, hotspot_villages, hotspot_ids
 
 
 def pick_village(villages, hotspot_villages, hotspot_ids):
@@ -471,197 +327,123 @@ def get_sector_cell_for_village(db, village):
     """Walk up the location hierarchy to find cell and sector IDs."""
     cell_id = village.parent_location_id
     if cell_id:
-        row = db.execute(
-            text("SELECT parent_location_id FROM locations WHERE location_id = :cid"),
-            {"cid": int(cell_id)},
-        ).first()
-        if row:
-            return row[0], cell_id
+        cell = db.query(Location).get(cell_id)
+        if cell:
+            sector_id = cell.parent_location_id
+            return sector_id, cell_id
     return None, None
 
 
-def description_for_bucket(bucket: str, inc_type_name: str) -> str:
-    """Pick description quality to steer the real verification pipeline."""
-    if bucket == "rejected":
-        return random.choice(WEAK_DESCRIPTIONS)
-    type_descs = DESCRIPTIONS.get(
-        inc_type_name, ["Incident reported in the area with limited detail."]
+def create_ml_prediction(db, report, trust_score):
+    """Create a realistic ML prediction for a report."""
+    if trust_score >= 70:
+        label = "likely_real"
+        confidence = round(random.uniform(72, 98), 2)
+    elif trust_score >= 45:
+        label = random.choice(["likely_real", "suspicious"])
+        confidence = round(random.uniform(50, 78), 2)
+    elif trust_score >= 20:
+        label = "suspicious"
+        confidence = round(random.uniform(30, 55), 2)
+    else:
+        label = "fake"
+        confidence = round(random.uniform(60, 90), 2)
+
+    pred = MLPrediction(
+        prediction_id=uuid.uuid4(),
+        report_id=report.report_id,
+        trust_score=Decimal(str(trust_score)),
+        prediction_label=label,
+        model_version="unified_v3.2",
+        confidence=Decimal(str(confidence)),
+        explanation={
+            "description_quality": round(random.uniform(0.4, 0.95), 3),
+            "device_credibility": round(random.uniform(0.3, 0.9), 3),
+            "location_consistency": round(random.uniform(0.5, 1.0), 3),
+            "temporal_pattern": round(random.uniform(0.3, 0.9), 3),
+        },
+        model_type="unified_aggregation",
+        is_final=True,
+        processing_time=random.randint(80, 2500),
     )
-    base = random.choice(type_descs)
-    if bucket == "verified":
-        return enrich_description(base, inc_type_name)
-    return base
+    db.add(pred)
+    return pred
 
 
-def build_compose_narratives_fn(incident_type_name: str | None = None):
-    """Mirror report submit path so seeded rows get full AI verification narratives."""
-    from app.api.v1.reports import (
-        _build_ai_analysis_snapshot,
-        _compose_ai_verification_reason,
-        _description_credibility_from_report,
-        _human_location_chain_from_report,
-        _persist_ai_analysis_snapshot,
-        _text_only_reason_codes_from_report,
-    )
+def apply_verification(report, trust_score, device_trust):
+    """Apply verification logic matching the real pipeline thresholds."""
+    # Combine report trust + device trust for overall score
+    combined = trust_score * 0.7 + device_trust * 0.3
 
-    def _resolve_incident_type_name(report) -> str | None:
-        if incident_type_name:
-            return incident_type_name
-        rel = getattr(report, "incident_type", None)
-        return getattr(rel, "type_name", None) if rel is not None else None
+    reported_at = report.reported_at
 
-    def compose_narratives(**kwargs):
-        r = kwargs["report"]
-        uv = kwargs["unified_validation"]
-        sc = kwargs["scorecard"]
-        ai_ts = kwargs["ai_trust_score"]
-        ai_lbl = kwargs["ai_label"]
-        ev = kwargs["evidence_validations"]
-        type_name = _resolve_incident_type_name(r)
-        evidence_files_all = list(getattr(r, "evidence_files", []) or [])
-        ec_final = len(evidence_files_all) if evidence_files_all else len(ev or [])
-        sem = (
-            r.feature_vector.get("semantic_alignment")
-            if isinstance(r.feature_vector, dict)
-            else None
-        )
-        r.ai_verification_reason = _compose_ai_verification_reason(
-            verification_status=r.verification_status,
-            rule_status=r.rule_status,
-            is_flagged=r.is_flagged,
-            flag_reason=r.flag_reason,
-            ml_prediction_label=ai_lbl,
-            trust_score=ai_ts,
-            semantic_alignment=sem if isinstance(sem, dict) else None,
-            incident_type_name=type_name,
-            reporter_description=r.description,
-            context_tags=list(getattr(r, "context_tags", None) or []),
-            unified_validation=uv,
-            scorecard=sc,
-            evidence_validations=ev,
-            evidence_file_count=ec_final,
-            latitude=getattr(r, "latitude", None),
-            longitude=getattr(r, "longitude", None),
-            gps_accuracy=getattr(r, "gps_accuracy", None),
-            location_label=_human_location_chain_from_report(r),
-            description_credibility=_description_credibility_from_report(r),
-            text_only_reason_codes=_text_only_reason_codes_from_report(r),
-        )
-        r.ai_evidence_description = None
-        snapshot = _build_ai_analysis_snapshot(
-            verification_status=r.verification_status,
-            rule_status=r.rule_status,
-            is_flagged=r.is_flagged,
-            flag_reason=r.flag_reason,
-            ml_prediction_label=ai_lbl,
-            trust_score=ai_ts,
-            semantic_alignment=sem if isinstance(sem, dict) else None,
-            incident_type_name=type_name,
-            reporter_description=r.description,
-            context_tags=list(getattr(r, "context_tags", None) or []),
-            unified_validation=uv,
-            scorecard=sc,
-            evidence_validations=ev,
-            evidence_file_count=ec_final,
-            latitude=getattr(r, "latitude", None),
-            longitude=getattr(r, "longitude", None),
-            gps_accuracy=getattr(r, "gps_accuracy", None),
-            location_label=_human_location_chain_from_report(r),
-            description_credibility=_description_credibility_from_report(r),
-        )
-        _persist_ai_analysis_snapshot(r, snapshot)
-
-    return compose_narratives
-
-
-def run_seed_verification_pipeline(db, report, device, inc_type):
-    """
-    Run the same 5-stage citizen verification pipeline used on real report submit.
-    Populates threshold_scorecard, ML prediction, ai_verification_reason, and AI snapshot.
-    """
-    from app.api.v1.reports import _compute_threshold_scorecard
-    from app.core.credibility_model import _json_safe
-    from app.core.natural_language_scorer import analyze_description_quality
-    from app.core.report_priority import apply_anti_fraud_rules
-    from app.core.verification_orchestrator import (
-        build_text_only_validation_from_nl,
-        run_citizen_verification_pipeline,
-    )
-
-    type_name = inc_type.type_name
-    type_description = getattr(inc_type, "description", "") or ""
-
-    try:
-        nl = analyze_description_quality(
-            report.description or "",
-            type_name,
-            type_description,
-        )
-        fv = report.feature_vector if isinstance(report.feature_vector, dict) else {}
-        fv["text_only_nl"] = {
-            "overall_score": float(getattr(nl, "overall_score", 0.0) or 0.0),
-            "confidence": float(getattr(nl, "confidence", 0.0) or 0.0),
-            "semantic_similarity": float(getattr(nl, "semantic_similarity_score", 0.0) or 0.0),
-            "description_quality": float(getattr(nl, "description_quality_score", 0.0) or 0.0),
-        }
-        fv["text_only_validation"] = build_text_only_validation_from_nl(nl)
-        report.feature_vector = _json_safe(fv)
-    except Exception as exc:
-        logger.warning("Text-only NL analysis failed for %s: %s", report.report_id, exc)
-
-    pre_rule_status, _pre_flagged, pre_reason = apply_anti_fraud_rules(report, 0, db)
-    if pre_rule_status == "rejected":
+    if combined >= 70:
+        # High confidence — auto-verify + leader confirmed
+        report.rule_status = "passed"
+        report.verification_status = "verified"
+        report.status = "verified"
+        report.is_flagged = False
+        report.ai_verification_reason = "AI auto-verified: high trust score with consistent indicators"
+        report.leader_verification_status = "confirmed"
+        report.leader_verified_at = reported_at + timedelta(hours=random.randint(1, 24))
+        report.leader_verification_note = random.choice([
+            "Confirmed by community leader. Incident is known in the area.",
+            "Verified through community channels. Details consistent.",
+            "Community confirms this incident occurred as described.",
+            "Local leader confirmed after speaking with witnesses.",
+            None,
+        ])
+    elif combined >= 45:
+        # Medium — some verified, some under review
+        if random.random() < 0.65:
+            report.rule_status = "passed"
+            report.verification_status = "verified"
+            report.status = "verified"
+            report.is_flagged = False
+            report.ai_verification_reason = "AI verified: adequate trust indicators meet threshold"
+            # ~70% of medium-verified also get leader confirmation
+            if random.random() < 0.7:
+                report.leader_verification_status = "confirmed"
+                report.leader_verified_at = reported_at + timedelta(hours=random.randint(2, 48))
+            else:
+                report.leader_verification_status = "pending"
+        else:
+            report.rule_status = "flagged"
+            report.verification_status = "under_review"
+            report.status = "pending"
+            report.is_flagged = True
+            report.flag_reason = "threshold_low_score"
+            report.ai_verification_reason = "AI flagged for review: borderline trust score requires human verification"
+            report.leader_verification_status = "pending"
+    elif combined >= 20:
+        # Low confidence — mostly flagged
+        if random.random() < 0.15:
+            report.rule_status = "passed"
+            report.verification_status = "verified"
+            report.status = "verified"
+            report.ai_verification_reason = "AI verified with caution: marginal indicators but no hard gate violations"
+            report.leader_verification_status = "pending"
+        else:
+            report.rule_status = "flagged"
+            report.verification_status = "under_review"
+            report.status = "pending"
+            report.is_flagged = True
+            report.flag_reason = "threshold_low_score"
+            report.ai_verification_reason = "AI flagged: low trust indicators require community leader confirmation"
+            report.leader_verification_status = "pending"
+    else:
+        # Very low — rejected
         report.rule_status = "rejected"
         report.verification_status = "rejected"
         report.status = "rejected"
         report.is_flagged = True
-        report.flag_reason = pre_reason or "anti_fraud_rules_violation"
-        report.ai_ready = True
-        report.features_extracted_at = datetime.now(timezone.utc)
-        return None
-
-    compose_narratives = build_compose_narratives_fn(type_name)
-    return run_citizen_verification_pipeline(
-        db,
-        report,
-        device,
-        evidence_files=[],
-        evidence_validations=[],
-        evidence_metadata_list=[],
-        compute_scorecard_fn=_compute_threshold_scorecard,
-        compose_narratives_fn=compose_narratives,
-    )
-
-
-def apply_seed_leader_follow_up(report, reported_at: datetime) -> None:
-    """Set leader gate fields after the real pipeline has decided AI status."""
-    if report.verification_status == "verified" and report.status == "verified":
-        report.leader_verification_status = "confirmed"
-        report.leader_verified_at = reported_at + timedelta(hours=random.randint(1, 36))
-        report.leader_verification_note = random.choice([
-            "Confirmed by community leader. Incident is known in the area.",
-            "Verified through community channels. Details are consistent with local accounts.",
-            "Community confirms this incident occurred as described.",
-        ])
-        if not report.verified_at:
-            report.verified_at = reported_at + timedelta(minutes=random.randint(2, 45))
-    elif report.verification_status == "rejected":
+        report.flag_reason = "threshold_low_score"
+        report.ai_verification_reason = "AI rejected: trust score below minimum threshold"
         report.leader_verification_status = "rejected"
         report.leader_verified_at = reported_at + timedelta(hours=random.randint(1, 12))
-    else:
-        report.leader_verification_status = "pending"
 
 
-def pipeline_trust_score(report) -> float:
-    fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
-    sc = fv.get("threshold_scorecard") if isinstance(fv.get("threshold_scorecard"), dict) else {}
-    if sc.get("total_score") is not None:
-        return float(sc["total_score"])
-    stage5 = fv.get("stage_5_trust_score") if isinstance(fv.get("stage_5_trust_score"), dict) else {}
-    return float(stage5.get("trust_score") or 0.0)
-
-
-def create_notifications(db, report, police_users, local_leaders, *, incident_type_name: str = "Unknown"):
+def create_notifications(db, report, police_users, local_leaders):
     """Create notifications for flagged/pending reports."""
     if report.status == "pending" or report.verification_status == "under_review":
         # Notify supervisors/officers about reports needing review
@@ -670,7 +452,7 @@ def create_notifications(db, report, police_users, local_leaders, *, incident_ty
                 notif = Notification(
                     notification_id=uuid.uuid4(),
                     police_user_id=pu.police_user_id,
-                    title=f"Report needs review: {incident_type_name}",
+                    title=f"Report needs review: {report.incident_type.type_name if report.incident_type else 'Unknown'}",
                     message=f"Report {report.report_number} has been flagged for review. Trust score indicates community verification is needed.",
                     type="report",
                     related_entity_type="report",
@@ -687,7 +469,7 @@ def create_notifications(db, report, police_users, local_leaders, *, incident_ty
                 notif = Notification(
                     notification_id=uuid.uuid4(),
                     police_user_id=pu.police_user_id,
-                    title=f"{report.priority.upper()}: {incident_type_name}",
+                    title=f"{report.priority.upper()}: {report.incident_type.type_name if report.incident_type else 'Unknown'}",
                     message=f"Verified {report.priority}-priority incident reported. Case investigation may be required.",
                     type="report",
                     related_entity_type="report",
@@ -786,327 +568,216 @@ def create_cases_from_clusters(db, reports_by_village, incident_types_map, polic
     return cases_created
 
 
-def recompute_hotspots(db):
-    """Rebuild hotspot clusters from verified leader-confirmed reports."""
+def main():
+    random.seed(42)  # Reproducible but can be removed
+    db = SessionLocal()
+
     try:
-        from app.core.hotspot_auto import create_hotspots_from_reports
+        now = datetime.now(timezone.utc)
+        logger.info("=== Starting report simulation ===")
+        logger.info("Target: %d reports across %d days", NUM_REPORTS, DAYS_BACK)
 
-        result = create_hotspots_from_reports(
-            db,
-            time_window_hours=720,
-            min_incidents=3,
-            radius_meters=500,
-            trust_min=70,
-            analyze_all_reports=True,
-        )
+        # Clean up any previous simulation data (reports with RPT-2026-0129+)
+        logger.info("Cleaning previous simulation data...")
+        # Delete simulated case_reports, cases, notifications, predictions, reports, devices
+        db.execute(text("DELETE FROM case_reports WHERE report_id IN (SELECT report_id FROM reports WHERE report_number > 'RPT-2026-0128')"))
+        db.execute(text("DELETE FROM cases WHERE case_number > 'CASE-2026-0007'"))
+        db.execute(text("DELETE FROM notifications WHERE created_at > '2026-06-02T19:00:00+00:00' AND type IN ('report', 'assignment')"))
+        db.execute(text("DELETE FROM ml_predictions WHERE report_id IN (SELECT report_id FROM reports WHERE report_number > 'RPT-2026-0128')"))
+        db.execute(text("DELETE FROM hotspot_reports WHERE report_id IN (SELECT report_id FROM reports WHERE report_number > 'RPT-2026-0128')"))
+        db.execute(text("DELETE FROM reports WHERE report_number > 'RPT-2026-0128'"))
+        # Delete devices that have zero remaining reports
+        db.execute(text("""
+            DELETE FROM devices WHERE device_id NOT IN (
+                SELECT DISTINCT device_id FROM reports
+            ) AND first_seen_at > '2026-06-02T19:00:00+00:00'
+        """))
         db.commit()
-        logger.info("Hotspot recompute: %s", result)
-        return result
-    except Exception:
-        logger.exception("Hotspot recompute failed (non-fatal)")
-        db.rollback()
-        return None
+        logger.info("Cleanup done")
 
+        # Load incident types
+        incident_types = db.query(IncidentType).all()
+        if not incident_types:
+            raise RuntimeError("No incident types found — seed the database first")
+        it_map = {it.incident_type_id: it.type_name for it in incident_types}
+        it_by_name = {it.type_name: it for it in incident_types}
+        logger.info("Loaded %d incident types", len(incident_types))
 
-def seed_operational_data(
-    db,
-    *,
-    num_reports: int = NUM_REPORTS,
-    num_devices: int | None = None,
-    days_back: int = DAYS_BACK,
-    min_rejected: int = MIN_REJECTED,
-    min_pending: int = MIN_PENDING,
-    with_cases: bool = False,
-) -> dict:
-    """Seed devices and reports with planned trust-score distribution."""
-    now = datetime.now(timezone.utc)
-    target_rejected, target_pending = resolve_distribution_targets(
-        num_reports, min_rejected, min_pending
-    )
-    target_verified = num_reports - target_rejected - target_pending
-    if num_devices is None:
-        num_devices = max(3, min(NUM_DEVICES, (num_reports // 3) + 2))
+        # Load villages
+        villages, hotspot_villages, hotspot_ids = build_village_pools(db)
 
-    logger.info(
-        "Seeding %d reports (rejected=%d, pending=%d, verified=%d) over %d days, %d devices",
-        num_reports,
-        target_rejected,
-        target_pending,
-        target_verified,
-        days_back,
-        num_devices,
-    )
+        # Load police users, leaders, stations
+        from app.models.police_user import PoliceUser
+        from app.models.station import Station
+        police_users = db.query(PoliceUser).filter(PoliceUser.is_active == True).all()
+        local_leaders = db.query(LocalLeader).all()
+        stations = db.query(Station).all()
+        logger.info("Police users: %d, Local leaders: %d, Stations: %d",
+                     len(police_users), len(local_leaders), len(stations))
 
-    incident_types = load_incident_types(db)
-    if not incident_types:
-        raise RuntimeError("No incident types found — seed reference data first")
-    it_map = {it.incident_type_id: it.type_name for it in incident_types}
-    it_by_name = {it.type_name: it for it in incident_types}
+        # Get next report number
+        max_num = db.execute(
+            text("SELECT MAX(CAST(SUBSTRING(report_number FROM 10) AS INTEGER)) FROM reports WHERE report_number LIKE 'RPT-2026-%'")
+        ).scalar() or 0
+        report_counter = max_num + 1
 
-    villages, hotspot_villages, hotspot_ids, today_target_villages = build_village_pools(db)
-
-    from app.models.police_user import PoliceUser
-    from app.models.station import Station
-
-    police_users = db.query(PoliceUser).filter(PoliceUser.is_active == True).all()
-    local_leaders = db.query(LocalLeader).filter(LocalLeader.is_active == True).all()
-    stations = db.query(Station).all()
-    leader_village_since = build_leader_village_since_map(db, local_leaders)
-
-    max_num = db.execute(
-        text(
-            "SELECT MAX(CAST(SUBSTRING(report_number FROM 10) AS INTEGER)) "
-            "FROM reports WHERE report_number LIKE 'RPT-2026-%'"
-        )
-    ).scalar() or 0
-    report_counter = int(max_num) + 1
-
-    devices = create_devices(db, num_devices)
-    db.flush()
-
-    weighted_types = []
-    for tname, weight in INCIDENT_WEIGHTS.items():
-        if tname in it_by_name:
-            weighted_types.extend([it_by_name[tname]] * weight)
-
-    score_plan = build_trust_score_plan(num_reports, min_rejected, min_pending)
-    reports_by_village = {}
-    created_count = 0
-    verified_count = 0
-    flagged_count = 0
-    rejected_count = 0
-
-    for i, (bucket, _target_score) in enumerate(score_plan):
-        device = random.choice(devices)
-        inc_type = random.choice(weighted_types)
-        # 20 reports generated for today in Muhoza/Cyuve, rest over the specified period
-        is_today_report = i < 20
-        if is_today_report:
-            village = random.choice(today_target_villages)
-        else:
-            village = pick_village(villages, hotspot_villages, hotspot_ids)
-            
-        sector_id, _cell_id = get_sector_cell_for_village(db, village)
-
-        lat = jitter_coord(village.centroid_lat, spread=0.002)
-        lng = jitter_coord(village.centroid_long, spread=0.002)
-
-        leader_since = leader_village_since.get(int(village.location_id))
-        
-        if is_today_report:
-            reported_at = now - timedelta(hours=random.uniform(0, 24))
-        else:
-            reported_at = report_time_for_bucket(now, days_back, bucket, leader_since)
-        description = description_for_bucket(bucket, inc_type.type_name)
-
-        tags_pool = CONTEXT_TAGS_POOL.get(inc_type.type_name, [[]])
-        tags = random.choice(tags_pool)
-
-        report = Report(
-            report_id=uuid.uuid4(),
-            report_number=f"RPT-2026-{report_counter:04d}",
-            device_id=device.device_id,
-            incident_type_id=inc_type.incident_type_id,
-            description=description,
-            latitude=Decimal(str(round(lat, 7))),
-            longitude=Decimal(str(round(lng, 7))),
-            gps_accuracy=Decimal(str(round(random.uniform(3, 50), 2))),
-            motion_level=random.choices(MOTION_LEVELS, weights=MOTION_WEIGHTS, k=1)[0],
-            movement_speed=Decimal(str(round(random.uniform(0, 2.5), 2))) if random.random() < 0.3 else None,
-            was_stationary=random.random() < 0.6,
-            location_id=sector_id,
-            village_location_id=village.location_id,
-            handling_station_id=random.choice(stations).station_id if stations else None,
-            reported_at=reported_at,
-            priority="medium",
-            rule_status="pending",
-            status="pending",
-            verification_status="pending",
-            app_version=random.choice(APP_VERSIONS),
-            network_type=random.choices(NETWORK_TYPES, weights=NETWORK_WEIGHTS, k=1)[0],
-            battery_level=Decimal(str(round(random.uniform(10, 100), 1))),
-            context_tags=tags,
-            ai_ready=False,
-            feature_vector={
-                "description_length": len(description),
-                "word_count": len(description.split()),
-                "gps_accuracy": float(round(random.uniform(3, 50), 2)),
-            },
-        )
-
-        db.add(report)
+        # Create devices
+        devices = create_devices(db, NUM_DEVICES)
         db.flush()
 
-        try:
-            with db.begin_nested():
-                run_seed_verification_pipeline(db, report, device, inc_type)
-                apply_seed_leader_follow_up(report, reported_at)
-        except Exception:
-            logger.exception(
-                "Verification pipeline failed for %s — rolling back report AI state",
-                report.report_number,
+        # Build weighted incident type list
+        weighted_types = []
+        for tname, weight in INCIDENT_WEIGHTS.items():
+            if tname in it_by_name:
+                weighted_types.extend([it_by_name[tname]] * weight)
+
+        # Track reports by village for case creation
+        reports_by_village = {}
+        created_count = 0
+        verified_count = 0
+        flagged_count = 0
+        rejected_count = 0
+
+        logger.info("Generating %d reports...", NUM_REPORTS)
+
+        for i in range(NUM_REPORTS):
+            # Pick device, type, village
+            device = random.choice(devices)
+            inc_type = random.choice(weighted_types)
+            village = pick_village(villages, hotspot_villages, hotspot_ids)
+            sector_id, cell_id = get_sector_cell_for_village(db, village)
+
+            # Realistic coordinates with GPS jitter from village centroid
+            lat = jitter_coord(village.centroid_lat, spread=0.002)
+            lng = jitter_coord(village.centroid_long, spread=0.002)
+
+            # Report time with realistic distribution
+            reported_at = random_report_time(now, DAYS_BACK)
+
+            # Pick description
+            type_descs = DESCRIPTIONS.get(inc_type.type_name, ["Incident reported in the area."])
+            description = random.choice(type_descs)
+            # Add slight variation so descriptions aren't identical
+            variations = [
+                "", " The area was dark at the time.",
+                " Happened near the main road.", " Local residents are concerned.",
+                " This seems to be a recurring issue.", "",
+                " Community members alerted the local leader.",
+                " The situation was reported promptly.",
+                "", " Weather was clear at the time.",
+            ]
+            description += random.choice(variations)
+
+            # Context tags
+            tags_pool = CONTEXT_TAGS_POOL.get(inc_type.type_name, [[]])
+            tags = random.choice(tags_pool)
+
+            # Priority based on incident severity
+            sev = float(inc_type.severity_weight or 1.0)
+            if sev >= 1.6:
+                priority = weighted_choice({"high": 40, "urgent": 15, "medium": 35, "low": 10})
+            elif sev >= 1.2:
+                priority = weighted_choice({"medium": 45, "high": 25, "low": 20, "urgent": 10})
+            else:
+                priority = weighted_choice({"low": 35, "medium": 45, "high": 15, "urgent": 5})
+
+            # Trust score — influenced by device trust and description quality
+            device_trust = float(device.device_trust_score or 50)
+            base_trust = device_trust * 0.35 + random.uniform(20, 80) * 0.65
+            # Add noise
+            trust_score = max(5, min(98, base_trust + random.gauss(0, 8)))
+            trust_score = round(trust_score, 2)
+
+            report = Report(
+                report_id=uuid.uuid4(),
+                report_number=f"RPT-2026-{report_counter:04d}",
+                device_id=device.device_id,
+                incident_type_id=inc_type.incident_type_id,
+                description=description,
+                latitude=Decimal(str(round(lat, 7))),
+                longitude=Decimal(str(round(lng, 7))),
+                gps_accuracy=Decimal(str(round(random.uniform(3, 50), 2))),
+                motion_level=random.choices(MOTION_LEVELS, weights=MOTION_WEIGHTS, k=1)[0],
+                movement_speed=Decimal(str(round(random.uniform(0, 2.5), 2))) if random.random() < 0.3 else None,
+                was_stationary=random.random() < 0.6,
+                location_id=sector_id,
+                village_location_id=village.location_id,
+                handling_station_id=random.choice(stations).station_id if stations else None,
+                reported_at=reported_at,
+                priority=priority,
+                app_version=random.choice(APP_VERSIONS),
+                network_type=random.choices(NETWORK_TYPES, weights=NETWORK_WEIGHTS, k=1)[0],
+                battery_level=Decimal(str(round(random.uniform(10, 100), 1))),
+                context_tags=tags,
+                ai_ready=True,
+                features_extracted=reported_at + timedelta(seconds=random.randint(2, 30)),
+                features_extracted_at=reported_at + timedelta(seconds=random.randint(2, 30)),
+                feature_vector={
+                    "description_length": len(description),
+                    "word_count": len(description.split()),
+                    "device_trust": device_trust,
+                    "base_trust": round(base_trust, 2),
+                    "gps_accuracy": float(round(random.uniform(3, 50), 2)),
+                },
             )
-            raise
 
-        if report.status == "verified":
-            verified_count += 1
-        elif report.status == "pending" or report.verification_status == "under_review":
-            flagged_count += 1
-        else:
-            rejected_count += 1
+            # Apply AI verification
+            apply_verification(report, trust_score, device_trust)
 
-        device.total_reports += 1
-        if report.status == "verified":
-            device.trusted_reports += 1
-        elif report.is_flagged:
-            device.flagged_reports += 1
-        device.last_seen_at = reported_at
+            if report.status == "verified":
+                report.verified_at = reported_at + timedelta(minutes=random.randint(1, 60))
+                verified_count += 1
+            elif report.status == "pending":
+                flagged_count += 1
+            else:
+                rejected_count += 1
 
-        if report.status == "pending" or report.priority in ("high", "urgent"):
-            create_notifications(
-                db, report, police_users, local_leaders, incident_type_name=inc_type.type_name
-            )
+            db.add(report)
 
-        reports_by_village.setdefault(village.location_id, []).append(report)
-        report_counter += 1
-        created_count += 1
+            # Create ML prediction
+            create_ml_prediction(db, report, trust_score)
 
-        if created_count % BATCH_SIZE == 0:
-            db.commit()
-            logger.info(
-                "  ... %d/%d reports verified (verified=%d pending=%d rejected=%d)",
-                created_count,
-                num_reports,
-                verified_count,
-                flagged_count,
-                rejected_count,
-            )
+            # Update device stats
+            device.total_reports += 1
+            if report.status == "verified":
+                device.trusted_reports += 1
+            elif report.is_flagged:
+                device.flagged_reports += 1
+            device.last_seen_at = reported_at
 
-    db.flush()
-    logger.info(
-        "Reports created: %d (verified=%d, pending=%d, rejected=%d)",
-        created_count,
-        verified_count,
-        flagged_count,
-        rejected_count,
-    )
+            # Create notifications for flagged/high-priority reports
+            if report.status in ("pending",) or report.priority in ("high", "urgent"):
+                create_notifications(db, report, police_users, local_leaders)
 
-    cases_created = 0
-    if with_cases:
-        try:
-            cases_created = create_cases_from_clusters(
-                db, reports_by_village, it_map, police_users, stations
-            )
-        except Exception:
-            logger.exception("Case creation failed (reports will still be saved)")
-    else:
-        logger.info("Skipping case creation (reports-only seed)")
+            # Track for case creation
+            vid = village.location_id
+            reports_by_village.setdefault(vid, []).append(report)
 
-    db.commit()
+            report_counter += 1
+            created_count += 1
 
-    return {
-        "reports": created_count,
-        "devices": num_devices,
-        "cases": cases_created,
-        "verified": verified_count,
-        "pending": flagged_count,
-        "rejected": rejected_count,
-    }
+            # Batch commit
+            if created_count % BATCH_SIZE == 0:
+                db.flush()
+                logger.info("  ... %d/%d reports created", created_count, NUM_REPORTS)
 
+        db.flush()
+        logger.info("Reports created: %d (verified=%d, flagged=%d, rejected=%d)",
+                     created_count, verified_count, flagged_count, rejected_count)
 
-def configure_seed_db_session(db) -> None:
-    """Longer timeouts for bulk seed + verification pipeline on remote Postgres."""
-    try:
-        db.execute(text("SET statement_timeout = '600000'"))  # 10 minutes per statement
-        db.execute(text("SET idle_in_transaction_session_timeout = '900000'"))
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        logger.warning("Could not tune session timeouts: %s", exc)
-
-
-def refresh_db_session(db):
-    """Return a fresh session after clear/long idle (avoids 'server closed connection')."""
-    try:
-        db.execute(text("SELECT 1"))
-        db.commit()
-        return db
-    except Exception:
-        try:
-            db.rollback()
-        except Exception:
-            pass
-        try:
-            db.close()
-        except Exception:
-            pass
-        logger.info("Refreshing database session after connection drop")
-        new_db = SessionLocal()
-        configure_seed_db_session(new_db)
-        return new_db
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Clear operational data and seed incident reports.")
-    parser.add_argument("--no-clear", action="store_true", help="Skip clearing operational tables")
-    parser.add_argument("--dry-run-clear", action="store_true", help="Print row counts only")
-    parser.add_argument("--count", type=int, default=NUM_REPORTS, help="Number of reports to seed")
-    parser.add_argument("--preserve", type=int, default=2, help="Reports to keep (prefer tomorrow's date)")
-    parser.add_argument("--with-cases", action="store_true", help="Also create cases from report clusters")
-    parser.add_argument("--with-hotspots", action="store_true", help="Also recompute hotspot clusters after seed")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
-    args = parser.parse_args()
-
-    random.seed(args.seed)
-    db = SessionLocal()
-    configure_seed_db_session(db)
-
-    try:
-        from app.database import engine
-        from app.core.workflow_schema_extensions import apply_workflow_schema_ddl
-
-        apply_workflow_schema_ddl(engine)
-    except Exception as exc:
-        logger.warning("Workflow schema DDL skipped: %s", exc)
-
-    try:
-        logger.info("=== Operational data reset & seed ===")
-
-        if not args.no_clear:
-            preserve_ids = find_preserved_report_ids(db, preserve_count=args.preserve)
-            if preserve_ids:
-                logger.info("Preserving %d report(s): %s", len(preserve_ids), preserve_ids)
-            cleared = clear_operational_data(
-                db,
-                preserve_report_ids=preserve_ids,
-                dry_run=args.dry_run_clear,
-            )
-            if args.dry_run_clear:
-                logger.info("Dry-run clear counts: %s", cleared)
-                return
-            logger.info("Cleared operational tables: %s", cleared)
-            db = refresh_db_session(db)
-
-        result = seed_operational_data(
-            db,
-            num_reports=args.count,
-            with_cases=args.with_cases,
+        # Create cases from clusters
+        cases_created = create_cases_from_clusters(
+            db, reports_by_village, it_map, police_users, stations
         )
-        if args.with_hotspots:
-            recompute_hotspots(db)
-        else:
-            logger.info("Skipping hotspot recompute (reports-only seed)")
 
-        logger.info("=== Complete ===")
-        logger.info("  Reports: %d", result["reports"])
-        logger.info("  Devices: %d", result["devices"])
-        logger.info("  Cases: %d", result["cases"])
-        logger.info(
-            "  Verified: %d, Pending: %d, Rejected: %d",
-            result["verified"],
-            result["pending"],
-            result["rejected"],
-        )
+        # Commit everything
+        db.commit()
+        logger.info("=== Simulation complete ===")
+        logger.info("  Reports: %d", created_count)
+        logger.info("  Devices: %d", NUM_DEVICES)
+        logger.info("  Cases: %d", cases_created)
+        logger.info("  Verified: %d, Flagged: %d, Rejected: %d",
+                     verified_count, flagged_count, rejected_count)
 
     except Exception:
         db.rollback()
