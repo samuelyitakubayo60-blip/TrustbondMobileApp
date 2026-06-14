@@ -459,14 +459,15 @@ def rule_adjusted_trust_label(
     trust_score: Optional[float],
     ml_prediction_label: Optional[str],
 ) -> Tuple[Optional[float], Optional[str]]:
+    """Derive prediction label strictly from score.
+
+    Score is the single source of truth:
+      ≥70 → likely_real
+      40-69 → suspicious
+      <40 → fake
+    """
     score = trust_score
-    label = (ml_prediction_label or "").strip().lower() or None
-    rule_status = (getattr(report, "rule_status", None) or "").strip().lower()
-    is_flagged = bool(getattr(report, "is_flagged", False))
-    if rule_status == "rejected":
-        return score, "fake"
-    # 3-tier label: 70-100 likely_real, 40-69 suspicious, 0-39 fake
-    # Score always determines the label — override any stale/mismatched label.
+    # Score always determines the label — no overrides from rule_status or flags
     if score is not None and score >= 70.0:
         label = "likely_real"
     elif score is not None and score >= 40.0:
@@ -479,10 +480,20 @@ def rule_adjusted_trust_label(
 # ── Outcome application ──────────────────────────────────────────────────────
 
 def apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
-    """Apply scorecard to report status. Policy unchanged from previous version."""
+    """Apply scorecard to report status.
+
+    The trust SCORE is the single source of truth for status:
+      ≥70 → verified / likely_real   (never pending or rejected)
+      40-69 → under_review / suspicious (pending)
+      <40 → rejected / fake
+
+    Only hard-reject gates (boundary, hard rules) and leader decisions
+    can override the score-based status.
+    """
     if not isinstance(scorecard, dict):
         return
 
+    # Leader decision is the ultimate authority — never override it
     fv = getattr(report, "feature_vector", None) or {}
     if isinstance(fv, dict):
         leader_dec = (fv.get("leader_decision") or {})
@@ -494,14 +505,18 @@ def apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
             if not getattr(report, "flag_reason", None):
                 report.flag_reason = "rejected_by_local_leader"
             return
+        if isinstance(leader_dec, dict) and leader_dec.get("decision") == "confirmed":
+            report.rule_status = "passed"
+            report.verification_status = "verified"
+            report.status = "verified"
+            report.is_flagged = False
+            return
 
     band = str(scorecard.get("threshold_band") or "").lower()
     hard_gates = [str(g) for g in (scorecard.get("hard_gates") or [])]
     hard_set = {g.upper() for g in hard_gates}
-    rule_status = (getattr(report, "rule_status", None) or "").strip().lower()
-    is_flagged = bool(getattr(report, "is_flagged", False))
-    flagged_for_review = is_flagged or rule_status == "flagged"
 
+    # Hard-reject gates (boundary violations, hard rules) always override
     hard_reject = (
         band == "hard_reject"
         or bool(hard_set & {c.upper() for c in HARD_GATE_REJECT_CODES})
@@ -518,68 +533,30 @@ def apply_threshold_outcome(report: Report, scorecard: Dict[str, Any]) -> None:
                 report.flag_reason = "hard_rule_reject"
         return
 
-    if rule_status == "rejected" and not flagged_for_review:
-        report.verification_status = "rejected"
-        report.status = "rejected"
-        report.is_flagged = True
-        return
-
+    # Score-based status — the score decides, flags are metadata only
     if band == "confirmed_candidate":
-        flag_reason_val = (getattr(report, "flag_reason", None) or "").strip().lower()
-        content_mismatch = is_flagged and any(
-            p in flag_reason_val
-            for p in ("mismatch", "evidence_incident", "description_evidence",
-                       "incident_description", "evidence_not_relevant", "contradictory", "unrelated")
-        )
-        if content_mismatch:
-            if report.rule_status != "rejected":
-                report.rule_status = "flagged"
-                report.verification_status = "under_review"
-                if report.status not in ("rejected",):
-                    report.status = "pending"
-            return
-        if report.rule_status not in ("rejected",):
-            report.rule_status = "passed"
-            report.verification_status = "verified"
-            report.is_flagged = False
-            if report.status in {None, "", "pending", "flagged", "under_review"}:
-                report.status = "verified"
+        # Score ≥70 → VERIFIED, regardless of any flags
+        report.rule_status = "passed"
+        report.verification_status = "verified"
+        report.status = "verified"
+        report.is_flagged = False
         return
 
-    if flagged_for_review:
-        if report.rule_status != "rejected":
-            report.verification_status = "under_review"
-            if report.status not in ("rejected",):
-                report.status = "pending"
+    if band == "under_review":
+        # Score 40-69 → UNDER REVIEW (pending)
+        report.rule_status = "passed"
+        report.verification_status = "under_review"
+        report.status = "pending"
         return
 
     if band == "low_confidence":
-        # Score 0-39 → rejected
+        # Score <40 → REJECTED
         report.rule_status = "rejected"
         report.verification_status = "rejected"
         report.status = "rejected"
         report.is_flagged = True
         if not getattr(report, "flag_reason", None):
             report.flag_reason = "threshold_low_score"
-        return
-
-    if band == "under_review":
-        fv_ur = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
-        sc_ur = fv_ur.get("threshold_scorecard") if isinstance(fv_ur.get("threshold_scorecard"), dict) else {}
-        if sc_ur.get("evidence_all_failed"):
-            report.rule_status = "rejected"
-            report.verification_status = "rejected"
-            report.status = "rejected"
-            report.is_flagged = True
-            if not getattr(report, "flag_reason", None):
-                report.flag_reason = "evidence_does_not_match_incident"
-            return
-        if report.rule_status != "rejected":
-            if report.rule_status not in {"flagged"}:
-                report.rule_status = "passed"
-            report.verification_status = "under_review"
-            if report.status != "rejected":
-                report.status = "pending"
         return
 
 
@@ -739,13 +716,12 @@ def run_citizen_verification_pipeline(
     description = (getattr(report, "description", None) or "").strip()
     reported_at = getattr(report, "reported_at", None)
 
-    # Legacy integrity hints
+    # Legacy integrity hints — flag only, don't override status
+    # (apply_threshold_outcome will set the definitive status from score)
     if evidence_metadata_list:
         _, should_flag = run_integrity_checks_on_evidence(report, evidence_metadata_list)
-        if should_flag and report.rule_status != "rejected":
+        if should_flag:
             report.is_flagged = True
-            report.rule_status = "flagged"
-            report.verification_status = "under_review"
             if not report.flag_reason:
                 report.flag_reason = "evidence_integrity_check"
 
@@ -1004,12 +980,9 @@ def run_citizen_verification_pipeline(
             pipeline_audit=audit_trail, final_decision="REJECTED",
         )
 
-    # Flag weak evidence support
+    # Flag weak evidence support — metadata only, don't override status
     if not stage4.skipped and stage4.decision == "flag":
         report.is_flagged = True
-        if report.rule_status != "rejected":
-            report.rule_status = "flagged"
-        report.verification_status = "under_review"
         if not report.flag_reason:
             report.flag_reason = f"weak_evidence_support_{stage4.support_level}"
 
@@ -1101,14 +1074,12 @@ def run_citizen_verification_pipeline(
     )
 
     # ── Anti-fraud rules ─────────────────────────────────────────────────────
+    # Anti-fraud flags are metadata only — apply_threshold_outcome (below)
+    # sets the definitive status based on the trust score.
     rule_status, is_flagged, flag_reason = apply_anti_fraud_rules(report, evidence_count, db)
-    if report.rule_status != "rejected":
-        report.rule_status = rule_status
     report.is_flagged = bool(report.is_flagged or is_flagged)
     if is_flagged and flag_reason and not report.flag_reason:
         report.flag_reason = flag_reason
-    if report.is_flagged and report.rule_status != "rejected":
-        report.verification_status = "under_review"
 
     # ── Priority ─────────────────────────────────────────────────────────────
     priority = calculate_report_priority(report, evidence_count, db, unified_validation)
@@ -1153,6 +1124,11 @@ def run_citizen_verification_pipeline(
     ai_lbl = getattr(ml_prediction, "prediction_label", None) if ml_prediction else None
     ai_ts, ai_lbl = rule_adjusted_trust_label(report, ai_ts, ai_lbl)
     persist_adjusted_ml_prediction(db, ml_prediction, ai_ts, ai_lbl)
+
+    # Sync ml_prediction_label on the report row so the dashboard
+    # always shows the score-derived label without needing a join.
+    if hasattr(report, "ml_prediction_label") and ai_lbl:
+        report.ml_prediction_label = ai_lbl
 
     try:
         update_device_ml_aggregates(db, device, window=30)
@@ -1341,9 +1317,8 @@ def apply_evidence_semantic_checks(
             fv["semantic_alignment"] = semantic_result
 
             if result.decision == "reject":
-                report.rule_status = "flagged"
+                # Flag as metadata only — score determines final status
                 report.is_flagged = True
-                report.verification_status = "under_review"
                 if not report.flag_reason:
                     report.flag_reason = f"evidence_{result.support_level}_to_description"
 

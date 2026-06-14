@@ -571,85 +571,64 @@ const Reports = ({
                       <ReportTrustScore report={r} />
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>
-                      {r.ml_prediction_label ? (
-                        <span
-                          className={`badge ${
-                            r.ml_prediction_label === "likely_real"
-                              ? "b-green"
-                              : r.ml_prediction_label === "suspicious" ||
-                                  r.ml_prediction_label === "uncertain"
-                                ? "b-orange"
-                                : r.ml_prediction_label === "fake"
-                                  ? "b-red"
-                                  : "b-gray"
-                          }`}
-                        >
-                          {r.ml_prediction_label === "likely_real"
-                            ? "Likely real"
-                            : r.ml_prediction_label === "suspicious"
-                              ? "Suspicious"
-                              : r.ml_prediction_label === "uncertain"
-                                ? "Needs Review"
-                                : r.ml_prediction_label === "fake"
-                                  ? "Low Credibility"
-                                  : "Unknown"}
-                        </span>
-                      ) : r.ml_predictions && r.ml_predictions.length > 0 ? (
-                        (() => {
-                          // Get the latest ML prediction
+                      {(() => {
+                        // Leader decision is the FINAL authority — override AI label when leader has decided
+                        const leaderStatus = (r.leader_verification_status || "").trim().toLowerCase();
+                        let effectiveLabel = r.ml_prediction_label;
+
+                        // If no direct label, derive from latest ML prediction
+                        if (!effectiveLabel && r.ml_predictions && r.ml_predictions.length > 0) {
                           const latestPrediction = r.ml_predictions.reduce((latest, pred) => {
                             return (!latest || new Date(pred.evaluated_at) > new Date(latest.evaluated_at)) ? pred : latest;
                           }, null);
-                          
-                          const trustScore = latestPrediction ? parseFloat(latestPrediction.trust_score) : 0;
-                          const hasLabel = latestPrediction && latestPrediction.prediction_label;
-                          
-                          if (hasLabel) {
-                            // Show traditional ML prediction label
+                          effectiveLabel = latestPrediction?.prediction_label || null;
+                        }
+
+                        // Leader confirmed → label must be at least "suspicious", never "fake"
+                        if (leaderStatus === "confirmed" && effectiveLabel === "fake") {
+                          effectiveLabel = "likely_real";
+                        }
+
+                        if (!effectiveLabel) {
+                          // Fallback: score-based label
+                          const ts = r.ml_predictions?.length
+                            ? parseFloat(r.ml_predictions.reduce((l, p) =>
+                                (!l || new Date(p.evaluated_at) > new Date(l.evaluated_at)) ? p : l, null)?.trust_score || 0)
+                            : 0;
+                          if (ts > 0) {
                             return (
-                              <span
-                                className={`badge ${
-                                  latestPrediction.prediction_label === "likely_real"
-                                    ? "b-green"
-                                    : latestPrediction.prediction_label === "suspicious" ||
-                                        latestPrediction.prediction_label === "uncertain"
-                                      ? "b-orange"
-                                      : latestPrediction.prediction_label === "fake"
-                                        ? "b-red"
-                                        : "b-gray"
-                                }`}
-                              >
-                                {latestPrediction.prediction_label === "likely_real"
-                                  ? "Likely real"
-                                  : latestPrediction.prediction_label === "suspicious"
-                                    ? "Suspicious"
-                                    : latestPrediction.prediction_label === "uncertain"
-                                      ? "Needs Review"
-                                      : latestPrediction.prediction_label === "fake"
-                                        ? "Low Credibility"
-                                        : "Unknown"}
-                              </span>
-                            );
-                          } else {
-                            // Show text analysis
-                            return (
-                              <span
-                                className={`badge ${
-                                  trustScore >= 70
-                                    ? "b-green"
-                                    : trustScore >= 40
-                                      ? "b-orange"
-                                      : "b-red"
-                                }`}
-                              >
+                              <span className={`badge ${ts >= 70 ? "b-green" : ts >= 40 ? "b-orange" : "b-red"}`}>
                                 Text Analysis
                               </span>
                             );
                           }
-                        })()
-                      ) : (
-                        <span className="badge b-gray">No ML</span>
-                      )}
+                          return <span className="badge b-gray">No ML</span>;
+                        }
+
+                        return (
+                          <span
+                            className={`badge ${
+                              effectiveLabel === "likely_real"
+                                ? "b-green"
+                                : effectiveLabel === "suspicious" || effectiveLabel === "uncertain"
+                                  ? "b-orange"
+                                  : effectiveLabel === "fake"
+                                    ? "b-red"
+                                    : "b-gray"
+                            }`}
+                          >
+                            {effectiveLabel === "likely_real"
+                              ? "Likely real"
+                              : effectiveLabel === "suspicious"
+                                ? "Suspicious"
+                                : effectiveLabel === "uncertain"
+                                  ? "Needs Review"
+                                  : effectiveLabel === "fake"
+                                    ? "Low Credibility"
+                                    : "Unknown"}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       {shownPriority ? (
@@ -670,30 +649,36 @@ const Reports = ({
                       )}
                     </td>
                     <td style={{ verticalAlign: "top", fontSize: "11px" }}>
-                      {vs ? (
-                        <span
-                          className={`badge ${
-                            vs === "under_review"
-                              ? "b-orange"
-                              : vs === "pending"
-                                ? "b-orange"
-                                : vs === "verified"
-                                  ? "b-green"
-                                  : "b-red"
-                          }`}
-                          style={{ display: "inline-block", marginBottom: 6 }}
-                        >
-                          {vs === "under_review"
-                            ? "Under review"
-                            : vs === "pending"
-                              ? "Pending"
-                              : vs === "verified"
-                                ? "AI verified"
-                                : "Rejected"}
-                        </span>
-                      ) : (
-                        <span className="badge b-gray">{r.status || "—"}</span>
-                      )}
+                      {(() => {
+                        // Leader confirmation overrides AI verification display
+                        const leaderSt = (r.leader_verification_status || "").trim().toLowerCase();
+                        const effectiveVs = leaderSt === "confirmed" ? "verified" : vs;
+                        if (effectiveVs) {
+                          return (
+                            <span
+                              className={`badge ${
+                                effectiveVs === "under_review"
+                                  ? "b-orange"
+                                  : effectiveVs === "pending"
+                                    ? "b-orange"
+                                    : effectiveVs === "verified"
+                                      ? "b-green"
+                                      : "b-red"
+                              }`}
+                              style={{ display: "inline-block", marginBottom: 6 }}
+                            >
+                              {effectiveVs === "under_review"
+                                ? "Under review"
+                                : effectiveVs === "pending"
+                                  ? "Pending"
+                                  : effectiveVs === "verified"
+                                    ? "AI verified"
+                                    : "Rejected"}
+                            </span>
+                          );
+                        }
+                        return <span className="badge b-gray">{r.status || "—"}</span>;
+                      })()}
                       {r.flag_reason && (
                         <div style={{ marginTop: 6, fontSize: "10px", color: "var(--muted)", maxWidth: 220 }}>
                           {friendlyFlagReason(r.flag_reason)}

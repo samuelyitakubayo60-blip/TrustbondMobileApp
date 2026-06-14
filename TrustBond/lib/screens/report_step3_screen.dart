@@ -54,6 +54,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
 
   final List<_EvidenceFile> _files = [];
   bool _submitting = false;
+  bool _submitted = false; // Prevents duplicate submissions after success
   String? _error;
   String? _submitStatus;
   bool _isRecording = false;
@@ -209,7 +210,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   }
   Future<void> _pickExistingAudio() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.audio,
       );
       if (result != null && result.files.single.path != null) {
@@ -342,6 +343,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
   }
 
   Future<void> _submit() async {
+    if (_submitted) return; // Already submitted successfully — block duplicate
     final networkType = await _statusService.getNetworkType();
     final isOffline = (networkType ?? '').toLowerCase() == 'none' ||
         (networkType ?? '').toLowerCase() == 'offline' ||
@@ -458,6 +460,7 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
         leaderAccessToken: leaderTok,
       );
 
+      _submitted = true; // Mark as submitted to prevent duplicates
       AppRefreshBus.notify('report_submitted');
 
       if (mounted) {
@@ -499,8 +502,17 @@ class _ReportStep3ScreenState extends State<ReportStep3Screen> {
         );
       }
     } catch (e) {
+      String errorMsg = e.toString();
+      // User-friendly messages for duplicate/rate-limit rejections
+      if (errorMsg.contains('409') || errorMsg.toLowerCase().contains('duplicate')) {
+        errorMsg = 'This incident was already submitted recently. Please wait before reporting the same incident again.';
+      } else if (errorMsg.contains('429') || errorMsg.toLowerCase().contains('rate limit')) {
+        errorMsg = 'Too many reports in a short time. Please wait a moment before submitting again.';
+      } else {
+        errorMsg = 'Failed to submit report: $errorMsg';
+      }
       setState(() {
-        _error = 'Failed to submit report: ${e.toString()}';
+        _error = errorMsg;
         _submitStatus = null;
       });
     } finally {

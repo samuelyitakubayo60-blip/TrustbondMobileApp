@@ -58,6 +58,15 @@ frontend/Dockerfile
 # Database dumps (large SQL files not needed in backend image)
 *.sql
 
+# Flutter mobile app (not needed in backend image)
+TrustBond/
+.dart_tool/
+.flutter-plugins*
+
+# Documentation & analysis
+docs/
+backend/musanze/
+
 # Local secrets — set these as HF Space secrets / Docker env vars instead
 backend/.env
 .env

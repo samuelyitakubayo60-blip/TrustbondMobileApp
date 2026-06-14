@@ -356,7 +356,7 @@ def _apply_post_pipeline_evidence_checks(
     out_of_boundary: bool = False,
 ) -> None:
     """Re-run evidence semantic checks when pipeline was invoked outside orchestrator."""
-    if out_of_boundary or (getattr(report, "rule_status", None) or "").strip().lower() == "rejected":
+    if out_of_boundary:
         return
 
     from app.core.verification_orchestrator import apply_evidence_semantic_checks, apply_threshold_outcome
@@ -365,11 +365,12 @@ def _apply_post_pipeline_evidence_checks(
         db,
         report,
         description=description or "",
-        skip_if_rejected=True,
+        skip_if_rejected=False,
     )
+    # Always re-apply score-based status to ensure consistency
     fv = report.feature_vector if isinstance(getattr(report, "feature_vector", None), dict) else {}
     scorecard = fv.get("threshold_scorecard") if isinstance(fv.get("threshold_scorecard"), dict) else None
-    if scorecard and (report.is_flagged or (report.rule_status or "").strip().lower() == "flagged"):
+    if scorecard:
         apply_threshold_outcome(report, scorecard)
 
 
@@ -1732,10 +1733,8 @@ def _compute_threshold_scorecard(
         components = stage5.get("components", [])
 
         hard_gates: List[str] = []
-        rule_status = (getattr(report, "rule_status", None) or "").lower()
         flag_reason = (getattr(report, "flag_reason", None) or "").lower()
-        if rule_status == "rejected":
-            hard_gates.append("RULE_REJECTED")
+        # Only boundary violations are hard gates — score determines all else
         if "out_of_musanze_boundary" in flag_reason:
             hard_gates.append("LOCATION_OUT_OF_BOUNDARY")
 
@@ -1791,7 +1790,7 @@ def _compute_threshold_scorecard(
                 "scorecard_type": "legacy_ml_prediction",
                 "max_score": 100.0,
                 "total_score": round(ts, 2),
-                "threshold_band": "under_review" if ts >= 40.0 else "low_confidence",
+                "threshold_band": "confirmed_candidate" if ts >= 70.0 else ("under_review" if ts >= 40.0 else "low_confidence"),
                 "hard_gates": [],
                 "factors": {},
             }
@@ -1813,11 +1812,8 @@ def _compute_threshold_scorecard(
     factors: Dict[str, Dict[str, Any]] = {}
     hard_gates: List[str] = []
 
-    # Hard gates from rule engine/boundary controls.
-    rule_status = (getattr(report, "rule_status", None) or "").lower()
+    # Hard gates — only boundary violations; score determines all else
     flag_reason = (getattr(report, "flag_reason", None) or "").lower()
-    if rule_status == "rejected":
-        hard_gates.append("RULE_REJECTED")
     if "out_of_musanze_boundary" in flag_reason:
         hard_gates.append("LOCATION_OUT_OF_BOUNDARY")
 
@@ -2024,9 +2020,8 @@ def _compute_threshold_scorecard(
                       "EVIDENCE_NOT_RELEVANT")
         )
 
-        if evidence_all_failed or evidence_mismatch_flag:
-            # All evidence is irrelevant/failed — hard cap, cannot be confirmed
-            total = min(total, 40.0)
+        # Evidence failure is already factored into the score through component weights.
+        # No hard cap — score determines final status.
 
         if hard_gates:
             band = "hard_reject"
@@ -4562,6 +4557,7 @@ def get_evidence_training_data(
 @router.post("/{report_id}/evidence")
 async def upload_evidence(
     report_id: str,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     device_id: Optional[str] = Form(None, description="Device ID UUID (mobile: required to add evidence to own report)."),
     media_latitude: Optional[float] = Form(None),
@@ -4793,10 +4789,9 @@ async def upload_evidence(
     db.commit()
     db.refresh(evidence)
 
-    # Re-run AI-enhanced rule-based verification (evidence count changed)
+    # Persist pending validation metadata on the report immediately (fast).
     report_after = db.query(Report).filter(Report.report_id == report.report_id).first()
     if report_after:
-        # Validate newly uploaded evidence and persist semantic audit fields.
         try:
             current_validations: List[Dict[str, Any]] = []
             fv_existing = report_after.feature_vector if isinstance(report_after.feature_vector, dict) else {}
@@ -4818,56 +4813,47 @@ async def upload_evidence(
             )
             fv_update["evidence_validations"] = current_validations
             report_after.feature_vector = _json_safe(fv_update)
+            db.commit()
         except Exception as e:
             logger.warning(f"Post-upload semantic validation failed for report {report_after.report_id}: {e}")
 
+    # Run the heavy verification pipeline in a BACKGROUND task so the
+    # mobile client gets an immediate response after Cloudinary upload.
+    _report_id_str = str(report.report_id)
+    _device_id_str = str(device.device_id) if device else None
+
+    def _run_evidence_verification_background(report_id_str: str, device_id_str: Optional[str]):
+        from app.database import SessionLocal
         from app.core.verification_orchestrator import run_citizen_verification_pipeline
 
-        evidence_files_all = (
-            db.query(EvidenceFile).filter(EvidenceFile.report_id == report_after.report_id).all()
-        )
-        fv_pre = report_after.feature_vector if isinstance(report_after.feature_vector, dict) else {}
-        validations_pre = (
-            fv_pre.get("evidence_validations")
-            if isinstance(fv_pre.get("evidence_validations"), list)
-            else []
-        )
+        bg_db = SessionLocal()
+        try:
+            bg_report = bg_db.query(Report).filter(Report.report_id == report_id_str).first()
+            if not bg_report:
+                return
+            bg_device = bg_report.device
 
-        def _compose_narratives_upload(**kwargs):
-            r = kwargs["report"]
-            uv = kwargs["unified_validation"]
-            sc = kwargs["scorecard"]
-            ai_lbl = kwargs["ai_label"]
-            ai_ts = kwargs["ai_trust_score"]
-            ev = kwargs["evidence_validations"]
-            sem = fv_pre.get("semantic_alignment") if isinstance(fv_pre.get("semantic_alignment"), dict) else None
-            loc_chain = _human_location_chain_from_report(r)
-            r.ai_evidence_description = None
-            r.ai_verification_reason = _compose_ai_verification_reason(
-                verification_status=r.verification_status,
-                rule_status=r.rule_status,
-                is_flagged=r.is_flagged,
-                flag_reason=r.flag_reason,
-                ml_prediction_label=ai_lbl,
-                trust_score=ai_ts,
-                semantic_alignment=sem,
-                incident_type_name=getattr(getattr(r, "incident_type", None), "type_name", None),
-                reporter_description=r.description,
-                context_tags=list(getattr(r, "context_tags", None) or []),
-                unified_validation=uv,
-                scorecard=sc,
-                evidence_validations=ev,
-                evidence_file_count=len(evidence_files_all or []),
-                latitude=getattr(r, "latitude", None),
-                longitude=getattr(r, "longitude", None),
-                gps_accuracy=getattr(r, "gps_accuracy", None),
-                location_label=loc_chain,
-                description_credibility=_description_credibility_from_report(r),
-                text_only_reason_codes=_text_only_reason_codes_from_report(r),
+            evidence_files_all = (
+                bg_db.query(EvidenceFile).filter(EvidenceFile.report_id == bg_report.report_id).all()
             )
-            _persist_ai_analysis_snapshot(
-                r,
-                _build_ai_analysis_snapshot(
+            fv_pre = bg_report.feature_vector if isinstance(bg_report.feature_vector, dict) else {}
+            validations_pre = (
+                fv_pre.get("evidence_validations")
+                if isinstance(fv_pre.get("evidence_validations"), list)
+                else []
+            )
+
+            def _compose_narratives_upload(**kwargs):
+                r = kwargs["report"]
+                uv = kwargs["unified_validation"]
+                sc = kwargs["scorecard"]
+                ai_lbl = kwargs["ai_label"]
+                ai_ts = kwargs["ai_trust_score"]
+                ev = kwargs["evidence_validations"]
+                sem = fv_pre.get("semantic_alignment") if isinstance(fv_pre.get("semantic_alignment"), dict) else None
+                loc_chain = _human_location_chain_from_report(r)
+                r.ai_evidence_description = None
+                r.ai_verification_reason = _compose_ai_verification_reason(
                     verification_status=r.verification_status,
                     rule_status=r.rule_status,
                     is_flagged=r.is_flagged,
@@ -4881,33 +4867,63 @@ async def upload_evidence(
                     unified_validation=uv,
                     scorecard=sc,
                     evidence_validations=ev,
-                    # Use the real uploaded evidence file count (not validation count).
                     evidence_file_count=len(evidence_files_all or []),
                     latitude=getattr(r, "latitude", None),
                     longitude=getattr(r, "longitude", None),
                     gps_accuracy=getattr(r, "gps_accuracy", None),
                     location_label=loc_chain,
-                ),
-            )
+                    description_credibility=_description_credibility_from_report(r),
+                    text_only_reason_codes=_text_only_reason_codes_from_report(r),
+                )
+                _persist_ai_analysis_snapshot(
+                    r,
+                    _build_ai_analysis_snapshot(
+                        verification_status=r.verification_status,
+                        rule_status=r.rule_status,
+                        is_flagged=r.is_flagged,
+                        flag_reason=r.flag_reason,
+                        ml_prediction_label=ai_lbl,
+                        trust_score=ai_ts,
+                        semantic_alignment=sem,
+                        incident_type_name=getattr(getattr(r, "incident_type", None), "type_name", None),
+                        reporter_description=r.description,
+                        context_tags=list(getattr(r, "context_tags", None) or []),
+                        unified_validation=uv,
+                        scorecard=sc,
+                        evidence_validations=ev,
+                        evidence_file_count=len(evidence_files_all or []),
+                        latitude=getattr(r, "latitude", None),
+                        longitude=getattr(r, "longitude", None),
+                        gps_accuracy=getattr(r, "gps_accuracy", None),
+                        location_label=loc_chain,
+                    ),
+                )
 
-        run_citizen_verification_pipeline(
-            db,
-            report_after,
-            device,
-            evidence_files=evidence_files_all,
-            evidence_validations=validations_pre,
-            compute_scorecard_fn=_compute_threshold_scorecard,
-            compose_narratives_fn=_compose_narratives_upload,
-        )
-        _apply_post_pipeline_evidence_checks(
-            report_after,
-            db,
-            description=report_after.description or "",
-        )
-        db.commit()
-    
+            run_citizen_verification_pipeline(
+                bg_db,
+                bg_report,
+                bg_device,
+                evidence_files=evidence_files_all,
+                evidence_validations=validations_pre,
+                compute_scorecard_fn=_compute_threshold_scorecard,
+                compose_narratives_fn=_compose_narratives_upload,
+            )
+            _apply_post_pipeline_evidence_checks(
+                bg_report,
+                bg_db,
+                description=bg_report.description or "",
+            )
+            bg_db.commit()
+        except Exception as e:
+            logger.exception(f"Background evidence verification failed for report {report_id_str}: {e}")
+            bg_db.rollback()
+        finally:
+            bg_db.close()
+
+    background_tasks.add_task(_run_evidence_verification_background, _report_id_str, _device_id_str)
+
     await manager.broadcast({"type": "refresh_data", "entity": "report", "action": "evidence_added"})
-    
+
     return {"evidence_id": str(evidence.evidence_id), "file_url": file_url}
 @router.post("/{report_id}/confirm")
 def add_community_confirmation(

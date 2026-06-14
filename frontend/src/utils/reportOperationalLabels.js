@@ -3,6 +3,12 @@
 export function formatTechnicalStatus(report) {
   const vs = (report?.verification_status || "").trim().toLowerCase();
   const rs = (report?.rule_status || "").trim().toLowerCase();
+  const ls = (report?.leader_verification_status || "").trim().toLowerCase();
+
+  // Leader decision is final — override display when leader has decided
+  if (ls === "confirmed") {
+    return "Leader confirmed (final) · Verified";
+  }
 
   const parts = [];
   if (rs === "passed") parts.push("AI verification: passed");
@@ -63,8 +69,10 @@ export function leaderConfirmationOkForHotspots(report) {
   return st === "confirmed";
 }
 
-/** Mirrors backend leader_workflow.report_ready_for_cases_and_hotspots. */
+/** Mirrors backend leader_workflow.report_ready_for_cases_and_hotspots.
+ *  Leader confirmation is the FINAL authority — overrides AI rejection. */
 export function reportReadyForCasesAndHotspots(report) {
+  if (leaderConfirmationOkForHotspots(report)) return true;
   const pv = policeVerificationOkForHotspots(report);
   if (!pv.ok) return false;
   return leaderConfirmationOkForHotspots(report);
@@ -72,6 +80,7 @@ export function reportReadyForCasesAndHotspots(report) {
 
 /**
  * Single operational state aligned with the dashboard workflow diagram.
+ * Leader decision is the FINAL authority — overrides AI decision.
  * @returns {'eligible'|'leader_confirmed_ai_pending'|'leader_rejected'|'awaiting_leader'|'ai_review_queue'|'rejected'}
  */
 export function getOperationalPipelineState(report) {
@@ -79,10 +88,10 @@ export function getOperationalPipelineState(report) {
   const leaderOk = leaderConfirmationOkForHotspots(report);
   const ls = (report?.leader_verification_status || "pending").trim().toLowerCase();
 
-  if (!pv.ok && pv.reason === "rejected") return "rejected";
+  // Leader decision is final — confirmed overrides any AI rejection
   if (ls === "rejected") return "leader_rejected";
-  if (pv.ok && leaderOk) return "eligible";
-  if (!pv.ok && ls === "confirmed") return "leader_confirmed_ai_pending";
+  if (leaderOk) return "eligible";
+  if (!pv.ok && pv.reason === "rejected") return "rejected";
   if (pv.ok && !leaderOk) return "awaiting_leader";
   return "ai_review_queue";
 }
@@ -94,9 +103,9 @@ const PIPELINE_META = {
     hint: "AI verified and local leader confirmed. Report can feed auto-cases and hotspot clustering.",
   },
   leader_confirmed_ai_pending: {
-    label: "Pending for ops",
-    badge: "b-orange",
-    hint: "Leader confirmed but AI verification is not complete yet. Stays out of cases/hotspots until AI verifies.",
+    label: "Cases & hotspots",
+    badge: "b-green",
+    hint: "Leader confirmed (final authority). Report is eligible for auto-cases and hotspot clustering.",
   },
   leader_rejected: {
     label: "Out of cases/hotspots",
@@ -140,35 +149,38 @@ export function operationalGateChecklist(report) {
   const pv = policeVerificationOkForHotspots(report);
   const leaderOk = leaderConfirmationOkForHotspots(report);
   const ls = (report?.leader_verification_status || "pending").trim().toLowerCase();
+  const ready = reportReadyForCasesAndHotspots(report);
   return [
     {
       key: "ai_police",
       label: "1. AI verification",
-      done: pv.ok,
-      detail: pv.ok
-        ? "Verified (AI threshold)"
-        : pv.reason === "rejected"
-          ? "Rejected"
-          : "Pending — AI scoring under review",
+      done: pv.ok || leaderOk, // Leader override makes AI gate pass
+      detail: leaderOk
+        ? "Overridden by leader confirmation"
+        : pv.ok
+          ? "Verified (AI threshold)"
+          : pv.reason === "rejected"
+            ? "Rejected (awaiting leader decision)"
+            : "Pending — AI scoring under review",
     },
     {
       key: "leader",
-      label: "2. Local leader confirmation",
+      label: "2. Local leader (final decision)",
       done: leaderOk,
       detail:
         ls === "confirmed"
-          ? "Community confirmed"
+          ? "Community confirmed — final authority"
           : ls === "rejected"
-            ? "Leader disputed"
+            ? "Leader rejected — final authority"
             : "Awaiting village/cell leader",
     },
     {
       key: "ops",
       label: "3. Cases & hotspots",
-      done: pv.ok && leaderOk,
-      detail: reportReadyForCasesAndHotspots(report)
+      done: ready,
+      detail: ready
         ? "Eligible for auto-case and hotspot clustering"
-        : "Blocked until both gates above pass",
+        : "Blocked — awaiting leader confirmation",
     },
   ];
 }

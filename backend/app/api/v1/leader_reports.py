@@ -93,6 +93,7 @@ def list_leader_reports(
             .joinedload(Location.parent),
         )
         .filter(Report.village_location_id.in_(covered_villages))
+        .filter(Report.reported_at >= current_leader.created_at)
         .order_by(Report.reported_at.desc())
     )
     # Never show AI-rejected reports in the leader inbox — only flagged/under_review ones need review
@@ -184,6 +185,9 @@ def get_leader_report_detail(
 
     if r.village_location_id is None or int(r.village_location_id) not in covered_villages:
         raise HTTPException(status_code=403, detail="Not allowed for this location")
+
+    if current_leader.created_at and r.reported_at < current_leader.created_at:
+        raise HTTPException(status_code=403, detail="Report predates leader registration")
 
     vname = getattr(r.village_location, "location_name", None) if r.village_location else None
     cell_name = None
@@ -286,26 +290,32 @@ def verify_report(
     if r.village_location_id is None or int(r.village_location_id) not in covered_villages:
         raise HTTPException(status_code=403, detail="Not allowed for this location")
 
+    if current_leader.created_at and r.reported_at < current_leader.created_at:
+        raise HTTPException(status_code=403, detail="Report predates leader registration")
+
     now = datetime.now(timezone.utc)
     r.leader_verification_status = decision
     r.leader_verified_by = current_leader.local_leader_id
     r.leader_verified_at = now
     r.leader_verification_note = (payload.note or "").strip()[:500] if payload.note else None
 
-    # Leader confirmation is sufficient for map display.
+    # Leader decision is the FINAL authority — overrides AI decision.
     if decision == "confirmed":
         r.verification_status = "verified"
         r.status = "verified"
-        if r.rule_status not in ("passed",):
-            r.rule_status = "passed"
+        r.rule_status = "passed"
         r.is_flagged = False
-        r.flag_reason = None
+        # Sync the report-level prediction label so the dashboard shows the
+        # leader-overridden result, not the stale AI label.
+        if hasattr(r, "ml_prediction_label"):
+            r.ml_prediction_label = "likely_real"
     elif decision == "rejected":
         r.verification_status = "rejected"
         r.status = "rejected"
         r.is_flagged = True
         r.flag_reason = r.flag_reason or "rejected_by_local_leader"
-        r.rule_status = "rejected"
+        if hasattr(r, "ml_prediction_label"):
+            r.ml_prediction_label = "fake"
 
     # ── Update ML trust score based on leader decision ──────────────────────
     # confirmed: raise score to AT LEAST 90 (workflow rule: AI + leader only,

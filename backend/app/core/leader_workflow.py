@@ -154,24 +154,24 @@ def report_ready_for_cases_and_hotspots(report: Report) -> bool:
     """
     Operational eligibility for auto-cases and hotspot clustering.
 
-    Citizen-submitted (when leader gate is on):
-    1. Police/AI: verification_status == verified
-    2. Community: leader_verification_status == confirmed
-
-    Leader-submitted: mobile basic checks at submit + leader attestation (no AI threshold);
-    both gates are satisfied when verification_status is verified and leader confirmed.
+    Leader decision is the FINAL authority:
+    - If leader confirmed → eligible (overrides AI rejection).
+    - If leader rejected → not eligible.
+    - If no leader decision yet → fall back to AI verification.
     """
-    if report_is_leader_submitted(report):
-        if not report_police_verified(report):
-            return False
-        if not leader_gate_enabled():
-            return True
-        return report_meets_leader_confirmation(report)
+    # Leader confirmation is the final gate — always overrides AI
+    if report_meets_leader_confirmation(report):
+        return True
+    # Leader explicitly rejected — not eligible
+    st = (getattr(report, "leader_verification_status", None) or "pending").strip().lower()
+    if st == "rejected":
+        return False
+    # No leader decision yet — AI must have verified
     if not report_police_verified(report):
         return False
     if not leader_gate_enabled():
         return True
-    return report_meets_leader_confirmation(report)
+    return False  # Awaiting leader input
 
 
 def report_eligible_for_auto_case(report: Report) -> bool:
