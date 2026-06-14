@@ -87,29 +87,36 @@ class UnifiedValidator:
         
         # 1. Run TrustBond model (historical patterns)
         try:
-            evidence_count = len(evidence_files) if evidence_files else 0
-            score_report_credibility(db, report, device, evidence_count)
-            db.flush()  # Ensure XGBoost prediction is visible to subsequent query
+            with db.begin_nested():
+                evidence_count = len(evidence_files) if evidence_files else 0
+                score_report_credibility(db, report, device, evidence_count)
+                db.flush()
 
-            # Get the score from the prediction
-            ml_prediction = db.query(MLPrediction).filter(
-                MLPrediction.report_id == report.report_id,
-                MLPrediction.model_type == "xgboost"
-            ).first()
-            
-            if ml_prediction and ml_prediction.trust_score is not None:
-                trustbond_score = float(ml_prediction.trust_score)
-                logger.info(f"TrustBond score: {trustbond_score:.2f}")
-            
+                ml_prediction = db.query(MLPrediction).filter(
+                    MLPrediction.report_id == report.report_id,
+                    MLPrediction.model_type == "xgboost",
+                ).first()
+
+                if ml_prediction and ml_prediction.trust_score is not None:
+                    trustbond_score = float(ml_prediction.trust_score)
+                    logger.info(f"TrustBond score: {trustbond_score:.2f}")
+
         except Exception as exc:
             logger.warning(f"TrustBond scoring failed: {exc}")
-        
+
         # 2. Run Natural Language model (description analysis)
         try:
             incident_type_name = ""
             incident_type_description = ""
-            
-            if report.incident_type:
+
+            if report.incident_type_id:
+                from app.core.incident_type_loader import fetch_incident_type_by_id
+
+                it_row = fetch_incident_type_by_id(db, int(report.incident_type_id))
+                if it_row:
+                    incident_type_name = it_row.type_name or ""
+                    incident_type_description = (it_row.description or "") or ""
+            elif report.incident_type:
                 incident_type_name = report.incident_type.type_name or ""
                 incident_type_description = report.incident_type.description or ""
             

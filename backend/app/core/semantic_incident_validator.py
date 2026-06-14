@@ -332,21 +332,22 @@ def get_incident_semantic_definition(
     Returns (type_name, description, semantic_definition).
     Falls back to description if semantic_definition not set.
     """
-    row = (
-        db.query(IncidentType)
-        .filter(IncidentType.incident_type_id == incident_type_id)
-        .first()
+    from app.core.incident_type_loader import (
+        fetch_incident_type_by_id,
+        semantic_definition_for_type,
     )
+
+    row = fetch_incident_type_by_id(db, incident_type_id)
     if not row:
         return "", "", ""
 
     type_name = (row.type_name or "").strip()
     description = (row.description or "").strip()
-    semantic_def = (getattr(row, "semantic_definition", None) or "").strip()
-
-    # Fallback: use description + type_name if semantic_definition not set
-    if not semantic_def:
-        semantic_def = f"{type_name}: {description}" if description else type_name
+    semantic_def = semantic_definition_for_type(
+        type_name,
+        description,
+        getattr(row, "semantic_definition", None),
+    )
 
     return type_name, description, semantic_def
 

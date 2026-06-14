@@ -1329,46 +1329,72 @@ def _try_append_report_to_nearby_hotspot(
     lat = float(p["lat"])
     lon = float(p["lon"])
     delta = max(0.001, float(eps_m) / 111000.0)
-    candidates = (
-        db.query(Hotspot)
-        .filter(
-            Hotspot.center_lat.between(lat - delta, lat + delta),
-            Hotspot.center_long.between(lon - delta, lon + delta),
-        )
-        .all()
-    )
+    candidates = db.execute(
+        text(
+            """
+            SELECT hotspot_id, center_lat, center_long, incident_count, composition, crime_group
+            FROM hotspots
+            WHERE center_lat BETWEEN :lat_min AND :lat_max
+              AND center_long BETWEEN :lon_min AND :lon_max
+            """
+        ),
+        {
+            "lat_min": lat - delta,
+            "lat_max": lat + delta,
+            "lon_min": lon - delta,
+            "lon_max": lon + delta,
+        },
+    ).fetchall()
     report_id_str = str(p["report"].report_id)
-    for h in candidates:
-        if _haversine_meters(lat, lon, float(h.center_lat), float(h.center_long)) > eps_m:
+    now = datetime.now(timezone.utc)
+    for hid, h_lat, h_lon, inc_count, composition_raw, crime_group in candidates:
+        if _haversine_meters(lat, lon, float(h_lat), float(h_lon)) > eps_m:
             continue
         exists = db.execute(
             text(
                 "SELECT 1 FROM hotspot_reports WHERE hotspot_id = :hid AND report_id = :rid"
             ),
-            {"hid": h.hotspot_id, "rid": report_id_str},
+            {"hid": hid, "rid": report_id_str},
         ).fetchone()
         if exists:
             return True
         i_name = p.get("incident_type_name") or "Unknown"
         composition: Dict[str, int] = {}
         try:
-            composition = json.loads(h.composition) if h.composition else {}
+            composition = json.loads(composition_raw) if composition_raw else {}
         except Exception:
             composition = {}
         composition[i_name] = composition.get(i_name, 0) + 1
-        new_count = int(h.incident_count or 0) + 1
-        h.incident_count = new_count
-        h.composition = json.dumps(composition)
-        h.detected_at = datetime.now(timezone.utc)
-        if h.crime_group and h.crime_group != group_name:
-            h.crime_group = "mixed"
+        new_count = int(inc_count or 0) + 1
+        new_crime_group = crime_group
+        if crime_group and crime_group != group_name:
+            new_crime_group = "mixed"
+        db.execute(
+            text(
+                """
+                UPDATE hotspots
+                SET incident_count = :cnt,
+                    composition = :comp,
+                    detected_at = :detected_at,
+                    crime_group = :crime_group
+                WHERE hotspot_id = :hid
+                """
+            ),
+            {
+                "cnt": new_count,
+                "comp": json.dumps(composition),
+                "detected_at": now,
+                "crime_group": new_crime_group,
+                "hid": hid,
+            },
+        )
         db.execute(
             text(
                 "INSERT INTO hotspot_reports (hotspot_id, report_id, is_core) "
                 "VALUES (:hid, :rid, true) "
                 "ON CONFLICT (hotspot_id, report_id) DO NOTHING"
             ),
-            {"hid": h.hotspot_id, "rid": report_id_str},
+            {"hid": hid, "rid": report_id_str},
         )
         db.flush()
         return True

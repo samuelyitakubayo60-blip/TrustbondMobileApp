@@ -497,18 +497,30 @@ def _compute_trust_factors(db: Session, report: Report, device: Device, evidence
     # Is this report near a confirmed hotspot of the same type?
     cluster_score = 0.0
     try:
-        from app.models.hotspot import Hotspot
+        from sqlalchemy import text
+
         lat = float(report.latitude)
         lon = float(report.longitude)
-        hotspot = db.query(Hotspot).filter(
-            Hotspot.incident_type_id == report.incident_type_id,
-            Hotspot.center_lat.between(lat - 0.02, lat + 0.02),
-            Hotspot.center_long.between(lon - 0.02, lon + 0.02)
+        row = db.execute(
+            text(
+                """
+                SELECT hotspot_id FROM hotspots
+                WHERE incident_type_id = :tid
+                  AND center_lat BETWEEN :lat_min AND :lat_max
+                  AND center_long BETWEEN :lon_min AND :lon_max
+                LIMIT 1
+                """
+            ),
+            {
+                "tid": report.incident_type_id,
+                "lat_min": lat - 0.02,
+                "lat_max": lat + 0.02,
+                "lon_min": lon - 0.02,
+                "lon_max": lon + 0.02,
+            },
         ).first()
-        if hotspot:
+        if row:
             cluster_score = 80.0
-            if getattr(hotspot, "risk_level", "") in ["high", "critical"]:
-                cluster_score = 100.0
     except Exception:
         pass
     factors["cluster_score"] = round(cluster_score, 1)

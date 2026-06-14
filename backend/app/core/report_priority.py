@@ -29,9 +29,9 @@ def calculate_report_priority(
     
     # 1. Incident type severity (0-3 points)
     if db and report.incident_type_id:
-        incident_type = db.query(IncidentType).filter(
-            IncidentType.incident_type_id == report.incident_type_id
-        ).first()
+        from app.core.incident_type_loader import fetch_incident_type_by_id
+
+        incident_type = fetch_incident_type_by_id(db, report.incident_type_id)
         if incident_type and incident_type.severity_weight:
             severity = float(incident_type.severity_weight)
             if severity >= 2.0:
@@ -258,13 +258,9 @@ def _incident_description_mismatch_semantic(report: Report, db: Optional[Session
     if not report_semantic_llm_configured():
         return False
 
-    active_types = (
-        db.query(IncidentType)
-        .filter(getattr(IncidentType, "is_active", True) == True)  # noqa: E712
-        .all()
-    )
-    if not active_types:
-        active_types = db.query(IncidentType).all()
+    from app.core.incident_type_loader import fetch_active_incident_types
+
+    active_types = fetch_active_incident_types(db)
     if len(active_types) < 2:
         return False
 

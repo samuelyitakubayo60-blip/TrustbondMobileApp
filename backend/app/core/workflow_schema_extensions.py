@@ -81,6 +81,9 @@ DDL_STATEMENTS: tuple[str, ...] = (
       ADD COLUMN IF NOT EXISTS anomaly_score NUMERIC(5,4);
     """,
     """
+    ALTER TABLE hotspots ADD COLUMN IF NOT EXISTS area_label VARCHAR(300);
+    """,
+    """
     ALTER TABLE local_leaders ADD COLUMN IF NOT EXISTS role VARCHAR(32) NOT NULL DEFAULT 'executive_of_cell';
     ALTER TABLE local_leaders ALTER COLUMN phone_number DROP NOT NULL;
     """,

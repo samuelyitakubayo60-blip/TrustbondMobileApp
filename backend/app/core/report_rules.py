@@ -508,12 +508,10 @@ def apply_rule_based_status(
     Returns (rule_status, is_flagged, flag_reason or None).
     """
     # Validate incident type exists and is active (domain validity).
-    incident_type = (
-        db.query(IncidentType)
-        .filter(IncidentType.incident_type_id == report.incident_type_id)
-        .first()
-    )
-    if incident_type is None:
+    from app.core.incident_type_loader import fetch_incident_type_by_id
+
+    incident_type = fetch_incident_type_by_id(db, report.incident_type_id)
+    if incident_type is None or not getattr(incident_type, "is_active", True):
         return "rejected", True, "invalid_incident_type"
 
     # Validate coordinates range.

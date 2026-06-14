@@ -252,7 +252,11 @@ def get_leader_mobile_incidents(
     # Get incidents in leader's coverage area
     covered_villages = leader_covered_village_ids(db, leader_id)
     
-    query = db.query(Report).filter(Report.village_location_id.in_(covered_villages))
+    query = (
+        db.query(Report)
+        .filter(Report.village_location_id.in_(covered_villages))
+        .filter(Report.reported_at >= current_leader.created_at)
+    )
     
     if only_pending:
         query = query.filter(
