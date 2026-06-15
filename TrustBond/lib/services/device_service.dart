@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 
@@ -93,11 +94,23 @@ class DeviceService {
     if (hash.isEmpty) return null;
 
     final api = apiService ?? ApiService();
-    final result = await api.registerDevice(hash);
-    final id = result['device_id']?.toString();
-    if (id == null || id.isEmpty) return null;
 
-    await saveDeviceId(id);
-    return id;
+    // Retry up to 3 times with short delays for transient network errors.
+    for (int attempt = 0; attempt < 3; attempt++) {
+      try {
+        final result = await api.registerDevice(hash);
+        final id = result['device_id']?.toString();
+        if (id != null && id.isNotEmpty) {
+          await saveDeviceId(id);
+          return id;
+        }
+      } catch (e) {
+        debugPrint('Device registration attempt ${attempt + 1} failed: $e');
+        if (attempt < 2) {
+          await Future.delayed(Duration(seconds: 2 * (attempt + 1)));
+        }
+      }
+    }
+    return null;
   }
 }

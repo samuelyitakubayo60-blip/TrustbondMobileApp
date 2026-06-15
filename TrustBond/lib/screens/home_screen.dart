@@ -203,6 +203,15 @@ class _HomeScreenState extends State<HomeScreen>
       }
 
       if (deviceId == null || deviceId.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Device registration failed. Please check your internet connection and restart the app.'),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
         setState(() => _loading = false);
         return;
       }

@@ -1269,6 +1269,35 @@ def _compose_ai_verification_reason(
     return chosen[:4000]
 
 
+def _patch_stale_no_evidence_text(text: Optional[str], evidence_count: int) -> Optional[str]:
+    """Replace stale 'no evidence' phrases when evidence files actually exist.
+
+    This handles the race condition where the initial verification pipeline runs
+    before evidence is uploaded (report JSON first, then multipart evidence),
+    and the background re-verification either hasn't completed or failed.
+    """
+    if not text or evidence_count <= 0:
+        return text
+    import re as _re
+    stale_phrases = [
+        "No photo, video, or audio evidence was attached",
+        "no evidence was attached",
+        "no photo or video evidence",
+        "no evidence uploaded",
+    ]
+    replacement = f"{evidence_count} evidence file(s) were uploaded and analyzed"
+    patched = text
+    for phrase in stale_phrases:
+        patched = _re.sub(
+            _re.escape(phrase),
+            replacement,
+            patched,
+            count=1,
+            flags=_re.IGNORECASE,
+        )
+    return patched
+
+
 def _extract_decision_patterns(ai_verification_reason: Optional[str]) -> List[str]:
     """Parse machine-readable decision pattern codes from generated reason text."""
     text = (ai_verification_reason or "").strip()
@@ -4917,6 +4946,22 @@ async def upload_evidence(
         except Exception as e:
             logger.exception(f"Background evidence verification failed for report {report_id_str}: {e}")
             bg_db.rollback()
+            # Even if the full pipeline fails, patch the stale "no evidence" text
+            # so the user doesn't see contradictory information.
+            try:
+                bg_report2 = bg_db.query(Report).filter(Report.report_id == report_id_str).first()
+                if bg_report2:
+                    ev_count = bg_db.query(EvidenceFile).filter(EvidenceFile.report_id == report_id_str).count()
+                    if ev_count > 0:
+                        bg_report2.ai_verification_reason = _patch_stale_no_evidence_text(
+                            bg_report2.ai_verification_reason, ev_count
+                        )
+                        bg_report2.ai_evidence_description = _patch_stale_no_evidence_text(
+                            bg_report2.ai_evidence_description, ev_count
+                        )
+                        bg_db.commit()
+            except Exception:
+                bg_db.rollback()
         finally:
             bg_db.close()
 
@@ -6199,6 +6244,14 @@ def _build_report_detail_response(
                 )
             )
 
+    # Fix stale "no evidence" text when evidence was uploaded after initial verification
+    actual_evidence_count = len(report.evidence_files) if report.evidence_files else 0
+    raw_ai_evidence_desc = getattr(report, "ai_evidence_description", None)
+    raw_ai_verification_reason = getattr(report, "ai_verification_reason", None)
+    if actual_evidence_count > 0:
+        raw_ai_evidence_desc = _patch_stale_no_evidence_text(raw_ai_evidence_desc, actual_evidence_count)
+        raw_ai_verification_reason = _patch_stale_no_evidence_text(raw_ai_verification_reason, actual_evidence_count)
+
     return ReportDetailResponse(
         report_id=report.report_id,
         report_number=getattr(report, "report_number", None),
@@ -6230,8 +6283,8 @@ def _build_report_detail_response(
         context_tags=context_tags_list,
         is_flagged=getattr(report, "is_flagged", None),
         flag_reason=getattr(report, "flag_reason", None),
-        ai_evidence_description=getattr(report, "ai_evidence_description", None),
-        ai_verification_reason=getattr(report, "ai_verification_reason", None),
+        ai_evidence_description=raw_ai_evidence_desc,
+        ai_verification_reason=raw_ai_verification_reason,
         decision_patterns=_extract_decision_patterns(getattr(report, "ai_verification_reason", None)),
         decision_pattern_explanations=_extract_decision_pattern_explanations(
             getattr(report, "ai_verification_reason", None)
@@ -6398,8 +6451,14 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
         trust_score=trust_score,
         trust_factors=trust_factors,
         ml_prediction_label=ml_prediction_label,
-        ai_evidence_description=getattr(report, "ai_evidence_description", None),
-        ai_verification_reason=getattr(report, "ai_verification_reason", None),
+        ai_evidence_description=_patch_stale_no_evidence_text(
+            getattr(report, "ai_evidence_description", None),
+            len(report.evidence_files or []),
+        ),
+        ai_verification_reason=_patch_stale_no_evidence_text(
+            getattr(report, "ai_verification_reason", None),
+            len(report.evidence_files or []),
+        ),
         decision_patterns=_extract_decision_patterns(getattr(report, "ai_verification_reason", None)),
         decision_pattern_explanations=_extract_decision_pattern_explanations(
             getattr(report, "ai_verification_reason", None)
