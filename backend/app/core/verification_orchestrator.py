@@ -693,6 +693,12 @@ def run_citizen_verification_pipeline(
 
     # ── Boundary check ───────────────────────────────────────────────────────
     if skip_if_out_of_boundary and fv.get("boundary_status") == "out_of_musanze":
+        if compose_narratives_fn:
+            compose_narratives_fn(
+                report=report, unified_validation={}, scorecard={},
+                ml_prediction=None, ai_trust_score=0.0, ai_label="fake",
+                evidence_validations=fv.get("evidence_validations")
+            )
         return VerificationPipelineResult(
             unified_validation={}, scorecard={},
             rule_status=report.rule_status or "rejected",
@@ -770,6 +776,13 @@ def run_citizen_verification_pipeline(
         fv["pipeline_rejection_reason"] = "evidence_admissibility_failed"
         report.feature_vector = _json_safe(fv)
 
+        if compose_narratives_fn:
+            compose_narratives_fn(
+                report=report, unified_validation={}, scorecard={},
+                ml_prediction=None, ai_trust_score=0.0, ai_label="fake",
+                evidence_validations=fv.get("evidence_validations")
+            )
+
         return VerificationPipelineResult(
             unified_validation={}, scorecard={},
             rule_status="rejected", is_flagged=True,
@@ -826,6 +839,13 @@ def run_citizen_verification_pipeline(
         fv["pipeline_rejection_stage"] = 2
         fv["pipeline_rejection_reason"] = "incident_description_semantic_mismatch"
         report.feature_vector = _json_safe(fv)
+
+        if compose_narratives_fn:
+            compose_narratives_fn(
+                report=report, unified_validation={}, scorecard={},
+                ml_prediction=None, ai_trust_score=0.0, ai_label="fake",
+                evidence_validations=fv.get("evidence_validations")
+            )
 
         return VerificationPipelineResult(
             unified_validation={}, scorecard={},
@@ -890,6 +910,13 @@ def run_citizen_verification_pipeline(
         fv["pipeline_rejection_stage"] = 3
         fv["pipeline_rejection_reason"] = "description_quality_below_minimum"
         report.feature_vector = _json_safe(fv)
+
+        if compose_narratives_fn:
+            compose_narratives_fn(
+                report=report, unified_validation={}, scorecard={},
+                ml_prediction=None, ai_trust_score=0.0, ai_label="fake",
+                evidence_validations=fv.get("evidence_validations")
+            )
 
         return VerificationPipelineResult(
             unified_validation={}, scorecard={},
@@ -970,6 +997,13 @@ def run_citizen_verification_pipeline(
         fv["pipeline_rejection_stage"] = 4
         fv["pipeline_rejection_reason"] = f"evidence_{stage4.support_level}"
         report.feature_vector = _json_safe(fv)
+
+        if compose_narratives_fn:
+            compose_narratives_fn(
+                report=report, unified_validation={}, scorecard={},
+                ml_prediction=None, ai_trust_score=0.0, ai_label="fake",
+                evidence_validations=fv.get("evidence_validations")
+            )
 
         return VerificationPipelineResult(
             unified_validation={}, scorecard={},

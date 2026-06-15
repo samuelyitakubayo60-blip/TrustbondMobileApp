@@ -15,7 +15,7 @@ cloudinary
 email-validator
 requests
 google-auth
-scikit-learn
+scikit-learn==1.8.0
 xgboost
 joblib
 pandas

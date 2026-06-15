@@ -3360,7 +3360,9 @@ def create_report(
     if report_data.device_id:
         device = db.query(Device).filter(Device.device_id == report_data.device_id).first()
         if not device:
-            raise HTTPException(status_code=404, detail="Device not found")
+            if not report_data.device_hash:
+                report_data.device_hash = str(report_data.device_id)
+
     if device is None and report_data.device_hash and str(report_data.device_hash).strip():
         device = (
             db.query(Device)
@@ -3380,7 +3382,7 @@ def create_report(
                     detail="This device hash is banned from submitting reports"
                 )
             device = Device(
-                device_id=uuid4(),
+                device_id=report_data.device_id if report_data.device_id else uuid4(),
                 device_hash=report_data.device_hash.strip(),
             )
             db.add(device)

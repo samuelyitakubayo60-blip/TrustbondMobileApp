@@ -287,7 +287,10 @@ def _load_model_and_meta():
     if not MODEL_PATH.exists() or not META_PATH.exists():
         return None, None
 
-    _MODEL = joblib.load(MODEL_PATH)
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _MODEL = joblib.load(MODEL_PATH)
     _META = json.loads(META_PATH.read_text(encoding="utf-8"))
     return _MODEL, _META
 

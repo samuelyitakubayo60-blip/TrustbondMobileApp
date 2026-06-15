@@ -56,8 +56,11 @@ def _load_cluster_model() -> Optional[Any]:
         return None
     try:
         import joblib  # type: ignore
+        import warnings
 
-        return joblib.load(model_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return joblib.load(model_path)
     except Exception:
         return None
 
