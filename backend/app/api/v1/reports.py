@@ -6316,6 +6316,10 @@ def _build_report_detail_response(
                 blur_score=float(ef.blur_score) if getattr(ef, "blur_score", None) is not None else None,
                 tamper_score=float(ef.tamper_score) if getattr(ef, "tamper_score", None) is not None else None,
                 quality_label=ef.quality_label.value if ef.quality_label else None,
+                file_size=ef.file_size,
+                duration=float(ef.duration) if getattr(ef, "duration", None) is not None else None,
+                is_live_capture=ef.is_live_capture,
+                cloudinary_url=ef.cloudinary_url,
             )
             for ef in report.evidence_files
         ],
@@ -6410,6 +6414,9 @@ def _build_report_response(report: Report, db: Session, request_device_id: Optio
             blur_score=float(ef.blur_score) if getattr(ef, "blur_score", None) is not None else None,
             tamper_score=float(ef.tamper_score) if getattr(ef, "tamper_score", None) is not None else None,
             quality_label=ef.quality_label.value if ef.quality_label else None,
+            duration=float(ef.duration) if getattr(ef, "duration", None) is not None else None,
+            is_live_capture=ef.is_live_capture,
+            cloudinary_url=ef.cloudinary_url,
         )
         for ef in (report.evidence_files or [])
     ]

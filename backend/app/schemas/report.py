@@ -159,6 +159,10 @@ class EvidenceFileResponse(BaseModel):
     blur_score: Optional[Decimal] = None
     tamper_score: Optional[Decimal] = None
     quality_label: Optional[str] = None
+    file_size: Optional[int] = None
+    duration: Optional[float] = None
+    is_live_capture: Optional[bool] = None
+    cloudinary_url: Optional[str] = None
 
     class Config:
         from_attributes = True

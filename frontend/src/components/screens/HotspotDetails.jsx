@@ -578,15 +578,16 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
               const ev = evidenceFiles[currentEvidenceIndex];
               if (!ev) return null;
               const isPhoto = ev.file_type === 'photo';
+              const isAudio = ev.file_type === 'audio';
               return (
                 <div>
                   {/* Media tags */}
                   <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
                     <span style={{
                       padding: "3px 10px", borderRadius: 12, fontSize: 10, fontWeight: 600,
-                      background: isPhoto ? "rgba(59,130,246,0.1)" : "rgba(245,158,11,0.1)",
-                      color: isPhoto ? "#3b82f6" : "#f59e0b",
-                    }}>{isPhoto ? "PHOTO" : "VIDEO"}</span>
+                      background: isPhoto ? "rgba(59,130,246,0.1)" : isAudio ? "rgba(16,185,129,0.1)" : "rgba(245,158,11,0.1)",
+                      color: isPhoto ? "#3b82f6" : isAudio ? "#10b981" : "#f59e0b",
+                    }}>{isPhoto ? "PHOTO" : isAudio ? "AUDIO" : "VIDEO"}</span>
                     {ev.quality_label && (
                       <span style={{
                         padding: "3px 10px", borderRadius: 12, fontSize: 10, fontWeight: 600,
@@ -650,7 +651,17 @@ const HotspotDetails = ({ hotspotId, goToScreen, wsRefreshKey }) => {
                           }}
                         />
                       );
-                    })() : (
+                    })() : isAudio ? (
+                      <div style={{ padding: 24, textAlign: "center", width: "100%" }}>
+                        <div style={{ fontSize: "52px", marginBottom: "16px" }}>
+                          🎵
+                        </div>
+                        <audio controls style={{ width: "100%" }}>
+                          <source src={ev.file_url || ev.cloudinary_url} type="audio/mpeg" />
+                          Your browser does not support the audio tag.
+                        </audio>
+                      </div>
+                    ) : (
                       <video controls style={{ width: "100%", maxHeight: 400, objectFit: "contain" }}>
                         <source src={ev.file_url || ev.cloudinary_url} type="video/mp4" />
                       </video>

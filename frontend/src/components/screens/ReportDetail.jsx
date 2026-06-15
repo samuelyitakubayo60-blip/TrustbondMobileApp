@@ -1681,6 +1681,35 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                           </div>
                         </div>
                       </>
+                    ) : ef.file_type === "audio" ? (
+                      <div
+                        style={{
+                          height: "280px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexDirection: "column",
+                          background: "var(--surface2)",
+                          padding: "20px",
+                          boxSizing: "border-box",
+                        }}
+                      >
+                        <div style={{ fontSize: "52px", marginBottom: "16px" }}>
+                          🎵
+                        </div>
+                        <audio
+                          controls
+                          style={{
+                            width: "100%",
+                          }}
+                        >
+                          <source
+                            src={ef.cloudinary_url || ef.file_url}
+                            type="audio/mpeg"
+                          />
+                          Your browser does not support the audio tag.
+                        </audio>
+                      </div>
                     ) : (
                       <div style={{ position: "relative" }}>
                         <video
@@ -1716,20 +1745,20 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                         backdropFilter: "blur(4px)",
                       }}
                     >
-                      {ef.file_type === "photo" ? "Photo" : "Video"}
+                      {ef.file_type === "photo" ? "Photo" : ef.file_type === "audio" ? "Audio" : "Video"}
                     </div>
 
                     {/* Quality Badge */}
-                    {ef.ai_quality_label && (
+                    {ef.quality_label && (
                       <div
                         style={{
                           position: "absolute",
                           top: "12px",
                           right: "12px",
                           background:
-                            ef.ai_quality_label === "good"
+                            ef.quality_label === "good"
                               ? "var(--success)"
-                              : ef.ai_quality_label === "fair"
+                              : ef.quality_label === "fair"
                                 ? "var(--warning)"
                                 : "var(--danger)",
                           color: "white",
@@ -1740,7 +1769,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                           textTransform: "uppercase",
                         }}
                       >
-                        {ef.ai_quality_label}
+                        {ef.quality_label}
                       </div>
                     )}
                   </div>
@@ -1799,7 +1828,7 @@ const ReportDetail = ({ goToScreen, openModal, reportId, wsRefreshKey }) => {
                     )}
 
                     {/* AI Analysis */}
-                    {(ef.ai_quality_label ||
+                    {(ef.quality_label ||
                       ef.blur_score ||
                       ef.tamper_score) && (
                       <div
