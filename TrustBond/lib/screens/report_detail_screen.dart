@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../config/theme.dart';
 import '../config/api_config.dart';
 import '../widgets/shared_widgets.dart';
@@ -406,7 +407,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
           itemBuilder: (context, i) {
             final ev = r.evidenceFiles[i];
             final url = ApiConfig.evidenceFileUrl(ev.fileUrl);
-            final isPhoto = ev.fileType.toLowerCase() == 'photo';
+            final type = ev.fileType.toLowerCase();
+            final isPhoto = type == 'photo';
+            final isAudio = type == 'audio';
             final quality = ev.aiQualityLabel;
             return GestureDetector(
               onTap: () {
@@ -420,6 +423,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                       ),
                     ),
                   ));
+                } else {
+                  // Open video/audio in external player
+                  launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
                 }
               },
               child: ClipRRect(
@@ -443,7 +449,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                             width: 80,
                             height: 80,
                             color: AppColors.surface3,
-                            child: const Icon(Icons.videocam, color: AppColors.accent2, size: 28),
+                            child: Icon(
+                              isAudio ? Icons.audiotrack : Icons.videocam,
+                              color: AppColors.accent2,
+                              size: 28,
+                            ),
                           ),
                     if (quality != null && quality.isNotEmpty)
                       Positioned(
